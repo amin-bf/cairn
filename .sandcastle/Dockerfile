@@ -45,6 +45,14 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal \
   && /home/agent/.cargo/bin/rustup component add clippy rustfmt
 
+# Give the agent a git identity. The host's ~/.gitconfig is not mounted into
+# the sandbox and the repo carries no local user.*, so without this every
+# `git commit` an agent attempts fails with "Author identity unknown" — and the
+# implementer's whole contract is to produce commits.
+RUN git config --global user.name "Sandcastle Agent" \
+  && git config --global user.email "sandcastle@localhost" \
+  && git config --global --add safe.directory /home/agent/workspace
+
 # Install Claude Code CLI
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
