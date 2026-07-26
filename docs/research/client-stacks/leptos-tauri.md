@@ -7,7 +7,7 @@
 > `sqlite-wasm-rs` under `cfg(all(target_family = "wasm", target_os = "unknown"))`, and the current
 > `sqlite-wasm-rs` README makes no such incompatibility claim — it lists rusqlite and diesel as
 > "Related Project". SQL, schema, migrations and row-mapping code **are** portable across all three
-> targets. See §0 and §3.4 of [`../client-stacks.md`](../client-stacks.md). The rest of this report
+> targets. See §0 and §3.4 of [`./README.md`](./README.md). The rest of this report
 > stands.
 
 Research date: **2026-07-26**. Every claim links to a primary source (crates.io API / crates.io sparse index, docs.rs, the projects' own GitHub source & issue trackers, or the official docs site). Secondary sources are not used as evidence.

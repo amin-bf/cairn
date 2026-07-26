@@ -15,9 +15,9 @@ write-ups were used only as pointers.
 
 | Appendix | Covers |
 |---|---|
-| [`client-stacks/dioxus.md`](client-stacks/dioxus.md) | Dioxus: health, Android, rendering, web, storage, dev loop, server story |
-| [`client-stacks/leptos-tauri.md`](client-stacks/leptos-tauri.md) | Leptos + Tauri 2: the same seven areas, plus the two-process architecture |
-| [`client-stacks/storage-and-contenders.md`](client-stacks/storage-and-contenders.md) | Cross-platform storage in depth; egui, Slint, Makepad, Iced, Tauri+other frontends |
+| [`dioxus.md`](./dioxus.md) | Dioxus: health, Android, rendering, web, storage, dev loop, server story |
+| [`leptos-tauri.md`](./leptos-tauri.md) | Leptos + Tauri 2: the same seven areas, plus the two-process architecture |
+| [`storage-and-contenders.md`](./storage-and-contenders.md) | Cross-platform storage in depth; egui, Slint, Makepad, Iced, Tauri+other frontends |
 
 Each appendix ends with a register of what its author **could not verify**. Those registers are
 part of the finding — read them before treating anything here as settled.
@@ -123,7 +123,7 @@ The facts most likely to constrain the decision in #8, in rough order of weight.
 
 ### 2.1 Dioxus
 
-*Full detail: [`client-stacks/dioxus.md`](client-stacks/dioxus.md)*
+*Full detail: [`dioxus.md`](./dioxus.md)*
 
 **Health.** Stable **0.7.9** (2026-05-08); newest publish is `0.8.0-alpha.0` (2026-05-19). Ten 0.7.x
 patches in ~6 months, then a gap — no stable release in the 2.5 months to the research date, and no
@@ -173,7 +173,7 @@ against this stack will be reading `dx` source, not documentation.
 
 ### 2.2 Leptos + Tauri 2
 
-*Full detail: [`client-stacks/leptos-tauri.md`](client-stacks/leptos-tauri.md)*
+*Full detail: [`leptos-tauri.md`](./leptos-tauri.md)*
 
 **Health.** Split verdict — see headline findings 3 and 4. Leptos 0.8.20, "lightly maintained",
 pre-1.0, no stability policy, breaking 0.9 in beta. Tauri 2.11.5, monthly cadence, multi-maintainer,
@@ -249,7 +249,7 @@ officially support server based solutions."* The two positions agree.
 
 ### 2.3 Other contenders
 
-*Full detail: [`client-stacks/storage-and-contenders.md`](client-stacks/storage-and-contenders.md)*
+*Full detail: [`storage-and-contenders.md`](./storage-and-contenders.md)*
 
 An architectural point that frames the whole group: **Tauri is not a web deployment target.** It
 *"acts as a static web host"* and produces desktop and mobile binaries only. A "Tauri + X" stack gets
