@@ -35,7 +35,16 @@ If applicable, use RGR to complete the task.
 
 # FEEDBACK LOOPS
 
-Before committing, run `npm run typecheck` and `npm run test` to ensure the tests pass.
+Before committing, run all four and make sure they are clean:
+
+1. `cargo fmt --all` — formats; never hand-format instead
+2. `cargo clippy --all-targets --all-features -- -D warnings` — lints, warnings are errors
+3. `cargo test --all-features` — the test suite
+4. `cargo build --release` **only** if the change could plausibly affect release-only behaviour
+
+`cargo clippy` type-checks as it lints, so there is no separate type-check step — a clean clippy run means the crate compiles.
+
+If a command fails for a reason unrelated to your change (a pre-existing failure on the base branch), say so explicitly in the commit message rather than working around it or disabling the check.
 
 # COMMIT
 

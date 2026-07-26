@@ -44,15 +44,24 @@ const planSchema = z.object({
 const MAX_ITERATIONS = 10;
 
 // Hooks run inside the sandbox before the agent starts each iteration.
-// npm install ensures the sandbox always has fresh dependencies.
+// cargo fetch downloads the dependency graph up front, so the agent's first
+// `cargo test` isn't also a registry sync — and so a network failure surfaces
+// here rather than halfway through an implementation.
 const hooks = {
-  sandbox: { onSandboxReady: [{ command: "npm install" }] },
+  sandbox: { onSandboxReady: [{ command: "cargo fetch" }] },
 };
 
-// Copy node_modules from the host into the worktree before each sandbox
-// starts. Avoids a full npm install from scratch; the hook above handles
-// platform-specific binaries and any packages added since the last copy.
-const copyToWorktree = ["node_modules"];
+// Nothing is copied from the host into the worktree.
+//
+// node_modules is not needed inside the sandbox: the zod schema and the
+// sandcastle harness both run on the host, and the Claude Code CLI is a
+// standalone binary baked into the image.
+//
+// `target` is deliberately not copied either — build artifacts are large, and
+// host/container toolchain differences would likely invalidate them anyway.
+// Cargo's registry cache lives in ~/.cargo, outside the worktree, so it cannot
+// be seeded this way; the `cargo fetch` hook above covers it per sandbox.
+const copyToWorktree: string[] = [];
 
 // ---------------------------------------------------------------------------
 // Main loop

@@ -1,10 +1,18 @@
 FROM node:22-bookworm
 
-# Install system dependencies
+# Install system dependencies.
+# build-essential / pkg-config / libssl-dev are here for Rust crates that
+# compile C or link against system libraries (ring, openssl-sys, libsqlite3-sys
+# without its bundled feature). The node:*-bookworm base is buildpack-deps
+# based so it already carries a compiler, but naming them keeps the image
+# correct if the base image is ever swapped for a slim variant.
 RUN apt-get update && apt-get install -y \
   git \
   curl \
   jq \
+  build-essential \
+  pkg-config \
+  libssl-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
@@ -25,11 +33,23 @@ ARG AGENT_GID=1000
 RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d /home/agent -m -l agent node
 USER ${AGENT_UID}:${AGENT_GID}
 
+# Install the Rust toolchain as the agent user, so cargo's home lands in
+# /home/agent/.cargo and stays writable at runtime. clippy and rustfmt are
+# requested explicitly because the minimal profile omits them, and the
+# implement/review/merge prompts all run them as feedback loops.
+# Note: --no-modify-path is deliberately NOT passed. The ENV PATH below covers
+# the non-login shells that sandbox.exec uses, but letting rustup write its
+# profile snippet means a login shell (bash -l) also finds cargo — otherwise
+# /etc/profile resets PATH and the toolchain silently disappears.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+  | sh -s -- -y --profile minimal \
+  && /home/agent/.cargo/bin/rustup component add clippy rustfmt
+
 # Install Claude Code CLI
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
-# Add Claude to PATH
-ENV PATH="/home/agent/.local/bin:$PATH"
+# Add cargo and Claude to PATH
+ENV PATH="/home/agent/.cargo/bin:/home/agent/.local/bin:$PATH"
 
 WORKDIR /home/agent
 
