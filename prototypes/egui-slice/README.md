@@ -108,12 +108,31 @@ nothing.
 - **No CSS means layout is your code.** The canvas fills the viewport; centring, max-width and
   responsive behaviour are all hand-written.
 - Typography is visibly egui's own and does not match a native or web app.
-- Android was **not built** — the font finding above is decisive enough that packaging is moot until
-  the script question is answered. `cargo-apk` was last published 2023-11-30; `xbuild` 0.2.0 is the
-  alternative.
+- Android **is built and verified** — see below.
 
 ## Verified
 
 - Desktop: persisted to `~/.local/share/leitner-egui-slice/`, survived restart.
 - Web: persisted to OPFS through the polling layer, survived reload.
-- Android: **not attempted** — see above.
+- Android (Pixel 8 Pro, API 37): persisted to `/data/user/0/dev.leitner.eguislice/files/`, survived
+  force-stop. **Release APK 5.4 MB, non-debuggable, verified on device.**
+
+## Android packaging
+
+```sh
+cargo install cargo-apk --locked
+cargo apk build            # debug  → target/debug/apk/egui-slice.apk    221 MB
+cargo apk build --release  # release → target/release/apk/egui-slice.apk   5.4 MB
+```
+
+Uses `android-native-activity`, so the APK is **just a manifest and a `.so`** — no Java, no Kotlin,
+no `classes.dex`, no Gradle project in the repo.
+
+`eframe`'s default features include `accesskit`, which it refuses alongside `android-native-activity`,
+so the dependency is **split per target** in `Cargo.toml` — Android gets
+`default-features = false` plus `default_fonts`, `wgpu`, `android-native-activity`.
+
+Two warts: `cargo-apk` **panics after signing** (`Bin is not compatible with Cdylib`) because this
+crate has both a cdylib and a bin — the APK is correct but the exit code is non-zero, which will
+upset CI; split the desktop binary into its own crate to fix. And `cargo-apk` was last published
+**2023-11-30** — it works on NDK 29 / API 37, but it is unmaintained.

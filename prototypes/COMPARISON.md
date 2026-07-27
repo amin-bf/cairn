@@ -560,9 +560,9 @@ That leaves the live shortlist as **A, C, and conditionally D**.
 |---|---|---|---|---|
 | **VERIFIED ON REAL HARDWARE** | | | | |
 | Web — persist, survive reload | ✅ | ✅ | ✅ | ✅ |
-| Android — survive force-stop (Pixel 8 Pro) | ✅ | ✅ | ✅ | ❌ **not built** |
+| Android — survive force-stop (Pixel 8 Pro) | ✅ | ✅ | ✅ | ✅ |
 | Desktop — survive restart | ✅ | ✅ | ✅ | ✅ |
-| Release artifact run on the phone | ✅ APK+AAB | ✅ APK | ⚠️ debug only | ❌ |
+| Release artifact run on the phone | ✅ APK+AAB | ✅ APK | ⚠️ debug only | ✅ APK |
 | **TEXT & INTERNATIONALISATION** | | | | |
 | Latin + diacritics | ✅ | ✅ | ✅ | ✅ |
 | Cyrillic | ✅ | ✅ | ✅ | ✅ |
@@ -588,20 +588,20 @@ That leaves the live shortlist as **A, C, and conditionally D**.
 | Web cold build | ✓ 20.0s | 23.6s | 23.4s | 31.7s |
 | Web incremental (Rust) | 2.6s | ✓ 1.2s | 2.66s | ~2s |
 | Markup-only change | ✓ hot reload | ❌ rebuild | ✓ hot reload | ❌ rebuild |
-| Android cold APK | ✓ 71s | 85s | 36s † | — |
+| Android cold APK | 71s | 85s | 36s † | ✓ **~16s** |
 | Android incremental APK | 6.8s | ✓ 5.4s | — | — |
 | **SIZE & DEPENDENCIES** | | | | |
 | Crates in wasm graph | 126 | 180 | 127 | ✓ **119** |
 | Crates in native graph | 352 | 269 | 269 | ✓ **268** |
 | Debug wasm bundle | — | — | — | ⚠️ 41 MB |
-| Debug APK | ✓ 66 MB | 129 MB | 137 MB | — |
-| Release APK | 9.0 MB | 13 MB | — | — |
+| Debug APK | ✓ 66 MB | 129 MB | 137 MB | 221 MB |
+| Release APK | 9.0 MB | 13 MB | — | ✓ **5.4 MB** |
 | **SYSTEM REQUIREMENTS** | | | | |
 | Linux desktop packages | ⚠️ webkit2gtk + **xdotool** | webkit2gtk | webkit2gtk | ✓ **no webkit** |
 | Unwanted native menu bar | ⚠️ yes | ✓ none | ✓ none | ✓ none |
 | Android data directory | ⚠️ hand JNI | ✅ `app_data_dir()` | ✅ `app_data_dir()` | ⚠️ hand JNI |
-| Android packaging tool | dx (integrated) | tauri-cli | tauri-cli | ❌ cargo-apk (2023) / xbuild 0.2 |
-| targetSdk default | ⚠️ 34 → 36 by config | ✅ 36 | ✅ 36 | unknown |
+| Android packaging tool | dx (integrated) | tauri-cli | tauri-cli | ⚠️ cargo-apk 0.10 (2023) — works |
+| targetSdk default | ⚠️ 34 → 36 by config | ✅ 36 | ✅ 36 | ✅ 36 by config |
 | **UI & INTERACTION** | | | | |
 | Typed answers / IME (#11) | ✅ native | ✅ native | ✅ native | ⚠️ faked, "doesn't always work" |
 | Text selection / page search on web | ✅ | ✅ | ✅ | ❌ canvas |
@@ -614,8 +614,28 @@ That leaves the live shortlist as **A, C, and conditionally D**.
 
 † C's Android build ran with a warm cargo cache — not comparable to A's and B's cold numbers.
 
-### The one gap in D's evidence
+### D's Android gap is now closed
 
-The ticket's first judging criterion is *"Runs on Android on the real device — not just 'compiles for
-Android'."* **D has not been built for Android at all.** A, B and C each cleared that bar on the
-Pixel 8 Pro; D has not. That should be closed before the ADR is written, not after.
+Built with **`cargo-apk` 0.10.0** via `android-native-activity`, and run on the Pixel 8 Pro:
+persists, survives force-stop, and the release APK is **non-debuggable** (`run-as` refused).
+
+| | D · egui |
+|---|---|
+| Debug APK | 221 MB (unstripped `.so`) |
+| **Release APK** | **5.4 MB — smallest of all four** |
+| Build time (cold, cargo-apk) | ~16s debug / ~22s release |
+| Java/Kotlin in the APK | **none** — no `classes.dex` at all |
+
+The APK contains only `AndroidManifest.xml` + `lib/arm64-v8a/libegui_slice.so`. `NativeActivity` is a
+framework class, so no dex, no Gradle project, no generated scaffold in the repo. That is a real
+structural advantage over the webview stacks, which each carry a Gradle project (44 committed files
+for B and C).
+
+**Two warts:**
+
+- `cargo-apk` **panics after signing** — `Bin is not compatible with Cdylib` — because this crate has
+  both a `[lib]` cdylib and a `src/main.rs` bin. The APK is produced and signed correctly first, so
+  it is cosmetic, but the command exits non-zero, which will upset CI. Fix by splitting the desktop
+  binary into its own crate.
+- `cargo-apk` was last published **2023-11-30** and warns that `ANDROID_SDK_ROOT` is deprecated. It
+  works today on NDK 29 / API 37; it is not maintained.

@@ -154,3 +154,25 @@ impl eframe::App for SliceApp {
         }
     }
 }
+
+
+/// Android entry point. `android-native-activity` means the framework's own `NativeActivity`
+/// hosts us, so the APK needs no Java or Kotlin at all — just this `.so` and a manifest.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+fn android_main(app: android_activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid as _;
+
+    let options = eframe::NativeOptions {
+        android_app: Some(app.clone()),
+        event_loop_builder: Some(Box::new(move |b| {
+            b.with_android_app(app.clone());
+        })),
+        ..Default::default()
+    };
+    let _ = eframe::run_native(
+        "egui slice",
+        options,
+        Box::new(|cc| Ok(Box::new(SliceApp::new(cc)))),
+    );
+}
