@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "dev.leitner.eguislice.app-mergeReleaseResources-21:/values-hdpi-v4/values-hdpi-v4.xml",
+            "map": [
+                {
+                    "source": "/home/amin/.gradle/caches/8.14.3/transforms/604897ea046431cf3f38f36adca8bde0/transformed/appcompat-1.7.0/res/values-hdpi-v4/values-hdpi-v4.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "6",
+                        "endColumns": "13",
+                        "endOffsets": "327"
+                    }
+                }
+            ]
+        }
+    ]
+}

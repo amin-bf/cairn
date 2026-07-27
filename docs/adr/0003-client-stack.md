@@ -151,22 +151,36 @@ only because, in the library's own words, *"some soft keyboards will deliver phy
 basic ascii input"*, which it calls adequate *"for prototyping"* but *"unlikely to be sufficient for
 production applications."* Persian is delivered via `InputConnection.commitText` and never reaches us.
 
-`GameActivity` is the documented answer — real IME through GameTextInput, and it is also the only
-backend under which `eframe` permits `accesskit`. The price is a Gradle dependency
-(`androidx.games:games-activity`), which means a Gradle project and an AAR, which is exactly the
-scaffold the NativeActivity route avoids.
+`GameActivity` looked like the answer — real IME through GameTextInput. **It was built and tested,
+and it does not help.** The Gradle project is kept at `prototypes/egui-slice/android/` so nobody
+repeats the experiment.
 
-| | NativeActivity (current) | GameActivity |
+**winit is the break, not the activity backend.**
+`winit-0.30.13/src/platform_impl/android/mod.rs` handles exactly two input events —
+`InputEvent::MotionEvent` and `InputEvent::KeyEvent`. There is no `Ime` handling and no call to
+`text_input_state`. `set_ime_allowed` merely calls `show_soft_input`, raising the keyboard and then
+discarding whatever it composes. GameActivity implements IME correctly underneath; winit never reads
+it. Verified on the handset: Persian still could not be typed.
+
+| | NativeActivity | GameActivity (tested) |
 |---|---|---|
-| Non-Latin text input | ❌ ASCII only | ✅ full IME |
-| APK | manifest + `.so`, no dex, 5.4 MB | Gradle project + AAR |
-| Packaging | `cargo-apk` | Gradle |
-| Native accessibility | ❌ eframe rejects accesskit | ✅ available |
+| Non-Latin text input | ❌ | ❌ **still broken** |
+| APK | **5.4 MB**, manifest + `.so` | 19 MB, incl. 5.7 MB `classes.dex` |
+| Packaging | `cargo-apk` | Gradle project + AAR + Kotlin conflict to resolve |
+| Native accessibility | ❌ | ✅ accesskit permitted |
 
-**Undecided, and it depends on the decks.** If typed answers are only ever entered in Latin — German
-answers to Persian prompts, say — NativeActivity stands and the packaging advantage is real. If a
-user must ever *type* Persian, we move to GameActivity and lose the clean APK.
-[#11](https://github.com/amin-bf/leitner/issues/11) cannot be specified until this is settled.
+**So this is not a choice we get to make.** Non-Latin text input on Android is unavailable to any
+egui/winit app today, at any packaging cost. Fixing it means implementing Android IME in **winit** —
+two dependency layers below us, real platform-integration work, and far larger than the bidi patch.
+
+Reverted to NativeActivity, since GameActivity's only remaining prize is native-only accessibility.
+
+**The consequence for [#11](https://github.com/amin-bf/leitner/issues/11) is concrete:** typed
+answers on Android can only be entered in Latin. For German-answer decks that is survivable. For
+Persian-answer decks it is not, and no amount of work inside this repository changes it. **This is
+the strongest argument against this stack that the whole exercise produced**, and it is recorded
+here rather than buried, because the webview options do not have it — a DOM text field gets full IME
+for free.
 
 ## Consequences
 

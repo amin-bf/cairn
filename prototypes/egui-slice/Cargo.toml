@@ -43,6 +43,10 @@ jni = "0.21"
 ndk-context = "0.1"
 android-activity = "0.6"
 winit = "0.30"
+# Back to NativeActivity. GameActivity was tried and reverted: it implements IME properly, but
+# winit 0.30's Android backend never reads it (only MotionEvent and KeyEvent are handled), so the
+# capability is unreachable. It cost a Gradle project, an AAR, a 5.7 MB classes.dex and a Kotlin
+# version conflict, for nothing. See android/README.md.
 eframe = { version = "0.35", default-features = false, features = [
   "default_fonts",
   "wgpu",
