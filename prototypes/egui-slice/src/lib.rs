@@ -19,7 +19,26 @@ pub const DEVICE: &str = "egui-web";
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub const DEVICE: &str = "egui-desktop";
 
+/// egui ships no Arabic face, so one has to be registered. Doing it inside `CreationContext`
+/// breaks the web build on **both** renderers — egui-wgpu panics with "Tried to update a texture
+/// that has not been allocated yet", and glow renders everything near-black. Deferring the install
+/// to the first frame avoids both.
+fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "ar".into(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../assets/NotoSansArabic-Regular.ttf"
+        ))),
+    );
+    for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts.families.entry(fam).or_default().push("ar".into());
+    }
+    ctx.set_fonts(fonts);
+}
+
 pub struct SliceApp {
+    fonts_installed: bool,
     idx: usize,
     revealed: bool,
     log: Vec<ReviewEvent>,
@@ -40,28 +59,18 @@ impl SliceApp {
             style.spacing.button_padding = egui::vec2(14.0, 12.0);
         });
 
-        {
-            // Embedded, not read from a system path — Android has no /usr/share/fonts.
-            // egui ships only Hack, Ubuntu-Light and Noto Emoji, so Arabic script needs a face.
-            let mut fonts = egui::FontDefinitions::default();
-            fonts.font_data.insert(
-                "ar".into(),
-                std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-                    "../assets/NotoSansArabic-Regular.ttf"
-                ))),
-            );
-            for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-                fonts.families.entry(fam).or_default().push("ar".into());
-            }
-            cc.egui_ctx.set_fonts(fonts);
-        }
         store::kick_off_load();
-        Self { idx: 0, revealed: false, log: store::read_all(), typed: String::new() }
+        Self { fonts_installed: false, idx: 0, revealed: false, log: store::read_all(), typed: String::new() }
     }
 }
 
 impl eframe::App for SliceApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if !self.fonts_installed {
+            install_fonts(ui.ctx());
+            self.fonts_installed = true;
+        }
+
         // The polling layer. On native this is a no-op; on web it is how OPFS results arrive.
         if let Some(evs) = store::poll() {
             self.log = evs;

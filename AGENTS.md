@@ -40,8 +40,11 @@ platform, no webview, no IPC. Setup and commands are in [`README.md`](./README.m
    has both a cdylib and a bin. The APK is fine; the exit code is not, and CI will break.
 6. **`eframe`'s dependency is split per target** — its default `accesskit` feature is rejected
    alongside `android-native-activity`.
-7. **Fonts are ours to ship.** egui bundles only Hack, Ubuntu-Light and Noto Emoji. Register any
-   added face in **every** family you use, including `Monospace`, or text silently renders as boxes.
+7. **Fonts are ours to ship — and must be installed on the first frame, not in `CreationContext`.**
+   egui bundles only Hack, Ubuntu-Light and Noto Emoji. Register any added face in **every** family
+   you use, including `Monospace`, or text silently renders as boxes. Registering during creation
+   breaks the web build: wgpu panics with "Tried to update a texture that has not been allocated
+   yet", glow renders everything near-black. Defer it one frame.
 8. **Android text input is ASCII-only, and cannot be fixed here.** winit's Android backend handles
    only motion and key events — it has no IME path, so composed text never reaches the app. This is
    not the activity backend: GameActivity was tried and reverted (see

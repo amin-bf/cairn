@@ -125,6 +125,11 @@ months.
 - **Layout is hand-written** — centring, max-width and responsive behaviour are our code.
 - **Fonts are ours to ship.** egui bundles only Hack, Ubuntu-Light and Noto Emoji. Arabic costs
   232 KB; **CJK costs 19 MB**, which is the practical bar on ever supporting CJK decks.
+  **Install them on the first frame, never in `CreationContext`** — registering a font during
+  creation breaks the *web* build on both renderers: `egui-wgpu` panics with *"Tried to update a
+  texture that has not been allocated yet"*, and `glow` renders the entire UI near-black. Deferring
+  the install one frame fixes both, and the default wgpu renderer is then fine. Found by testing;
+  it costs an afternoon if you meet it cold.
 - **An async platform call cannot be awaited in the frame.** Immediate mode redraws every frame, so
   results arrive via a handle polled per frame; the context must be woken with `request_repaint()`
   or a completed task sits unseen until the next input event.
@@ -174,6 +179,12 @@ egui/winit app today, at any packaging cost. Fixing it means implementing Androi
 two dependency layers below us, real platform-integration work, and far larger than the bidi patch.
 
 Reverted to NativeActivity, since GameActivity's only remaining prize is native-only accessibility.
+
+**Authoring is therefore a desktop/web activity.** Both accept Persian correctly — verified by
+typing `من ۳ کتاب فارسی دارم` into the web build, right-aligned and correctly ordered, and Persian
+sentences into the desktop build. Cards get authored there and reach the phone by sync. That is a
+workable answer, but it **promotes sync from deferred to load-bearing**: it is no longer only a
+multi-device convenience, it is the only route by which non-Latin content reaches Android at all.
 
 **The consequence for [#11](https://github.com/amin-bf/leitner/issues/11) is concrete:** typed
 answers on Android can only be entered in Latin. For German-answer decks that is survivable. For
