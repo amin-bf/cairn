@@ -20,15 +20,24 @@ it says so.
 |---|---|---|
 | **Web** — persist + survive reload | ✅ OPFS, verified bytes on disk | ✅ OPFS, verified bytes on disk |
 | **Android** — persist + survive force-stop | ✅ on the Pixel 8 Pro | ✅ on the Pixel 8 Pro |
-| **Desktop (Linux)** | ⛔ **does not link** — needs `libxdo` too | ✅ builds in 31s, runs, renders |
+| **Desktop (Linux)** — persist + survive restart | ✅ once `xdotool` is installed | ✅ |
+
+**All three targets pass for both stacks.** Desktop was driven with `xdotool`: click a grade, kill
+the process, relaunch, confirm the log reads back.
+
+```
+~/.local/share/leitner-dioxus-slice/review-log.jsonl
+  {"card_id":0,"grade":3,"at_ms":1785184938597,"device":"dioxus-desktop"}
+
+~/.local/share/dev.leitner.tauri-leptos-slice/review-log.jsonl
+  {"card_id":0,"grade":3,"at_ms":1785185065599,"device":"tauri-desktop"}
+```
 
 ### Desktop needs a different system dependency per stack
 
-With `webkit2gtk-4.1` 2.52.5 installed, **Tauri desktop built and ran on the first try** — window
-renders, platform correctly detected as `tauri-desktop`, and it resolved
-`~/.local/share/dev.leitner.tauri-leptos-slice/review-log.jsonl`.
+With `webkit2gtk-4.1` 2.52.5 installed, **Tauri desktop built and ran on the first try**.
 
-**Dioxus desktop still does not link:**
+**Dioxus desktop did not link until `xdotool` was also installed:**
 
 ```
 rust-lld: error: unable to find library -lxdo
@@ -43,7 +52,9 @@ libxdo-sys 0.11.0 → libxdo 0.6.0 → muda 0.17.2 → dioxus-desktop 0.7.9
 
 `muda` (menus) and `tray-icon` are **unconditional** dependencies of `dioxus-desktop` 0.7.9, so a
 Linux desktop build requires `xdotool` for features this app never uses. Tauri needed only
-`webkit2gtk-4.1`. Small, but it is one more thing every contributor and CI image must install.
+`webkit2gtk-4.1`. Small, but it is one more thing every contributor and CI image must install — and
+it is visible in the UI too: the Dioxus window carries a native **Window / Edit / Help** menu bar we
+did not ask for and would have to remove. The Tauri window has none.
 
 ### One architectural wrinkle, observed
 
@@ -315,11 +326,7 @@ the seam it depends on is real and cheap.
 
 ## 7. What this does *not* settle
 
-- **Dioxus desktop** — blocked on `xdotool` (`libxdo`). Tauri desktop is proven; Dioxus desktop is
-  not, and the two are therefore not yet compared on equal footing.
-- **Desktop persistence + restart survival** — the Tauri desktop window renders and resolves its log
-  path, but no grade has been recorded through it yet, so the write-and-restart proof that exists for
-  web and Android does not yet exist for desktop.
+- **Windows and macOS** — never built. Only Linux desktop was proven.
 - **Whether OPFS-on-main-thread holds under load** — proven for an append-only log at 136 bytes, not
   for a large log or concurrent tabs. No VFS supports multiple connections; multi-tab is unhandled
   in both slices.

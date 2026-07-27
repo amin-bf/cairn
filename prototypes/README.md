@@ -42,4 +42,14 @@ One `Store` type per target family, same call sites:
 | [`dioxus-slice/`](./dioxus-slice) | Dioxus 0.7.9 — one crate, `dx serve --platform {desktop,web,android}` |
 | [`tauri-leptos-slice/`](./tauri-leptos-slice) | Leptos 0.8 CSR + Tauri 2 — frontend crate + core crate + shared crate |
 
-Each has its own README with the one command to run it per platform, and what was measured.
+Each has a `README.md` (what it is, how to run it, what was verified) and a **`DEV-NOTES.md`**.
+
+## Which file survives the decision
+
+The prototypes are throwaway; the knowledge is not.
+
+- [`COMPARISON.md`](./COMPARISON.md) — the measured evidence. Feeds the **ADR** for #8, then can go.
+- `<winner>/DEV-NOTES.md` — prerequisites, commands, storage locations, every trap hit, and the
+  rules an agent needs. **This is the source for the repo `README.md` (setup + commands) and
+  `AGENTS.md` (traps + working rules)** once a stack is chosen.
+- The loser's `DEV-NOTES.md`, both slices, and this directory — delete.
