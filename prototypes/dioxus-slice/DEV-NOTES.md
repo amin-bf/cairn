@@ -109,3 +109,32 @@ exists solely to hide this — anything time-related must go through a `cfg`-spl
   failing at runtime. Lean on that — prefer `#[cfg]` over runtime platform checks.
 - Verify Android changes on the real handset. The emulator is x86_64; the Pixel 8 Pro is
   arm64-v8a only.
+
+## 7. Shipping Android, settled
+
+Two working release artifacts. `dx` reaches one of them; the other needs a direct Gradle call.
+
+```sh
+# App Bundle — the Play upload format. --target is REQUIRED or you silently get the host triple.
+dx bundle --platform android --release --package-types aab --target aarch64-linux-android
+#   → outputs/bundle/release/DioxusSlice-aarch64-linux-android.aab   9.3 MB
+
+# APK — dx never invokes the release buildType, so call it yourself.
+cd target/dx/<name>/release/android/app && ./gradlew assembleRelease
+#   → app/build/outputs/apk/release/app-release-unsigned.apk         9.0 MB
+```
+
+Both are genuine release builds — verified on the Pixel 8 Pro with the APK: no
+`application-debuggable`, `run-as` refused with *"package not debuggable"*, `lib/arm64-v8a/`,
+persists and survives force-stop.
+
+Sign with the SDK build-tools, not with `dx`:
+
+```sh
+zipalign -f -p 4 app-release-unsigned.apk out.apk
+apksigner sign --ks <keystore> --ks-key-alias <alias> out.apk
+```
+
+**Raise `targetSdk` to 36 before doing any layout work.** Play requires it, and at 36 Android
+enforces edge-to-edge — the app then draws under the status bar and owes real safe-area inset
+handling. At the stock default of 34 you get tidy insets for free and a nasty surprise later.

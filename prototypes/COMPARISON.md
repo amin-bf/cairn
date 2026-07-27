@@ -286,22 +286,42 @@ Verified on that file:
 **And AAB is the format that matters.** Google Play has required App Bundles for new apps since
 August 2021; the APK is not the upload artifact. So the shipping path exists.
 
-Two caveats, stated plainly:
+**And the release APK exists too — `dx` just never asks for it.** `dx` generates a real Gradle
+project; invoking its unused task directly works:
 
-- **`--target` is required or you get the host triple.** Without it the bundle contained
-  `base/lib/x86_64/libmain.so` and was named `DioxusSlice-x86_64-linux-android.aab`. Easy to ship by
-  accident.
-- **Not run on device.** `bundletool` is not installed here, so the AAB was verified by inspection
-  (Gradle task, manifest, ABI) rather than by converting it to APKs and launching it. The Tauri
-  release APK *was* launched on the handset. That asymmetry is real and is the one thing still
-  missing.
+```sh
+cd target/dx/dioxus-slice/release/android/app && ./gradlew assembleRelease
+→ app/build/outputs/apk/release/app-release-unsigned.apk    9.0 MB, 11s
+```
+
+Signed and **run on the Pixel 8 Pro**: launches, renders, the tap registers, the JNI data-dir path
+survives minification, the event persists, and it **survives force-stop + relaunch**. Decisively:
+
+```
+$ adb shell run-as dev.leitner.dioxusslice ls
+run-as: package not debuggable: dev.leitner.dioxusslice
+```
+
+`aapt2 dump badging` shows **no `application-debuggable` line**, `lib/arm64-v8a/`, `compileSdk 36`.
+
+So this was never a capability gap — it is a **CLI gap**. The release buildType works; `dx`'s APK
+commands simply do not invoke it, and one `gradlew` call gets you there.
+
+One caveat that remains: **`--target` is required for AAB or you get the host triple.** Without it
+the bundle contained `base/lib/x86_64/libmain.so` under the name
+`DioxusSlice-x86_64-linux-android.aab`. Easy to ship by accident.
 
 | | Dioxus | Leptos + Tauri 2 |
 |---|---|---|
-| Release **APK** is a release variant | ❌ debug variant, `application-debuggable` | ✅ minified, not debuggable |
 | Release **AAB** — the Play upload format | ✅ 9.3 MB, non-debuggable, correct ABI | ✅ |
-| Release artifact launched on device | ⚠️ not yet (needs `bundletool`) | ✅ |
+| Release **APK**, via `dx` | ❌ debug variant only | ✅ |
+| Release **APK**, via `./gradlew assembleRelease` | ✅ 9.0 MB, non-debuggable | ✅ |
+| Release artifact run on the handset | ✅ persists, survives restart | ✅ |
 | `targetSdk` meets Play minimum | ✅ via 2-line config (default 34) | ✅ 36 by default |
+
+**Knock-on:** once `targetSdk` is raised to 36 — which Play requires anyway — the Dioxus app draws
+under the status bar exactly like the Tauri one. The tidier insets noted in §5 were purely an
+artefact of targeting 34, **not a property of the stack**. Both stacks owe the same safe-area work.
 
 ---
 
