@@ -2,3 +2,10 @@
 node_modules/
 .claude/settings.local.json
 .claude/worktrees/
+
+# throwaway prototypes for #8
+prototypes/*/target/
+prototypes/*/*/target/
+prototypes/*/dist/
+prototypes/*/*/dist/
+prototypes/tauri-leptos-slice/src-tauri/gen/android/.tauri/

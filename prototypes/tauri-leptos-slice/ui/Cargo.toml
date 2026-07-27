@@ -1,0 +1,28 @@
+[package]
+name = "slice-ui"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+leptos = { version = "0.8", features = ["csr"] }
+slice-shared = { path = "../shared" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = [
+  "Window",
+  "Navigator",
+  "StorageManager",
+  "FileSystemDirectoryHandle",
+  "FileSystemFileHandle",
+  "FileSystemGetFileOptions",
+  "FileSystemWritableFileStream",
+  "FileSystemCreateWritableOptions",
+  "File",
+  "Blob",
+] }

@@ -1,0 +1,7 @@
+[application]
+
+[web.app]
+title = "Dioxus slice · #8"
+
+[bundle]
+identifier = "dev.leitner.dioxusslice"

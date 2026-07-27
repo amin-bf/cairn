@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">"tauri-leptos-slice"</string>
+    <string name="main_activity_title">"tauri-leptos-slice"</string>
+</resources>

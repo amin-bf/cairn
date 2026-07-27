@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "tauri-leptos-slice",
+  "version": "0.0.1",
+  "identifier": "dev.leitner.tauri-leptos-slice",
+  "build": {
+    "beforeDevCommand": "trunk serve --config ui/Trunk.toml --port 8111",
+    "devUrl": "http://localhost:8111",
+    "beforeBuildCommand": "trunk build --config ui/Trunk.toml",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Tauri+Leptos slice · #8",
+        "width": 560,
+        "height": 820
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"]
+  }
+}
