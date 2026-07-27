@@ -48,7 +48,7 @@ platform, no webview, no IPC. Setup and commands are in [`README.md`](./README.m
 8. **Android text input is ASCII-only, and cannot be fixed here.** winit's Android backend handles
    only motion and key events — it has no IME path, so composed text never reaches the app. This is
    not the activity backend: GameActivity was tried and reverted (see
-   `prototypes/egui-slice/android/README.md`). Never design a feature that requires typing non-Latin
+   [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/leitner/blob/worktree-worktree-client-stack-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
    text on Android.
 9. **Verify Android on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
 

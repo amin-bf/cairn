@@ -5,7 +5,7 @@
 - **Resolves**: [Prototype: pick the client stack](https://github.com/amin-bf/leitner/issues/8)
 - **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
 - **Evidence**: [`docs/research/client-stacks/`](../research/client-stacks/README.md) and the four
-  prototypes measured in `prototypes/COMPARISON.md` (branch `worktree-worktree-client-stack-8`,
+  prototypes measured in [`prototypes/COMPARISON.md`](https://github.com/amin-bf/leitner/blob/worktree-worktree-client-stack-8/prototypes/COMPARISON.md) (branch `worktree-worktree-client-stack-8`,
   PR [#29](https://github.com/amin-bf/leitner/pull/29))
 - **Related**: [ADR-0001](0001-scheduling-algorithm-and-grade-scale.md),
   [ADR-0002](0002-the-card-model.md)
@@ -98,7 +98,7 @@ run"*, and that sections are laid out in the order given:
   not.
 
 **~60 lines, no fork of epaint**, verified on Persian sentences, mixed Latin/Persian, and digits, and
-confirmed by a Persian reader. See `prototypes/egui-slice/src/bidi.rs`.
+confirmed by a Persian reader. See [`prototypes/egui-slice/src/bidi.rs`](https://github.com/amin-bf/leitner/blob/worktree-worktree-client-stack-8/prototypes/egui-slice/src/bidi.rs).
 
 **All card and UI text must be rendered through this helper.** Text rendered with a plain
 `RichText`/`&str` bypasses it and will be wrong for RTL content. This is the single most important
@@ -163,7 +163,7 @@ basic ascii input"*, which it calls adequate *"for prototyping"* but *"unlikely 
 production applications."* Persian is delivered via `InputConnection.commitText` and never reaches us.
 
 `GameActivity` looked like the answer — real IME through GameTextInput. **It was built and tested,
-and it does not help.** The Gradle project is kept at `prototypes/egui-slice/android/` so nobody
+and it does not help.** The Gradle project is kept at [`prototypes/egui-slice/android/`](https://github.com/amin-bf/leitner/blob/worktree-worktree-client-stack-8/prototypes/egui-slice/android) so nobody
 repeats the experiment.
 
 **winit is the break, not the activity backend.**
@@ -198,6 +198,17 @@ Persian-answer decks it is not, and no amount of work inside this repository cha
 the strongest argument against this stack that the whole exercise produced**, and it is recorded
 here rather than buried, because the webview options do not have it — a DOM text field gets full IME
 for free.
+
+### 7. What is carried forward, and what is not
+
+The prototypes are throwaway and **do not land on `main`** — they live on the branch named above,
+which is the evidence asset for this decision. What lands is this ADR, `README.md` and the rules in
+`AGENTS.md`.
+
+One exception is worth naming: **the bidi helper is a validated decision, not a prototype artefact.**
+It must be carried into the real crate when the workspace is laid out
+([#14](https://github.com/amin-bf/leitner/issues/14)), together with its tests. Everything else in
+`prototypes/` can be deleted once this ADR is merged.
 
 ## Consequences
 
