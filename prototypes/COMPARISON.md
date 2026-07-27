@@ -511,6 +511,11 @@ Individual words *look* right because HarfBuzz shapes each run; what is missing 
 decides the **order runs are placed in**. Not fixable by shipping a font — it needs bidi implemented
 upstream in epaint.
 
+**Can it be worked around from outside egui? No — tested.** Reordering *runs* is a no-op (a pure
+Persian sentence is one RTL run; digits are not classed RTL). Reordering *characters* is worse — it
+breaks harfrust's joining. Shaping and bidi placement must happen in a fixed order, so a pre-pass
+outside the library cannot supply the missing half. The fix belongs inside epaint, at its own TODO.
+
 **This settles D for this app.** The repo owner's own language is Persian; a flashcard app whose
 cards render backwards is not a trade-off, it is a defect.
 

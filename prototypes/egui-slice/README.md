@@ -71,6 +71,26 @@ implemented upstream in epaint.
 **For a Persian flashcard app, this disqualifies egui today.** Not "adds a caveat" — the primary
 content renders in the wrong order.
 
+### Can it be fixed from outside egui? No — tested
+
+The obvious cheap fix is to run the Unicode bidi algorithm yourself and hand egui text already in
+visual order. **Both forms of it were built and run. Neither works.**
+
+| Attempt | Result |
+|---|---|
+| Reorder **runs** (`BidiInfo::visual_runs`), each run keeping logical order | **No-op.** A pure-Persian sentence is a single RTL run, so there is nothing to reorder. Pure digits are not classed RTL, so the pass returns early. Output identical to raw. |
+| Reorder **characters** (`BidiInfo::reorder_line`) into visual order | **Worse.** Reversing the characters fights harfrust's shaping — letters stop joining. Digits still unchanged. |
+
+The reason is structural: shaping and bidi placement have to happen in a specific order, and a
+pre-pass outside the library can only do one of them. harfrust shapes whatever it is given; if you
+pre-reverse, it shapes the reversed text and the joining comes out wrong.
+
+**The fix has to live inside epaint**, between shaping and glyph placement — which is exactly where
+epaint's own TODO sits (`epaint/src/text/font.rs`, near the reference to
+[egui#336](https://github.com/emilk/egui/issues/336)). epaint already depends on `harfrust`,
+`skrifa` and `unicode-segmentation`; adding `unicode-bidi` at the placement step is the shape of the
+change. Bounded, but upstream work — **not attempted here**.
+
 ### It is not the OS, and it is not the fonts
 
 Worth stating because it is the obvious suspect. The controlled comparison:
