@@ -439,7 +439,7 @@ re-optimisation. So `(card, timestamp, grade)` ⇒ scheduling state, **condition
 | Breaker | Replayable? | What it means for us |
 |---|---|---|
 | **The parameter vector** | Must be versioned | Re-optimising changes every card's computed `(S, D)`. Bit-exact replay requires pinning/versioning the 21 weights alongside the log. |
-| **Anki-style fuzz** | **Yes, if seeded from card identity** | Anki seeds from `card_id + reps`, so fuzz is exactly reproducible. `py-fsrs` uses unseeded `random()` and is not. Copy Anki's approach. |
+| **Interval fuzz** | **Yes, if seeded from card identity** | Anki seeds from `card_id + reps`, so every device recomputes the identical date and fuzz survives replay. `py-fsrs` uses unseeded `random()` and does not. **Requirement: seed from card identity and review count; never from an ambient RNG.** |
 | **Load balancing** | **No — depends on the whole collection** | Picks a day inside the fuzz range weighted by how many *other* cards are due each day. On by default in Anki. Not recoverable from one card's log. |
 | **Easy Days** | **No — depends on calendar weekday** | The adjustment depends on which weekday each candidate due date lands on. |
 | **Sibling avoidance** | **No — depends on other cards** | Biases against days already holding a card from the same note. |

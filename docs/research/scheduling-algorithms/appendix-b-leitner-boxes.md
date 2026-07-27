@@ -172,7 +172,7 @@ So across two real graded implementations: Hard is *demote one* in (a) and *no c
 > "開発者向け用語 **Box**（`review_state.box`）。**UI では非表示。**"
 > ("**Box** is a developer-facing term (`review_state.box`). **Not displayed in the UI.**")
 
-An app that literally names its feature "Leitner" keeps the box number internal and shows Anki-style next-interval labels on the buttons instead. That is a data point directly on the ticket's question.
+An app that literally names its feature "Leitner" keeps the box number internal and instead labels each grade button with the interval that grade would schedule ("4 d", "10 d"), so the user is told when the card returns rather than which box it sits in. That is a data point directly on the ticket's question.
 
 ### 2.5 Woźniak's "Normalized Leitner" — a spec, but still binary
 
