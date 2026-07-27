@@ -46,8 +46,11 @@ Pixel 8 Pro — and it is 29 lines you own forever. The Tauri slice gets the sam
 
 ## Not verified / found broken
 
-- `dx build --release` and `dx bundle --release` both emit the **debug** Gradle variant
-  (`application-debuggable`, unminified), and the `[android.signing]` block parses but is never
-  wired into the generated Gradle. No config fixes this. See COMPARISON §6.
-- `targetSdk` defaults to 34, below Google Play's minimum — but **this one is a two-line fix**
+- Every **APK** route emits the debug Gradle variant (`application-debuggable`, unminified) —
+  `dx build --release`, with or without `--device`, and `dx bundle --package-types apk`.
+- The **AAB** route does produce a real release build, and AAB is what Google Play requires:
+  `dx bundle --platform android --release --package-types aab --target aarch64-linux-android`
+  → `outputs/bundle/release/*.aab`, non-debuggable, `lib/arm64-v8a/`. **Pass `--target` or you get
+  the host triple silently.** Not yet launched on device — `bundletool` is not installed.
+- `targetSdk` defaults to 34, below Google Play's minimum — **two-line fix**
   (`[android] target_sdk = 36`, `compile_sdk = 36`), verified in `Dioxus.toml` here.

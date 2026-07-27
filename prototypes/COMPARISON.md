@@ -227,7 +227,7 @@ is a different matter and does *not* have a config fix.
 
 ---
 
-## 6. Release build — the result that reverses the research
+## 6. Release build — where both stacks land
 
 This is the most consequential thing the prototype found, and it points the opposite way from what
 the research predicted.
@@ -247,62 +247,61 @@ The two template defects the research names are still *present* — `isMinifyEna
 `versionCode` defaulting to `1` — but the crash they were said to cause does not occur on
 tauri 2.11.5 / tauri-cli 2.11.4 / API 37.
 
-### Dioxus: there is no release path
+### Dioxus: the APK path is debug-only, but the AAB path is a real release
 
-`dx build --platform android --release` builds the Rust in release mode, then packages it into the
-**`debug` Gradle variant**:
+> **This section previously claimed Dioxus had no Play-shippable Android build. That was wrong**,
+> and it was wrong because only the *APK* package type was tested. Corrected below. The error
+> mattered — it was the sole basis of an earlier recommendation.
+
+**What is true:** every APK route emits the **`debug` Gradle variant**.
 
 ```
-target/dx/dioxus-slice/release/android/app/app/build/outputs/apk/debug/app-debug.apk
+dx build  --platform android --release                        → apk/debug/app-debug.apk
+dx build  --platform android --release --device               → apk/debug/app-debug.apk
+dx bundle --platform android --release --package-types apk    → apk/debug/app-debug.apk
 ```
 
-`dx bundle --platform android --release --package-types apk` — the documented "shippable object"
-command — emits the **same debug-variant path**. So this is not a misuse of the CLI.
+`aapt2 dump badging` on that file reports **`application-debuggable`**, and `adb shell run-as`
+succeeds against it. So for sideloaded APKs, Dioxus 0.7.9 gives you a debuggable package.
 
-Read from the Gradle file `dx` generates, the `debug` buildType it actually invokes is:
+**What is not true:** that this leaves no shippable artifact. Switching the package type does invoke
+Gradle's release task:
 
-```kotlin
-getByName("debug") {
-    isDebuggable = true
-    isJniDebuggable = true
-    isMinifyEnabled = false
-}
+```sh
+dx bundle --platform android --release --package-types aab --target aarch64-linux-android
 ```
 
-A `release` buildType with minification **exists in the generated file** and is never used. Confirmed
-empirically: `adb shell run-as dev.leitner.dioxusslice` succeeded against the *release* APK, which
-only works on a debuggable package.
+```
+→ app/build/outputs/bundle/release/DioxusSlice-aarch64-linux-android.aab   9.3 MB, 13.5s
+```
 
-### And it is not configurable
+Verified on that file:
 
-`dx` accepts a signing block — `[android.signing]` with `jks_file`, `jks_password`, `key_alias`,
-`key_password` (field names discovered by reading the parser's own "missing field" errors; they are
-not documented). Supplying all four **parses and builds**, and changes nothing:
+| Check | Result |
+|---|---|
+| Gradle task | `packageReleaseBundle` — the **release** buildType (`isMinifyEnabled = true`) |
+| `debuggable` in the bundle's `AndroidManifest.xml` | **attribute absent → defaults to false** |
+| ABI | `base/lib/arm64-v8a/libmain.so` — correct for the handset |
 
-- the only output is still `.../release/android/app/app/build/outputs/apk/debug/app-debug.apk`,
-  freshly written;
-- `aapt2 dump badging` on it reports **`application-debuggable`**;
-- the generated `build.gradle.kts` contains **no `signingConfig`, `storeFile` or `keyAlias` at
-  all** — the signing config is accepted by the config parser and then not wired into Gradle.
+**And AAB is the format that matters.** Google Play has required App Bundles for new apps since
+August 2021; the APK is not the upload artifact. So the shipping path exists.
 
-So unlike `targetSdk`, this one has no config escape. To ship a Play-acceptable APK from Dioxus
-0.7.9 you would have to post-process the Gradle project `dx` regenerates into `target/` on every
-build — i.e. patch a directory that is overwritten each time you build.
+Two caveats, stated plainly:
 
-**`android:debuggable="true"` is rejected by Google Play**, and on any installed build it lets
-`run-as` walk into the app's private data — which is where this app's entire review log lives.
-
-**Fairness note:** this is fixable upstream and 0.8-alpha may already differ. But choosing Dioxus
-today means choosing 0.7.9 as it is, or riding an alpha — exactly the open question research
-finding 3 left.
+- **`--target` is required or you get the host triple.** Without it the bundle contained
+  `base/lib/x86_64/libmain.so` and was named `DioxusSlice-x86_64-linux-android.aab`. Easy to ship by
+  accident.
+- **Not run on device.** `bundletool` is not installed here, so the AAB was verified by inspection
+  (Gradle task, manifest, ABI) rather than by converting it to APKs and launching it. The Tauri
+  release APK *was* launched on the handset. That asymmetry is real and is the one thing still
+  missing.
 
 | | Dioxus | Leptos + Tauri 2 |
 |---|---|---|
-| Release APK builds | ✅ 14 MB, 26s | ✅ 13 MB, 53s |
-| Release APK **is a release variant** | ❌ debug variant, `application-debuggable`, unminified | ✅ minified, not debuggable |
-| …fixable by config? | ❌ signing block parses but is never wired into Gradle | n/a |
-| Signed release APK runs on device | ✅ | ✅ |
-| `targetSdk` meets Play minimum | ✅ **via 2-line config** (default 34) | ✅ 36 by default |
+| Release **APK** is a release variant | ❌ debug variant, `application-debuggable` | ✅ minified, not debuggable |
+| Release **AAB** — the Play upload format | ✅ 9.3 MB, non-debuggable, correct ABI | ✅ |
+| Release artifact launched on device | ⚠️ not yet (needs `bundletool`) | ✅ |
+| `targetSdk` meets Play minimum | ✅ via 2-line config (default 34) | ✅ 36 by default |
 
 ---
 

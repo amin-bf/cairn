@@ -47,9 +47,15 @@ Skipping it produces `Failed to get android tools`, which does not say what is m
 ```sh
 dx serve --platform web                  # http://localhost:8080, hot reload
 dx serve --platform desktop
-dx build --platform android --device     # then adb install -r <apk>
+dx build --platform android --device     # dev APK; then adb install -r <apk>
 dx serve --platform android              # build + install + launch on a connected device
+
+# shipping: AAB, not APK — every APK route is the debug Gradle variant
+dx bundle --platform android --release --package-types aab --target aarch64-linux-android
 ```
+
+**`--target` is not optional for release bundles.** Omit it and `dx` silently builds the *host*
+triple — you get `lib/x86_64/` inside a file named `…-x86_64-linux-android.aab`.
 
 Measured on this machine: web cold 20s / incremental 2.6s; Android cold 71s / incremental 6.8s.
 
@@ -83,7 +89,9 @@ exists solely to hide this — anything time-related must go through a `cfg`-spl
 
 | Trap | Symptom | Fix |
 |---|---|---|
-| No release Android variant | `--release` still emits `apk/debug/app-debug.apk`, `application-debuggable` | **None found.** `[android.signing]` parses but never reaches Gradle. See COMPARISON §6. |
+| APK routes are debug-only | `--release` still emits `apk/debug/app-debug.apk`, `application-debuggable` | **Ship the AAB, not the APK** — see below. Play requires AAB anyway. |
+| AAB silently built for the host triple | bundle contains `lib/x86_64/`, named `*-x86_64-linux-android.aab` | **always pass `--target aarch64-linux-android`** |
+| `[android.signing]` appears to do nothing | parses, but no `signingConfig` in the generated Gradle | fields are `jks_file`/`jks_password`/`key_alias`/`key_password`; sign the AAB yourself if needed |
 | `targetSdk` defaults to 34 | Below Play's minimum | `[android] target_sdk = 36` / `compile_sdk = 36` — verified to work |
 | Missing `libxdo` | `unable to find library -lxdo` | `pacman -S xdotool` |
 | Android env not sourced | `Failed to get android tools` | `source scripts/android-env.sh` |
