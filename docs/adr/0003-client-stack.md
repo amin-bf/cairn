@@ -130,6 +130,12 @@ months.
   texture that has not been allocated yet"*, and `glow` renders the entire UI near-black. Deferring
   the install one frame fixes both, and the default wgpu renderer is then fine. Found by testing;
   it costs an afternoon if you meet it cold.
+  **One custom face is shipped: `NotoSansArabic-Regular`, 232 KB, embedded with `include_bytes!`**
+  and registered into *both* the `Proportional` and `Monospace` families. It is sufficient for
+  **Persian**, not merely Arabic — verified by rendering the four letters Arabic lacks (`گ چ پ ژ`),
+  the Persian `ی` and `ک`, and Persian digits, with no missing glyphs. A Persian-specific face such
+  as Vazirmatn would be a typographic preference, not a correctness fix. Latin and Cyrillic come
+  from egui's own bundled Hack / Ubuntu-Light.
 - **An async platform call cannot be awaited in the frame.** Immediate mode redraws every frame, so
   results arrive via a handle polled per frame; the context must be woken with `request_repaint()`
   or a completed task sits unseen until the next input event.
