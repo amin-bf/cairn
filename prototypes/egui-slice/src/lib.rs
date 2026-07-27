@@ -161,12 +161,13 @@ impl eframe::App for SliceApp {
                     .font(egui::FontId::proportional(20.0))
                     .layouter(&mut layouter),
             );
-            ui.label(
-                egui::RichText::new(format!("{} chars: {:?}", self.typed.chars().count(), self.typed))
-                    .monospace()
-                    .size(10.0)
-                    .color(egui::Color32::from_rgb(0x9a, 0xa3, 0xb0)),
-            );
+            // Through the helper — a plain RichText here renders RTL backwards. This debug line
+            // was itself the first thing to get it wrong.
+            ui.label(bidi::job(
+                &format!("{} chars: {}", self.typed.chars().count(), self.typed),
+                egui::FontId::monospace(11.0),
+                egui::Color32::from_rgb(0x9a, 0xa3, 0xb0),
+            ));
 
             ui.add_space(16.0);
             ui.label(
@@ -179,15 +180,14 @@ impl eframe::App for SliceApp {
             );
             ui.add_space(6.0);
             for ev in self.log.iter().rev().take(6) {
-                ui.label(
-                    egui::RichText::new(format!(
+                ui.label(bidi::job(
+                    &format!(
                         "card {} · grade {} · {} · {}",
                         ev.card_id, ev.grade, ev.at_ms, ev.device
-                    ))
-                    .monospace()
-                    .size(10.0)
-                    .color(egui::Color32::from_rgb(0x9a, 0xa3, 0xb0)),
-                );
+                    ),
+                    egui::FontId::monospace(10.0),
+                    egui::Color32::from_rgb(0x9a, 0xa3, 0xb0),
+                ));
             }
             ui.add_space(10.0);
             ui.label(
