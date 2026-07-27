@@ -549,3 +549,73 @@ alternative — the "completely awful" setup the research quotes from egui's own
 yes it is out; if no it is the only option that keeps a compile-time seam without a webview.
 
 That leaves the live shortlist as **A, C, and conditionally D**.
+
+---
+
+## 12. Full four-way table
+
+`✓` marks best-in-row where there is a clear winner. **D is the chosen option** (#8).
+
+| | A · Dioxus | B · Leptos+Tauri | C · Dioxus+Tauri | **D · egui ✔** |
+|---|---|---|---|---|
+| **VERIFIED ON REAL HARDWARE** | | | | |
+| Web — persist, survive reload | ✅ | ✅ | ✅ | ✅ |
+| Android — survive force-stop (Pixel 8 Pro) | ✅ | ✅ | ✅ | ❌ **not built** |
+| Desktop — survive restart | ✅ | ✅ | ✅ | ✅ |
+| Release artifact run on the phone | ✅ APK+AAB | ✅ APK | ⚠️ debug only | ❌ |
+| **TEXT & INTERNATIONALISATION** | | | | |
+| Latin + diacritics | ✅ | ✅ | ✅ | ✅ |
+| Cyrillic | ✅ | ✅ | ✅ | ✅ |
+| CJK | ✅ free | ✅ free | ✅ free | ⚠️ ship 19 MB |
+| Arabic-script letters + joining | ✅ | ✅ | ✅ | ✅ harfrust |
+| Persian sentence — word order | ✅ | ✅ | ✅ | ❌ **wrong** |
+| Persian digits `۱۲۳۴۵` | ✅ | ✅ | ✅ | ❌ reversed |
+| Bidi algorithm | ✅ | ✅ | ✅ | ❌ upstream TODO |
+| Font source | system | system | system | ⚠️ you ship them |
+| **ARCHITECTURE** | | | | |
+| Rendering | webview | webview | webview | **canvas** |
+| Crates in the app | ✓ 1 | 3 | 3 | ✓ 1 |
+| Storage seam | ✓ compile-time | ❌ runtime | ❌ runtime | ✓ compile-time |
+| Platform known in Rust | ✅ | ❌ UA sniff | ❌ UA sniff | ✅ |
+| IPC boundary | ✓ none | JSON invoke | JSON invoke | ✓ none |
+| Dead code shipped | ✓ none | both paths | both paths | ✓ none |
+| Async platform APIs | ✓ await | ✓ await | ✓ await | ⚠️ poll each frame |
+| Layout system | CSS | CSS | CSS | ⚠️ hand-written |
+| Rust LOC | 376 | 365 | 365 | 439 |
+| Config files | 2 | 8 | 7 | 3 |
+| Generated scaffold committed | ✓ 0 | 44 | 44 | ✓ 0 |
+| **BUILD & ITERATION** | | | | |
+| Web cold build | ✓ 20.0s | 23.6s | 23.4s | 31.7s |
+| Web incremental (Rust) | 2.6s | ✓ 1.2s | 2.66s | ~2s |
+| Markup-only change | ✓ hot reload | ❌ rebuild | ✓ hot reload | ❌ rebuild |
+| Android cold APK | ✓ 71s | 85s | 36s † | — |
+| Android incremental APK | 6.8s | ✓ 5.4s | — | — |
+| **SIZE & DEPENDENCIES** | | | | |
+| Crates in wasm graph | 126 | 180 | 127 | ✓ **119** |
+| Crates in native graph | 352 | 269 | 269 | ✓ **268** |
+| Debug wasm bundle | — | — | — | ⚠️ 41 MB |
+| Debug APK | ✓ 66 MB | 129 MB | 137 MB | — |
+| Release APK | 9.0 MB | 13 MB | — | — |
+| **SYSTEM REQUIREMENTS** | | | | |
+| Linux desktop packages | ⚠️ webkit2gtk + **xdotool** | webkit2gtk | webkit2gtk | ✓ **no webkit** |
+| Unwanted native menu bar | ⚠️ yes | ✓ none | ✓ none | ✓ none |
+| Android data directory | ⚠️ hand JNI | ✅ `app_data_dir()` | ✅ `app_data_dir()` | ⚠️ hand JNI |
+| Android packaging tool | dx (integrated) | tauri-cli | tauri-cli | ❌ cargo-apk (2023) / xbuild 0.2 |
+| targetSdk default | ⚠️ 34 → 36 by config | ✅ 36 | ✅ 36 | unknown |
+| **UI & INTERACTION** | | | | |
+| Typed answers / IME (#11) | ✅ native | ✅ native | ✅ native | ⚠️ faked, "doesn't always work" |
+| Text selection / page search on web | ✅ | ✅ | ✅ | ❌ canvas |
+| Accessibility on web | ✅ DOM | ✅ DOM | ✅ DOM | ❌ AccessKit has no web backend |
+| Per-engine CSS divergence | ⚠️ 3 engines | ⚠️ 3 engines | ⚠️ 3 engines | ✓ none |
+| **PROJECT HEALTH** | | | | |
+| Stability | ⚠️ pre-1.0 | Tauri post-1.0 / Leptos pre-1.0 | Tauri post-1.0 / Dioxus pre-1.0 | ⚠️ pre-1.0 |
+| Maintenance signal | funded team; ~55 doc stubs | ⚠️ Leptos "lightly maintained" | Tauri healthy | ✓ active, ~4.5M dl/90d |
+| Framework risk swappable | ❌ | ✅ | ✅ frontend only | ❌ |
+
+† C's Android build ran with a warm cargo cache — not comparable to A's and B's cold numbers.
+
+### The one gap in D's evidence
+
+The ticket's first judging criterion is *"Runs on Android on the real device — not just 'compiles for
+Android'."* **D has not been built for Android at all.** A, B and C each cleared that bar on the
+Pixel 8 Pro; D has not. That should be closed before the ADR is written, not after.
