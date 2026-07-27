@@ -41,12 +41,17 @@ impl SliceApp {
         });
 
         {
+            // Embedded, not read from a system path — Android has no /usr/share/fonts.
+            // egui ships only Hack, Ubuntu-Light and Noto Emoji, so Arabic script needs a face.
             let mut fonts = egui::FontDefinitions::default();
-            if let Ok(by) = std::fs::read("/usr/share/fonts/noto/NotoSansArabic-Regular.ttf") {
-                fonts.font_data.insert("ar".into(), std::sync::Arc::new(egui::FontData::from_owned(by)));
-                for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-                    fonts.families.entry(fam).or_default().push("ar".into());
-                }
+            fonts.font_data.insert(
+                "ar".into(),
+                std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+                    "../assets/NotoSansArabic-Regular.ttf"
+                ))),
+            );
+            for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                fonts.families.entry(fam).or_default().push("ar".into());
             }
             cc.egui_ctx.set_fonts(fonts);
         }
@@ -154,8 +159,10 @@ impl eframe::App for SliceApp {
                 job.wrap.max_width = wrap_width;
                 ui.ctx().fonts_mut(|f| f.layout_job(job))
             };
+            let rtl = bidi::is_rtl(&self.typed);
             ui.add(
                 egui::TextEdit::singleline(&mut self.typed)
+                    .horizontal_align(if rtl { egui::Align::RIGHT } else { egui::Align::LEFT })
                     .hint_text("type here — Latin, Persian, anything")
                     .desired_width(f32::INFINITY)
                     .font(egui::FontId::proportional(20.0))

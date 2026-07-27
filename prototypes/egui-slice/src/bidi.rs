@@ -28,6 +28,13 @@ fn fix_digits(word: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// True when the text's base direction is RTL — i.e. its first strong character is Arabic-script.
+/// Use it to right-align widgets around the text, and to set `TextEdit::horizontal_align`.
+pub fn is_rtl(text: &str) -> bool {
+    let info = unicode_bidi::BidiInfo::new(text, None);
+    info.paragraphs.first().is_some_and(|p| p.level.is_rtl())
+}
+
 /// Build a `LayoutJob` whose sections are ordered by the Unicode bidirectional algorithm.
 pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
     use unicode_bidi::BidiInfo;
@@ -39,6 +46,13 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
     if info.paragraphs.is_empty() {
         job.append(text, 0.0, fmt);
         return job;
+    }
+
+    // Base direction, resolved the way HTML's dir="auto" does it: from the first strong character.
+    // A Persian paragraph is right-aligned; a Latin one is not. Without this the runs are ordered
+    // correctly but the block still hugs the left edge, which reads wrong.
+    if info.paragraphs[0].level.is_rtl() {
+        job.halign = egui::Align::RIGHT;
     }
 
     for (i, para) in info.paragraphs.iter().enumerate() {

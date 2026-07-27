@@ -66,9 +66,10 @@ Measured, not inferred:
 - **Leanest dependency graph of the four** — 119 crates in the wasm graph (against 126 / 180 / 127)
   and 268 native (against A's 352).
 - **Smallest release artifact** — a 5.4 MB Android APK, against A's 9.0 MB and B's 13 MB.
-- **No Gradle project in the repository.** Packaged via `cargo-apk` with `android-native-activity`,
-  the APK is a manifest and a `.so` — no Java, no Kotlin, no `classes.dex`. The Tauri options each
-  commit 44 generated files.
+- **No Gradle project in the repository** — *if* we stay on `NativeActivity`. Packaged via
+  `cargo-apk` with `android-native-activity`, the APK is a manifest and a `.so`: no Java, no Kotlin,
+  no `classes.dex`, against 44 committed generated files for each Tauri option. **This advantage is
+  conditional — see §6.**
 - No webkit2gtk, and therefore no three-CSS-engine divergence.
 
 ### 3. Bidi is patched in our application, not upstream
@@ -141,6 +142,32 @@ months.
 - Under Wayland, winit ignores `GDK_BACKEND`; use `WINIT_UNIX_BACKEND=x11` when an X11 window is
   needed.
 
+### 6. Android text input forces a choice we have not made yet
+
+Found by typing into the app on the handset: **only Latin can be entered.** The cause is not egui.
+`android-activity` 0.6.1's `NativeActivity` backend implements no input method at all — its
+`set_text_input_state` and `set_ime_editor_info` are literally `// NOP: Unsupported`. Latin arrives
+only because, in the library's own words, *"some soft keyboards will deliver physical key events for
+basic ascii input"*, which it calls adequate *"for prototyping"* but *"unlikely to be sufficient for
+production applications."* Persian is delivered via `InputConnection.commitText` and never reaches us.
+
+`GameActivity` is the documented answer — real IME through GameTextInput, and it is also the only
+backend under which `eframe` permits `accesskit`. The price is a Gradle dependency
+(`androidx.games:games-activity`), which means a Gradle project and an AAR, which is exactly the
+scaffold the NativeActivity route avoids.
+
+| | NativeActivity (current) | GameActivity |
+|---|---|---|
+| Non-Latin text input | ❌ ASCII only | ✅ full IME |
+| APK | manifest + `.so`, no dex, 5.4 MB | Gradle project + AAR |
+| Packaging | `cargo-apk` | Gradle |
+| Native accessibility | ❌ eframe rejects accesskit | ✅ available |
+
+**Undecided, and it depends on the decks.** If typed answers are only ever entered in Latin — German
+answers to Persian prompts, say — NativeActivity stands and the packaging advantage is real. If a
+user must ever *type* Persian, we move to GameActivity and lose the clean APK.
+[#11](https://github.com/amin-bf/leitner/issues/11) cannot be specified until this is settled.
+
 ## Consequences
 
 - The storage seam is a compile-time `#[cfg]`, so platform mistakes fail the build. This is the
@@ -156,6 +183,8 @@ months.
   weak IME support rather than assuming a native text field.
 - Accessibility is not available on web. If it becomes a requirement, this ADR must be reopened —
   it cannot be added to a canvas cheaply.
+- **Android typed answers are Latin-only until we move to GameActivity** (§6), and moving costs the
+  no-Gradle-project property. This is the one open question this ADR does not close.
 - `cargo-apk` is an unmaintained single point of failure for Android releases. If it breaks,
   `xbuild` 0.2.0 is the fallback, and the manifest-plus-`.so` APK is simple enough to assemble by
   hand.
