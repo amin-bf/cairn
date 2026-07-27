@@ -1,4 +1,4 @@
-# #8 — measured comparison of the two client stacks
+# #8 — measured comparison of three client stacks
 
 Everything below was **run**, not inferred. Where a claim is inherited from
 [`docs/research/client-stacks/`](../docs/research/client-stacks/README.md) rather than observed here,
@@ -8,22 +8,35 @@ it says so.
 - **Handset**: Pixel 8 Pro, Android 17 (API 37), arm64-v8a — the real device from
   [#7](https://github.com/amin-bf/leitner/issues/7), not an emulator.
 - **Versions**: dioxus 0.7.9 / dx 0.7.9 · leptos 0.8.20 / tauri 2.11.5 / tauri-cli 2.11.4 /
-  trunk 0.21.14.
+  trunk 0.21.14. **A** = Dioxus standalone · **B** = Leptos+Tauri · **C** = Dioxus+Tauri.
 - **The slice**: 3 hardcoded cards → front → 4-grade answer → back → append event → survive restart.
-  Identical behaviour and identical on-disk JSON in both.
+  Identical behaviour and identical on-disk JSON in all three.
+
+---
+
+## 0. The three options
+
+| | Stack | Shape |
+|---|---|---|
+| **A** | Dioxus 0.7.9 standalone | one crate, `dx` builds everything |
+| **B** | Leptos 0.8.20 + Tauri 2.11.5 | three crates, Trunk builds the frontend |
+| **C** | **Dioxus 0.7.9 + Tauri 2.11.5** | three crates, `dx` builds the frontend |
+
+C exists to ask whether Dioxus's UI ergonomics survive being put inside Tauri's shell. They do —
+see §8.
 
 ---
 
 ## 1. Does the slice actually work?
 
-| Target | Dioxus | Leptos + Tauri 2 |
-|---|---|---|
-| **Web** — persist + survive reload | ✅ OPFS, verified bytes on disk | ✅ OPFS, verified bytes on disk |
-| **Android** — persist + survive force-stop | ✅ on the Pixel 8 Pro | ✅ on the Pixel 8 Pro |
-| **Desktop (Linux)** — persist + survive restart | ✅ once `xdotool` is installed | ✅ |
+| Target | A · Dioxus | B · Leptos+Tauri | C · Dioxus+Tauri |
+|---|---|---|---|
+| **Web** — persist + survive reload | ✅ OPFS | ✅ OPFS | ✅ OPFS |
+| **Android** — survive force-stop | ✅ Pixel 8 Pro | ✅ Pixel 8 Pro | ✅ Pixel 8 Pro |
+| **Desktop (Linux)** — survive restart | ✅ needs `xdotool` | ✅ | ✅ |
 
-**All three targets pass for both stacks.** Desktop was driven with `xdotool`: click a grade, kill
-the process, relaunch, confirm the log reads back.
+**All three targets pass for all three stacks.** Desktop was driven with `xdotool`: click a grade,
+kill the process, relaunch, confirm the log reads back.
 
 ```
 ~/.local/share/leitner-dioxus-slice/review-log.jsonl
@@ -107,15 +120,18 @@ for anything larger than an append-only log.
 
 No measured times existed for either stack anywhere. These are ours.
 
-| | Dioxus | Leptos + Tauri 2 |
-|---|---|---|
-| Web, cold build | **20.0s** (175 crates) | **23.6s** (trunk) |
-| Web, incremental (Rust change) | **2.6s** | **1.2s** |
-| Web, incremental (markup only) | **~0s — RSX hot-reload, no rebuild, state preserved** | no equivalent; full rebuild + page reload |
-| Android, cold APK | **71s** (16s Rust + 55s Gradle) | **85s** |
-| Android, incremental APK | **6.8s** | **5.4s** |
-| `adb install` (debug APK) | 10.1s (66 MB) | 6.7s (129 MB) |
-| Unique crates in the wasm graph | **126** | **180** |
+| | A · Dioxus | B · Leptos+Tauri | C · Dioxus+Tauri |
+|---|---|---|---|
+| Web, cold build | **20.0s** | **23.6s** | **23.4s** |
+| Web, incremental (Rust change) | 2.6s | **1.2s** | 2.66s |
+| Web, incremental (markup only) | **~0s — hot reload, state preserved** | no equivalent | **~0s — hot reload, state preserved, *inside the Tauri window*** |
+| Android, cold APK | **71s** | 85s | 36s † |
+| Android, incremental APK | 6.8s | **5.4s** | — |
+| `adb install` (debug APK) | 10.1s (66 MB) | 6.7s (129 MB) | (137 MB) |
+| Unique crates in the wasm graph | **126** | 180 | **127** |
+
+† C's Android build ran with a warm cargo cache from its own web build, so it is **not** comparable
+to A's and B's cold numbers. Don't read it as C being twice as fast.
 
 **Neither stack has a painful dev loop.** Both rebuild an Android APK in under 7 seconds
 incrementally, which is far better than the "budget a Gradle assemble per change" framing the
@@ -354,3 +370,95 @@ the seam it depends on is real and cheap.
 - **Long-run agent legibility.** Both slices were written by one agent in one session without
   fighting either framework. Dioxus's stub-filled docs (research §2.1) did not bite at this size,
   and would not be expected to.
+
+---
+
+## 8. Option C — Dioxus inside Tauri
+
+Built after A and B, to test the claim §6b made rather than assert it: that in a Tauri app the
+frontend framework is nearly incidental and therefore swappable.
+
+### The swap itself is the evidence
+
+`ui/src/store.rs` was copied from the Leptos slice and **2 lines of 145 differ** — both cosmetic
+device labels (`"leptos-web"` → `"dxtauri-web"`). No structural change. `shared/` and `src-tauri/`
+were copied **unchanged**. Only the view layer was rewritten, from Leptos's `view!` to Dioxus's
+`rsx!`.
+
+So the swappability claim holds, measured rather than argued. It also means the same swap to Yew,
+Sycamore or TypeScript would be similarly cheap.
+
+### What C gains over B
+
+| | B · Leptos+Tauri | C · Dioxus+Tauri |
+|---|---|---|
+| Crates in the wasm graph | 180 | **127** |
+| Markup-only change | full rebuild + page reload | **hot reload, no rebuild, state preserved** |
+| Frontend bundler | Trunk 0.21.14 (last stable 2025-05-08) | `dx` 0.7.9 |
+| Web cold / incremental | 23.6s / 1.2s | 23.4s / 2.66s |
+
+**Hot reload works inside the Tauri webview.** Verified on the running desktop app: with the window
+open and mid-session — a card already graded and revealed — editing the markup updated the window in
+place, kept the revealed state, and never restarted the process. This is the single feature that
+made A attractive, and it survives the move into Tauri.
+
+### What C gains over A
+
+| | A · Dioxus | C · Dioxus+Tauri |
+|---|---|---|
+| Linux system packages | webkit2gtk **+ xdotool** | webkit2gtk |
+| Unwanted native menu bar | yes (`muda`) | none — the window is Tauri's |
+| Android data dir | 29 lines of hand-written JNI | `app_data_dir()` |
+| Release APK via the CLI | ❌ debug variant (AAB or raw `gradlew` only) | ✅ |
+| Core project health | pre-1.0, docs are stubs | Tauri post-1.0, documented |
+
+C never depends on `dioxus-desktop`, so it never pulls `muda`/`tray-icon` → `libxdo`. Confirmed:
+`cargo tree -i libxdo-sys` finds no match in either the `ui` or the `src-tauri` graph.
+
+### What C costs — the same thing B costs
+
+`ui/` is **always wasm**, so:
+
+- the storage backend is a **runtime `if`** on `window.isTauri`, not a compile-time `#[cfg]`;
+- the frontend sniffs the user agent to tell Android from desktop;
+- both storage paths ship in every binary;
+- a platform mismatch is a runtime bug, not a build failure.
+
+**This is the whole trade.** A's single genuine advantage over B was the compile-time seam. C keeps
+everything else about A and gives that up.
+
+### New trap
+
+`identifier` may not contain hyphens by the time it reaches Android:
+`dev.leitner.dioxus-tauri-slice` installs as **`dev.leitner.dioxus_tauri_slice`**, so every `adb`
+command against the configured name fails silently. Found the hard way.
+
+---
+
+## 9. Three-way summary
+
+| | A · Dioxus | B · Leptos+Tauri | C · Dioxus+Tauri |
+|---|---|---|---|
+| Web / Android / desktop all pass | ✅ | ✅ | ✅ |
+| Storage seam | **compile-time `cfg`** | runtime `if` | runtime `if` |
+| Frontend knows its platform in Rust | ✅ | ❌ UA sniff | ❌ UA sniff |
+| Crates in wasm graph | 126 | 180 | **127** |
+| Rust LOC | 376 | 365 | 365 |
+| Crates / config files / committed scaffold | 1 / 3 / 0 | 3 / 9 / 44 | 3 / 9 / 44 |
+| Markup hot reload with state | ✅ | ❌ | ✅ |
+| Linux system packages | webkit2gtk + xdotool | webkit2gtk | webkit2gtk |
+| Android data dir | hand-written JNI | `app_data_dir()` | `app_data_dir()` |
+| Release APK from the CLI | ❌ (AAB ✅, `gradlew` ✅) | ✅ | ✅ |
+| Native menu bar you didn't ask for | ✅ present | none | none |
+| Framework maintenance risk | Dioxus, **not swappable** | Leptos, swappable | Dioxus **frontend only**, swappable |
+
+**How to read this.** C dominates B: everything B offers, plus hot reload and 53 fewer crates, at
+identical architectural cost — the only thing B has over C is Leptos's larger ecosystem against
+Dioxus's pre-1.0 churn.
+
+A versus C is the real decision, and it is one question: **is the compile-time storage seam worth a
+second system dependency, hand-written JNI, a menu bar to remove, a clumsier release path, and
+pre-1.0 tooling whose docs are stubs?**
+
+A says the compiler should catch platform mistakes. C says let Tauri own the platform and keep the
+nice frontend. Both are defensible; they are not the same bet.

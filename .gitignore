@@ -9,3 +9,4 @@ prototypes/*/*/target/
 prototypes/*/dist/
 prototypes/*/*/dist/
 prototypes/tauri-leptos-slice/src-tauri/gen/android/.tauri/
+prototypes/dioxus-tauri-slice/src-tauri/gen/android/.tauri/

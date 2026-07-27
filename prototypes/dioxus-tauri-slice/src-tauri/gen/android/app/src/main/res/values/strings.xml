@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">"dioxus-tauri-slice"</string>
+    <string name="main_activity_title">"dioxus-tauri-slice"</string>
+</resources>
