@@ -424,7 +424,7 @@ All rows queried from the crates.io API and GitHub API on **2026-07-26**. The wa
 | `loro` | 1.13.7 | 2026-07-15 | MIT | **OK** out of the box | Repo pushed 2026-07-22, 6.0k★. Shallow snapshots; movable tree/list; version vectors. |
 | `crdts` | 7.3.2 | **2023-08-08** | Apache-2.0 | OK with `getrandom` `wasm_js` backend | **~3 years since last release.** Provides primitive CRDTs (VClock, ORSWOT, LWWReg) rather than a document engine. Useful as a reference for version-vector code; risky as a dependency. |
 | `redb` | 4.1.0 | 2026-04-19 | MIT OR Apache-2.0 | **compiles** — but see caveat | Pure-Rust embedded KV, ACID. |
-| `rusqlite` | 0.40.1 | 2026-06-06 | MIT | **compiles** (`bundled`) — but see caveat | 85M downloads. What Anki uses. |
+| `rusqlite` | 0.40.1 | 2026-06-06 | MIT | **compiles** (`bundled`) — but see caveat | 85M downloads. Also the storage layer of Anki, which ships the same SQLite collection format on desktop and Android — direct evidence it sustains an SRS collection across exactly our target platforms. |
 | `sqlite-wasm-rs` | 0.5.5 | 2026-05-25 | MIT | purpose-built for wasm | Provides SQLite + a browser VFS (OPFS/IndexedDB) for wasm targets. This, not bare `rusqlite`, is the realistic web path. |
 | `fjall` | 3.1.8 | 2026-07-18 | MIT OR Apache-2.0 | **FAILS** — `lsm-tree`: "unsupported platform" | LSM KV store. Actively developed but rules itself out for web. |
 | `sled` | 0.34.7 | **2024-10-11** | MIT OR Apache-2.0 | not tested | Long-stalled; 1.0 never landed. |
