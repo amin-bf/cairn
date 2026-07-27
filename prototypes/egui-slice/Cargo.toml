@@ -1,0 +1,42 @@
+# Standalone workspace: keeps this throwaway crate out of the repo root package.
+[workspace]
+
+[package]
+name = "egui-slice"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+eframe = "0.35"
+egui = "0.35"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+  "Window",
+  "Navigator",
+  "StorageManager",
+  "FileSystemDirectoryHandle",
+  "FileSystemFileHandle",
+  "FileSystemGetFileOptions",
+  "FileSystemWritableFileStream",
+  "FileSystemCreateWritableOptions",
+  "File",
+  "Blob",
+  "Document",
+  "HtmlCanvasElement",
+] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
+
+[lib]
+name = "egui_slice"
+crate-type = ["lib", "cdylib"]

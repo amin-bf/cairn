@@ -462,3 +462,90 @@ pre-1.0 tooling whose docs are stubs?**
 
 A says the compiler should catch platform mistakes. C says let Tauri own the platform and keep the
 nice frontend. Both are defensible; they are not the same bet.
+
+---
+
+## 10. Option D — egui / eframe, the non-webview one
+
+A, B and C are all the same rendering bet: Dioxus desktop/Android and Tauri both go through wry to a
+system webview. D is the only slice that isn't — a single canvas drawn from Rust, no HTML, no CSS,
+no IPC.
+
+**It gets back the thing B and C gave up.** One crate, one binary per platform, `#[cfg]` picks the
+storage backend, `DEVICE` is a `const`. No `invoke`, no `window.isTauri`, no user-agent sniffing.
+
+Desktop and web both persist and survive restart, verified the same way as the others.
+
+### And then the fonts
+
+egui bundles its own fonts. Probed by rendering a string and reading the canvas:
+
+| Script | egui | A / B / C (webview) |
+|---|---|---|
+| Latin + diacritics — `schön` | ✅ | ✅ |
+| Cyrillic — `любовь` | ✅ | ✅ |
+| Chinese / Japanese | ❌ boxes | ✅ |
+| Arabic | ❌ boxes | ✅ |
+| Arrows `→` `⇒` | ❌ boxes | ✅ |
+
+A webview gets the system font stack for free. egui needs `ctx.set_fonts()` and a shipped font file —
+a CJK face is 10–20 MB, on top of a debug wasm bundle already at **41 MB**.
+
+**Shaping, however, works.** egui 0.35 uses **harfrust** (a pure-Rust HarfBuzz port) with skrifa, so
+Arabic-script letters join correctly. Write-ups saying egui cannot shape are out of date.
+
+**Bidi does not.** epaint's own source: `// TODO(emilk): heed bidi characters`. Probed with Persian
+against Chrome as reference, and confirmed by the repo owner, who reads Persian:
+
+| Test | Chrome | Android WebView | egui 0.35 |
+|---|---|---|---|
+| `فارسی`, `گچپژ`, `پنجره` — letters + joining | ✅ | ✅ | ✅ |
+| `این یک جمله است` — sentence | ✅ | ✅ | ❌ wrong word order |
+| …the same sentence **alone on its own line** | ✅ | ✅ | ❌ still wrong |
+| `۱۲۳۴۵` — Persian digits | ✅ | ✅ | ❌ reversed |
+
+**Not the OS and not the fonts** — same machine, same fonts, same session: Chrome correct, egui
+wrong. Only the renderer changed.
+
+Individual words *look* right because HarfBuzz shapes each run; what is missing is the algorithm that
+decides the **order runs are placed in**. Not fixable by shipping a font — it needs bidi implemented
+upstream in epaint.
+
+**This settles D for this app.** The repo owner's own language is Persian; a flashcard app whose
+cards render backwards is not a trade-off, it is a defect.
+
+### Immediate mode versus an async platform API
+
+The webview slices `await` OPFS inside a click handler. egui redraws the whole UI every frame and has
+nowhere to await, so the web backend must be **fire-and-forget plus a shared slot the UI polls each
+frame** (`INBOX` in `src/store.rs`). That layer exists purely because of immediate mode, and it would
+have to wrap every async platform call the app ever makes — not just storage.
+
+Also: no CSS means centring, max-width and responsive layout are all hand-written; the canvas simply
+fills the viewport.
+
+### Not attempted
+
+**Android.** The font finding is decisive enough that packaging is moot until the script question is
+answered. For the record, `cargo-apk` was last published **2023-11-30** and `xbuild` 0.2.0 is the
+alternative — the "completely awful" setup the research quotes from egui's own Android PR author.
+
+---
+
+## 11. Where the four options stand
+
+| | A · Dioxus | B · Leptos+Tauri | C · Dioxus+Tauri | D · egui |
+|---|---|---|---|---|
+| Rendering | webview | webview | webview | **canvas** |
+| Web / Android / desktop verified | ✅✅✅ | ✅✅✅ | ✅✅✅ | ✅ / **not built** / ✅ |
+| Storage seam | **compile-time** | runtime | runtime | **compile-time** |
+| Async platform APIs | direct `await` | direct `await` | direct `await` | **poll a slot each frame** |
+| Non-Latin scripts | ✅ system fonts | ✅ | ✅ | ❌ **CJK/Arabic missing** |
+| Text shaping / bidi | ✅ | ✅ | ✅ | ❌ none |
+| Markup hot reload | ✅ | ❌ | ✅ | ❌ |
+| Layout | CSS | CSS | CSS | hand-written |
+
+**B is dominated by C.** **D is gated on one domain question** — will decks ever be non-Latin? If
+yes it is out; if no it is the only option that keeps a compile-time seam without a webview.
+
+That leaves the live shortlist as **A, C, and conditionally D**.
