@@ -3,6 +3,7 @@
 //! The one non-webview slice. No HTML, no CSS, no IPC — a single canvas drawn by Rust on every
 //! platform, and the storage seam back to a compile-time `#[cfg]`.
 
+pub mod bidi;
 pub mod model;
 pub mod store;
 
@@ -22,6 +23,8 @@ pub struct SliceApp {
     idx: usize,
     revealed: bool,
     log: Vec<ReviewEvent>,
+    /// Typed-answer probe for #11 — is a real text field usable here?
+    typed: String,
 }
 
 impl SliceApp {
@@ -37,8 +40,18 @@ impl SliceApp {
             style.spacing.button_padding = egui::vec2(14.0, 12.0);
         });
 
+        {
+            let mut fonts = egui::FontDefinitions::default();
+            if let Ok(by) = std::fs::read("/usr/share/fonts/noto/NotoSansArabic-Regular.ttf") {
+                fonts.font_data.insert("ar".into(), std::sync::Arc::new(egui::FontData::from_owned(by)));
+                for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                    fonts.families.entry(fam).or_default().push("ar".into());
+                }
+            }
+            cc.egui_ctx.set_fonts(fonts);
+        }
         store::kick_off_load();
-        Self { idx: 0, revealed: false, log: store::read_all() }
+        Self { idx: 0, revealed: false, log: store::read_all(), typed: String::new() }
     }
 }
 
@@ -68,7 +81,7 @@ impl eframe::App for SliceApp {
                 .show(ui, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(10.0);
-                        ui.label(egui::RichText::new(card.front).size(30.0).strong());
+                        ui.label(bidi::job(card.front, egui::FontId::proportional(30.0), egui::Color32::from_rgb(0xe6,0xe8,0xec)));
                         ui.add_space(14.0);
                     });
 
@@ -76,11 +89,11 @@ impl eframe::App for SliceApp {
                         ui.separator();
                         ui.vertical_centered(|ui| {
                             ui.add_space(10.0);
-                            ui.label(
-                                egui::RichText::new(card.back)
-                                    .size(19.0)
-                                    .color(egui::Color32::from_rgb(0x7e, 0xe2, 0xb8)),
-                            );
+                            ui.label(bidi::job(
+                                card.back,
+                                egui::FontId::proportional(19.0),
+                                egui::Color32::from_rgb(0x7e, 0xe2, 0xb8),
+                            ));
                             ui.add_space(12.0);
                         });
                         let b = egui::Button::new(
@@ -124,7 +137,38 @@ impl eframe::App for SliceApp {
                     }
                 });
 
-            ui.add_space(22.0);
+            ui.add_space(16.0);
+            ui.label(
+                egui::RichText::new("TYPED ANSWER PROBE (#11)")
+                    .size(10.0)
+                    .color(egui::Color32::from_rgb(0x7f, 0x88, 0x94)),
+            );
+            // TextEdit lays out its own text, so it bypasses the bidi helper unless we hand it
+            // a custom layouter that routes through the same LayoutJob.
+            let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
+                let mut job = bidi::job(
+                    text.as_str(),
+                    egui::FontId::proportional(20.0),
+                    egui::Color32::from_rgb(0xe6, 0xe8, 0xec),
+                );
+                job.wrap.max_width = wrap_width;
+                ui.ctx().fonts_mut(|f| f.layout_job(job))
+            };
+            ui.add(
+                egui::TextEdit::singleline(&mut self.typed)
+                    .hint_text("type here — Latin, Persian, anything")
+                    .desired_width(f32::INFINITY)
+                    .font(egui::FontId::proportional(20.0))
+                    .layouter(&mut layouter),
+            );
+            ui.label(
+                egui::RichText::new(format!("{} chars: {:?}", self.typed.chars().count(), self.typed))
+                    .monospace()
+                    .size(10.0)
+                    .color(egui::Color32::from_rgb(0x9a, 0xa3, 0xb0)),
+            );
+
+            ui.add_space(16.0);
             ui.label(
                 egui::RichText::new(format!("Persisted log — {} events", self.log.len())).strong(),
             );
