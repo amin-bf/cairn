@@ -173,9 +173,20 @@ not. Cause, read from the generated Gradle:
 Tauri targets 36, where Android enforces edge-to-edge and the app must apply safe-area insets
 itself — so Tauri's is the *correct modern* behaviour with a real layout cost we would have to pay.
 Dioxus's tidier result comes from targeting 34, which is **below Google Play's minimum for new
-apps**. Dioxus is not avoiding the inset work; it is deferring it, and the deferral is not
-indefinite. Whether `dx` lets us raise `targetSdk` cleanly is **not yet checked** and is the one
-Android question this prototype leaves open.
+apps**. Dioxus is not avoiding the inset work; it is deferring it.
+
+**Checked, and it is a two-line fix.** `dx` does expose the keys — this in `Dioxus.toml`:
+
+```toml
+[android]
+target_sdk = 36
+compile_sdk = 36
+```
+
+produced `targetSdk = 36` / `compileSdk = 36` in the generated Gradle, verified by
+`aapt2 dump badging` (`compileSdkVersion='36'`). **So `targetSdk` is not a Dioxus blocker** — treat
+it as configuration, and expect to do the inset work either way. The release-variant problem in §6
+is a different matter and does *not* have a config fix.
 
 ---
 
@@ -225,27 +236,36 @@ A `release` buildType with minification **exists in the generated file** and is 
 empirically: `adb shell run-as dev.leitner.dioxusslice` succeeded against the *release* APK, which
 only works on a debuggable package.
 
-Two consequences:
+### And it is not configurable
 
-- **`android:debuggable="true"` is rejected by Google Play**, and on any installed build it lets the
-  user (and `run-as`) walk into the app's private data — where this app's entire review log lives.
-- Combined with **`targetSdk = 34`** (§5), which is below Play's minimum for new apps, **Dioxus 0.7.9
-  has no out-of-the-box Play-shippable Android build**, while Tauri does.
+`dx` accepts a signing block — `[android.signing]` with `jks_file`, `jks_password`, `key_alias`,
+`key_password` (field names discovered by reading the parser's own "missing field" errors; they are
+not documented). Supplying all four **parses and builds**, and changes nothing:
 
-Neither gap is in *our* code. Both live in the scaffold `dx` regenerates into `target/` on every
-build — which is exactly the property that made Dioxus's zero-committed-files story attractive in
-§4. The same regeneration that keeps the repo clean also puts these defaults out of reach.
+- the only output is still `.../release/android/app/app/build/outputs/apk/debug/app-debug.apk`,
+  freshly written;
+- `aapt2 dump badging` on it reports **`application-debuggable`**;
+- the generated `build.gradle.kts` contains **no `signingConfig`, `storeFile` or `keyAlias` at
+  all** — the signing config is accepted by the config parser and then not wired into Gradle.
 
-**Fairness note:** these are fixable upstream, and 0.8-alpha may already differ. But choosing Dioxus
-today means choosing 0.7.9 as it is, or riding an alpha — which is exactly the open question the
-research left in its finding 3.
+So unlike `targetSdk`, this one has no config escape. To ship a Play-acceptable APK from Dioxus
+0.7.9 you would have to post-process the Gradle project `dx` regenerates into `target/` on every
+build — i.e. patch a directory that is overwritten each time you build.
+
+**`android:debuggable="true"` is rejected by Google Play**, and on any installed build it lets
+`run-as` walk into the app's private data — which is where this app's entire review log lives.
+
+**Fairness note:** this is fixable upstream and 0.8-alpha may already differ. But choosing Dioxus
+today means choosing 0.7.9 as it is, or riding an alpha — exactly the open question research
+finding 3 left.
 
 | | Dioxus | Leptos + Tauri 2 |
 |---|---|---|
 | Release APK builds | ✅ 14 MB, 26s | ✅ 13 MB, 53s |
-| Release APK **is a release variant** | ❌ debug variant, `isDebuggable = true`, unminified | ✅ minified, not debuggable |
+| Release APK **is a release variant** | ❌ debug variant, `application-debuggable`, unminified | ✅ minified, not debuggable |
+| …fixable by config? | ❌ signing block parses but is never wired into Gradle | n/a |
 | Signed release APK runs on device | ✅ | ✅ |
-| `targetSdk` meets Play minimum | ❌ 34 | ✅ 36 |
+| `targetSdk` meets Play minimum | ✅ **via 2-line config** (default 34) | ✅ 36 by default |
 
 ---
 
@@ -270,7 +290,6 @@ the seam it depends on is real and cheap.
 ## 7. What this does *not* settle
 
 - **Desktop, for either stack** — blocked on `webkit2gtk-4.1`.
-- **Whether `dx` can raise `targetSdk` to 35+** (§5).
 - **Whether OPFS-on-main-thread holds under load** — proven for an append-only log at 136 bytes, not
   for a large log or concurrent tabs. No VFS supports multiple connections; multi-tab is unhandled
   in both slices.

@@ -5,3 +5,15 @@ title = "Dioxus slice · #8"
 
 [bundle]
 identifier = "dev.leitner.dioxusslice"
+
+# Verified to take effect: the generated Gradle reads targetSdk = 36 / compileSdk = 36,
+# confirmed by `aapt2 dump badging`. The stock dx default is 34, below Play's minimum.
+[android]
+target_sdk = 36
+compile_sdk = 36
+
+# `[android.signing]` also parses — required fields are jks_file / jks_password / key_alias /
+# key_password, discovered from the parser's own "missing field" errors, not from docs. It is
+# left out here because it does NOTHING: with all four supplied, `dx build --release` still
+# emits apk/debug/app-debug.apk, aapt2 reports `application-debuggable`, and the generated
+# build.gradle.kts contains no signingConfig at all. See ../COMPARISON.md §6.

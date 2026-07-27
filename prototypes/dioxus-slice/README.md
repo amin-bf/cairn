@@ -47,5 +47,7 @@ Pixel 8 Pro — and it is 29 lines you own forever. The Tauri slice gets the sam
 ## Not verified / found broken
 
 - `dx build --release` and `dx bundle --release` both emit the **debug** Gradle variant
-  (`isDebuggable = true`, unminified). See COMPARISON §6.
-- `targetSdk = 34`, below Google Play's minimum for new apps.
+  (`application-debuggable`, unminified), and the `[android.signing]` block parses but is never
+  wired into the generated Gradle. No config fixes this. See COMPARISON §6.
+- `targetSdk` defaults to 34, below Google Play's minimum — but **this one is a two-line fix**
+  (`[android] target_sdk = 36`, `compile_sdk = 36`), verified in `Dioxus.toml` here.
