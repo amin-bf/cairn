@@ -27,8 +27,8 @@ agent must export them itself).
 | --- | --- | --- |
 | JDK (Eclipse Temurin) | **17.0.20+8** | `~/.local/share/jdk-17.0.20+8`, symlinked as `~/.local/share/jdk17` |
 | Android SDK cmdline-tools | **15859902** | `~/Android/Sdk/cmdline-tools/latest` |
-| Android SDK Platform | **android-34**, **android-36** | `~/Android/Sdk/platforms` |
-| Android build-tools | **34.0.0**, **35.0.0**, **36.1.0** | `~/Android/Sdk/build-tools` |
+| Android SDK Platform | **android-34**, **android-36**, **android-37.0** | `~/Android/Sdk/platforms` |
+| Android build-tools | **34.0.0**, **35.0.0**, **36.1.0**, **37.0.0** | `~/Android/Sdk/build-tools` |
 | Android NDK | **29.0.13846066** (`r29-beta3`, clang 21.0.0) | `~/Android/Sdk/ndk/29.0.13846066` |
 | platform-tools (`adb`, `fastboot`) | **r37.0.0** (`adb` 1.0.41) | `~/Android/Sdk/platform-tools` |
 | Emulator | bundled with SDK | `~/Android/Sdk/emulator` |
@@ -36,7 +36,20 @@ agent must export them itself).
 | Gradle | **8.14.3** | `~/.local/share/gradle-8.14.3` |
 | `cargo-ndk` | **4.1.2** | `~/.cargo/bin/cargo-ndk` |
 
-Total SDK footprint: **~8.3 GB** under `~/Android/Sdk`.
+Total SDK footprint: **~8.7 GB** under `~/Android/Sdk`.
+
+**Gotcha — API 37 packages are named with a minor version and live on the preview
+channel.** `sdkmanager "platforms;android-37"` fails with *"Failed to find package"*.
+The real name is **`platforms;android-37.0`** (Google now ships `36.1`, `37.0`, `37.1`),
+and it is not on the default channel, so it needs `--channel=3`:
+
+```sh
+sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0"
+```
+
+API 37 is installed because **the physical test device runs it** (see below). AGP 8.11.0
+accepts `compileSdk = 37` / `targetSdk = 37` without complaint despite the
+`android-37.0` directory name.
 
 The symlink `~/.local/share/jdk17` exists so `JAVA_HOME` contains no `+` character —
 some build tooling mishandles it in paths — and so a future JDK bump is a symlink
@@ -109,7 +122,8 @@ ELF 64-bit LSB pie executable, ARM aarch64, ... for Android 21, built by NDK r29
 ELF 64-bit LSB shared object, x86-64,       ... for Android 21, built by NDK r29-beta3
 ```
 
-**2. Execution on Android.** Pushed the `x86_64` binary to the emulator and ran it:
+**2. Execution on Android.** Pushed the `x86_64` binary to the emulator and ran it
+(the `aarch64` build was later run on the real handset — see Device situation):
 
 ```
 ANDSMOKE_OK sqlite=3.50.2 rows=1 path=/data/local/tmp/smoke.db printf=0.33333333333333330000
@@ -146,10 +160,70 @@ d8, signing, packaging, install — which the native binary test alone does not 
 
 ## Device situation
 
-**There is no physical Android device attached.** `adb devices` was empty throughout, so
-everything above was proven on an **emulator**.
+Everything above was first proven on an emulator, then **re-proven on real hardware**.
 
-An AVD named **`leitner-test`** is set up and working:
+### Physical device — Pixel 8 Pro (verified)
+
+The whole suite was re-run on the human's handset and **passed identically**:
+
+| Property | Value |
+| --- | --- |
+| Model | Google **Pixel 8 Pro** |
+| Android | **17** (API **37**), build `CP2A.260705.006` |
+| `ro.product.cpu.abilist` | **`arm64-v8a`** — 64-bit only |
+| Kernel page size | **4096** |
+
+- Native `aarch64` binary: `ANDSMOKE_OK sqlite=3.50.2`, `rows` incrementing 1 → 2 → 3
+  across runs, so the database is genuinely created, written and **persisted** on the
+  handset. Whole open/create/insert/query cycle in **0.05 s real**.
+- APK installed, launched, and `System.loadLibrary("andsmoke")` succeeded in the app
+  process, with `primaryCpuAbi=arm64-v8a`.
+- Rebuilt at `compileSdk`/`targetSdk` **37** and re-installed: also fine
+  (`minSdk=24 targetSdk=37` as installed). AGP 8.11.0 is happy with API 37.
+- Test artifacts were uninstalled and `/data/local/tmp` cleaned up afterwards.
+
+**Three consequences worth carrying into #8:**
+
+1. **This device is `arm64-v8a` only.** `armv7-linux-androideabi` and
+   `i686-linux-android` binaries cannot run on it at all, so Dioxus having dropped
+   32-bit Android is a non-issue for our test hardware.
+2. **The device runs 4 KB pages**, so it does *not* exercise the 16 KB page-size path at
+   runtime. 16 KB alignment is still mandatory for Play uploads — it is satisfied at
+   link time (see above) — but do not treat "works on this Pixel" as evidence about
+   16 KB-page devices.
+3. **The device API (37) is ahead of the stacks' defaults** (Dioxus generates 34, Tauri
+   36). That is fine — an APK targeting 36 installs and runs on 37 — but it means the
+   handset cannot, by itself, catch anything that only breaks on older Android.
+
+### Getting the device connected
+
+`adb devices` was empty at first because **USB debugging was off**. The diagnostic that
+settles this quickly is the USB descriptor rather than `adb`: with debugging off the
+Pixel exposes a *single* interface of class `06` (MTP); with it on, a second interface
+appears with class `FF`, subclass `42`, protocol `01`.
+
+```sh
+lsusb | grep -i google        # 18d1:4ee1 = MTP only
+for d in /sys/bus/usb/devices/*/; do
+  [ "$(cat $d/idVendor 2>/dev/null)" = "18d1" ] && cat $d*/bInterfaceClass
+done
+```
+
+**No udev rules were needed after all.** The `android-udev` package is still not
+installed and the user is in no `plugdev`/`adbusers` group, but `/dev/bus/usb/...` for the
+handset carries an ACL (`crw-rw-r--+`, from `uaccess`) that grants the logged-in user
+access. `adb` talks to the device as a normal user. **Nothing in this setup required
+root** — the earlier note that a password might be needed turned out not to apply on
+this host.
+
+Remaining: after enabling USB debugging you must accept the **"Allow USB debugging?"**
+RSA prompt on the phone, or `adb devices` reports the serial as `unauthorized` rather
+than `device`.
+
+### Emulator
+
+An AVD named **`leitner-test`** is also set up and working — useful for CI-ish runs and
+for the `x86_64` triple, which the handset cannot exercise:
 
 - `system-images;android-36;google_apis;x86_64`, Android 16 / API 36, at
   `~/.android/avd/leitner-test.avd`
@@ -161,30 +235,25 @@ An AVD named **`leitner-test`** is set up and working:
 - **KVM works without a group change** — `/dev/kvm` is `crw-rw-rw-` on this host, so
   hardware acceleration is available even though the user is not in the `kvm` group.
 
-Two things to know if a physical device is used later:
+Note `adb` also exists at `/usr/bin/adb` (Arch `android-tools`, v36.0.1) independently of
+the SDK copy (r37.0.0). Sourcing `scripts/android-env.sh` puts the **SDK** copy first on
+`PATH`. Avoid running both versions against one device — mismatched `adb` clients fight
+over the server on port 5037. With both a handset and an emulator attached, set
+`ANDROID_SERIAL` to pick one.
 
-- `adb` also exists at `/usr/bin/adb` (Arch `android-tools`, v36.0.1) independently of
-  the SDK copy (r37.0.0). Sourcing `scripts/android-env.sh` puts the **SDK** copy first
-  on `PATH`. Avoid running both versions against one device — mismatched `adb` clients
-  fight over the server on port 5037.
-- **USB device access may need root.** The `android-udev` rules package is not
-  installed and the user is not in a `plugdev`/`adbusers` group. This did not matter for
-  the emulator, but plugging in a real handset may require installing udev rules — the
-  one step in this setup that cannot be done without a password.
-
-### Emulator caveat for #8
+### Emulator caveats
 
 The AVD ignored the `pixel_6` device profile: `avdmanager` reported
 `Could not load devices from .../devices.xml` and fell back to a default profile. The
-AVD works fine, but it is **not** a faithful Pixel 6 (screen size and density are
-defaults). If #8 needs to judge a real handheld layout, fix the device profile or use a
-physical device — an emulator with a default profile is a poor witness for a UI
-decision.
+AVD works fine, but it is **not** a faithful Pixel (screen size and density are
+defaults), so it is a poor witness for a **UI layout** judgement. Now that the Pixel 8
+Pro is known-working, prefer the handset for anything about how the app *looks or feels*
+and keep the emulator for build/CI checks and the `x86_64` triple.
 
-Also relevant to #8: the research found Dioxus 0.7.x **crashes below API 30** (`tao`
-calls the API-30-only `getCurrentWindowMetrics`). The installed system image is API 36,
-which is above that floor — so this emulator **cannot** reproduce that bug. Testing the
-declared `minSdk` 24 needs an API 24–29 image installed separately.
+Also: the research found Dioxus 0.7.x **crashes below API 30** (`tao` calls the
+API-30-only `getCurrentWindowMetrics`). Both the emulator (API 36) and the handset
+(API 37) are **above** that floor, so **neither can reproduce that bug**. Testing the
+declared `minSdk` 24 needs an API 24–29 system image installed separately.
 
 ## Reproducing this setup elsewhere
 
@@ -207,6 +276,9 @@ yes | sdkmanager --licenses
 sdkmanager "platform-tools" "platforms;android-34" "platforms;android-36" \
            "build-tools;34.0.0" "build-tools;36.1.0" "ndk;29.0.13846066" \
            "emulator" "system-images;android-36;google_apis;x86_64"
+
+# API 37 (the test handset's level) is preview-channel and minor-versioned
+sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0"
 
 rustup target add aarch64-linux-android x86_64-linux-android \
                   armv7-linux-androideabi i686-linux-android
