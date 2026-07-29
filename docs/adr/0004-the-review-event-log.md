@@ -1,4 +1,4 @@
-# ADR-0003: The review event log
+# ADR-0004: The review event log
 
 - **Status**: Accepted
 - **Date**: 2026-07-28
