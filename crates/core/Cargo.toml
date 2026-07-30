@@ -1,0 +1,13 @@
+[package]
+name = "leitner-core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# INTENTIONALLY EMPTY, and it is the point of this crate. ADR-0009 §2: the domain is pure, so
+# `cargo test -p leitner-core` needs no database, no window and no handset. A dependency added here
+# is a decision, not a convenience — and `rusqlite`, `eframe` and `egui` in particular belong in
+# `leitner-store` and `leitner-app` respectively. See ADR-0009 §6 for why `log` the crate must never
+# appear here: it would collide with the `log` context module.
+[dependencies]
