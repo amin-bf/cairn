@@ -289,6 +289,10 @@ literally), or ADR-0008 (nothing new enters the export).
 
 1. **A suspended card is not introduced and is not counted** against any daily limit, for the same
    reason §8 removes it from the due count.
+   > **Discharged by [ADR-0011 §8](0011-new-card-rate-and-daily-limits.md)**, which skips suspended
+   > cards in the introduction walk. Note that the *daily limit* this anticipated turned out to be
+   > singular: ADR-0011 §1 declines a daily review limit entirely, so the new-card cap is the only
+   > count a suspended card could have entered.
 
 ### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
 

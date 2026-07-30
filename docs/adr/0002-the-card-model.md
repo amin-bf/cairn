@@ -243,6 +243,16 @@ Notes, by contrast, *are* created by a user action, so a minted identifier is co
   the one item in this ADR not put to the human directly; it is an implementation detail the spec
   has to pin, and #12 may revisit the encoding without disturbing anything above.)*
 
+> **Amended by [ADR-0011 §7](0011-new-card-rate-and-daily-limits.md): a note also carries
+> `position`, a plain integer.** The random id above is deliberately unsortable, so nothing in this
+> model could express the order an author put their notes in — and that order is a large part of
+> what a published deck is worth, since new cards are introduced in it. `position` is assigned from
+> a local high-water counter on creation and from the `notes.jsonl` line index on import, ties
+> broken by note id; it need not be dense or unique, only to sort. **The id itself is untouched** —
+> it stays a random UUIDv4 and is not made time-ordered, so this section's clock-skew argument
+> stands. An empty `position` on a note predating the field is the defined state §4 already
+> provides for.
+
 #### Canonical encoding
 
 ADR-0001 §7 seeds interval fuzz from `(card_id, review_count)` and requires every device to compute

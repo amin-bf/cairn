@@ -51,11 +51,34 @@ This was a live design change from round 1's timed variant, which ended outright
 repo owner's framing — "time's up leaves for the user to decide to finish or continue" — is the
 operative rule: the timer is a courtesy check-in, not an enforcement mechanism.
 
+> **Amended by [ADR-0011 §9](0011-new-card-rate-and-daily-limits.md): the chosen count counts
+> gradings, not distinct cards.** A lapse re-show (ADR-0001 §5) advances the counter like any other
+> graded event, so choosing 20 means at most 20 grade presses. A grading is the unit of effort the
+> count is a proxy for — a card failed three times is three cards' worth of work — and §7's
+> progress bar has to move whenever the user acts, which counting distinct cards would break
+> precisely on the sessions where they are struggling. Ending a session with a lapsed card
+> unresolved costs nothing: there are no relearning steps in this design, so the card is simply due
+> very soon.
+>
+> **Also amended by [ADR-0011 §1](0011-new-card-rate-and-daily-limits.md): this count is the *only*
+> bound on review work.** No daily review limit exists, and a user may start as many sessions in a
+> day as they like — the same reasoning that softened this section's timer, applied one level up.
+
 ### 2. Session position is never stored — only derived, and this was proven, not assumed
 
 There is no session-progress entity anywhere. The due queue for a session is always *this
 scenario's due cards minus cards with a log entry*, recomputed on every read. The chosen count and
 the timer's start instant are ordinary in-memory state, not persisted.
+
+> **Amended by [ADR-0011 §9](0011-new-card-rate-and-daily-limits.md): the queue is due cards minus
+> cards whose *latest review was a pass*** — grade 2, 3 or 4 — not minus any card with a log entry.
+> As written, this rule dropped a card the instant it was graded, which made
+> [ADR-0001 §5](0001-scheduling-algorithm-and-grade-scale.md)'s mandated same-session re-show after
+> a lapse impossible; the prototype this section was written from had no lapse path, so the
+> collision went unseen. A failed card stays in the queue because it genuinely is still due — FSRS
+> gives it a sub-day interval — and leaves once passed, under ADR-0001 §5's one-day floor.
+> **Everything else here stands**: nothing is stored, and the derive-don't-store property this
+> section proved by force-stopping the app is exactly what makes the corrected rule cost nothing.
 
 Proven for real, not just argued: force-stopping and relaunching the app on the Pixel 8 Pro — and
 separately, a "simulate kill & restart" control on desktop that reloads only the on-disk log —
