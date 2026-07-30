@@ -84,12 +84,12 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | Context | Binding ADRs | Also bound by |
 |---|---|---|
 | `content` | [0002](./docs/adr/0002-the-card-model.md), [0005](./docs/adr/0005-the-deck-model.md) | — |
-| `log` | [0004](./docs/adr/0004-the-review-event-log.md) | 0002 §7, 0001 §6 |
+| `log` | [0004](./docs/adr/0004-the-review-event-log.md) | 0002 §7, 0001 §6, 0010 §5 |
 | `scheduling` | [0001](./docs/adr/0001-scheduling-algorithm-and-grade-scale.md) | 0004 §4, 0004 §5 |
-| `replay` | *none of its own* | 0001 §7, 0002 §7, 0004 §9, 0007 §2 |
+| `replay` | *none of its own* | 0001 §7, 0002 §7, 0004 §9, 0007 §2, 0010 §2 |
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md) | 0005, 0002 §9, 0004 §11 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md) | 0002 §4 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md) | 0002 §4 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md) | — |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another

@@ -43,8 +43,23 @@ deliberately does not exist.
 
 **Due**:
 A card whose next scheduled day has arrived, measured against the **device's local** day — not the
-collection day scale, which is only ever used for stamping rows at write time.
+collection day scale, which is only ever used for stamping rows at write time. **A suspended card is
+excluded from every due count** (ADR-0010 §8), or the count could never reach zero.
 _Avoid_: Overdue, pending, scheduled.
+
+**Failure day**:
+A distinct day on which a card was graded `1 Forgot` at least once. The unit the leech rule counts,
+**not** the grade-1 row — same-session re-shows are real logged rows with a zero day gap (ADR-0001
+§5), so counting rows would treat one act of forgetting as three.
+_Avoid_: Lapse count, failure count — both of which invite counting rows.
+
+**Leech**:
+A card with **four or more failure days in the trailing ninety**, measured with the device's local
+day as the right edge (ADR-0010 §2). **Derived, never stored** — a query over replayed history, so
+it is always current and self-clearing: learn the card and it leaves the list unaided. Carries no
+scheduling consequence whatever.
+_Avoid_: Difficult card, problem card — and never derive it from FSRS difficulty, which is a
+scheduler parameter and would re-couple the surface to a scheduler the design keeps swappable.
 
 ## The mechanism, in one paragraph
 
@@ -70,6 +85,9 @@ being projected, and starts again if it returns.
   full replay; trusting a stale one costs wrong memory state that looks right.
 - **The projection is not versioned; the derivation is.** There is no migration path for cached
   state — bump the derivation version and let it rebuild.
+- **No leech signal may reach memory state.** Leech-ness is read *out* of replayed history and never
+  fed back into it (ADR-0010 §1). A lapse counter that nudges scheduling is folklore overriding the
+  model, and ADR-0001 §5 rejected it before ADR-0010 existed.
 
 ## The highest-value test in the repository
 

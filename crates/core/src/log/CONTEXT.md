@@ -72,6 +72,15 @@ The `(counter, writer id)` pair attached to every mutable value, deciding which 
 values is later. The counter jumps above any counter it sees. **Never a wall clock.**
 _Avoid_: Timestamp, version, mtime.
 
+**Suspension**:
+"Stop showing me this card" — a per-`CardRef` boolean on the mutable surface, settling by stamp like
+any other value (ADR-0010 §5). **Syncs between the user's own devices; never exported**, because it
+is personal progress and a `.ldeck` file carries only content. It is **not** a row kind and not an
+input to replay: memory state is exactly what the reviews say it is, and suspension changes only
+what is *offered*.
+_Avoid_: Buried, archived, disabled, leech flag — and never "suspend event", which is the row kind
+ADR-0010 §5 ruled out.
+
 ### Interchange
 
 **Interchange form**:
@@ -88,3 +97,7 @@ Relayed **byte for byte and never re-encoded**, so an old build cannot strip a n
 - **Guard writes against the log's own contents.** A device whose clock is years wrong writes rows
   that sort into an order that never happened; the guard is the only thing that catches it before
   the data is permanent (ADR-0004 §8).
+- **Never add a row kind for something that toggles.** Across writers the log is ordered by
+  *timestamp*, so a value that flips on and off would be settled by wall clock — the precise thing
+  the stamp exists to prevent. Anything the user can turn off again belongs on the mutable surface.
+  This is why suspension is not a row kind (ADR-0010 §5).
