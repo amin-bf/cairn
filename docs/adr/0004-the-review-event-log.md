@@ -306,6 +306,12 @@ bytes. **Accepted cost**: undeleting restores the schedule but not the text, whi
 backup or an export. Delete means gone, which is also the right answer for a user deleting something
 they want rid of.
 
+> **Amended by [ADR-0008 §5 and §8](0008-the-deck-export-format.md)**: a deleted note also retains its
+> `deck` reference — id, flag, deck reference, stamp, roughly sixteen bytes above the figure quoted
+> here. Without it a retraction cannot be attributed to a deck, so a deck-scoped export cannot select
+> its tombstones and an author cannot withdraw a note from a published deck. No content is retained,
+> so "delete means gone" is untouched.
+
 **Concurrent add-and-remove of the same tag resolves as add-wins.** A spurious tag is a nuisance; a
 silently-lost one is a bug that is never found.
 

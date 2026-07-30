@@ -137,6 +137,13 @@ These definitions are **read-only data shipped with the application**. Being dat
 user-editable — §2 stands. What it buys is that a deck file can carry them, and therefore stands on
 its own.
 
+> **Widened by [ADR-0008 §7](0008-the-deck-export-format.md)**: a collection may also hold definitions
+> **acquired from an imported file**, for kinds the running build does not ship — which is what lets an
+> old build render a deck built by a newer one. They remain read-only, and a **shipped definition always
+> wins**: an acquired one can never displace it. §2 is not reopened, because its objection was
+> user-editability rather than provenance, and the evolution rules below are what make an acquired
+> definition safe to trust.
+
 A note stores only its kind and its values:
 
 ```

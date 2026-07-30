@@ -151,6 +151,13 @@ Left open for #21, deliberately: whether such a preference **syncs between your 
 device-local. The mutable surface syncs by default, but a commute-sized limit on a phone versus a
 desk-sized one on a laptop is a real counter-case, and #21 is where it should be weighed.
 
+> **Amended by [ADR-0008 §9](0008-the-deck-export-format.md)**: the deck-id-keyed slot is not uniformly
+> personal. It holds **personal** values, as described here, and **authoring** values such as a deck's
+> export revision — which **must** sync, since otherwise an author exporting from a laptop and a phone
+> emits conflicting revisions as routine behaviour. Both kinds are alike in never exporting and never
+> appearing in the log; they differ in whether the syncing question is open. Only the personal kind is
+> #21's to decide.
+
 Also handed onward: **author, description, licence** and similar deck metadata are things an export
 *file* declares about itself — [#13](https://github.com/amin-bf/leitner/issues/13)'s concern, not the
 deck object's.
