@@ -78,6 +78,37 @@ authoritative, `derived.db` is a disposable cache attached to the same connectio
    `$XDG_STATE_HOME` on desktop. Move it into the data directory and a restored phone becomes a
    duplicate writer.
 
+## Deck export
+
+A `.ldeck` file is a **zip archive** carrying deck content and never review progress, chosen in
+[ADR-0008](./docs/adr/0008-the-deck-export-format.md).
+
+### Rules that are easy to break silently
+
+1. **A shipped kind definition always wins; an imported file may never overwrite one.** A file's
+   definition is used only for kinds this build does not ship. Break this and an import becomes a
+   remote path to reordering a kind's `cards` list, which silently retypes every accumulated review
+   onto the wrong card and cannot be repaired from the log.
+2. **Never write an ADR-0004 §7 stamp into an export.** A stamp is a counter plus a **writer id**,
+   which is a device fingerprint, and its counter is meaningless outside its own collection. Import
+   assigns fresh local stamps — and only to values whose content actually differs, or every import
+   floods the user's own devices with edits.
+3. **Import branches on deck id, and the branches have opposite rules.** Id already held → the file
+   wins and may move notes into that deck (ADR-0005 §9). Id new → notes already held are never touched
+   or moved (ADR-0005 §2). Applying one rule everywhere lets a stranger's file take notes out of decks
+   the user already has.
+4. **The importer accepts only the known member names and the `media/` prefix**, rejecting absolute
+   paths, `..` segments and symlink entries. Zip path traversal is this container's classic defect.
+5. **Export must be byte-for-byte deterministic** — fixed member order, pinned timestamps, fixed
+   deflate level, no extra fields. Zip's per-member timestamps otherwise make identical content export
+   as different bytes, which leaks build time and breaks "same revision, same file".
+6. **The revision advances only when the content digest changes**, not on every export. Incrementing
+   per export inflates the counter and makes relaying an unmodified deck emit a phantom revision that
+   competes with the original author's next one.
+7. **`zip`'s `deflate-flate2` feature does not compile** — it selects no zlib backend. Use
+   `--no-default-features --features deflate-flate2-zlib-rs`; the `deflate` umbrella feature builds but
+   drags in zopfli for an encoder we do not need.
+
 ## Agent skills
 
 ### Issue tracker
