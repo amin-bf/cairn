@@ -17,6 +17,30 @@ argue the trade-off on its own merits.
 
 This applies to every agent working in this repo, on every artifact that persists.
 
+## Landing work
+
+Tickets here are worked in **parallel worktree sessions**, each branching from `origin/main` and
+never seeing what merged afterwards. Two things break silently because of it.
+
+### Rules that are easy to break silently
+
+1. **If commit signing fails, stop and ask. Never fall back to `--no-gpg-sign`.** Every commit on
+   `main` is signed, and this repo merges with merge commits rather than squashing, so unsigned work
+   lands on `main` as-is and someone has to clean it up. The passphrase comes from a GUI prompt, so
+   an unattended session gets `gpg: signing failed: Timeout` and **no commit object is written** —
+   the work is not lost, it simply has not been committed yet. Land everything that needs no commit
+   first (tracker updates, verification runs) so the pause blocks only the commit, then wait.
+   To repair history that already went unsigned:
+   `git rebase --exec 'git commit --amend --no-edit -S' origin/main` then
+   `git push --force-with-lease`.
+2. **Re-check the highest ADR number immediately before committing**, not when you start writing.
+   `git fetch origin && git ls-tree --name-only origin/main docs/adr/` — a parallel session may have
+   taken your number, and the worktree's own `docs/adr/` is a stale answer that looks authoritative.
+   When renumbering, **sed only your own files**: `AGENTS.md` and older ADRs may already reference
+   the *other* ADR at that number, and a blind replace corrupts those links. Re-read whatever landed
+   meanwhile, too — an ADR that merged mid-session may place requirements on the ticket you are
+   resolving.
+
 ## Start with the context map
 
 **[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the five crates, the
