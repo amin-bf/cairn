@@ -22,6 +22,11 @@ This applies to every agent working in this repo, on every artifact that persist
 **egui / eframe**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). One crate, one binary per
 platform, no webview, no IPC. Setup and commands are in [`README.md`](./README.md).
 
+**The targets are desktop and Android.** The web target was ruled out of scope in
+[ADR-0007 §1](./docs/adr/0007-the-local-store.md) — a browser cannot be the system of record for an
+app whose only copy of the data is local. Rules below that mention the web build are retained
+because they are validated findings, not because a web build ships.
+
 ### Rules that are easy to break silently
 
 1. **All user-visible text goes through the bidi helper.** egui places text runs left-to-right in
@@ -51,6 +56,27 @@ platform, no webview, no IPC. Setup and commands are in [`README.md`](./README.m
    [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
    text on Android.
 9. **Verify Android on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
+
+## The local store
+
+Two SQLite files, chosen in [ADR-0007](./docs/adr/0007-the-local-store.md): `collection.db` is
+authoritative, `derived.db` is a disposable cache attached to the same connection.
+
+### Rules that are easy to break silently
+
+1. **`INSERT OR IGNORE` is for merge-ingest only. Our own writes use plain `INSERT`.** On another
+   device's rows it is the union merge; on our own it silently drops a review.
+2. **Never take the next sequence number from `MAX(seq) WHERE writer = me`.** After a merge that
+   continues *another* device's numbering, which is the duplicate-writer failure the design exists to
+   prevent. Use `local.seq_highwater` — and a log row above it means someone else is writing as us,
+   so mint a new writer id.
+3. **Every write transaction is `BEGIN IMMEDIATE`.** Sequence allocation is a read-modify-write; a
+   deferred transaction loses updates between two processes.
+4. **Only `log.line` is authoritative.** Every other column, and everything in `derived.db`, is
+   derived and may be dropped and rebuilt. Derived columns do **not** have to round-trip.
+5. **The writer marker lives outside the backup set** — `getNoBackupFilesDir()` on Android,
+   `$XDG_STATE_HOME` on desktop. Move it into the data directory and a restored phone becomes a
+   duplicate writer.
 
 ## Agent skills
 
