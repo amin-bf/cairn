@@ -453,6 +453,10 @@ here forecloses it.
 
 1. Anything counted per day reads the cache, which is disposable — a daily counter must be derivable
    from the log, never stored only in `derived.db`.
+   > **Discharged by [ADR-0011 §5](0011-new-card-rate-and-daily-limits.md).** The only daily counter
+   > is *"cards whose earliest `reviewed` row falls in the device's local day"* — a query over
+   > replayed history, stored nowhere, so the cache may hold it freely and losing the cache loses
+   > nothing. This warning has now been honoured twice, ADR-0010's leech rule being the other.
 
 ### [#26 — leeches](https://github.com/amin-bf/leitner/issues/26)
 

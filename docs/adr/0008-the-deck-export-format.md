@@ -345,7 +345,15 @@ is typed deliberately or it is absent.
 
 **Export is byte-for-byte deterministic**: fixed member order, all member timestamps pinned to a
 constant, a fixed deflate level, no extra fields, and no platform-dependent creator or attribute
-variance. Zip entries otherwise carry per-member modification times and creator fields, so exporting
+variance.
+
+> **Amended by [ADR-0011 §7](0011-new-card-rate-and-daily-limits.md): `notes.jsonl` lines are
+> emitted in `(position, note id)` order.** Determinism above fixes the order of zip *members* but
+> never said what order the *lines inside* `notes.jsonl` take — so the strongest claim in this
+> section rested on an order no ADR specified. ADR-0011 adds `position` to the note (amending
+> ADR-0002 §6) so that new cards are introduced in the order their author intended, and that same
+> field fixes emission order here. One concept serves both, and a deck under version control now
+> diffs one line per note against a stable sequence rather than an incidental one. Zip entries otherwise carry per-member modification times and creator fields, so exporting
 identical content twice would yield different bytes — leaking build time, making a deck under version
 control diff as changed when nothing did, and weakening §9's "same revision, same file" from a property
 to an approximation.

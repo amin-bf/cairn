@@ -507,6 +507,11 @@ bad byte must never render the application unusable.
 ### [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
 
 1. **"Today" is the device's local day**, not the collection day scale used for `delta_t` (§4).
+   > **Discharged by [ADR-0011 §5](0011-new-card-rate-and-daily-limits.md).** The daily new-card
+   > count is derived against the device's local day, and **nothing from that ticket enters the
+   > log** — the rate is a value on §7's mutable surface, failing §1's *"is this an input to
+   > replay?"* test for the same two reasons ADR-0010 §5 gave for suspension. Constraint 1 needs no
+   > third widening.
 
 ### [#26 — leeches](https://github.com/amin-bf/leitner/issues/26)
 

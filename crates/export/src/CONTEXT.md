@@ -11,7 +11,10 @@ specifies the progress profile — which is why this is a peer of `replay` rathe
 **Bound by** [ADR-0008](../../../docs/adr/0008-the-deck-export-format.md), whose glossary this file
 supersedes; also by [ADR-0005](../../../docs/adr/0005-the-deck-model.md) (deck identity) and
 [ADR-0002 §9](../../../docs/adr/0002-the-card-model.md) (the container must be able to carry binary
-from day one, even though no media ships).
+from day one, even though no media ships) and
+[ADR-0011 §7](../../../docs/adr/0011-new-card-rate-and-daily-limits.md), which fixes `notes.jsonl`
+line order as `(position, note id)` — ADR-0008 §12 demanded byte-for-byte determinism without ever
+saying what order the lines took.
 
 ## Language
 
