@@ -456,8 +456,13 @@ here forecloses it.
 
 ### [#26 — leeches](https://github.com/amin-bf/leitner/issues/26)
 
-1. Suspension as a fourth row kind needs no schema change: `kind` is a column and unknown kinds are
-   skipped (§9).
+1. ~~Suspension as a fourth row kind needs no schema change: `kind` is a column and unknown kinds are
+   skipped (§9).~~
+   > **Amended by [ADR-0010 §5](0010-leeches.md).** There is no fourth row kind. Suspension is a
+   > value on ADR-0004 §7's mutable surface — which §7 here made **one attribute table with the
+   > stamp on the row**, so it needs no schema change *there* either. The "no schema change"
+   > observation was true of both homes and therefore never discriminated between them; the log was
+   > ruled out on wall-clock settling instead.
 
 ## Glossary
 

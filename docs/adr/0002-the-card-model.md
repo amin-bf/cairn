@@ -373,6 +373,12 @@ incapable of going stale the way a hand-applied label does.
 Should personal tags ever be wanted, they are an additive change — a second tag set on the progress
 side of the §7 split — and nothing here forecloses it.
 
+> **Taken literally by [ADR-0010](0010-leeches.md)**, which builds the leech concept as exactly the
+> query described here and stores nothing. It also confirms the reason from the other side: because
+> tags are content and content travels in the `.ldeck` export (ADR-0008), a leech tag would publish
+> the user's personal struggle into a deck someone else downloads — a correctness bug, not a
+> preference.
+
 **Recommendation to #9**: merge tags by **set union** rather than the whole-note last-write-wins
 rule. Adding `verbs` on a phone and `irregular` on a laptop, both offline, should not lose one of
 them; a set of strings has an obvious commutative merge and no reason to inherit the coarser rule.
