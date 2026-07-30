@@ -416,36 +416,14 @@ Removal under set union needs its own answer, which is #9's to give.
 An **authoring/editing experience** ticket: the Markdown subset with live preview (§8), entering and
 proofreading numbered blanks (§5), and the warning before an edit retires a card with history (§7).
 
-## Glossary (provisional)
+## Glossary
 
-Settled by this ADR. They move into a context's `CONTEXT.md` once
-[Decide: crate and workspace layout](https://github.com/amin-bf/leitner/issues/14) fixes where
-contexts live; until then this ADR is their definition of record. This follows ADR-0001, which
-deferred its glossary the same way and for the same reason.
+**Moved.** These terms are now of record in [`content`](../../crates/core/src/content/CONTEXT.md), per
+[ADR-0009 §6](0009-crate-and-workspace-layout.md), which fixed where contexts live. They
+were marked provisional here precisely so this could happen: the `CONTEXT.md` is
+authoritative, and this ADR keeps the reasoning behind them.
 
-- **Note** — the unit of authored content: a kind plus a set of named field values plus tags. Never
-  scheduled, never shown as a question. The term was chosen deliberately over *fact*, *entry* and
-  *item* for reading naturally in "one note, two cards".
-- **Card** — a question generated from a note by rule, and the unit that carries a schedule.
-  Identified by `CardRef`, never by an identifier of its own.
-- **CardRef** — the pair `(note id, ordinal)` identifying a card. Encodes as 18 bytes (§6).
-- **Ordinal** — a card's index within its note: the position in the kind's `cards` list for
-  fixed-arity kinds, the authored blank number for `cloze`.
-- **Kind** — the closed-set identifier declaring a note's fields and how its cards are generated.
-  A permanent string, never reused.
-- **Kind definition** — the read-only data describing a kind's fields and cards. Shipped with the
-  application and carried in exports.
-- **Field** — a named text value on a note, either **asked** or **shown-with** another field.
-- **Asked field** — one that may serve as a card's prompt or answer.
-- **Shown-with field** — one never asked, rendering wherever its anchor field renders.
-- **Blank** — a numbered `{{n::text}}` region in a `cloze` note's text. Each distinct number
-  generates one card.
-- **Sibling** — another card generated from the same note.
-- **Note store** — the mutable half of the data. Content, tags, kind. Last edit wins.
-- **Review log** — the append-only, immutable half. Reviews and scheduler configuration.
-- **Dormant card** — a `CardRef` with events in the log that the current content no longer
-  generates. Not a stored state; the absence of a generated card. Reattaches if the content
-  returns.
+**Dormant card** moved to [`replay`](../../crates/core/src/replay/CONTEXT.md) instead: it names the join between content and the log, not a property of content.
 
 ## Consequences
 

@@ -298,29 +298,12 @@ widening of constraint 1; the first added the event-kind discriminator.
 strictly timestamp-ordered with `delta_t` in days, so a device with a wrong wall clock writes wrong
 facts into a log that is immutable by design. That tension remains #9's to confront.
 
-## Glossary (provisional)
+## Glossary
 
-These terms are settled by this ADR. They move into a scheduling context's `CONTEXT.md` once
-[Decide: crate and workspace layout](https://github.com/amin-bf/leitner/issues/14) fixes where
-contexts live; until then this ADR is their definition of record.
-
-- **Grade** — the user's rating of a single recall attempt, one of `Forgot`, `Barely`, `Good`,
-  `Easy`, encoded 1–4. `Forgot` is the only failure.
-- **Memory state** — a card's `(stability, difficulty)` pair, derived by replaying its review
-  history. Never authored directly, never the source of truth.
-- **Stability** — days for recall probability to fall to 90%. Non-decreasing on a pass,
-  non-increasing on a lapse.
-- **Difficulty** — how hard it is to increase a card's stability, clamped to `[1, 10]`.
-- **Retrievability** — current recall probability, a function of stability and elapsed time.
-- **Box** — a UI-level bucket, 1 to 5, computed from stability alone. Expresses **durability**
-  ("how long you would remember this"), never urgency.
-- **Durability** — the property a box reports. Distinct from **due-ness**, which is separate and
-  never expressed as a box.
-- **Lapse** — a review graded `Forgot`. Collapses stability per the model; we define no rule of our
-  own for it.
-- **Scheduler parameters** — the 21-weight vector plus algorithm identity. Collection state carried
-  in the log, not a device setting.
-- **Desired retention** — the target recall probability at the scheduled due date. Fixed at 0.9.
+**Moved.** These terms are now of record in [`scheduling`](../../crates/core/src/scheduling/CONTEXT.md), per
+[ADR-0009 §6](0009-crate-and-workspace-layout.md), which fixed where contexts live. They
+were marked provisional here precisely so this could happen: the `CONTEXT.md` is
+authoritative, and this ADR keeps the reasoning behind them.
 
 ## Consequences
 
