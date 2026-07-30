@@ -207,6 +207,12 @@ softening the lapse would make the display lie.
 **Not decided here**: leeches — what happens to a card failed repeatedly. That is card and deck
 management, not scheduling, and the model has no opinion on it.
 
+> **Since decided by [ADR-0010](0010-leeches.md), and this section is untouched by it.** Leeches are
+> detected and surfaced, never acted on automatically, and no leech signal reaches memory state —
+> *"no lapse counter influencing scheduling"* stands exactly as written above. ADR-0010 §2 leans on
+> this section twice: on the 3–5 day post-lapse collapse measured in the table, and on same-session
+> re-shows being real logged rows, which is why it counts failure *days* rather than failure rows.
+
 ### 6. Scheduler configuration is collection state carried in the log, never a device setting
 
 The parameter vector is a replay input: re-optimising changes every card's computed `(S, D)`. With

@@ -110,6 +110,13 @@ overall due count is large, a backlog-aware note appears — `"N due — pick a 
 rest will keep"` at the picker, `"N still waiting, that's fine"` at session end — rather than a
 bare number that reads as falling behind.
 
+> **Amended by [ADR-0010 §8](0010-leeches.md): the due count excludes suspended cards.** A suspended
+> card is due but never offered, so leaving it in the count would stop the number ever reaching zero
+> and make §8's `"nothing due right now"` state unreachable — a header permanently reporting work
+> the user is structurally unable to do. This does not touch §6's box badge: the box goes on meaning
+> durability and makes no claim about the queue, which is exactly the case constraint 4 was written
+> to survive.
+
 ### 8. Empty, new-deck and backlog states are explicit, worded states
 
 "Nothing due right now" and "fresh deck, first look" (zero review history) are both rendered

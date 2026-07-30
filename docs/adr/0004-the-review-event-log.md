@@ -79,6 +79,12 @@ progress so it cannot live in the note store, but it is a mutable flag rather th
 happened. It belongs with [#26](https://github.com/amin-bf/leitner/issues/26), which owns the leech
 policy that needs it, and it is additive: a fourth row kind costs nothing under the rule above.
 
+> **Settled by [ADR-0010 §5](0010-leeches.md): it is *not* a fourth row kind.** The reasoning in the
+> first two sentences here was correct and the last clause did not follow from it. A mutable flag
+> that toggles is settled in the log by *timestamp* order (§9), which §7 exists to forbid; on the
+> mutable surface it is settled by a counter carrying real causality. Suspension is a per-`CardRef`
+> value on that surface, syncing but never exporting. **The three row kinds above are final.**
+
 ### 2. A row is identified by its writer and that writer's own sequence number
 
 Without a server there is no authority handing out row numbers, so no global sequence exists to
@@ -504,8 +510,14 @@ bad byte must never render the application unusable.
 
 ### [#26 — leeches](https://github.com/amin-bf/leitner/issues/26)
 
-1. **Owns suspension**, which is additive as a fourth row kind (§1).
-2. **Answer duration is available** as a leech signal (§5).
+1. ~~**Owns suspension**, which is additive as a fourth row kind (§1).~~
+   > **Amended by [ADR-0010 §5](0010-leeches.md).** Suspension is a value on the **§7 mutable
+   > surface**, not a row kind — this table was wrong and §1's prose ("a mutable flag rather than a
+   > fact that happened") was right. A flag that toggles has its winner picked by *timestamp* order
+   > in the log (§9), which is exactly what §7 forbids; and it fails §1's own membership test, since
+   > suspension is not an input to replay. The three row kinds stand unchanged.
+2. **Answer duration is available** as a leech signal (§5) — taken up by ADR-0010 §6 as a *cost
+   display*, having been rejected as a trigger for being too noisy (ADR-0010 §3).
 
 ### [#11 — the review session prototype](https://github.com/amin-bf/leitner/issues/11)
 
@@ -543,7 +555,7 @@ authoritative, and this ADR keeps the reasoning behind them.
 |---|---|
 | Local storage engine; the cache; per-value stamps | [#12 — the local store](https://github.com/amin-bf/leitner/issues/12) |
 | Export container; scrubbing writer ids from a progress export | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
-| Suspension as a fourth row kind | [#26 — leeches](https://github.com/amin-bf/leitner/issues/26) |
+| ~~Suspension as a fourth row kind~~ — **closed by [ADR-0010 §5](0010-leeches.md)**: it is a value on the §7 mutable surface, keyed by `CardRef`, and no fourth row kind exists | [#26 — leeches](https://github.com/amin-bf/leitner/issues/26) |
 | How the mutable store moves between devices — snapshot or change stream | Sync transport; map fog |
 | Whether a precise clock-correction row is ever needed | Deferred until the failure is seen |
 | "Everything is merged, you are safe" reassurance in the UI | Sync transport; map fog |
