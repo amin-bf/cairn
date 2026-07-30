@@ -459,21 +459,14 @@ here forecloses it.
 1. Suspension as a fourth row kind needs no schema change: `kind` is a column and unknown kinds are
    skipped (§9).
 
-## Glossary (provisional)
+## Glossary
 
-Following ADR-0004, these are of record here until
-[#14](https://github.com/amin-bf/leitner/issues/14) fixes where contexts live.
+**Moved.** These terms are now of record in [`store`](../../crates/store/src/CONTEXT.md), per
+[ADR-0009 §6](0009-crate-and-workspace-layout.md), which fixed where contexts live. They
+were marked provisional here precisely so this could happen: the `CONTEXT.md` is
+authoritative, and this ADR keeps the reasoning behind them.
 
-- **Collection database** (`collection.db`) — the authoritative file: `log`, `mutable`, `local`.
-- **Derived database** (`derived.db`) — the disposable cache, attached to the same connection.
-- **Derivation version** — the constant identifying our replay arithmetic plus the pinned scheduler
-  version. A mismatch deletes the cache.
-- **Cache high-water** — the `(writer, sequence)` the cache has consumed through. Behind is
-  recoverable; unprovable is discarded.
-- **Sequence high-water** — the highest sequence *this install* has written. Both the source of the
-  next sequence number and the self-heal detector (§5).
-- **Writer marker** — the copy of the writer id held outside the backup set, whose absence or
-  disagreement means this collection was copied here and a fresh writer id must be minted (§6).
+**Derivation version** and **cache high-water** moved to [`replay`](../../crates/core/src/replay/CONTEXT.md), which owns the arithmetic they version.
 
 ## Consequences
 

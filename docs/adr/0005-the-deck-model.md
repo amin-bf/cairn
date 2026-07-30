@@ -287,21 +287,14 @@ The policy:
 3. Decide how a per-deck limit **composes with the single collection-wide queue** (§6) if one is
    introduced.
 
-## Glossary (provisional)
+## Glossary
 
-Settled by this ADR. They move into a context's `CONTEXT.md` once
-[Decide: crate and workspace layout](https://github.com/amin-bf/leitner/issues/14) fixes where contexts
-live; until then this ADR is their definition of record.
+**Moved.** These terms are now of record in [`content`](../../crates/core/src/content/CONTEXT.md), per
+[ADR-0009 §6](0009-crate-and-workspace-layout.md), which fixed where contexts live. They
+were marked provisional here precisely so this could happen: the `CONTEXT.md` is
+authoritative, and this ADR keeps the reasoning behind them.
 
-- **Deck** — the unit of ownership and export: `{ id, name }`, plus the notes whose `deck` reference
-  names it. Never a filing structure; personal organisation is tags' job.
-- **Deck id** — a UUIDv4, minted once at creation, preserved through export and import. The stable
-  identity that lets an update be recognised as the same deck rather than a new one.
-- **Unfiled** — the state of a note whose `deck` reference names no deck the collection currently
-  holds. Fully reviewable, never dropped.
-- **Personal deck preference** — a per-deck setting living on the mutable surface, keyed by deck id,
-  that never exports and never appears in the review log. Distinguished from deck content by the test:
-  does it travel with the deck?
+Decks did not earn a context of their own — see ADR-0009 §6. Deck *files* did: see [`export`](../../crates/export/src/CONTEXT.md).
 
 ## Consequences
 

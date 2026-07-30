@@ -17,10 +17,67 @@ argue the trade-off on its own merits.
 
 This applies to every agent working in this repo, on every artifact that persists.
 
+## Landing work
+
+Tickets here are worked in **parallel worktree sessions**, each branching from `origin/main` and
+never seeing what merged afterwards. Two things break silently because of it.
+
+### Rules that are easy to break silently
+
+1. **If commit signing fails, stop and ask. Never fall back to `--no-gpg-sign`.** Every commit on
+   `main` is signed, and this repo merges with merge commits rather than squashing, so unsigned work
+   lands on `main` as-is and someone has to clean it up. The passphrase comes from a GUI prompt, so
+   an unattended session gets `gpg: signing failed: Timeout` and **no commit object is written** —
+   the work is not lost, it simply has not been committed yet. Land everything that needs no commit
+   first (tracker updates, verification runs) so the pause blocks only the commit, then wait.
+   To repair history that already went unsigned:
+   `git rebase --exec 'git commit --amend --no-edit -S' origin/main` then
+   `git push --force-with-lease`.
+2. **Re-check the highest ADR number immediately before committing**, not when you start writing.
+   `git fetch origin && git ls-tree --name-only origin/main docs/adr/` — a parallel session may have
+   taken your number, and the worktree's own `docs/adr/` is a stale answer that looks authoritative.
+   When renumbering, **sed only your own files**: `AGENTS.md` and older ADRs may already reference
+   the *other* ADR at that number, and a blind replace corrupts those links. Re-read whatever landed
+   meanwhile, too — an ADR that merged mid-session may place requirements on the ticket you are
+   resolving.
+
+## Start with the context map
+
+**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the five crates, the
+seven contexts, and an index saying which ADR sections bind which context. `docs/adr/` is over 2,600
+lines; the index is what stops "read the ADRs" from meaning all of them.
+
+Read this file first, then the context map, then the `CONTEXT.md` for the area you are touching.
+`docs/research/` is the evidence trail for reopening a decision, not reading for implementing one.
+
+## The workspace
+
+Five crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md):
+`leitner-core` (the domain, pure), `leitner-store` (SQLite and the platform seam), `leitner-export`
+(the `.ldeck` container), `leitner-app` (egui, lib + cdylib), `leitner-desktop` (a shim, forced by
+`cargo-apk`).
+
+Contexts are **modules, not crates**. Vocabulary lives in a `CONTEXT.md` beside the code; decisions
+live system-wide in `docs/adr/`, and context-scoped `docs/adr/` directories are not used here.
+
+### Rules that are easy to break silently
+
+1. **`leitner-core` has no dependencies, and adding one is an ADR-sized decision.** Its empty
+   `[dependencies]` is what makes `cargo test -p leitner-core` need no database, no window and no
+   handset. `rusqlite` belongs in `leitner-store`; `egui` and `eframe` belong in `leitner-app`.
+2. **Time and identity are values, never injected traits.** Replay needs no clock at all — day
+   numbers are frozen on the row at write time, and fuzz is seeded from card identity. The two call
+   sites that need "now" take it as a parameter. A `SystemTime::now()` inside `leitner-core` breaks
+   the property that two devices replaying one log agree.
+3. **There is no fake store.** Store tests open a real SQLite database in a temp directory, because
+   the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and `INSERT OR IGNORE`.
+4. **A new ADR must be added to `CONTEXT-MAP.md`'s index.** One that is not there is invisible to
+   the agent it was written for.
+
 ## The client stack
 
-**egui / eframe**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). One crate, one binary per
-platform, no webview, no IPC. Setup and commands are in [`README.md`](./README.md).
+**egui / eframe**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). One binary per platform,
+no webview, no IPC. Setup and commands are in [`README.md`](./README.md).
 
 **The targets are desktop and Android.** The web target was ruled out of scope in
 [ADR-0007 §1](./docs/adr/0007-the-local-store.md) — a browser cannot be the system of record for an
@@ -37,12 +94,17 @@ because they are validated findings, not because a web build ships.
    otherwise bypasses the helper. Note that caret and selection are then in visual order while the
    buffer is logical, so RTL editing is imprecise; design around it rather than fighting it.
 3. **The storage seam is a compile-time `#[cfg]`.** Keep it that way. Never introduce a runtime
-   platform check — the whole stack choice rests on wrong platform code failing the build.
+   platform check — the whole stack choice rests on wrong platform code failing the build. It is two
+   functions in `leitner-store::platform`, and a **third function appearing there means the seam is
+   eroding**. A `#[cfg(target_os)]` anywhere else in the workspace is a defect.
 4. **Immediate mode has nowhere to `await`.** Spawn the future, store a handle, read the result on a
    later frame, and call `ctx.request_repaint()` on completion or the result sits unseen until the
    next input event.
-5. **The desktop binary must live in its own crate.** `cargo-apk` panics after signing when one crate
-   has both a cdylib and a bin. The APK is fine; the exit code is not, and CI will break.
+5. **The desktop binary lives in its own crate, and that crate stays empty.** `cargo-apk` panics
+   after signing when one crate has both a cdylib and a bin — the APK is fine, the exit code is not,
+   and CI breaks. So never add a `[[bin]]` to `leitner-app`, and never put logic in
+   `leitner-desktop`: code there is never compiled for Android and never runs on the handset.
+   It takes `eframe` by re-export from `leitner-app`, not as its own dependency.
 6. **`eframe`'s dependency is split per target** — its default `accesskit` feature is rejected
    alongside `android-native-activity`.
 7. **Fonts are ours to ship — and must be installed on the first frame, not in `CreationContext`.**

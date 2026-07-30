@@ -1,0 +1,18 @@
+[package]
+name = "leitner-export"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# This crate exists because ADR-0008 chose a **zip archive** as the deck file container, and
+# `leitner-core`'s empty dependency list (ADR-0009 §2) has no room for a compression library. It is
+# also the right shape independently: export spans content and — once #37 specifies the progress
+# profile — the log, so it cannot live inside either, exactly like `replay`.
+#
+# The zip dependency lands here when the container is built. ADR-0008 §2 already verified the
+# feature flags, and the obvious-looking one is the broken one:
+#   zip 8.6 --no-default-features --features deflate-flate2-zlib-rs
+# builds from nine transitive crates with no `-sys` crate, so deflate needs no C toolchain.
+[dependencies]
+leitner-core.workspace = true

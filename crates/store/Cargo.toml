@@ -1,0 +1,18 @@
+[package]
+name = "leitner-store"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+leitner-core.workspace = true
+# ADR-0007 §2: two SQLite files via rusqlite, `bundled` so no system SQLite is required and the
+# cross-compile proven in #7 keeps working.
+rusqlite.workspace = true
+
+# ADR-0003 §5 / ADR-0007 §6: Android's data directory is reachable only through hand-written JNI.
+# These two crates exist solely for `platform/android.rs` and must not be used anywhere else.
+[target.'cfg(target_os = "android")'.dependencies]
+jni.workspace = true
+ndk-context.workspace = true

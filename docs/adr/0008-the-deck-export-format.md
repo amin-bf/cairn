@@ -425,24 +425,14 @@ syncing is open at all.
 3. Author, description and licence are **typed deliberately or left empty** (§12) — never
    auto-populated.
 
-## Glossary (provisional)
+## Glossary
 
-Settled by this ADR. They move into a context's `CONTEXT.md` once
-[Decide: crate and workspace layout](https://github.com/amin-bf/leitner/issues/14) fixes where contexts
-live; until then this ADR is their definition of record.
+**Moved.** These terms are now of record in [`export`](../../crates/export/src/CONTEXT.md), per
+[ADR-0009 §6](0009-crate-and-workspace-layout.md), which fixed where contexts live. They
+were marked provisional here precisely so this could happen: the `CONTEXT.md` is
+authoritative, and this ADR keeps the reasoning behind them.
 
-- **Deck file** — a `.ldeck` zip archive carrying one or more decks' content and no review progress.
-  The artifact handed to another person.
-- **Profile** — which payload a container carries: `deck` (specified here) or `progress` (reserved for
-  #37). Declared in the manifest; distinguished to the operating system by extension.
-- **Revision** — a per-deck monotonic integer declared by the file, advancing only when the deck's
-  content digest changes. Compared only within one deck id's lineage.
-- **Tombstone** — a note id marked deleted, carrying no content, by which an author retracts a note
-  from a published deck.
-- **Acquired kind definition** — a kind definition a collection holds because it arrived in an imported
-  file, for a kind the running build does not ship. Read-only; never displaces a shipped definition.
-- **Update path / create path** — the two import branches, selected by whether the file's deck id is
-  already held (§11).
+**Acquired kind definition** is also noted in [`content`](../../crates/core/src/content/CONTEXT.md), since it is a kind definition first and an import artefact second.
 
 ## Consequences
 

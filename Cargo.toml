@@ -1,6 +1,42 @@
-[package]
-name = "leitner-app"
+[workspace]
+resolver = "3"
+members = [
+  "crates/core",
+  "crates/store",
+  "crates/export",
+  "crates/app",
+  "crates/desktop",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+publish = false
+license = "MIT"
 
-[dependencies]
+# Dependency versions live here so the five crates cannot drift apart. The Android set is pinned to
+# the versions proven on the handset in #7 and #8 — see docs/environment/android-toolchain.md.
+[workspace.dependencies]
+leitner-core = { path = "crates/core" }
+leitner-store = { path = "crates/store" }
+leitner-export = { path = "crates/export" }
+leitner-app = { path = "crates/app" }
+
+egui = "0.35"
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# `eframe` is deliberately absent. Its two arms disagree on `default-features` (ADR-0003 §5), and a
+# workspace entry cannot be overridden that way — so both arms are declared literally in
+# `crates/app`, side by side in one file where they cannot drift apart. `crates/desktop` gets it by
+# re-export rather than by dependency, which is what keeps that crate a shim.
+unicode-bidi = "0.3.18"
+
+android-activity = "0.6"
+jni = "0.21"
+ndk-context = "0.1"
+winit = "0.30"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

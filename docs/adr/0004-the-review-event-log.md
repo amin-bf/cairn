@@ -512,33 +512,14 @@ bad byte must never render the application unusable.
 1. A same-session re-show after a lapse is a **real logged review** with a zero day gap, not a UI-only
    loop (ADR-0001 §5, §1 here).
 
-## Glossary (provisional)
+## Glossary
 
-Settled by this ADR. They move into a context's `CONTEXT.md` once
-[Decide: crate and workspace layout](https://github.com/amin-bf/leitner/issues/14) fixes where
-contexts live; until then this ADR is their definition of record, following ADR-0001 and ADR-0002.
+**Moved.** These terms are now of record in [`log`](../../crates/core/src/log/CONTEXT.md), per
+[ADR-0009 §6](0009-crate-and-workspace-layout.md), which fixed where contexts live. They
+were marked provisional here precisely so this could happen: the `CONTEXT.md` is
+authoritative, and this ADR keeps the reasoning behind them.
 
-- **Row** — one entry in the review log. Immutable, self-contained, identified by `(writer id,
-  sequence number)`. Preferred over *event* when speaking about the stored artefact.
-- **Row kind** — the discriminator naming what a row is: `reviewed`, `config-set`,
-  `history-cutoff-set`. Unknown kinds are skipped, never errors.
-- **Writer id** — the machine-owned random identifier of one sequential writer. Never reused, never
-  adopted, not shown to the user. Not a device: one device may own several over its life.
-- **Sequence number** — a writer's own gap-free counter, incremented once per row it writes.
-- **Version summary** — `{writer id → highest sequence}`, computed by scanning a log. Answers "am I
-  ahead of or behind that device?". Lives in the sync handshake, never on a row.
-- **Device label** — the user-owned name for a device. Groups one or more writer ids. Mutable
-  content, not a log row.
-- **Day number** — the day bucket a review fell in, computed at write time under the collection day
-  scale and frozen. What replay uses.
-- **Day scale** — the collection-wide timezone and rollover hour defining where a day starts. 4am.
-- **History cutoff** — the instant before which replay ignores every `reviewed` row.
-- **Stamp** — the `(counter, writer id)` pair attached to every mutable value, deciding which of two
-  competing values is later. The counter jumps above any counter it sees. Never a wall clock.
-- **Interchange form** — the canonical JSON-lines encoding of §11. Local storage may differ; it must
-  round-trip.
-- **Cache** — locally computed scheduling state. Disposable, never authoritative, never synced,
-  never exported.
+**Cache** moved to [`replay`](../../crates/core/src/replay/CONTEXT.md), which decides what it holds.
 
 ## Consequences
 
