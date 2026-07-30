@@ -53,6 +53,18 @@ A distinct day on which a card was graded `1 Forgot` at least once. The unit the
 §5), so counting rows would treat one act of forgetting as three.
 _Avoid_: Lapse count, failure count — both of which invite counting rows.
 
+**Introduced**:
+A card whose **earliest** `reviewed` row exists. *"Introduced today"* measures that row against the
+**device's local** day, and is the only daily counter in the system — **derived, never stored**
+(ADR-0011 §5), so the cache may hold it and losing the cache loses nothing. A lapse re-show is not an
+earliest row, so it never counts.
+_Avoid_: Learned, started, activated, seen.
+
+**Introduction candidate**:
+A never-introduced card that is eligible today: not suspended (ADR-0010 §8), and from a note that has
+had no card introduced today (ADR-0011 §8). Candidates are taken in `(position, ordinal)` order up to
+the new-card rate. **This is queue composition, never a due-date adjustment** — see the rules below.
+
 **Leech**:
 A card with **four or more failure days in the trailing ninety**, measured with the device's local
 day as the right edge (ADR-0010 §2). **Derived, never stored** — a query over replayed history, so
@@ -88,6 +100,12 @@ being projected, and starts again if it returns.
 - **No leech signal may reach memory state.** Leech-ness is read *out* of replayed history and never
   fed back into it (ADR-0010 §1). A lapse counter that nudges scheduling is folklore overriding the
   model, and ADR-0001 §5 rejected it before ADR-0010 existed.
+- **Queue composition and due-date adjustment are different powers, and only one of them is off.**
+  ADR-0001 §7 disabled load balancing, calendar shaping and sibling avoidance because each *moves a
+  scheduled date* using collection-wide state, which breaks replay. Deciding which card is **offered**
+  — suspension, the new-card cap, one-card-per-note-per-day — changes nothing the log records and
+  nothing any interval computes, so it is permitted. Reading §7 as "sibling handling is off" is the
+  natural mistake and would forfeit ADR-0011 §8.
 
 ## The highest-value test in the repository
 

@@ -81,6 +81,14 @@ what is *offered*.
 _Avoid_: Buried, archived, disabled, leech flag — and never "suspend event", which is the row kind
 ADR-0010 §5 ruled out.
 
+**New-card rate**:
+How many cards may be **introduced** per day — a user-set integer, default 5, zero legal and the
+intended answer to a backlog. A single **global** value on the mutable surface (ADR-0011 §3, §6):
+syncs between the user's own devices, never exported, and **never a log row**, failing the same
+membership test suspension fails. The *count* it bounds is derived by `replay`, never stored.
+_Avoid_: New card limit, daily limit — there is no daily *review* limit at all (ADR-0011 §1), and
+using "limit" for both invites one.
+
 ### Interchange
 
 **Interchange form**:

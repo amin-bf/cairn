@@ -9,7 +9,9 @@ of them.
 **Bound by** [ADR-0002](../../../../docs/adr/0002-the-card-model.md) and
 [ADR-0005](../../../../docs/adr/0005-the-deck-model.md), whose glossaries this file supersedes; also
 amended by [ADR-0008](../../../../docs/adr/0008-the-deck-export-format.md), which widened §2 to admit
-acquired kind definitions and §4's per-deck slot to hold authoring values.
+acquired kind definitions and §4's per-deck slot to hold authoring values, and by
+[ADR-0011 §7](../../../../docs/adr/0011-new-card-rate-and-daily-limits.md), which adds **`position`**
+to the note so authored order survives publication.
 
 ## Language
 
@@ -33,7 +35,16 @@ A card's index within its note: the position in the kind's `cards` list for fixe
 authored blank number for `cloze`.
 
 **Sibling**:
-Another card generated from the same note.
+Another card generated from the same note. **At most one card per note is introduced per day**
+(ADR-0011 §8) — siblings shown in one session measure ninety-second recall rather than the separate
+skills they exist to schedule separately.
+
+**Position**:
+The integer fixing a note's place in authored order. From a local high-water counter on creation,
+from the `notes.jsonl` line index on import, ties broken by note id. **Not dense and not unique** —
+it only has to sort. Two things read it: new cards are introduced in `(position, ordinal)` order, and
+`export` emits notes in it (ADR-0011 §7).
+_Avoid_: Index, sequence number (which means `log`'s per-writer counter), sort key.
 
 ### Kinds and fields
 
@@ -86,6 +97,8 @@ reviewable, never dropped.
 **Personal deck preference**:
 A per-deck setting on the mutable surface, keyed by deck id, that never exports and never appears in
 the review log. Distinguished from deck content by one test: does it travel with the deck?
+**The slot is deliberately still empty**: ADR-0011 §6 declined a per-deck new-card rate, because
+with one collection-wide queue the real daily obligation becomes a sum shown on no screen.
 
 ### The two halves
 

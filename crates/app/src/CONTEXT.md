@@ -3,8 +3,11 @@
 The egui application: every screen the user sees, the text-layout helper every one of them goes
 through, and both platform entry points.
 
-**Bound by** [ADR-0003](../../../docs/adr/0003-client-stack.md) and
-[ADR-0006](../../../docs/adr/0006-the-review-session-experience.md); also by
+**Bound by** [ADR-0003](../../../docs/adr/0003-client-stack.md),
+[ADR-0006](../../../docs/adr/0006-the-review-session-experience.md),
+[ADR-0010](../../../docs/adr/0010-leeches.md) and
+[ADR-0011](../../../docs/adr/0011-new-card-rate-and-daily-limits.md), the last of which **amends
+ADR-0006 §1 and §2** — read those amendments before touching the session; also by
 [ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind).
 
 ## Language
@@ -14,6 +17,13 @@ One sitting of review: a chosen card count, with a 10-minute timer running from 
 **Not a domain object** (ADR-0005 §6) — it exists only here, and its position is never stored, only
 derived from the log.
 _Avoid_: Study session, cram session, queue.
+
+**Session count**:
+The size the user picks at the start of a session, and **the only bound on review work there is** —
+no daily review limit exists, and a user may start as many sessions in a day as they like
+(ADR-0011 §1). It counts **gradings, not distinct cards** (ADR-0011 §9), so a lapse re-show advances
+it and the progress bar always moves when the user acts.
+_Avoid_: Daily limit, quota, target.
 
 **Checkpoint**:
 What the timer surfaces when it expires: finish here, or keep going. A courtesy check-in, never an
