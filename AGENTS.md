@@ -295,8 +295,10 @@ archiving against it.
 
 ### What the user sees
 
-[ADR-0015](./docs/adr/0015-the-sync-experience.md) settles the surface. Four of its rules fail
-silently, three of them because the reasoning is invisible from the code that would break them.
+[ADR-0015](./docs/adr/0015-the-sync-experience.md) settles the surface and
+[ADR-0019](./docs/adr/0019-naming-the-account-at-enrolment.md) adds the account name to it. Five
+rules fail silently, four of them because the reasoning is invisible from the code that would break
+them.
 
 1. **Exactly two things may speak about sync: a dead grant, and ADR-0004 §8's clock-skew warning.**
    A network failure never speaks — offline is normal and nagging about it is the defect. There is
@@ -313,13 +315,28 @@ silently, three of them because the reasoning is invisible from the code that wo
    whose rows a device that never fetched them will never see again. It looks like a courtesy and
    there is nothing to reclaim — a few hundred objects, ~47.5 MB per decade. Disconnect drops the
    local grant and deletes nothing.
-4. **A wrong-account enrolment is undetectable, and one sentence is the entire defence.** A second
-   device pointed at the wrong account gets an empty folder, which is indistinguishable from being
-   the first device to enrol. That is why enrolment *ends by stating what it found* — "the first
-   device here" versus the devices it met. Removing that line as redundant removes the only guard.
-   **ADR-0016 §10's identity check does not cover this**, and reaching for it is the natural mistake:
-   in a wrong-account enrolment **every collection id agrees**, since all the devices hold the same
-   collection and merely cannot see each other. The failure is **reachability, not identity**.
+4. **A wrong-account enrolment cannot be checked by any code, and the defence is two sentences the
+   user reads.** A device pointed at the wrong account gets an empty folder, indistinguishable from
+   being the first to enrol — so enrolment *ends by stating what it found*, **prefixed with the
+   account it connected as**: *"Connected as you@example.com. This is the first device here"* versus
+   the devices it met ([ADR-0019 §1](./docs/adr/0019-naming-the-account-at-enrolment.md)). Delete
+   either half and you remove a guard that has no replacement. **No check can substitute**, and
+   reaching for one is the natural mistake in two directions: ADR-0016 §10's identity check does not
+   cover it, because **every collection id agrees** — all the devices hold the same collection and
+   merely cannot see each other — and neither would a check on the *account*, because there is no
+   peer, no namespace and no published byte to compare against. The failure is **reachability, not
+   identity**, and the only comparand that exists is the user's memory of the last enrolment.
+   The two halves do different jobs and neither is redundant: **the "first device here" sentence
+   detects, the account address diagnoses.** Without the address the user infers "wrong account" from
+   "first device here" — which almost nobody does, and every likelier hypothesis (folder cleared,
+   other device reset, sync broken) **routes to a repair that cannot work**, so each failed attempt
+   convinces them the collection is gone.
+5. **The account address lives with the credential and never on ADR-0004 §7's mutable surface.** It
+   is a property of the *grant*, not the collection, so it is never published and never enters either
+   export profile — [ADR-0016 §4](./docs/adr/0016-backup-and-restore.md)'s `collection` rule excludes
+   credentials, which is what keeps it out without a clause naming it. Put it on the mutable surface
+   and it lands in every `.lcoll` **and** on the remote, buying nothing: a published address is
+   unreadable by the device that needs it, which is looking at a different folder.
 
 ## Agent skills
 

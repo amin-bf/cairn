@@ -12,8 +12,10 @@ ADR-0006 §1 and §2** — read those amendments before touching the session;
 [ADR-0018](../../../docs/adr/0018-the-card-pane-ordering.md), the second of which **amends ADR-0012 §1
 and §5** — read those amendments before touching the authoring pane; also by
 [ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind) and
-[ADR-0015](../../../docs/adr/0015-the-sync-experience.md) (everything the user sees about sync — the
-`sync` crate holds the mechanism and none of the surface).
+[ADR-0015](../../../docs/adr/0015-the-sync-experience.md) and
+[ADR-0019](../../../docs/adr/0019-naming-the-account-at-enrolment.md) (everything the user sees about
+sync — the `sync` crate holds the mechanism and none of the surface; the second **amends ADR-0015 §7
+and §12**, adding the connected account to enrolment and to sync settings).
 
 ## Language
 
@@ -85,9 +87,19 @@ _Avoid_: In sync, up to date, synced, a status icon or checkmark anywhere in the
 
 **Set up sync**:
 Granting this device access, once, via the device flow. Ends with the user naming **this** device
-(ADR-0015 §8), with ADR-0016 §10's identity check, and with the app stating what it found — *"the
-first device here"* or the devices it met.
+(ADR-0015 §8), with ADR-0016 §10's identity check, and with the app stating what it found —
+**prefixed with the account it connected as**: *"Connected as you@example.com. This is the first
+device here"*, or the devices it met (ADR-0019 §1).
 _Avoid_: Login, sign-in, pairing, connecting an account.
+
+**Connected account**:
+The address the grant was obtained against, shown at enrolment **and kept in sync settings** — those
+two places and nowhere else (ADR-0019 §1). **Not a third speaker**: it states a fact about
+configuration and makes no claim about sync state, which is what ADR-0015 §1 actually forbids. It is
+kept rather than shown once because the failure it diagnoses surfaces *months* later, and because two
+settings screens read side by side are **the only cross-device account comparison that exists** — the
+app itself can never make one.
+_Avoid_: Account status, signed in as, a checkmark beside it.
 
 **Identity refusal**:
 What a **non-empty** collection shows when it meets an id that is not its own (ADR-0016 §10). It
@@ -98,10 +110,18 @@ difference alone would block the commonest path there is. Not a counter-example 
 rule — it is the immediate result of an action just taken, not a resting notice (ADR-0015 §7).
 
 **Wrong-account enrolment**:
-Enrolling against the wrong account. **Undetectable, and structurally so** — every collection id
-agrees, because all the devices hold the same collection and merely cannot see each other, so the
-failure is *reachability, not identity* (ADR-0016 §13). The app stating what it found is the whole
-defence; deleting that line as redundant removes the only guard.
+Enrolling against the wrong account. **Uncheckable by any code, and structurally so** — there is no
+peer, no namespace and no published byte to compare against, so neither ADR-0016 §10's identity check
+(every collection id agrees) nor a check on the *account* can catch it; the failure is *reachability,
+not identity* (ADR-0016 §13, widened by ADR-0019 §3). The defence is two things the **user** reads,
+doing different jobs: *"this is the first device here"* **detects** (it is said to someone who knows
+they enrolled another device), and the **connected account** above **diagnoses**. Deleting either as
+redundant removes a guard with no replacement — without the address the user must infer "wrong
+account" from "first device here", and every likelier hypothesis routes to a repair that cannot work.
+
+**There is no wrong account in the absolute** — only one that differs from the account the other
+device used. A first device on an odd account is harmless; nothing breaks until a second disagrees.
+What is protected is **consistency across enrolments**.
 
 **The notice channel**:
 The persistent, non-modal line for the **only two things permitted to speak about sync**: a dead
