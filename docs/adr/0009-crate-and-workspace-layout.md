@@ -54,6 +54,13 @@ them splits `eframe` per target.
 
 The rest are chosen, and §2, §4 and §11 say why.
 
+> **Extended by [ADR-0013 §11](0013-the-sync-transport.md)**: a sixth crate, `crates/sync/`
+> (`leitner-sync`, lib), holds HTTP, TLS and OAuth. **This is not an overturning** — `CONTEXT-MAP.md`
+> recorded the prediction as this ADR landed (*"a `sync` context is anticipated, not created… expect
+> a sixth crate rather than a fifth module"*), on §2's ground that a network dependency cannot live
+> in `leitner-core`. The count in this heading is left as written, because it records what was
+> decided here; the live list is `CONTEXT-MAP.md`'s.
+
 ### 2. `leitner-core` has no dependencies, and that is its interface
 
 Its `[dependencies]` section is empty, deliberately and permanently. No `rusqlite`, no `egui`, no

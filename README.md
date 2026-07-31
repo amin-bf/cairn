@@ -8,14 +8,16 @@ Agent instructions live in [`AGENTS.md`](./AGENTS.md). The codebase entry point 
 
 ## Layout
 
-A five-crate workspace, laid out in
-[ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md):
+A six-crate workspace, laid out in
+[ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
+[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
 
 | Crate | What it is |
 |---|---|
 | `leitner-core` | The domain, entire and pure. Zero dependencies — testable with no database, window or handset. |
 | `leitner-store` | SQLite persistence and the whole platform seam (two functions wide). |
 | `leitner-export` | The `.ldeck` deck-file container and import policy. Holds the zip dependency. |
+| `leitner-sync` | Publishing the log to the remote and reading it back. Holds the network dependencies. |
 | `leitner-app` | The egui application. `lib` + `cdylib`; the Android entry point lives here. |
 | `leitner-desktop` | A twenty-line shim, forced by `cargo-apk`. Keep it empty. |
 
