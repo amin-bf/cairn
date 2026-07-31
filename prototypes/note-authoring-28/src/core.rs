@@ -163,10 +163,18 @@ pub struct FieldOutput {
 /// A bidi-correct text input.
 ///
 /// AGENTS.md rule 2: `TextEdit` lays out its own text and otherwise bypasses the bidi helper, so
-/// it needs `.layouter()`. The consequence is recorded there and reproduced here — with the
-/// layouter installed, **caret and selection are in visual order while the buffer is logical**, so
-/// on RTL content the caret lands in the wrong place. That is a property of the approach, not a
-/// bug in this prototype: judge RTL *rendering* here, not RTL caret precision.
+/// it needs `.layouter()`. Two consequences, and only one of them is inherent:
+///
+/// - **Inherent, and accepted:** on *RTL* text the caret and selection are in visual order while
+///   the buffer is logical, so the caret is imprecise. That is the cost of the approach, recorded
+///   in `AGENTS.md` — judge RTL *rendering* here, not RTL caret precision.
+/// - **Not inherent, and fixed:** the caret was also wrong on plain **LTR** text, one position per
+///   preceding line break, because the helper emitted a doubled newline and egui maps cursors
+///   through the galley. See `bidi::job` — the laid-out text must stay byte-identical to the
+///   buffer, which is now a test.
+///
+/// A single-line field is a real `TextEdit::singleline`, so Enter does not insert a newline into a
+/// `Term`, and its text scrolls rather than wrapping inside a one-row box.
 pub fn text_field(
     ui: &mut egui::Ui,
     id: egui::Id,
@@ -179,15 +187,22 @@ pub fn text_field(
     let rtl = crate::bidi::is_rtl(value);
     let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_width: f32| {
         let mut job = crate::bidi::job(buf.as_str(), egui::FontId::proportional(size), color);
-        job.wrap.max_width = wrap_width;
+        // A single-line field must not wrap, or a long term folds into a box one row tall and the
+        // caret goes hunting for rows that are not drawn.
+        job.wrap.max_width = if multiline { wrap_width } else { f32::INFINITY };
         ui.fonts_mut(|f| f.layout_job(job))
     };
 
-    let mut edit = egui::TextEdit::multiline(value)
+    let mut edit = if multiline {
+        egui::TextEdit::multiline(value).desired_rows(rows)
+    } else {
+        egui::TextEdit::singleline(value)
+    };
+    edit = edit
+        .id(id)
         .desired_width(f32::INFINITY)
         .font(egui::FontId::proportional(size))
         .layouter(&mut layouter);
-    edit = if multiline { edit.desired_rows(rows) } else { edit.desired_rows(1) };
     if rtl {
         edit = edit.horizontal_align(egui::Align::RIGHT);
     }
@@ -212,6 +227,15 @@ pub fn text_field(
         has_focus: out.response.has_focus(),
         selection,
     }
+}
+
+/// Drops the remembered selection for a field.
+///
+/// Must be called whenever something other than typing rewrites the text — blanking a selection
+/// does exactly that. Otherwise the remembered range still describes the *old* string, the button
+/// stays enabled, and a second click blanks whatever now happens to sit at those offsets.
+pub fn forget_selection(ui: &mut egui::Ui, id: egui::Id) {
+    ui.data_mut(|d| d.remove::<(usize, usize)>(id.with("last-selection")));
 }
 
 /// Draws a laid-out job at the full available width.

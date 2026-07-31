@@ -88,6 +88,7 @@ fn form(ui: &mut egui::Ui, ed: &mut Editor) {
                     if ui.add_enabled(has_selection, btn).clicked() {
                         if let Some(r) = out.selection.clone() {
                             ed.blank_selection(f.name, r);
+                            core::forget_selection(ui, id);
                         }
                     }
                     core::mono(

@@ -89,7 +89,7 @@ fn form(ui: &mut egui::Ui, ed: &mut Editor) {
         }
 
         if k.is_cloze() {
-            blank_toolbar(ui, ed, f.name, out.selection);
+            blank_toolbar(ui, ed, f.name, id, out.selection);
         }
         ui.add_space(10.0);
     }
@@ -108,6 +108,7 @@ fn blank_toolbar(
     ui: &mut egui::Ui,
     ed: &mut Editor,
     field: &'static str,
+    field_id: egui::Id,
     selection: Option<std::ops::Range<usize>>,
 ) {
     let text = ed.value(field);
@@ -119,6 +120,7 @@ fn blank_toolbar(
         if ui.add_enabled(has_selection, btn).clicked() {
             if let Some(r) = selection {
                 ed.blank_selection(field, r);
+                core::forget_selection(ui, field_id);
             }
         }
         if !has_selection {
