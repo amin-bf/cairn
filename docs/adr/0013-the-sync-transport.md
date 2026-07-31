@@ -429,6 +429,15 @@ which is the form [#37](https://github.com/amin-bf/leitner/issues/37) actually m
 crosses a collection boundary so ADR-0004 §7 stamps reset, a restore re-enters the same collection so
 they must travel byte for byte. Nothing here settles that.
 
+> **Completed by [ADR-0016 §3](0016-backup-and-restore.md), which mints a collection id** — adopted
+> and never re-minted, the exact opposite of the writer id's never-adopt rule. Two consequences for
+> this section. Import versus restore is settled by the **profile** (`deck` versus `collection`), not
+> by this scoping. And **§10's guarantee is upgraded from a structural accident to a checked
+> invariant**: "cannot merge two collections" here really means *cannot see the other one*, which
+> stops being true the moment a user has two accounts and picks the wrong one. ADR-0016 §10 makes it
+> an actual check — an empty collection adopts the identity it meets, a non-empty one refuses any but
+> its own, at both the restore and the enrolment seam.
+
 ### 11. `leitner-sync` is the sixth crate
 
 Anticipated rather than new: `CONTEXT-MAP.md` already records that *"a `sync` context is anticipated,
@@ -481,6 +490,13 @@ as a surprise. The shape of the fix, when it is needed: the seam rule is per cra
 workspace — `leitner-store` keeps exactly two functions, and a crate that must touch the platform for
 an unrelated reason gets its own module under the same three-arm discipline.
 
+> **Resolved by [ADR-0016 §5](0016-backup-and-restore.md), which adopted exactly that fix.** It was
+> the next ticket, and it had no escape: an archive that cannot leave the device is not a backup, and
+> a file picker was unavailable because activity *results* need a Java subclass and therefore a dex.
+> Its put/get/list seam lives in a `platform` module **inside `leitner-export`**, three arms, third a
+> `compile_error!` — so `leitner-store::platform` keeps exactly two functions and §4's erosion signal
+> survives intact. **The seam rule is per crate.**
+
 ## Requirements this places on downstream tickets
 
 ### [#40 — the sync experience](https://github.com/amin-bf/leitner/issues/40)
@@ -509,6 +525,16 @@ an unrelated reason gets its own module under the same three-arm discipline.
    transport*; distinguishing an import from a restore still needs the answer #37 owns.
 3. **A restore re-enters the same collection**, so ADR-0007's writer-marker exclusion still governs
    the fork, and §9's decision to let the *token* ride the backup set does not weaken it.
+
+> **All three discharged by [ADR-0016](0016-backup-and-restore.md).** (1) is honoured: §1 there
+> specifies a separate archive and names the three failures sync does not cover, and the sync folder
+> is never offered as one. (2) is completed by §3's collection id — see the note in §10 above. (3) is
+> confirmed and restated in §12: a restored device mints a fresh writer id and is a **clean fork
+> rather than a resurrection**, and the archive carries no credential at all.
+>
+> ADR-0016 also places two requirements back on **[#40](https://github.com/amin-bf/leitner/issues/40)**:
+> enrolment must run §10's identity check and both outcomes are UI moments, and the collection id is
+> published as one small immutable object per writer prefix under §4's never-rewritten rule.
 
 ### [#42 — when parameter optimisation runs](https://github.com/amin-bf/leitner/issues/42)
 

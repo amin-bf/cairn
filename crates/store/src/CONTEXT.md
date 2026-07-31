@@ -26,6 +26,24 @@ _Avoid_: Max seq, last seq — the names that invite the `MAX(seq) WHERE writer 
 The copy of the writer id held outside the backup set. Its absence or disagreement means this
 collection was copied here, and a fresh writer id must be minted.
 
+**Collection id**:
+A UUIDv4 naming *this collection*, held in `local`, minted once at first launch beside the writer
+marker. **Adopted and never re-minted** — the exact opposite of the writer id, and the two rules must
+never be swapped:
+
+| | Writer id | Collection id |
+|---|---|---|
+| On finding one you did not mint | **never adopt** — mint fresh | **always adopt** — never re-mint |
+| Why | a sequence number promises sole authorship | every device of one collection must agree |
+
+It is **not** on the mutable surface — it must never settle — and **not** in the log, since it is not
+an input to replay.
+
+**Empty collection**:
+One that has authored **no log rows under this device's own writer id and nothing on the mutable
+surface**. The test that decides whether a device adopts a collection id it meets or refuses it. Not
+"has no notes" — an imported deck with no reviews is still empty by this test.
+
 **Line**:
 The `log.line` column: the interchange row exactly as received. **The only authoritative column** —
 every other column in the table, and everything in `derived.db`, is derived from it and may be
@@ -41,6 +59,10 @@ dropped and rebuilt.
   deferred transaction loses updates between two processes.
 - **Derived columns do not have to round-trip. Only `line` does.**
 - **The writer marker lives outside the backup set** — never move it into the data directory.
+- **`derived.db` lives outside the backup set too.** It is disposable by design, so backing it up
+  protects nothing while burning the 25 MB platform quota and hastening the silent cutoff.
+- **A writer id is never adopted; a collection id is never re-minted.** Applying either rule to the
+  other identity is silent and destructive in opposite directions.
 - **WAL on both files; `synchronous=FULL` on the collection, `OFF` on the cache.**
 
 ## The platform seam
@@ -52,3 +74,11 @@ target fails the build rather than silently taking the desktop path.
 **A third function appearing here means the seam is eroding.** Everything else in this crate is
 portable — `rusqlite` with `bundled` compiles unchanged for desktop and Android, proven on the
 handset in #7.
+
+**The seam rule is per crate, not per workspace.** [ADR-0013 §12](../../../docs/adr/0013-the-sync-transport.md)
+recorded a contradiction — ADR-0009's handoff sends every platform capability *here*, while the rule
+above forbids a third arriving — and [ADR-0016 §5](../../../docs/adr/0016-backup-and-restore.md)
+resolved it: a crate that must touch the platform for an unrelated reason gets **its own** `platform`
+module under the same three-arm discipline. `leitner-export` has one (put/get/list for user-visible
+files). **This module still stays at two functions**, and that limit is now load-bearing rather than
+merely tidy — it is the reason the erosion signal still means anything.

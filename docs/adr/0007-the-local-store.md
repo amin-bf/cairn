@@ -310,6 +310,22 @@ costing about 24 bytes in the version summary, which §2 already budgets for.
   doesn't back up data to the cloud."* At §10's projections we cross that in about two years of
   heavy use. This is a fact for the map's **Backup and restore** fog, not something this ADR solves.
 
+  > **Amended twice by [ADR-0016 §7](0016-backup-and-restore.md).**
+  >
+  > **The figure is wrong: the crossing is about nine months of heavy use, not two years.** This
+  > bullet reads the wrong row of §10's own table — it used the **raw interchange** projection
+  > (11 MB/yr → 2.3 years), but Auto Backup covers *files on disk*, which is §10's other row at
+  > **~33 MB/yr → ~0.76 years**. The hazard identified here is roughly 2.5× more urgent than stated.
+  >
+  > **And `derived.db` moves out of the backup set**, to `getNoBackupFilesDir()` beside the writer
+  > marker above. §3 makes the cache disposable and rebuildable by design, yet this section puts it
+  > where Auto Backup collects it — so it is uploaded, counts against the 25 MB quota, and
+  > accelerates this very cutoff, in order to protect a file whose defining property is that losing
+  > it costs nothing. `ATTACH` is indifferent to the path, so this needs no new mechanism.
+  >
+  > ADR-0016 keeps Auto Backup **on**: the writer marker above already made restore safe, and for a
+  > user who never enrols sync and never makes an archive it is the only recovery there is.
+
 ### 7. Durability: WAL on both files, `FULL` on the collection, `OFF` on the cache
 
 ```
