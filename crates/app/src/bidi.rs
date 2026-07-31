@@ -2,9 +2,14 @@
 //!
 //! Carried into the workspace from tag `prototypes/issue-11` per ADR-0003 §7, which records this as
 //! a validated decision rather than a prototype artefact. The logic below is the prototype's, with
-//! one fix since: paragraph separators were emitted twice, because a paragraph range already ends
-//! with its own. The tests are new: the prototype verified this by eye, on a handset, and by a
-//! Persian reader, which is evidence but not a regression guard.
+//! two fixes since, both found by building the `#28` note-authoring prototype on a verbatim copy of
+//! this file: paragraph separators were emitted twice, because a paragraph range already ends with
+//! its own; and an RTL word's punctuation stayed glued to the word instead of moving to the run's
+//! visual end. A third defect found there — RTL text clipped inside a `TextEdit` — is a rule for
+//! callers rather than a change here, and is documented on `job()`.
+//!
+//! The tests are new: the prototype verified this by eye, on a handset, and by a Persian reader,
+//! which is evidence but not a regression guard.
 //!
 //! epaint shapes correctly (harfrust + `guess_segment_properties()` infers RTL from the script, so
 //! Arabic letters join and each run is laid out right-to-left *internally*). What it does not do is
@@ -50,6 +55,36 @@ pub fn is_rtl(text: &str) -> bool {
 }
 
 /// Build a `LayoutJob` whose sections are ordered by the Unicode bidirectional algorithm.
+///
+/// # A `TextEdit` must reset `halign` — otherwise RTL text is clipped
+///
+/// For RTL text this sets `halign = Align::RIGHT`, and epaint aligns rows against the **origin**
+/// rather than against the wrap width. The resulting galley therefore spans **negative x**:
+/// one Persian line measures `(-118, 0)..(0, 16)` here, and `(-109, 0)` was measured on the `#28`
+/// prototype's font set — the figure is font-dependent, the sign is not. A label is not *clipped*
+/// by that, because it allocates from `galley.size()` and so reserves space the text hangs into. A
+/// `TextEdit` does not — it draws at a fixed origin and clips, so the overhang is never painted and
+/// the last character of the line disappears.
+///
+/// Callers, therefore:
+///
+/// - **In a `.layouter()`**: set `job.halign = egui::Align::LEFT` after building the job, and let
+///   `TextEdit::horizontal_align` do the alignment. Ordering never depended on `halign` — it comes
+///   from the section order below — so resetting it costs nothing.
+/// - **In a label**: surviving the clip is not the same as being aligned, so do not lean on
+///   `halign` for the alignment either — a label sizes itself to its own content, leaving a
+///   right-aligned galley nothing to align against. Force `halign` to `LEFT`, measure the galley,
+///   and `ui.add_space(available - galley.rect.width())` in front of it. A right-to-left `Layout`
+///   was tried instead and puts the label's *left* edge on the container's right, running the line
+///   off the far side.
+///
+/// So **`halign` is a direction marker here, not the alignment mechanism** — ADR-0012 §7 makes that
+/// binding on the authoring screen, and the prototype it was written from sets `halign` here and
+/// resets it at every caller, which is the shape kept below. A caller that wants the direction
+/// should ask [`is_rtl`] rather than read it back off the job.
+/// `an_rtl_paragraph_is_right_aligned` pins that the field is still set, and
+/// `an_rtl_job_spans_negative_x_which_is_why_a_text_edit_must_reset_halign` pins the trap itself,
+/// so this note cannot go quietly out of date.
 pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
     use unicode_bidi::BidiInfo;
 
@@ -101,7 +136,7 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                         if i > 0 {
                             job.append(" ", 0.0, fmt.clone());
                         }
-                        job.append(&fix_digits(w), 0.0, fmt.clone());
+                        append_rtl_word(&mut job, w, &fmt);
                     }
                 } else {
                     // Even an LTR-classified run can contain Arabic-Indic digits, which epaint
@@ -126,6 +161,72 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
         }
     }
     job
+}
+
+/// Bidi mirroring: a bracket keeps its *meaning* across directions, so its glyph flips. An opening
+/// parenthesis before Persian text is drawn as `)`, because "opening" means the right-hand side
+/// there.
+///
+/// This is a deliberate subset of Unicode's `Bidi_Mirrored` property — the pairs a deck is likely
+/// to contain — not the full table, which runs to hundreds of mathematical characters. A pair that
+/// is missing is left as it stands rather than mirrored wrongly; add to the list when one turns up.
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        '«' => '»',
+        '»' => '«',
+        other => other,
+    }
+}
+
+/// Emits one word of an RTL run in visual order, moving the punctuation at its edges to the other
+/// side.
+///
+/// Reversing whole words is not enough: a sentence-final `.` is part of the last *word*, so it
+/// stayed glued to that word's right-hand side and appeared in the middle of the sentence instead
+/// of at the far left where an RTL reader expects it. The bidi algorithm resolves such a neutral to
+/// the paragraph level, which means it belongs at the run's visual end.
+///
+/// Detaching punctuation is safe for exactly the reason detaching letters is not: punctuation has
+/// no joining behaviour, so shaping is unaffected — the same argument `fix_digits` rests on.
+/// Splitting letters was tried in #8 and broke the joins, so do not generalise this to them.
+///
+/// Only the **edges** move. A hyphen or apostrophe inside a word stays where it is, or the word
+/// stops being the word.
+///
+/// "Not alphanumeric" is the test for an edge, and the zero-width joiner and non-joiner are the one
+/// place that test disagrees with the argument above: they are not alphanumeric, but controlling
+/// joining is their entire purpose. So they count as core. Persian writes `می‌روم` with one, and a
+/// word ends in one for as long as it takes to type the next letter.
+fn append_rtl_word(job: &mut LayoutJob, word: &str, fmt: &TextFormat) {
+    let is_core = |c: char| c.is_alphanumeric() || matches!(c, '\u{200C}' | '\u{200D}');
+    let flip = |s: &str| -> String { s.chars().rev().map(mirror).collect() };
+    let Some(start) = word.find(is_core) else {
+        // All punctuation: still mirrored, but there is no core for it to sit beside.
+        job.append(&flip(word), 0.0, fmt.clone());
+        return;
+    };
+    let end = word
+        .rfind(is_core)
+        .map(|i| i + word[i..].chars().next().unwrap().len_utf8())
+        .unwrap();
+
+    // Visual order inside an RTL run: what trailed the word now leads it, and vice versa.
+    let (leading, core, trailing) = (&word[..start], &word[start..end], &word[end..]);
+    if !trailing.is_empty() {
+        job.append(&flip(trailing), 0.0, fmt.clone());
+    }
+    job.append(&fix_digits(core), 0.0, fmt.clone());
+    if !leading.is_empty() {
+        job.append(&flip(leading), 0.0, fmt.clone());
+    }
 }
 
 /// Byte length of the paragraph separator `para` ends with, or 0.
@@ -250,6 +351,80 @@ mod tests {
         // The separator must never be handed to the word reversal: reordering it would move the
         // line break into the middle of the line it terminates.
         assert_eq!(visual("سلام دنیا\nسلام"), "دنیا سلام\nسلام");
+    }
+
+    #[test]
+    fn a_persian_full_stop_lands_at_the_visual_end_of_the_line() {
+        // Reported from the running #28 prototype: the dot sat "in the middle of the sentence
+        // before the last word". Reversing whole words is not enough — the full stop belongs to
+        // the last *word*, so it stayed glued to that word's right-hand side, one position too far
+        // right.
+        assert_eq!(visual("سگ در خانه است."), ".است خانه در سگ");
+    }
+
+    #[test]
+    fn brackets_around_rtl_text_are_mirrored_to_the_correct_side() {
+        // A bracket keeps its meaning and flips its glyph: "opening" is the right-hand side in RTL,
+        // so the pair reads the same after the edges swap places.
+        assert_eq!(visual("(سلام)"), "(سلام)");
+    }
+
+    #[test]
+    fn a_zero_width_non_joiner_at_a_word_edge_is_not_detached() {
+        // ZWNJ is where "punctuation has no joining behaviour" stops being true: U+200C is not
+        // alphanumeric, but it exists *to* control joining. Detaching it from a word edge and
+        // mirroring it across the word is the same class of breakage splitting letters caused in
+        // #8. Persian needs it constantly — "می‌روم" — and a word ends in one for as long as it
+        // takes to type the next letter, which in an editor is every keystroke.
+        assert_eq!(visual("می\u{200C}"), "می\u{200C}");
+        assert_eq!(visual("خانه\u{200C}ها"), "خانه\u{200C}ها");
+    }
+
+    #[test]
+    fn punctuation_inside_a_word_is_not_disturbed() {
+        // Only the *edges* move. An apostrophe or hyphen mid-word has to stay put, or the word
+        // stops being the word.
+        assert_eq!(visual("خانه-باغ"), "خانه-باغ");
+    }
+
+    #[test]
+    fn latin_punctuation_is_untouched() {
+        // The edge-swapping is the RTL branch's business only: an LTR run is already in visual
+        // order, so moving its punctuation would be the same defect in the other direction.
+        for t in ["Hello, world.", "(parenthesised)", "a-b"] {
+            assert_eq!(visual(t), t);
+        }
+    }
+
+    /// The clipping defect, pinned as a measurement rather than fixed here: an RTL job lays out
+    /// into negative x, which is what a `TextEdit` clips. `job()` keeps its `halign`, so the fix is
+    /// the caller rule documented on `job()` — and this test is what stops that documentation from
+    /// going quietly out of date.
+    ///
+    /// It runs a real epaint layout pass headlessly and needs no font install: the overhang comes
+    /// from `halign`, not from glyph coverage, so it reproduces with the stock fonts even though
+    /// the Persian glyphs themselves are missing here.
+    #[test]
+    fn an_rtl_job_spans_negative_x_which_is_why_a_text_edit_must_reset_halign() {
+        let _ = egui::Context::default().run_ui(Default::default(), |ui| {
+            let mut job = job("سلام دنیا", FontId::default(), Color32::WHITE);
+            job.wrap.max_width = 300.0;
+            assert_eq!(job.halign, egui::Align::RIGHT);
+
+            let clipped = ui.fonts_mut(|f| f.layout_job(job.clone()));
+            assert!(
+                clipped.rect.min.x < 0.0 && clipped.rect.max.x <= 0.0,
+                "expected the galley to hang into negative x, got {:?}",
+                clipped.rect
+            );
+
+            // The caller rule: reset halign and the same job lands in positive space, where a
+            // `TextEdit` draws it whole.
+            job.halign = egui::Align::LEFT;
+            let drawn = ui.fonts_mut(|f| f.layout_job(job));
+            assert_eq!(drawn.rect.min.x, 0.0);
+            assert!(drawn.rect.max.x > 0.0);
+        });
     }
 
     #[test]
