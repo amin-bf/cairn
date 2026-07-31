@@ -251,9 +251,17 @@ The settings, and their groupings:
 
 | Setting | Contents | Why grouped this way |
 |---|---|---|
-| **Scheduler parameters** | 21-weight vector **+ algorithm identity** (`fsrs-6` and the exact pinned crate version) | Twenty-one numbers are meaningless without knowing which formulas consume them (ADR-0001 §6). Split them and a valid-looking vector can be read by the wrong version |
+| **Scheduler parameters** | 21-weight vector **+ algorithm identity** (`fsrs-6` and the exact pinned crate version) **+ fitted-over count** | Twenty-one numbers are meaningless without knowing which formulas consume them (ADR-0001 §6). Split them and a valid-looking vector can be read by the wrong version |
 | **Day scale** | timezone **+** rollover hour | Together they define one boundary; neither is meaningful alone |
 | **Desired retention** | 0.9 | Fixed and not user-exposed (ADR-0001 §6), but **recorded explicitly**, so exposing it later is a value change rather than a format change |
+
+> **Amended by [ADR-0014 §6](0014-when-parameter-optimisation-runs.md): the scheduler-parameters
+> setting gains a third member, the fitted-over count** — how many reviews the vector was trained
+> on, **frozen at write time** like §4's day bucketing. It is not derivable: a device that trained
+> while behind on sync fitted over fewer reviews than a later scan of the *merged* log around that
+> row would count, so derivation reports a fit that never happened, exactly where the number
+> matters. The setting still settles as one unit, and arbitration is unchanged — values settle by
+> stamp (§7), never by which was fitted over more history.
 
 **The log carries only changes.** Starting values are the published defaults built into the
 application, so a fresh collection needs no `config-set` rows at all.

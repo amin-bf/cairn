@@ -53,9 +53,19 @@ separate and is never expressed as a box.
 ### Configuration
 
 **Scheduler parameters**:
-The 21-weight vector plus algorithm identity. Collection state carried in the log, not a device
-setting — otherwise two devices replay the same log and compute different memory states.
+The 21-weight vector, algorithm identity and fitted-over count. Collection state carried in the log,
+not a device setting — otherwise two devices replay the same log and compute different memory
+states.
 _Avoid_: Weights (too narrow — the algorithm identity travels with them).
+
+**Optimisation run**:
+Fitting a new parameter vector to this collection's own review history. Always started by the user
+(ADR-0014 §1), never on a threshold or a schedule.
+_Avoid_: Training, syncing parameters, recalculating.
+
+**Fitted-over count**:
+How many reviews an optimisation run trained on, recorded on the `config-set` row and **frozen at
+write time**. Never recomputed — see the rule below.
 
 **Desired retention**:
 The target recall probability at the scheduled due date. Fixed at 0.9.
@@ -74,3 +84,10 @@ The target recall probability at the scheduled due date. Fixed at 0.9.
   replay stops being a function of the card's own history.
 - **Fuzz is seeded from `CardRef`, never from an RNG.** Two devices replaying the same log must
   reach the same answer.
+- **Never derive the fitted-over count by counting rows around the `config-set` row.** A device that
+  optimised while behind on sync trained on fewer reviews than the merged log shows there, so the
+  derived number reports a fit that never happened — and it does so precisely when the vector is
+  stale, which is the case the number exists to expose (ADR-0014 §6).
+- **An optimisation run that produces the current vector writes nothing.** A value-less `config-set`
+  row still enters the settling contest, so it can displace a better-fitted vector while changing
+  nothing (ADR-0014 §5).

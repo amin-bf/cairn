@@ -121,6 +121,16 @@ because they are validated findings, not because a web build ships.
    [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
    text on Android.
 9. **Verify Android on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
+10. **A backgrounded Android app is frozen, not slowed.** The process moves to the `/background`
+    cpuset (~13× the CPU time) and is then frozen outright — `isFrozen=true`, `utime` stopped dead —
+    so long work *stops* rather than running slowly: 303 s of wall clock for 4.3 s of work, measured
+    in [`docs/research/fsrs-on-device/`](./docs/research/fsrs-on-device/README.md). It may also be
+    killed outright, since a process holding hundreds of megabytes is a prime low-memory-killer
+    target. So long work is started **from the foreground, by a user action**, on a worker thread
+    polled by the frame loop (rule 4), with **nothing persisted until it completes** — then a frozen
+    or killed run holds no partial state and the recovery action is to press the button again. Never
+    schedule it, never take a wakelock, and never promise the user that a started job is still
+    progressing. [ADR-0014 §3](./docs/adr/0014-when-parameter-optimisation-runs.md).
 
 ## The local store
 
