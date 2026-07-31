@@ -5,7 +5,8 @@
 //! two fixes since, both found by building the `#28` note-authoring prototype on a verbatim copy of
 //! this file: paragraph separators were emitted twice, because a paragraph range already ends with
 //! its own; and an RTL word's punctuation stayed glued to the word instead of moving to the run's
-//! visual end.
+//! visual end. A third defect found there — RTL text clipped inside a `TextEdit` — is a rule for
+//! callers rather than a change here, and is documented on `job()`.
 //!
 //! The tests are new: the prototype verified this by eye, on a handset, and by a Persian reader,
 //! which is evidence but not a regression guard.
@@ -54,6 +55,36 @@ pub fn is_rtl(text: &str) -> bool {
 }
 
 /// Build a `LayoutJob` whose sections are ordered by the Unicode bidirectional algorithm.
+///
+/// # A `TextEdit` must reset `halign` — otherwise RTL text is clipped
+///
+/// For RTL text this sets `halign = Align::RIGHT`, and epaint aligns rows against the **origin**
+/// rather than against the wrap width. The resulting galley therefore spans **negative x**:
+/// one Persian line measures `(-118, 0)..(0, 16)` here, and `(-109, 0)` was measured on the `#28`
+/// prototype's font set — the figure is font-dependent, the sign is not. A label is not *clipped*
+/// by that, because it allocates from `galley.size()` and so reserves space the text hangs into. A
+/// `TextEdit` does not — it draws at a fixed origin and clips, so the overhang is never painted and
+/// the last character of the line disappears.
+///
+/// Callers, therefore:
+///
+/// - **In a `.layouter()`**: set `job.halign = egui::Align::LEFT` after building the job, and let
+///   `TextEdit::horizontal_align` do the alignment. Ordering never depended on `halign` — it comes
+///   from the section order below — so resetting it costs nothing.
+/// - **In a label**: surviving the clip is not the same as being aligned, so do not lean on
+///   `halign` for the alignment either — a label sizes itself to its own content, leaving a
+///   right-aligned galley nothing to align against. Force `halign` to `LEFT`, measure the galley,
+///   and `ui.add_space(available - galley.rect.width())` in front of it. A right-to-left `Layout`
+///   was tried instead and puts the label's *left* edge on the container's right, running the line
+///   off the far side.
+///
+/// So **`halign` is a direction marker here, not the alignment mechanism** — ADR-0012 §7 makes that
+/// binding on the authoring screen, and the prototype it was written from sets `halign` here and
+/// resets it at every caller, which is the shape kept below. A caller that wants the direction
+/// should ask [`is_rtl`] rather than read it back off the job.
+/// `an_rtl_paragraph_is_right_aligned` pins that the field is still set, and
+/// `an_rtl_job_spans_negative_x_which_is_why_a_text_edit_must_reset_halign` pins the trap itself,
+/// so this note cannot go quietly out of date.
 pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
     use unicode_bidi::BidiInfo;
 
@@ -363,6 +394,37 @@ mod tests {
         for t in ["Hello, world.", "(parenthesised)", "a-b"] {
             assert_eq!(visual(t), t);
         }
+    }
+
+    /// The clipping defect, pinned as a measurement rather than fixed here: an RTL job lays out
+    /// into negative x, which is what a `TextEdit` clips. `job()` keeps its `halign`, so the fix is
+    /// the caller rule documented on `job()` — and this test is what stops that documentation from
+    /// going quietly out of date.
+    ///
+    /// It runs a real epaint layout pass headlessly and needs no font install: the overhang comes
+    /// from `halign`, not from glyph coverage, so it reproduces with the stock fonts even though
+    /// the Persian glyphs themselves are missing here.
+    #[test]
+    fn an_rtl_job_spans_negative_x_which_is_why_a_text_edit_must_reset_halign() {
+        let _ = egui::Context::default().run_ui(Default::default(), |ui| {
+            let mut job = job("سلام دنیا", FontId::default(), Color32::WHITE);
+            job.wrap.max_width = 300.0;
+            assert_eq!(job.halign, egui::Align::RIGHT);
+
+            let clipped = ui.fonts_mut(|f| f.layout_job(job.clone()));
+            assert!(
+                clipped.rect.min.x < 0.0 && clipped.rect.max.x <= 0.0,
+                "expected the galley to hang into negative x, got {:?}",
+                clipped.rect
+            );
+
+            // The caller rule: reset halign and the same job lands in positive space, where a
+            // `TextEdit` draws it whole.
+            job.halign = egui::Align::LEFT;
+            let drawn = ui.fonts_mut(|f| f.layout_job(job));
+            assert_eq!(drawn.rect.min.x, 0.0);
+            assert!(drawn.rect.max.x > 0.0);
+        });
     }
 
     #[test]
