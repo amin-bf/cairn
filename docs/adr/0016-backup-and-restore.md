@@ -431,6 +431,16 @@ defence**, and this ADR does not replace it. The one thing that would detect the
 [ADR-0013 §8](0013-the-sync-transport.md) deliberately did not request. That is a live trade, owned
 by neither ADR, and it is recorded in *Open items* rather than decided here.
 
+> **Widened by [ADR-0019 §3](0019-naming-the-account-at-enrolment.md): the reachability finding rules
+> out *any* application-side check, not only an identity one.** In a wrong-account enrolment there is
+> no peer, no namespace and no published byte to compare against, so **a check on the account address
+> is void too** — publishing *"this device connected as X"* into the application data folder is
+> unreadable by the device that needs it, which is looking at a different folder. **The only comparand
+> that exists is the user's own memory of the previous enrolment.** ADR-0019 nonetheless takes the
+> trade, on a corrected premise: naming the account is not *"the one thing that would detect"* the
+> case — ADR-0015 §7's sentence already detects it — it is what lets a user **diagnose** it, instead of
+> reaching for repairs that cannot work.
+
 **"The no-delete reasoning does not transfer to an artifact that is not disposable." — Correct, and
 it is already honoured.** ADR-0015 refuses a delete-remote-data control partly because the sync
 namespace is disposable and there is nothing to reclaim. An archive is the opposite: for the
@@ -527,6 +537,6 @@ marker it is minted with.
 | Item | Owner |
 |---|---|
 | Running an archive write and a restore on the real handset, including the `MediaStore` path | Implementation |
-| **Whether the enrolment screen should name the account it connected as**, which is the only thing that would detect [ADR-0015](0015-the-sync-experience.md)'s wrong-account case (§13) — it costs an `email` or `profile` scope [ADR-0013 §8](0013-the-sync-transport.md) deliberately did not request, and both are on that flow's allowlist. Owned by neither ADR | Not scheduled |
+| ~~**Whether the enrolment screen should name the account it connected as**, which is the only thing that would detect [ADR-0015](0015-the-sync-experience.md)'s wrong-account case (§13)~~ — **decided by [ADR-0019](0019-naming-the-account-at-enrolment.md)**: it does, and it persists in sync settings; the scope is `openid email` (`profile` declined) and all three are non-sensitive, so [ADR-0013 §3](0013-the-sync-transport.md)'s *no verification, therefore no server* survives. *"The only thing that would detect"* is **corrected**: it diagnoses, and §13 above is widened accordingly | — |
 | Whether the archive should ever be encrypted — must be answered together with the local store, never alone | Map fog: *Local encryption / device passcode* |
 | Media, if audio on cards is ever built: the archive inherits the size, and §6's manual write becomes a much larger ask | Map fog |

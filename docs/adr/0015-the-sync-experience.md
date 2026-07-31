@@ -239,6 +239,16 @@ true answer is unusually good: `drive.appdata` reaches a hidden folder only this
 not the user's files. **Only `drive.appdata` is requested** — not `email` — so the consent screen asks
 for exactly one thing.
 
+> **Amended by [ADR-0019 §4](0019-naming-the-account-at-enrolment.md): the requested set is `openid
+> email drive.appdata`, so the consent screen asks for two things.** `profile` is declined — display
+> name and picture have no diagnostic value and are exactly the ambient identity
+> [ADR-0016 §11](0016-backup-and-restore.md) keeps out. `openid` is required before `email` may be
+> included. The plain-words rule above is unchanged and now covers both: *"see your email address"* is
+> a claim a user can evaluate. **The property this section's narrow scope was protecting survives** —
+> all three scopes are non-sensitive, so verification remains not mandatory and
+> [ADR-0013 §3](0013-the-sync-transport.md)'s *no verification-time endpoint, therefore no server*
+> still holds.
+
 **After enrolment, the application states what it found.** This is the most load-bearing part of §7,
 because **enrolling a second device against the wrong account is undetectable**:
 [ADR-0013 §10](0013-the-sync-transport.md) scopes the folder per (account, application), so a wrong
@@ -251,6 +261,11 @@ one moment the user could notice:
 A user who expected to join an existing collection and reads the first sentence has caught it.
 Detect and surface, in [ADR-0010](0010-leeches.md)'s shape.
 
+> **Amended by [ADR-0019 §1](0019-naming-the-account-at-enrolment.md): each sentence is prefixed with
+> the account.** *"Connected as `you@example.com`. This is the first device here."* The address is also
+> kept in §12's settings screen — **not shown once and discarded**, because the failure is discovered
+> months later, when a second device disagrees, and a once-only message is gone by then.
+
 **[ADR-0016 §13](0016-backup-and-restore.md) landed after this ADR and answered the handoff below
 `no`, with a sharper reason than the one above** — worth recording, because it explains why no
 mechanism of this shape could ever have worked. **In a wrong-account enrolment every collection id
@@ -260,6 +275,17 @@ so an identity check was never going to catch it. The sentence therefore stands 
 and the one thing that *would* detect it is naming the **account** on the enrolment screen — which
 costs the `email` or `profile` scope this section deliberately declines. That trade is live and owned
 by neither ADR; it is in *Open items* rather than reversed here.
+
+> **Amended by [ADR-0019 §2](0019-naming-the-account-at-enrolment.md), which took the trade — and
+> corrected this paragraph's premise while doing so.** Naming the account is **not** *"the one thing
+> that would detect it"*: the sentence above already detects it, in both cases that occur — a second
+> device told it is the first, and a re-enrolment after
+> [ADR-0013 §3](0013-the-sync-transport.md)'s 7-month token death told the same. **What the sentence
+> cannot do is diagnose.** The user must infer *"wrong account"* from *"first device here"*, and every
+> competing hypothesis — folder cleared, other device reset, sync broken — is more intuitive and
+> **routes to a repair action that cannot possibly work**, so each failed attempt raises their
+> confidence that the collection is gone. The account name is bought for **diagnosis**; detection was
+> already paid for. This sentence therefore stands, but is no longer the *whole* defence.
 
 **Enrolment also runs [ADR-0016 §10](0016-backup-and-restore.md)'s identity check**, and both
 outcomes are moments this ADR owns:
@@ -425,6 +451,7 @@ One screen, and everything sync-shaped is on it:
 | | Source |
 |---|---|
 | **"Last caught up ⟨when⟩"** | §4 |
+| **The connected account address** — *"Connected as `you@example.com`"* | [ADR-0019 §1](0019-naming-the-account-at-enrolment.md); a standing fact, and the only cross-device comparison available to a human |
 | **Sync now** | §2's third trigger |
 | **The device list** — labels grouped per [ADR-0004 §3](0004-the-review-event-log.md), several writer ids under one label, each with "last published ⟨when⟩" | §8; read straight off [ADR-0013 §6](0013-the-sync-transport.md)'s listing, so it costs no extra request |
 | **Disconnect** | §10 |
@@ -512,6 +539,9 @@ edited away, because the negative answer is the more useful of the two.
    each other; the failure is **reachability, not identity**. §7's sentence stands as the whole
    defence, and the live trade it leaves — naming the account, at the cost of a scope
    [ADR-0013 §8](0013-the-sync-transport.md) declined — is in *Open items*.
+   **Since taken by [ADR-0019](0019-naming-the-account-at-enrolment.md)**, which widened the
+   reachability finding to rule out *any* application-side check and bought the account name for
+   **diagnosis rather than detection**. §7's sentence stands, no longer alone.
 
 ## Consequences
 
@@ -543,4 +573,4 @@ edited away, because the negative answer is the more useful of the two.
 | Exact copy for the drive's connected-applications route (§10) — a third party's UI, expected to drift | Implementation |
 | Visual treatment of sync settings, the notice channel and cold-start progress | Map fog — *a visual design pass* |
 | ~~Whether collection identity makes a wrong-account enrolment detectable~~ — **answered `no` by [ADR-0016 §13](0016-backup-and-restore.md)**: every id agrees, so the failure is reachability rather than identity | — |
-| **Whether to name the account on the enrolment screen**, at the cost of the `email` or `profile` scope §7 and [ADR-0013 §8](0013-the-sync-transport.md) both decline. The only lever left on the wrong-account case, and a live trade owned by neither ADR | Unowned — needs a decision before enrolment ships |
+| ~~**Whether to name the account on the enrolment screen**, at the cost of the `email` or `profile` scope §7 and [ADR-0013 §8](0013-the-sync-transport.md) both decline~~ — **taken by [ADR-0019](0019-naming-the-account-at-enrolment.md)**: it is named, on the enrolment screen *and* in §12's settings, at the cost of `openid email` (not `profile`); *"the only lever left"* was **wrong** — §7's sentence already detects, and the name is bought for diagnosis | — |
