@@ -261,9 +261,45 @@ pub fn forget_selection(ui: &mut egui::Ui, id: egui::Id) {
 /// itself to its content — so a right-aligned galley that is exactly as wide as its own text has
 /// nowhere to align to, and Persian ends up hugging the left edge with the alignment silently
 /// doing nothing. Giving the galley the full width is what makes the alignment visible.
-pub fn render(ui: &mut egui::Ui, mut job: egui::text::LayoutJob) {
-    job.wrap.max_width = ui.available_width();
-    ui.label(job);
+pub fn render(ui: &mut egui::Ui, job: egui::text::LayoutJob) {
+    // `bidi::job` marks RTL by setting halign, so a standalone string aligns by its own direction.
+    let rtl = job.halign == egui::Align::RIGHT;
+    render_aligned(ui, job, rtl);
+}
+
+/// Draws a laid-out job flushed to one edge, with the edge chosen by the **caller**.
+///
+/// A card is one block of text, so its lines have to share an edge: a Persian card whose
+/// pronunciation happens to be Latin must not leave that one line stranded on the opposite side.
+/// The direction therefore comes from the card's main content, not from each line's own script,
+/// which is why this takes `rtl` rather than reading it off the job.
+///
+/// The flush is done by laying the label out right-to-left rather than by the job's `halign`.
+/// `halign = Max` produces a galley whose rect runs from negative x to 0 — epaint aligns the rows
+/// against the origin, not against the wrap width — and a widget that allocates from that rect
+/// then draws the text off its own left edge. Forcing `halign` back to `LEFT` keeps the galley in
+/// positive space, and the layout does the alignment.
+pub fn render_aligned(ui: &mut egui::Ui, mut job: egui::text::LayoutJob, rtl: bool) {
+    let avail = ui.available_width();
+    job.wrap.max_width = avail;
+    job.halign = egui::Align::LEFT;
+    let galley = ui.fonts_mut(|f| f.layout_job(job));
+
+    if !rtl {
+        ui.label(galley);
+        return;
+    }
+
+    // Lay the galley out flush left and pad in front of it, rather than asking a layout or the
+    // job's `halign` to do the alignment. Both of those were tried and neither puts the text where
+    // it says: `halign = Max` builds a galley spanning negative x, and a right-to-left `Layout`
+    // placed the label's *left* edge on the container's right, so the line ran off the far side.
+    // Measuring the galley and spacing by the difference is the one version that is checkable.
+    let pad = (avail - galley.rect.width()).max(0.0);
+    ui.horizontal(|ui| {
+        ui.add_space(pad);
+        ui.label(galley);
+    });
 }
 
 /// Bidi-correct plain label. Nothing user-visible uses `ui.label(&str)` directly — AGENTS.md
@@ -288,6 +324,55 @@ pub fn reviews_phrase(reviews: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Where the text is actually drawn, per line, in a container `width` wide.
+    fn draw_extents(lines: &[(String, bool)], width: f32) -> Vec<(f32, f32)> {
+        let ctx = egui::Context::default();
+        crate::app::install_fonts(&ctx);
+        let _ = ctx.run_ui(Default::default(), |_| {});
+        let out = ctx.run_ui(Default::default(), |ui| {
+            ui.set_max_width(width);
+            for (text, rtl) in lines {
+                let theme = crate::markdown::Theme::new(
+                    15.0,
+                    egui::Color32::WHITE,
+                    egui::Color32::GRAY,
+                    egui::Color32::GREEN,
+                );
+                let job = crate::markdown::job(text, crate::markdown::Cloze::Off, theme);
+                render_aligned(ui, job, *rtl);
+            }
+        });
+        out.shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::epaint::Shape::Text(t) => {
+                    Some((t.pos.x, t.pos.x + t.galley.rect.width()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Reported from the running app: Persian sat on the left of the card, and the Latin
+    /// pronunciation under it sat further left still. A card is one block of text and its lines
+    /// must share an edge.
+    #[test]
+    fn an_rtl_side_flushes_every_line_including_a_latin_one_to_the_right() {
+        let lines = vec![("سگ".to_string(), true), ("sag".to_string(), true)];
+        for (start, end) in draw_extents(&lines, 400.0) {
+            assert!((end - 400.0).abs() < 0.5, "line should end at the right edge, got {end}");
+            assert!(start < end, "and it must not be drawn off the far side");
+        }
+    }
+
+    #[test]
+    fn an_ltr_side_is_untouched_and_stays_flush_left() {
+        let lines = vec![("der Hund".to_string(), false), ("hʊnt".to_string(), false)];
+        for (start, _) in draw_extents(&lines, 400.0) {
+            assert!(start.abs() < 0.5, "LTR must still start at the left edge, got {start}");
+        }
+    }
 
     #[test]
     fn blanking_a_selection_takes_the_next_number_up() {
