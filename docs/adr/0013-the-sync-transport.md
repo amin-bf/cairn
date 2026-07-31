@@ -366,6 +366,17 @@ excluded, and the scope this ADR needs is on the list
 That the allowlist is *narrow* is itself reassuring: the flow is scoped to app-owned data by design,
 which is exactly what §3 chose it for.
 
+> **Amended by [ADR-0019 §4](0019-naming-the-account-at-enrolment.md): the requested set is `openid
+> email drive.appdata`, not `drive.appdata` alone** — so the account can be named at enrolment, which
+> [ADR-0015 §7](0015-the-sync-experience.md) left unowned. All three were already on the allowlist
+> checked above. `profile` is declined: it yields display name and picture, which carry no diagnostic
+> value. **The non-sensitive property §3 rests on is confirmed, not spent** — all three are
+> non-sensitive, so verification is still not mandatory and there is still no verification-time
+> endpoint and therefore no server. One consequence for the phishing shape below: with `email`
+> granted, the blast radius grows by the victim's address — **a fact the attacker already had**, since
+> the attack requires talking to them. The flow's token response carries no `id_token`, so the address
+> costs one `GET` to the UserInfo endpoint at enrolment and still no platform capability.
+
 **Two facts came with that check, and both are load-bearing:**
 
 - **The credential must be registered as the "TVs and Limited Input devices" client type**, not as a
@@ -406,6 +417,15 @@ carries it manufactures a duplicate writer, the silent-loss failure ADR-0004 §2
 exists to prevent. The refresh token has no such property: a restored phone arriving already
 authorised is simply convenient, and it mints a fresh writer id regardless, so the restore is still a
 clean fork. The two look inconsistent and are not.
+
+> **Amended by [ADR-0019 §6](0019-naming-the-account-at-enrolment.md): the credential file also holds
+> the account address**, fetched once at enrolment and deleted with the grant on disconnect, because
+> it is a property of the grant rather than of the collection. It is therefore **never** on
+> [ADR-0004 §7](0004-the-review-event-log.md)'s mutable surface, never published, and outside both
+> export profiles without needing a clause — [ADR-0016 §4](0016-backup-and-restore.md)'s
+> `collection` rule already excludes credentials. Riding *inside* the Android backup set with the
+> token is right here for the same reason the token is: a restored phone arrives already authorised
+> and already stating what it enrolled as.
 
 **Revocation is all-or-nothing, and cannot be made otherwise.** Every device holds a token issued
 against the same client ID, and the provider's revocation surface is per-application: the account's

@@ -72,8 +72,26 @@ snapshot and change stream are the same thing paid for at different times.
 **Enrolment**:
 Granting one device access to the remote, once. Uses the device flow: a short code entered on
 whatever device the user likes, so no credential is ever typed into this application. Enrolment also
-runs the **identity check** below.
+runs the **identity check** below, and fetches the **connected account** — one `GET` to the UserInfo
+endpoint, because the device flow's token response carries no `id_token` (ADR-0019 §4).
 _Avoid_: Login, sign-in, pairing — there is no account of ours and no device-to-device step.
+
+**Connected account**:
+The address the grant was obtained against. Fetched once at enrolment, **stored beside the credential
+and never on ADR-0004 §7's mutable surface**, deleted with the grant on disconnect — it is a property
+of the *grant*, not of the collection, so another device derives its own and never needs telling
+(ADR-0019 §6). That placement is what keeps it out of both export profiles with no clause naming it:
+ADR-0016 §4 already excludes credentials. **Never publish it.** On the mutable surface it would ride
+into every `.lcoll` and onto the remote, and buy nothing — a device on the wrong account is looking at
+a different folder and cannot read it. Cached and never refreshed, so a later address change shows
+stale; that is the right answer to *"what did I enrol as"*.
+
+**Scope set**:
+`openid email drive.appdata` (ADR-0019 §4). `profile` is **declined** — display name and picture carry
+no diagnostic value and are exactly the ambient identity ADR-0016 §11 keeps out; `openid` is required
+before `email` may be requested. All three are **non-sensitive**, which is load-bearing rather than
+incidental: verification stays not mandatory, so there is no verification-time endpoint and therefore
+**no server** (ADR-0013 §3).
 
 **Identity check**:
 One rule, run identically at enrolment and at restore
@@ -86,7 +104,9 @@ account — the commonest path there is. A refusal must name the mismatch *and* 
 This is what upgrades [ADR-0013 §10](../../../docs/adr/0013-the-sync-transport.md) from a structural
 accident to a real check: "one account is one collection" holds because a device cannot *see* another
 collection's folder, which stops being true the moment a user has two accounts and picks the wrong
-one.
+one. **That residual case is uncheckable here and always will be** — with an empty folder there is
+nothing to compare against, so it is answered on the *screen* by the **connected account** above
+rather than by any code in this crate ([ADR-0019 §3](../../../docs/adr/0019-naming-the-account-at-enrolment.md)).
 
 **Grant**:
 What enrolment obtains and what revocation removes. **Revocation is all-or-nothing**: every device
