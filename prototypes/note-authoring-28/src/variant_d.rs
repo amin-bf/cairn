@@ -186,22 +186,28 @@ fn blank_row(
     if numbers.is_empty() {
         return;
     }
-    ui.horizontal_wrapped(|ui| {
-        core::mono(ui, "blanks", 10.0, DIM);
-        for n in &numbers {
+
+    // One line per blank, not a row of chips. The chip row read as a *count* — "blanks 1" looks
+    // like "one blank" rather than "blank number 1" — and its inner separator was the same weight
+    // as the gap between chips, so `1 · 5r  2` had no unambiguous parse. Naming the number and
+    // spelling out the history removes both problems, and showing the hidden text answers the
+    // ticket's actual question: proofreading a set of blanks you cannot read in the raw syntax.
+    ui.add_space(4.0);
+    core::mono(ui, &format!("blanks — {} card{}", numbers.len(), if numbers.len() == 1 { "" } else { "s" }), 10.0, DIM);
+    for n in &numbers {
+        ui.horizontal_wrapped(|ui| {
+            core::mono(ui, &format!("{n}"), 11.0, ACCENT);
+            core::label(ui, &model::blank_inner(&text, *n), 11.0, FG);
             let occurrences = model::blank_occurrences(&text, *n);
-            let reviews = model::history_for(ed.history(), *n).map(|h| h.reviews).unwrap_or(0);
-            let mut chip = format!("{n}");
             if occurrences > 1 {
-                chip.push_str(&format!("×{occurrences}"));
+                core::mono(ui, &format!("· hidden in {occurrences} places"), 10.0, DIM);
             }
-            if reviews > 0 {
-                chip.push_str(&format!(" · {reviews}r"));
+            match model::history_for(ed.history(), *n) {
+                Some(h) => core::mono(ui, &format!("· {}", core::reviews_phrase(h.reviews)), 10.0, ACCENT),
+                None => core::mono(ui, "· new", 10.0, DIM),
             }
-            let colour = if reviews > 0 { ACCENT } else { DIM };
-            ui.label(egui::RichText::new(chip).size(10.0).monospace().color(colour));
-        }
-    });
+        });
+    }
 }
 
 /// B's stack, with one change: dormant cards are interleaved by ordinal rather than appended.

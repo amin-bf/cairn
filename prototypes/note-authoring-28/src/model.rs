@@ -493,6 +493,37 @@ mod tests {
         assert_eq!(d[0].reviews, 40);
     }
 
+    /// **A kind change can hand one card's history to a completely unrelated card.**
+    ///
+    /// ADR-0002 §6 identifies a card as `(note, ordinal)`, where the ordinal is an index into the
+    /// kind's `cards` list for fixed-arity kinds and the authored blank number for cloze — so the
+    /// *kind is not part of the identity*. Switch a `vocab` note to `cloze` and blank 1 is
+    /// ordinal 1, the slot the `Meaning → Term` card used to occupy. §7's replay rule then projects
+    /// that card's reviews onto a blank the user has never seen.
+    ///
+    /// §7 presents "the same mechanism absorbs a note changing kind" as a prize. This is the other
+    /// face of it: absorbing is exactly what goes wrong when the two cards ask different questions.
+    /// Found by driving the editor, not by reading the ADR. See PROTOTYPE.md.
+    #[test]
+    fn changing_kind_reattaches_history_to_a_semantically_different_card() {
+        let history = Scenario::Vocab.history();
+        // Ordinal 1 under `vocab` is the reverse card, with 5 reviews behind it.
+        assert_eq!(history_for(history, 1).unwrap().reviews, 5);
+
+        let mut values = Scenario::Vocab.values();
+        values.insert("Text".into(), "alpha {{1::beta}}".into());
+        let live = ordinals("cloze", &values);
+        assert_eq!(live, vec![1], "blank 1 occupies ordinal 1");
+
+        // Nothing marks it as dormant, because ordinal 1 *is* generated — by a different question.
+        assert!(dormant(history, &live).iter().all(|d| d.ordinal != 1));
+        assert_eq!(
+            history_for(history, 1).unwrap().reviews,
+            5,
+            "so the reverse card's 5 reviews now project onto a blank never reviewed"
+        );
+    }
+
     #[test]
     fn changing_kind_can_retire_a_card_too() {
         let v = Scenario::KindChange.values();
