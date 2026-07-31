@@ -223,6 +223,19 @@ impl eframe::App for ProtoApp {
             });
             install_fonts(ui.ctx());
             self.fonts_installed = true;
+
+            // **Draw nothing this frame.** `set_fonts` applies at the *start of the next* pass, so
+            // the families it declares are not bound yet — and the very first bold word would hit
+            // `FontFamily::Name("bold") is not bound to any fonts` and abort. Appending fallbacks
+            // to `Proportional` and `Monospace` survived this because those families already
+            // exist; a brand-new named family does not, which is what makes bold the case that
+            // exposes it.
+            //
+            // This is the same one-frame deferral `AGENTS.md` client-stack rule 7 already records,
+            // now for a second reason: not just *when* a face is registered, but when a family
+            // becomes referenceable.
+            ui.ctx().request_repaint();
+            return;
         }
 
         // Arrow keys cycle variants — but never while a field has focus, or ← / ← in a text box
@@ -344,9 +357,12 @@ mod tests {
     /// laid-out width is the cheapest way to prove a different face is really being selected, and
     /// it needs no window: egui lays text out on the CPU.
     ///
-    /// This also guards a crash. `FontFamily::Name` panics at draw time if nothing is bound to it,
-    /// so if `install_fonts` ever stops registering the bold family, every screen dies on the
-    /// first bold word. Here that failure is a test, not a handset.
+    /// It guards a crash too — `FontFamily::Name` panics at draw time if nothing is bound to it —
+    /// but only the *registration*, **not the timing**, and the timing is what actually shipped
+    /// broken. Running a pass between `install_fonts` and the measurement is exactly what the real
+    /// app could not do: `set_fonts` applies at the start of the next pass, so drawing bold in the
+    /// same frame it was installed aborted. That is handled by returning early from the first
+    /// frame in `ui`, and catching it here would need a two-frame `eframe` harness.
     #[test]
     fn bold_is_a_heavier_face_than_the_body_text() {
         let ctx = egui::Context::default();
