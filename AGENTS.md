@@ -259,6 +259,34 @@ archiving against it.
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm
    discipline. `leitner-export` has one — put, get, list.
 
+### What the user sees
+
+[ADR-0015](./docs/adr/0015-the-sync-experience.md) settles the surface. Four of its rules fail
+silently, three of them because the reasoning is invisible from the code that would break them.
+
+1. **Exactly two things may speak about sync: a dead grant, and ADR-0004 §8's clock-skew warning.**
+   A network failure never speaks — offline is normal and nagging about it is the defect. There is
+   **no status icon, no badge, no success toast, and no "in sync"**: after a sync the app knows every
+   writer's highest *published* sequence and never whether another device has reviewed since, so
+   claiming devices agree is unknowable. The resting statement is the fact *"last caught up ⟨when⟩"*.
+   Every future feature will have a reason to want a third speaker; each one is a defect.
+2. **Never start a sync while the review screen is up; let one in flight finish.** This is not a lock
+   on reviewing — the app never blocks that, ever — it is what stops a merge recomputing every
+   `(S, D)` mid-session, which ADR-0014 called locally unfixable. **It works only because there is no
+   background sync**, so that absence is load-bearing and not a limitation to lift.
+3. **There is no delete-remote-data control, and adding one destroys other devices' rows.** The
+   `drive.appdata` grant reaches the whole app folder, so a delete from one device removes namespaces
+   whose rows a device that never fetched them will never see again. It looks like a courtesy and
+   there is nothing to reclaim — a few hundred objects, ~47.5 MB per decade. Disconnect drops the
+   local grant and deletes nothing.
+4. **A wrong-account enrolment is undetectable, and one sentence is the entire defence.** A second
+   device pointed at the wrong account gets an empty folder, which is indistinguishable from being
+   the first device to enrol. That is why enrolment *ends by stating what it found* — "the first
+   device here" versus the devices it met. Removing that line as redundant removes the only guard.
+   **ADR-0016 §10's identity check does not cover this**, and reaching for it is the natural mistake:
+   in a wrong-account enrolment **every collection id agrees**, since all the devices hold the same
+   collection and merely cannot see each other. The failure is **reachability, not identity**.
+
 ## Agent skills
 
 ### Issue tracker

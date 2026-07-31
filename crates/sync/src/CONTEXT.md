@@ -1,8 +1,11 @@
 # Sync
 
 Publishing this device's rows to storage nobody here owns, and reading back what other devices
-published. The mechanism only — *when* sync runs and how divergence is shown to the user belong to
-[#40](https://github.com/amin-bf/leitner/issues/40) and live in `ui`.
+published. The mechanism only — *when* sync runs and how divergence is shown to the user are settled
+by [ADR-0015](../../../docs/adr/0015-the-sync-experience.md) and live in `ui`. Two of its answers
+reach back into this crate's assumptions: **there is no background sync on either platform** (§2), so
+nothing here is ever entered from a scheduler; and **the app never rests in a "behind" state** (§4),
+because the handshake that discovers it and the fetch that fixes it are one operation.
 
 Depends on `log` for row identity and the version summary, and on `content` transitively. Does not
 depend on `replay` or `ui`: nothing here knows what a card is.

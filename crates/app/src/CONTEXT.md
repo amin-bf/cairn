@@ -8,7 +8,9 @@ through, and both platform entry points.
 [ADR-0010](../../../docs/adr/0010-leeches.md) and
 [ADR-0011](../../../docs/adr/0011-new-card-rate-and-daily-limits.md), the last of which **amends
 ADR-0006 §1 and §2** — read those amendments before touching the session; also by
-[ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind).
+[ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind) and
+[ADR-0015](../../../docs/adr/0015-the-sync-experience.md) (everything the user sees about sync — the
+`sync` crate holds the mechanism and none of the surface).
 
 ## Language
 
@@ -46,6 +48,38 @@ seen rather than described.
 More cards due than the user will get through. Always *framed* ("pick a comfortable size, the rest
 will keep"), never reported as a bare number.
 
+**Last caught up**:
+The only resting statement the app makes about sync — *when* it last completed one, a fact.
+**Never "in sync"**: after a sync the app knows every writer's highest *published* sequence, and
+never whether another device has reviewed since. Claiming agreement between devices is unknowable
+(ADR-0015 §4), the same shape as the box badge claiming something about the queue.
+_Avoid_: In sync, up to date, synced, a status icon or checkmark anywhere in the chrome.
+
+**Set up sync**:
+Granting this device access, once, via the device flow. Ends with the user naming **this** device
+(ADR-0015 §8), with ADR-0016 §10's identity check, and with the app stating what it found — *"the
+first device here"* or the devices it met.
+_Avoid_: Login, sign-in, pairing, connecting an account.
+
+**Identity refusal**:
+What a **non-empty** collection shows when it meets an id that is not its own (ADR-0016 §10). It
+**names the mismatch and states the way out** — archive, clear data, restore, enrol — because a
+refusal that only says no leaves the user holding a device that will not sync. An *empty* collection
+adopts silently and shows nothing: a fresh install has already minted an id, so refusing on
+difference alone would block the commonest path there is. Not a counter-example to the two-speakers
+rule — it is the immediate result of an action just taken, not a resting notice (ADR-0015 §7).
+
+**Wrong-account enrolment**:
+Enrolling against the wrong account. **Undetectable, and structurally so** — every collection id
+agrees, because all the devices hold the same collection and merely cannot see each other, so the
+failure is *reachability, not identity* (ADR-0016 §13). The app stating what it found is the whole
+defence; deleting that line as redundant removes the only guard.
+
+**The notice channel**:
+The persistent, non-modal line for the **only two things permitted to speak about sync**: a dead
+grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks — offline is normal
+(ADR-0015 §5).
+
 ## Rules that are easy to break silently
 
 - **All user-visible text goes through `bidi`.** egui places text runs left-to-right in logical
@@ -64,7 +98,17 @@ will keep"), never reported as a bare number.
 - **Fonts are installed on the first frame, never in `CreationContext`**, and every added face must
   be registered in **every** family including `Monospace`, or text silently renders as boxes.
 - **Android text input is ASCII-only and cannot be fixed here.** winit's Android backend has no IME
-  path. Never design a feature that requires typing non-Latin text on Android.
+  path. Never design a feature that requires typing non-Latin text on Android. Because we receive no
+  events, the failure is *silence* — so the editor states it in advance, off a compile-time
+  capability constant (ADR-0015 §9). That constant is the one sanctioned exception to the
+  no-`#[cfg(target_os)]` rule, and it exists to make a limitation visible, never to vary behaviour.
+- **Never start a sync while the review screen is up**, and let one already in flight finish. This
+  is not a lock on review — the app never blocks reviewing (ADR-0015 §1) — it is what stops a merge
+  recomputing every `(S, D)` mid-session, which ADR-0014 called locally unfixable. It works only
+  because there is no background sync, so treat that absence as load-bearing (ADR-0015 §6).
+- **Only two things may speak about sync**, and every future feature will have a reason to want a
+  third. A badge, a toast on success, a "syncing…" indicator in the chrome — each is a defect
+  against ADR-0015 §4, not a UX improvement.
 - **Verify on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
 
 ## Why this crate has no `main.rs`
