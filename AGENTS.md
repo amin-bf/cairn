@@ -164,19 +164,22 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
    definition is used only for kinds this build does not ship. Break this and an import becomes a
    remote path to reordering a kind's `cards` list, which silently retypes every accumulated review
    onto the wrong card and cannot be repaired from the log.
-2. **Never write an ADR-0004 §7 stamp into an export.** A stamp is a counter plus a **writer id**,
-   which is a device fingerprint, and its counter is meaningless outside its own collection. Import
-   assigns fresh local stamps — and only to values whose content actually differs, or every import
-   floods the user's own devices with edits.
+2. **Never write an ADR-0004 §7 stamp into a *deck* export.** A stamp is a counter plus a **writer
+   id**, which is a device fingerprint, and its counter is meaningless outside its own collection.
+   Import assigns fresh local stamps — and only to values whose content actually differs, or every
+   import floods the user's own devices with edits. The **`collection` profile is the exact opposite**
+   and carries stamps byte for byte, because a restore does not cross a collection boundary; the
+   profile is what selects the rule, which is why it is a profile and not a flag.
 3. **Import branches on deck id, and the branches have opposite rules.** Id already held → the file
    wins and may move notes into that deck (ADR-0005 §9). Id new → notes already held are never touched
    or moved (ADR-0005 §2). Applying one rule everywhere lets a stranger's file take notes out of decks
    the user already has.
 4. **The importer accepts only the known member names and the `media/` prefix**, rejecting absolute
    paths, `..` segments and symlink entries. Zip path traversal is this container's classic defect.
-5. **Export must be byte-for-byte deterministic** — fixed member order, pinned timestamps, fixed
-   deflate level, no extra fields. Zip's per-member timestamps otherwise make identical content export
-   as different bytes, which leaks build time and breaks "same revision, same file".
+5. **A *deck* export must be byte-for-byte deterministic** — fixed member order, pinned timestamps,
+   fixed deflate level, no extra fields. Zip's per-member timestamps otherwise make identical content
+   export as different bytes, which leaks build time and breaks "same revision, same file". This binds
+   the `deck` profile only: a collection archive carries a creation date instead (ADR-0016 §11).
 6. **The revision advances only when the content digest changes**, not on every export. Incrementing
    per export inflates the counter and makes relaying an unmodified deck emit a phantom revision that
    competes with the original author's next one.
@@ -213,7 +216,48 @@ remote costs one republish and no data.
    fixed-width zero-padded range in the key may not, because the listing *is* ADR-0004 §2's version
    summary and it works by lexicographic sort.
 6. **Never present the sync folder as a backup.** It is hidden, it is deleted when the user removes
-   the app's data, and backup is [#37](https://github.com/amin-bf/leitner/issues/37)'s to specify.
+   the app's data, and backup is the separate `.lcoll` archive specified in
+   [ADR-0016](./docs/adr/0016-backup-and-restore.md).
+
+## Backup and restore
+
+A **collection archive** is a `.lcoll` file — the same zip container as a deck file, carrying a
+different profile — holding the log verbatim plus everything that settles, and written only when the
+user asks. Chosen in [ADR-0016](./docs/adr/0016-backup-and-restore.md). Sync does **not** discharge
+it: sync is opt-in, so a never-enrolled user has nothing, and sync propagates a deletion rather than
+archiving against it.
+
+### Rules that are easy to break silently
+
+1. **Restore is a merge and never removes anything, and a replace is not implementable.** Every
+   device holds the whole log and merge is set union, so a wipe-then-install is undone by the next
+   sync — the peers still hold every row. It follows that backup protects against **loss, not against
+   unwanted change**: an overwritten field carries a newer stamp and must win, or ADR-0004 §7's
+   causality rule breaks. Say this to users; "restore" universally implies replacement.
+2. **A writer id is never adopted; a collection id is never re-minted.** The two halves of identity
+   take *opposite* rules, and swapping them is silent in both directions — adopt a writer id and two
+   devices become one writer with reviews dropped on merge; re-mint a collection id and the check
+   that tells an archive of yours from a stranger's stops working. The gate is one rule at both the
+   restore and the enrolment seam: **an empty collection adopts, a non-empty one refuses.** "Empty"
+   means no log rows under this device's own writer id and nothing on the mutable surface — *not* "no
+   notes", or a fresh install can never join an existing account.
+3. **The `collection` profile does not inherit ADR-0008 §12's byte-for-byte determinism.** That rule
+   exists so an artifact sent to strangers does not leak build time; a personal archive needs the
+   creation date it forbids, or a user cannot tell two backups apart. **Minimal disclosure still
+   binds both profiles** — never auto-populate an author name, a device label, or any ambient
+   identity.
+4. **`derived.db` stays outside the backup set**, beside the writer marker. It is disposable by
+   design, so backing it up protects nothing while spending the 25 MB platform quota and hastening
+   the cutoff — which arrives after roughly **nine months** of heavy use, not the two years ADR-0007
+   §6 states (it read that ADR's raw-interchange row where Auto Backup covers files on disk).
+5. **No file picker, on either platform, and no text field for a filename or a passphrase.** Activity
+   *results* need a Java subclass and therefore a dex, spending ADR-0003's Gradle-free APK; launch
+   intents and dropped files need neither and are fine. And rule 8 of the client stack makes Android
+   text input ASCII-only, so a passphrase set on the desktop in the user's own language cannot be
+   typed on the phone — which is why **archives are never encrypted**.
+6. **The platform seam rule is per crate.** `leitner-store::platform` keeps exactly two functions;
+   a crate needing the platform for an unrelated reason gets its own module under the same three-arm
+   discipline. `leitner-export` has one — put, get, list.
 
 ## Agent skills
 

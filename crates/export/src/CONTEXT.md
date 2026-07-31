@@ -24,8 +24,31 @@ handed to another person.
 _Avoid_: Export, bundle, package — all of which also name the act rather than the thing.
 
 **Profile**:
-Which payload a container carries: `deck` (specified) or `progress` (reserved for #37). Declared in
-the manifest, and distinguished to the operating system by extension.
+Which payload a container carries: `deck` or `collection`. Declared in the manifest, and
+distinguished to the operating system by extension. The **profile is the discriminator that selects
+the stamp rule** — import restamps, restore preserves — which is why it is a profile and not a flag.
+
+**Collection archive**:
+A `.lcoll` zip archive carrying the whole collection: the log verbatim, plus everything that settles,
+minus device identity and credentials. The artifact a user keeps for themselves.
+_Avoid_: Backup file — the artifact is not a backup until the user moves it off the device.
+
+**Collection profile**:
+The `collection` payload. Its selection rule is *everything that settles, plus the log, minus device
+identity and credentials* — **not** "all decks". It carries what the deck profile deliberately drops:
+unfiled notes, stamps byte for byte, per-deck revisions, suspensions, the new-card rate, device
+labels.
+
+**Collection id**:
+A UUIDv4 identifying a collection across devices and files. Minted once, **adopted and never
+re-minted** — the exact opposite of a writer id's never-adopt rule. Of record in
+[`store`](../../store/src/CONTEXT.md), where it is minted; named here because it is what the
+container carries.
+
+**User-files seam**:
+`leitner-export`'s own `platform` module: **put, get, list**, three `#[cfg]` arms with a
+`compile_error!` third. How an artifact reaches a place the user can see. Deliberately
+[ADR-0013](../../../docs/adr/0013-the-sync-transport.md) §1's shape reused.
 
 **Revision**:
 A per-deck monotonic integer declared by the file, advancing only when the deck's content digest
@@ -56,3 +79,16 @@ deck id, never a user's choice.
   itself; do not add a policy to contain it, and do not add a log member to the deck profile.
 - **One container, not two.** A backup artifact reuses this container with a different profile.
   Two containers means two parsers, two versioning stories and two sets of path-traversal rules.
+- **Restore is a merge and never removes anything.** A replace cannot stick: every device holds the
+  whole log, merge is set union, so the next sync re-merges whatever a wipe removed. It follows that
+  backup protects against **loss, not against unwanted change** — an overwritten field carries a
+  newer stamp and must win.
+- **The `collection` profile does not inherit byte-for-byte determinism.** That rule exists for an
+  artifact sent to strangers; a personal archive needs the creation date it forbids. **Minimal
+  disclosure still binds both** — never auto-populate an author name, a device label or any ambient
+  identity.
+- **Never put a credential in an archive**, and never put `writer_id` or `seq_highwater` in one. A
+  restored device must mint a fresh writer id, or two devices become one writer and the union drops
+  reviews.
+- **No file picker, on either platform.** Activity *results* need a Java subclass and therefore a
+  dex, which spends the Gradle-free APK. Launch intents and dropped files are fine; results are not.
