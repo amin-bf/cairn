@@ -71,7 +71,12 @@ fn kind_row(ui: &mut egui::Ui, ed: &mut Editor) {
 
 fn form(ui: &mut egui::Ui, ed: &mut Editor) {
     let k = ed.kind_def();
-    for f in k.fields {
+    let tags_id = egui::Id::new("a-tags");
+    let order: Vec<egui::Id> =
+        k.fields.iter().map(|f| egui::Id::new(("a-field", f.name))).chain([tags_id]).collect();
+    let mut advance: Option<egui::Id> = None;
+
+    for (i, f) in k.fields.iter().enumerate() {
         ui.horizontal(|ui| {
             core::mono(ui, f.name, 11.0, FG);
             // The `shown-with` question, answered in the field label: a passenger says so where
@@ -81,11 +86,14 @@ fn form(ui: &mut egui::Ui, ed: &mut Editor) {
             }
         });
 
-        let id = egui::Id::new(("a-field", f.name));
+        let id = order[i];
         let mut val = ed.value(f.name);
         let out = core::text_field(ui, id, &mut val, f.multiline, 4, 15.0, FG);
         if out.changed {
             ed.values.insert(f.name.to_string(), val);
+        }
+        if out.submitted {
+            advance = Some(order[i + 1]);
         }
 
         if k.is_cloze() {
@@ -95,10 +103,17 @@ fn form(ui: &mut egui::Ui, ed: &mut Editor) {
     }
 
     core::mono(ui, "tags", 11.0, FG);
-    let id = egui::Id::new("a-tags");
     let mut tags = ed.tags.clone();
-    if core::text_field(ui, id, &mut tags, false, 1, 13.0, FG).changed {
+    let out = core::text_field(ui, tags_id, &mut tags, false, 1, 13.0, FG);
+    if out.changed {
         ed.tags = tags;
+    }
+    if out.submitted {
+        advance = Some(tags_id);
+    }
+
+    if let Some(to) = advance {
+        core::advance_focus(ui, to);
     }
 }
 

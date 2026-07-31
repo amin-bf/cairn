@@ -115,9 +115,17 @@ are correctness, not taste:
 6. **RTL caret and selection remain imprecise** — buffer logical, caret visual (`AGENTS.md`,
    client-stack rule 2). Inherent to the approach, unlike the above; judge RTL *rendering* here,
    not RTL caret precision.
-7. **Single-line fields were built on `TextEdit::multiline`**, so Enter inserted a newline into a
-   `Term` and long values wrapped inside a one-row box. They are `singleline` now, with wrapping
-   off.
+7. **A single-line field has to be `singleline` *and* handle Enter — the two are a package.**
+   Originally every field was a `TextEdit::multiline`, so Enter inserted a newline into a `Term`
+   and long values wrapped inside a one-row box. Switching to `singleline` fixes both and inherits
+   egui's other singleline behaviour: Enter is a *submit*, and the widget **surrenders focus** —
+   so the caret vanished and the author had to click back in, which is worse than the newline it
+   replaced. Enter now hands focus to the next field, and to itself on the last one, so it is a
+   no-op rather than an ejection.
+
+   Left open for the ADR: **whether Enter on the last field should save**. Advancing is the safe
+   default and what a form is expected to do, but "Enter saves" is a real option, and this is a
+   decision rather than a fix.
 8. **A remembered text selection outlives the text it described.** The "blank the selection" button
    needs the selection from *before* the click took focus away, so it is cached — and after
    blanking rewrites the string that cache still pointed at the old offsets, leaving the button

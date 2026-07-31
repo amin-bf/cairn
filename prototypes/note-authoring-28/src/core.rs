@@ -158,6 +158,10 @@ pub struct FieldOutput {
     /// already gone. Every variant with such a button depends on this.
     pub selection: Option<std::ops::Range<usize>>,
     pub has_focus: bool,
+    /// Enter was pressed in a single-line field. egui treats that as a submit and **surrenders
+    /// focus**, which in a form means the caret vanishes and you have to click back in — so every
+    /// caller must handle this rather than ignore it. See `advance_focus`.
+    pub submitted: bool,
 }
 
 /// A bidi-correct text input.
@@ -222,11 +226,30 @@ pub fn text_field(
         ui.data_mut(|d| d.get_temp::<(usize, usize)>(mem_id)).map(|(s, e)| s..e)
     });
 
+    // Only a single-line field can report this: a multiline `TextEdit` consumes Enter as a newline
+    // and keeps focus, which is what the cloze `Text` field wants.
+    let submitted = out.response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
     FieldOutput {
         changed: out.response.changed(),
         has_focus: out.response.has_focus(),
         selection,
+        submitted,
     }
+}
+
+/// Moves the caret to `to` on the next frame.
+///
+/// Pressing Enter in a single-line `TextEdit` makes egui surrender focus, so without this the
+/// field simply loses the caret and the author has to click back in — worse than the stray newline
+/// that making these fields single-line was fixing. Handing focus to the next field instead is
+/// what a form is expected to do; on the last field the caller passes the field's own id, so Enter
+/// is a no-op rather than an ejection.
+///
+/// Whether Enter should instead *save* is a real design question, and one for the ADR to settle
+/// rather than for this helper to assume.
+pub fn advance_focus(ui: &mut egui::Ui, to: egui::Id) {
+    ui.memory_mut(|m| m.request_focus(to));
 }
 
 /// Drops the remembered selection for a field.
