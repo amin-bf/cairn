@@ -8,6 +8,7 @@ pub mod model;
 pub mod variant_a;
 pub mod variant_b;
 pub mod variant_c;
+pub mod variant_d;
 
 #[cfg(target_os = "android")]
 pub mod android;

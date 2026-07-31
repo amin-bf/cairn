@@ -6,21 +6,25 @@
 
 use crate::core::{self, Editor};
 use crate::model::{self, Scenario};
-use crate::{variant_a, variant_b, variant_c};
+use crate::{variant_a, variant_b, variant_c, variant_d};
 use eframe::egui;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Variant {
+    /// The graft chosen after round 1, and the one to judge now.
+    D,
     A,
     B,
     C,
 }
 
 impl Variant {
-    const ALL: [Variant; 3] = [Variant::A, Variant::B, Variant::C];
+    // D first, so the app opens on it and the arrow keys start there.
+    const ALL: [Variant; 4] = [Variant::D, Variant::A, Variant::B, Variant::C];
 
     pub fn key(self) -> &'static str {
         match self {
+            Variant::D => "D",
             Variant::A => "A",
             Variant::B => "B",
             Variant::C => "C",
@@ -29,6 +33,7 @@ impl Variant {
 
     pub fn name(self) -> &'static str {
         match self {
+            Variant::D => "Split + cards (round 2)",
             Variant::A => "Split preview",
             Variant::B => "Cards-first",
             Variant::C => "Inline, one column",
@@ -39,6 +44,7 @@ impl Variant {
     /// have to remember which is which.
     pub fn pitch(self) -> &'static str {
         match self {
+            Variant::D => "A's split view + A's kind dropdown + B's card visuals",
             Variant::A => "form | rendered preview · blanks via toolbar · confirm modal on save",
             Variant::B => "form above the cards it generates · dormancy shown in the stack, always",
             Variant::C => "no preview pane at all · render under each field · live warning + undo",
@@ -109,9 +115,10 @@ impl ProtoApp {
         let env = |k: &str| std::env::var(k).unwrap_or_default().to_ascii_lowercase();
 
         let variant = match env("PROTO_VARIANT").as_str() {
+            "a" => Variant::A,
             "b" => Variant::B,
             "c" => Variant::C,
-            _ => Variant::A,
+            _ => Variant::D,
         };
         let width = match env("PROTO_WIDTH").as_str() {
             "phone" => Width::Phone,
@@ -313,6 +320,7 @@ impl eframe::App for ProtoApp {
                         ui.add_space(12.0);
 
                         match self.variant {
+                            Variant::D => variant_d::ui(ui, &mut self.editor, self.width),
                             Variant::A => variant_a::ui(ui, &mut self.editor, self.width),
                             Variant::B => variant_b::ui(ui, &mut self.editor, self.width),
                             Variant::C => variant_c::ui(ui, &mut self.editor, self.width),

@@ -159,7 +159,7 @@ fn stack(ui: &mut egui::Ui, ed: &mut Editor) {
     }
 }
 
-fn live_card(ui: &mut egui::Ui, ed: &Editor, card: &GenCard) {
+pub(crate) fn live_card(ui: &mut egui::Ui, ed: &Editor, card: &GenCard) {
     let history = model::history_for(ed.history(), card.ordinal);
     app::card_frame(PANEL, LINE).show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
@@ -214,7 +214,7 @@ fn side(ui: &mut egui::Ui, lines: &[SideLine], size: f32, color: egui::Color32) 
     }
 }
 
-fn dormant_card(ui: &mut egui::Ui, ed: &mut Editor, d: &model::Dormant) {
+pub(crate) fn dormant_card(ui: &mut egui::Ui, ed: &mut Editor, d: &model::Dormant) {
     app::warn_frame().show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             core::mono(ui, &format!("card {} · dormant", d.ordinal), 10.0, WARN);

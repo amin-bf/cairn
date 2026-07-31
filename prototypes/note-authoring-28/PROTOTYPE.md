@@ -46,7 +46,33 @@ is advisory under native Wayland.
   survives while typing. If two variants are otherwise tied on that axis, that is when the APK
   earns its keep. `cargo apk build` is wired up, same shape as `prototypes/review-session-11`.
 
-## The three variants
+## Round 2 — variant D, the graft
+
+Round 1 was judged live and did not pick a variant outright. The verdict was a **graft**: *A's
+split view, B's visuals, A's kind selector.* That is variant **D**, and it is what the app now
+opens on. A, B and C are kept for comparison, not because any of them is still a candidate.
+
+D reuses `variant_a::kind_row` and `variant_b::live_card` / `dormant_card` directly rather than
+copying them, so "B's visuals" stays B's visuals and cannot drift.
+
+Two questions the graft raised that neither parent had to answer — **both are decisions to judge,
+not fixes**:
+
+- **Dormant cards sit in ordinal position**, interleaved with the live ones rather than appended
+  after them. This is the answer to round 1's open problem: in B the retired card was last in a
+  scrolling column and fell below the fold, so the `N DORMANT` counter in the header did all the
+  warning. In its own pane, in the slot the card actually occupied, it is where you are already
+  looking.
+- **The destructive-edit warning also appears in the *form* pane.** On a phone the cards pane is
+  behind a `Write | Cards` toggle, so a warning living only in the stack is invisible exactly when
+  it matters. The form pane is the one always on screen. On desktop this means the warning is
+  visible twice — deliberate, but worth a hard look.
+
+One smaller call, flagged for the same reason: **the blank-number chip row is phone-only.** With
+the card stack beside the field on a desktop it repeats what the stack already shows; behind a
+toggle it is the only way to check the set while typing.
+
+## The three round-1 variants
 
 They disagree on every axis the ticket names, not on styling. The palette is scaffolding inherited
 from #11 — [ADR-0006 §10](../../docs/adr/0006-the-review-session-experience.md) ruled that a

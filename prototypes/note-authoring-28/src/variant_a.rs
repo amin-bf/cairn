@@ -51,7 +51,7 @@ pub fn ui(ui: &mut egui::Ui, ed: &mut Editor, width: Width) {
     save_modal(ui, ed);
 }
 
-fn kind_row(ui: &mut egui::Ui, ed: &mut Editor) {
+pub(crate) fn kind_row(ui: &mut egui::Ui, ed: &mut Editor) {
     app::panel_frame().show(ui, |ui| {
         ui.horizontal(|ui| {
             core::mono(ui, "kind", 11.0, DIM);
