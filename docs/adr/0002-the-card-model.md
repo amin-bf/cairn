@@ -159,14 +159,23 @@ This is what makes a deck self-contained: a reader that has never heard of `voca
 the cards correctly, because the file explains itself. Constraint 2 asks for a self-contained export
 format, and layout that lives only in our source code would not be one.
 
+> **Amended by [ADR-0017 §1](0017-card-slots.md): the `cards` list is no longer positional.** Each
+> entry declares an explicit **slot** number, drawn from one namespace shared by every kind, and the
+> slot — not the list index — is the ordinal in §6's `CardRef`. So `basic` and `basic-reverse` both
+> declare slot 0 for Front→Back, deliberately, because it is deliberately the same card. The example
+> above reads `cards: [ {slot 2, Term→Meaning}, {slot 3, Meaning→Term} ]`.
+
 #### Rules for evolving a kind definition
 
 Binding on anyone editing these definitions later:
 
-- **The `cards` list may only be appended to.** Never reorder, never remove. A card's ordinal is
-  half its identity (§6); reordering the list silently reassigns every accumulated review history
-  in the collection to a different card, and the log cannot be edited to repair it. This is the
-  single most destructive edit available in this codebase.
+- ~~**The `cards` list may only be appended to.** Never reorder, never remove.~~ **Replaced by
+  [ADR-0017 §4](0017-card-slots.md).** With explicit slots, list order carries nothing and reordering
+  is harmless; the destructive edit relocates to *changing a slot number on an existing entry, or
+  reusing a number for a different question*. The replacement rule is **a slot number is the card's
+  identity: never change one, never reuse one, list order is free** — and unlike its predecessor it is
+  checkable, by a uniqueness test over the definition table and an immutability test against a golden
+  `slot → (prompt, answer)` list.
 - **Fields may be added.** A note that predates the field reads it as empty.
 - **Removing or renaming a field is a breaking change** and out of scope here; it needs a migration
   decision, because notes hold values under the old name.
@@ -200,6 +209,15 @@ Precise rules:
   the `cards` list from 0 — the two never occur in the same note, so no ambiguity arises, and a
   false uniformity would be worse than the honest difference.
 
+> **Corrected by [ADR-0017 §3](0017-card-slots.md): "the two never occur in the same note" was false,
+> and it was the defect.** A note that *changes kind* is precisely one where both schemes occur in the
+> same note across its lifetime — so this section talked itself out of the hazard one sentence before
+> [ADR-0012 §6](0012-the-note-authoring-experience.md) found it by driving the editor. It is now true
+> by construction rather than by assumption: **a cloze blank `n` occupies slot `0x8000 | n`** and
+> fixed-arity slots occupy `0x0000–0x7FFF`, so the one bit *is* the check. **Authored blank numbers
+> still start at 1** — the number the user types is theirs. What ends is fixed-arity ordinals
+> "indexing the `cards` list from 0": they are registry slots that merely happen to start low.
+
 **The authoring UI must never renumber blanks automatically.** Renumbering is indistinguishable from
 retyping the note's history onto the wrong cards: change blank 2 to blank 3 and every review of the
 old blank 3 attaches to what used to be blank 2. Editors that "tidy" numbering are actively
@@ -222,6 +240,14 @@ CardRef { note: NoteId, ordinal: u16 }
 
 For fixed-arity kinds the ordinal is the index into the kind's `cards` list. For `cloze` it is the
 authored blank number. **No card is ever assigned an identifier of its own.**
+
+> **Amended by [ADR-0017 §1](0017-card-slots.md): the ordinal is the *slot* the kind definition
+> declares, not the index into its `cards` list** — and for `cloze`, `0x8000 | n` rather than the bare
+> blank number. **The `CardRef` shape and the 18-byte canonical encoding below are unchanged**, which
+> is the point: the fix lives in how ordinals are *assigned*, so no persisted artifact moves.
+> **`CardRef` gains no kind discriminator**, and ADR-0017 §8 records that it will not: making identity
+> kind-scoped would orphan the history of a `basic` note gaining its reverse direction, which is the
+> same card asking the same question.
 
 This is forced by the absence of a server, and the failure it avoids is worth stating concretely.
 Add a third blank to a cloze note on a laptop; the phone, offline, receives the new text later and
@@ -313,6 +339,11 @@ put back.
 > ordinal 1 *is* generated, by a different question. Not fixable downstream: content edits are
 > not log events, so replay cannot know the previous kind. ADR-0012 §6 requires the authoring UI
 > to warn at the kind change until this is settled here.
+>
+> **Discharged by [ADR-0017](0017-card-slots.md).** Slots are disjoint across kinds, so a kind change
+> can no longer reattach history to a different question — only make cards **dormant**, which is what
+> this section already describes. The claim above is restored to true as written, and ADR-0012 §6's
+> bespoke warning is retired into ADR-0012 §5's ambient dormancy warning with nothing added.
 
 Two consequences to be honest about:
 
