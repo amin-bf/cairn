@@ -17,7 +17,7 @@ cargo run
 `←`/`→` or the bottom bar cycle **A / B / C**. The bar also picks the scenario and toggles
 **phone width / desktop width**.
 
-Open straight onto one state (only for screenshots — the bar is the real way to drive it):
+Open straight onto one state, to skip the clicks needed to reach it:
 
 ```
 PROTO_VARIANT=B PROTO_SCENARIO=cloze PROTO_DROP_BLANK=2 cargo run   # a card already dormant
@@ -25,6 +25,10 @@ PROTO_SCENARIO=kind PROTO_KIND=basic cargo run                      # mid kind-c
 ```
 
 `PROTO_VARIANT=a|b|c`, `PROTO_SCENARIO=new|vocab|cloze|persian|kind`, `PROTO_WIDTH=phone|desktop`.
+
+The window opens centred on the **landscape** monitor — a two-pane editor on the portrait screen
+is unjudgeable. `PROTO_POS=x,y` overrides it; see `window_position` in `src/main.rs` for why that
+is advisory under native Wayland.
 
 ## Does this need the handset?
 
@@ -95,10 +99,30 @@ are correctness, not taste:
 4. **Bold has to be a colour, not a face.** egui bundles no bold face and its own `RichText::strong`
    answers this by brightening. So "**bold**" in the Markdown subset means brighter until the app
    ships a face of its own.
-5. **The bidi `TextEdit` layouter makes RTL caret and selection imprecise** — buffer logical,
-   caret visual (`AGENTS.md`, client-stack rule 2). Known and accepted; judge RTL *rendering* here,
+5. **The caret was wrong on ordinary LTR text, and the cause is a defect in shipped code.**
+   `bidi::job` appended its own `"\n"` between paragraphs — but a paragraph's range from
+   `unicode-bidi` **already includes its trailing separator**, so every newline came out doubled:
+   an 11-byte buffer laid out as 12 bytes. egui maps a `TextEdit` cursor through the galley, so the
+   caret drifted one position for every preceding line break, compounding down the field. Fixed
+   here by stripping the separator, reordering only the content, and re-appending it verbatim —
+   which also stops an RTL paragraph reversing its own newline into the middle of the line.
+
+   **The same defect is in `crates/app/src/bidi.rs` on `main`**, which this file was copied from
+   verbatim. Its tests are all single-line, which is why nothing caught it. The invariant now has a
+   test: for LTR text the laid-out string must be byte-identical to the buffer. (It is deliberately
+   *not* byte-identical for RTL text or Arabic-Indic digits — that rewriting is the whole point,
+   and it is why the caret is inherently imprecise there.)
+6. **RTL caret and selection remain imprecise** — buffer logical, caret visual (`AGENTS.md`,
+   client-stack rule 2). Inherent to the approach, unlike the above; judge RTL *rendering* here,
    not RTL caret precision.
-6. **In B, the dormant card lands below the fold**, since it sits at the bottom of the stack. The
+7. **Single-line fields were built on `TextEdit::multiline`**, so Enter inserted a newline into a
+   `Term` and long values wrapped inside a one-row box. They are `singleline` now, with wrapping
+   off.
+8. **A remembered text selection outlives the text it described.** The "blank the selection" button
+   needs the selection from *before* the click took focus away, so it is cached — and after
+   blanking rewrites the string that cache still pointed at the old offsets, leaving the button
+   armed with a stale range. Dropped explicitly on blanking.
+9. **In B, the dormant card lands below the fold**, since it sits at the bottom of the stack. The
    `1 DORMANT` count in the stack header is what actually carries the warning — worth a hard look,
    because it is the one place B's "you cannot fail to notice" claim is doing real work.
 
