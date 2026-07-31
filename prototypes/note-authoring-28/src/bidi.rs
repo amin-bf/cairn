@@ -74,11 +74,22 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
         job.halign = egui::Align::RIGHT;
     }
 
-    for (i, para) in info.paragraphs.iter().enumerate() {
-        if i > 0 {
-            job.append("\n", 0.0, fmt.clone());
-        }
-        let (levels, runs) = info.visual_runs(para, para.range.clone());
+    for para in info.paragraphs.iter() {
+        // A paragraph's range **includes its trailing separator**. Two things follow, and getting
+        // either wrong corrupts the galley:
+        //
+        // 1. Appending our own "\n" between paragraphs duplicates one that is already there, so
+        //    `job.text` grows past the buffer and every caret position after the first line break
+        //    is off by one — compounding per line.
+        // 2. Leaving the separator inside the run hands it to the reordering below, and an RTL
+        //    paragraph then reverses the newline into the middle of its own line.
+        //
+        // So: take the separator off, reorder only the content, then put it back verbatim.
+        let sep = separator_len(&text[para.range.clone()]);
+        let content = para.range.start..para.range.end - sep;
+
+        if !content.is_empty() {
+        let (levels, runs) = info.visual_runs(para, content);
         for run in runs {
             let slice = &text[run.clone()];
             // epaint re-splits a section into sub-runs and places those left-to-right. So for an
@@ -103,8 +114,24 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                 }
             }
         }
+        }
+
+        if sep > 0 {
+            job.append(&text[para.range.end - sep..para.range.end], 0.0, fmt.clone());
+        }
     }
     job
+}
+
+/// Byte length of the paragraph separator `para` ends with, or 0. `\r\n` is one separator of two
+/// bytes and must not be split, or the halves land on opposite sides of a reordered line.
+fn separator_len(para: &str) -> usize {
+    for sep in ["\r\n", "\n", "\r", "\u{0085}", "\u{2028}", "\u{2029}"] {
+        if para.ends_with(sep) {
+            return sep.len();
+        }
+    }
+    0
 }
 
 #[cfg(test)]
@@ -176,6 +203,38 @@ mod tests {
     fn empty_input_survives() {
         assert_eq!(visual(""), "");
         assert!(!is_rtl(""));
+    }
+
+    /// The invariant a `TextEdit` caret rests on: egui maps a cursor position through the galley,
+    /// so if the laid-out text is not byte-identical to the buffer, the caret lands somewhere
+    /// else. Every case below is one the editor actually types.
+    ///
+    /// Byte-identity is **not** universal, and deliberately so — reordering RTL words and
+    /// reversing Arabic-Indic digits both rewrite the text on purpose, which is exactly why the
+    /// caret is imprecise there (`AGENTS.md`, client-stack rule 2). This test pins the case where
+    /// nothing is supposed to move: LTR text with no Arabic-Indic digits, where any drift is a bug.
+    #[test]
+    fn laid_out_text_is_always_byte_identical_to_an_ltr_buffer() {
+        for t in [
+            "hello world",
+            "hello\nworld",           // one newline — was doubled, caret off by one after it
+            "a\nb\nc\nd",             // compounding: was off by three by the last line
+            "para\n\nnext",           // a blank line between paragraphs
+            "trailing\n",
+            "\nleading",
+            "windows\r\nline",
+            "  double  spaces  ",
+            "",
+        ] {
+            assert_eq!(visual(t), t, "laid-out text drifted from the buffer for {t:?}");
+        }
+    }
+
+    #[test]
+    fn an_rtl_paragraph_keeps_its_newline_at_the_end_of_the_line() {
+        // The separator must never be handed to the word reversal: reordering it would move the
+        // line break into the middle of the line it terminates.
+        assert_eq!(visual("سلام دنیا\nسلام"), "دنیا سلام\nسلام");
     }
 
     #[test]
