@@ -338,6 +338,60 @@ them.
    and it lands in every `.lcoll` **and** on the remote, buying nothing: a published address is
    unreadable by the device that needs it, which is looking at a different folder.
 
+## Protection at rest
+
+**Nothing is encrypted, anywhere**, decided once for all four artifacts in
+[ADR-0020](./docs/adr/0020-protection-at-rest.md): `collection.db`, the drive credential, the `.lcoll`
+archive, and the log published to the drive. Three earlier ADRs each acted on this default while
+deferring the reasoning; the reasoning now lives in one place, and it is made of refusals — the kind of
+decision that erodes fastest when met without it.
+
+### Rules that are easy to break silently
+
+1. **Never ask the user for a secret — no passphrase, no PIN, no unlock code — and note that the
+   ASCII-input argument is not why.** [ADR-0016 §8](./docs/adr/0016-backup-and-restore.md) rejected a
+   *passphrase* because client-stack rule 8 makes it untypeable on the handset, and that argument
+   genuinely **does not reach a PIN**, since digits are ASCII. Reopening on that gap is the predictable
+   mistake. Two independent reasons refuse anyway. **There is nowhere to recover a forgotten secret
+   from** — no server, no account, no escrow, by construction — so a secret turns a design premised on
+   never losing data into one where forgetting loses all of it. And **a PIN is safe on a phone only
+   because the hardware refuses to be asked quickly**; data resting on a provider's disks cannot borrow
+   that, so against unlimited offline guessing a six-digit space is a routine computation and the PIN
+   protects nothing from the one adversary that motivated it.
+2. **An application-held key is not the way around rule 1.** For the two local artifacts it buys no
+   adversary the platform does not already answer — the desktop key is a file beside the data it
+   protects. For the two that travel it is *circular*: with no server there is no channel to distribute
+   the key except the one being protected, so the key ships beside the ciphertext and the design is
+   plaintext with extra steps.
+3. **A lock screen over the app is theatre, and it may never be described as protection.** The file sits
+   in plaintext beside it, so anything opening the *file* walks past. If it ever ships as a
+   user-interface convenience it may not be worded to imply the data is encrypted.
+4. **The one route to delete published data is the provider's own settings, and its absence from this
+   app is deliberate.** [ADR-0015 §10](./docs/adr/0015-the-sync-experience.md) forbids an in-app control
+   because the grant reaches the whole folder, so a delete from one device destroys namespaces another
+   device has never fetched. That prohibition is only tolerable because the user *does* have a route —
+   the folder goes on uninstall, or is deleted manually from the provider's connected-applications
+   settings. Anyone reading the missing control as an oversight should read that section before adding
+   one. **Sync settings must keep naming that route and the name this app appears under**, since the
+   folder is hidden and cannot be navigated to; the exact menu wording is a third party's UI and is
+   verified at implementation, never pinned in our documents.
+5. **Never claim the Android backup is unreadable by the provider — that guarantee is conditional and
+   this project's own floor breaks it.** Auto Backup is always encrypted in transit and at rest, but
+   under *operator-held* keys; the stronger layer, keyed to the lock screen, needs **Android 9+ (API
+   28) and a lock screen actually set**. `min_sdk_version = 24`, so API 24–27 handsets — and anyone
+   with no lock screen — have their collection *and* the sync refresh token held under keys the
+   operator manages. Backup stays **on** regardless: refusing it would spend protection against loss,
+   which is the thing this design actually fears, to buy confidentiality conceded everywhere else.
+   Note two asymmetries with the sync folder — a device backup has **no per-app deletion path** and
+   **survives uninstall**, and there is **no enrolment moment** at which to tell the user any of it.
+   Evidence in [`docs/research/auto-backup-at-rest/`](./docs/research/auto-backup-at-rest/README.md).
+6. **Enrolment states what leaves the device, and that clause is not a status message.**
+   [ADR-0015 §5](./docs/adr/0015-the-sync-experience.md) holds the number of things that may speak about
+   sync at two, and it means *ambient* speech — icons, badges, toasts. This clause rides the one-time
+   consent moment alongside ADR-0015 §7's existing sentence, for the same reason that one exists: an
+   exposure the user can never afterwards discover gets one sentence at the moment of choice. Do not
+   promote it to a surface, and do not delete it as redundant.
+
 ## Agent skills
 
 ### Issue tracker

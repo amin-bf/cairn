@@ -14,8 +14,10 @@ depend on `replay` or `ui`: nothing here knows what a card is.
 supersedes; also by [ADR-0004 §2](../../../docs/adr/0004-the-review-event-log.md) (row identity and
 the version summary), [ADR-0004 §7](../../../docs/adr/0004-the-review-event-log.md) (the mutable
 surface and its stamps), [ADR-0004 §10 and §11](../../../docs/adr/0004-the-review-event-log.md) (the
-log is never compacted; the interchange form is relayed byte for byte) and
-[ADR-0007](../../../docs/adr/0007-the-local-store.md) (the local copy is authoritative).
+log is never compacted; the interchange form is relayed byte for byte),
+[ADR-0007](../../../docs/adr/0007-the-local-store.md) (the local copy is authoritative) and
+[ADR-0020 §5 §6 §7](../../../docs/adr/0020-protection-at-rest.md) (what published objects disclose,
+and the one sentence that says so).
 
 ## The two rules that fail silently
 
@@ -73,8 +75,25 @@ snapshot and change stream are the same thing paid for at different times.
 Granting one device access to the remote, once. Uses the device flow: a short code entered on
 whatever device the user likes, so no credential is ever typed into this application. Enrolment also
 runs the **identity check** below, and fetches the **connected account** — one `GET` to the UserInfo
-endpoint, because the device flow's token response carries no `id_token` (ADR-0019 §4).
+endpoint, because the device flow's token response carries no `id_token` (ADR-0019 §4). It **ends by
+saying three things**: the account it connected as (ADR-0019 §1), what it found (ADR-0015 §7), and what
+leaves the device (**disclosure clause**, below). Each answers a different question — *which account*,
+*am I alone here*, *what leaves this device* — each is unavailable later for its own reason, and none
+is a status message. **A fourth needs a fact the user cannot obtain and cannot act on afterwards**
+(ADR-0020 §7); anything else belongs in sync settings or nowhere.
 _Avoid_: Login, sign-in, pairing — there is no account of ours and no device-to-device step.
+
+**Disclosure clause**:
+The closing sentence stating that published objects hold the review history **in plaintext**, and that
+the user removes them from the provider's own settings rather than from here
+([ADR-0020 §5 §7](../../../docs/adr/0020-protection-at-rest.md)). Nothing published is encrypted and
+nothing ever will be — a key that travels has no channel to travel on but the one it protects, and this
+design has no server to supply one. Said **once**, unlike the connected account, which persists in
+settings: the address diagnoses a failure discovered months later, whereas the only moment this clause
+can change anything is before the grant exists. Its durable half — *how to remove it* — is already
+permanent in sync settings by ADR-0015 §10.
+_Avoid_: Warning, notice, consent — it states a fact once, and promoting it to a resting surface is the
+defect ADR-0015 §5 exists to prevent.
 
 **Connected account**:
 The address the grant was obtained against. Fetched once at enrolment, **stored beside the credential
