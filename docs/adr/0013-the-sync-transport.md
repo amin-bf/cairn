@@ -1,6 +1,6 @@
 # ADR-0013: The sync transport
 
-- **Status**: Accepted, with one verification outstanding (§8)
+- **Status**: Accepted
 - **Date**: 2026-07-31
 - **Resolves**: [Decide: the sync transport](https://github.com/amin-bf/leitner/issues/39)
 - **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
@@ -152,6 +152,10 @@ folder.
 - **100 refresh tokens per end-user account per client ID**, each re-authorisation consuming one and
   the oldest invalidated at the ceiling. At 2–5 devices this never binds; it is recorded because
   ADR-0004 §3 mints a fresh writer id per install, so reinstalls are not rare events.
+
+A third joins them in §8: **the client must be registered as the "TVs and Limited Input devices"
+type.** All three are console settings that nothing in this repository can validate, and each fails
+by making sync mysteriously unavailable rather than by producing an error anyone can act on.
 
 **Rejected: Dropbox**, on the ceiling above. Its unauthenticated long-poll — the only push-shaped
 mechanism anywhere in the research, blocking up to 480 seconds with no credential in flight — is
@@ -347,12 +351,27 @@ carries an **unverified assumption**: this provider has withdrawn both custom UR
 copy-paste redirect for some client types, and loopback-from-Android against it was never confirmed.
 And it needs the redirect caught in-process, where the device flow needs nothing caught at all.
 
-**The outstanding verification, and the reason this ADR's status carries a caveat.** #33 verified a
-device flow against a *git host*, not against this provider, and this provider's limited-input-device
-flow publishes a scope allowlist. **Whether `drive.appdata` is on it is not established.** It is
-cheap to check and expensive to be wrong about, so it is a verification step rather than an
-assumption: if the scope is not permitted, the fallback is the rejected option above, and adopting it
-*does* then require amending ADR-0009 §4.
+**Verified, because the flow publishes a scope allowlist and #33 had only checked a git host's.** The
+provider's limited-input-device flow permits exactly `email`, `openid`, `profile`,
+**`drive.appdata`**, `drive.file`, and two YouTube scopes — full Drive, Gmail and cloud-platform are
+excluded, and the scope this ADR needs is on the list
+([OAuth 2.0 for TV and Limited-Input Device Applications](https://developers.google.com/identity/protocols/oauth2/limited-input-device)).
+That the allowlist is *narrow* is itself reassuring: the flow is scoped to app-owned data by design,
+which is exactly what §3 chose it for.
+
+**Two facts came with that check, and both are load-bearing:**
+
+- **The credential must be registered as the "TVs and Limited Input devices" client type**, not as a
+  desktop or Android client. This is a console choice that no code path can validate, so it belongs
+  beside §3's Production-publishing-status trap: get it wrong and the flow is simply unavailable,
+  with nothing in the repository able to say why.
+- **The device flow has a known phishing shape**, and honesty about it is owed since this ADR
+  prefers it: an attacker who obtains a code can try to talk a user into entering it, granting the
+  attacker's session rather than the user's device. The blast radius here is bounded by the same
+  thing that bounds §9's revocation — the grant reaches **our own application data folder and
+  nothing else**, not the user's Drive — and the realistic version of the attack needs the user to
+  be enrolling a device at that moment anyway. Recorded rather than mitigated; the mitigation is the
+  narrow scope, which we already have for other reasons.
 
 **Neither flow types a credential into our own text field**, which is why the drive family was
 attractive in the first place: `AGENTS.md` rule 8 records that Android text input is ASCII-only and
@@ -455,14 +474,12 @@ instructions cannot both be followed: the handoff sends `open_url()` into
 there.
 
 **This ADR does not resolve the contradiction; §8 routes around it**, because the device flow needs
-no platform capability at all. **It is recorded because the next ticket to need one will hit it head
-on with no equivalent escape**, and because a contradiction nobody wrote down is one the next agent
-rediscovers as a surprise. The shape of the fix, when it is needed: the seam rule is per crate rather
-than per workspace — `leitner-store` keeps exactly two functions, and a crate that must touch the
-platform for an unrelated reason gets its own module under the same three-arm discipline.
-
-If §8's verification fails and the loopback flow is adopted, **that fix becomes required**, and the
-amendment is no longer hypothetical.
+no platform capability at all — and §8's scope check confirms that route is open rather than
+provisional. **It is recorded because the next ticket to need one will hit it head on with no
+equivalent escape**, and because a contradiction nobody wrote down is one the next agent rediscovers
+as a surprise. The shape of the fix, when it is needed: the seam rule is per crate rather than per
+workspace — `leitner-store` keeps exactly two functions, and a crate that must touch the platform for
+an unrelated reason gets its own module under the same three-arm discipline.
 
 ## Requirements this places on downstream tickets
 
@@ -525,7 +542,7 @@ that a glossary lives beside the code it describes.
 
 | Item | Owner |
 |---|---|
-| Whether `drive.appdata` is permitted in the limited-input-device flow (§8) | Verification before implementation; fallback named |
+| ~~Whether `drive.appdata` is permitted in the limited-input-device flow~~ — **closed in §8**: it is on the allowlist, and the client type must be *TVs and Limited Input devices* | — |
 | Running an enrolment and a sync on the real handset, per `AGENTS.md` rule 9 | Implementation |
 | How long a real handset left alone actually goes between successful background syncs | [#40](https://github.com/amin-bf/leitner/issues/40) |
 | Tuning `K` (§5) against real object counts | Implementation; not a compatibility constant |
