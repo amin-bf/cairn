@@ -190,6 +190,12 @@ pub fn text_field(
         // A single-line field must not wrap, or a long term folds into a box one row tall and the
         // caret goes hunting for rows that are not drawn.
         job.wrap.max_width = if multiline { wrap_width } else { f32::INFINITY };
+        // **Drop the job's own alignment inside a `TextEdit`.** `bidi::job` sets `halign = Max` for
+        // RTL, which lays the galley out at *negative* x — its rect runs (-109, 0) for a Persian
+        // line. A label survives that because it allocates from the galley's size, but a `TextEdit`
+        // draws at a fixed origin and clips, so the overhang is simply cut off. Ordering does not
+        // depend on halign; alignment inside the widget is `horizontal_align`'s job, set below.
+        job.halign = egui::Align::LEFT;
         ui.fonts_mut(|f| f.layout_job(job))
     };
 

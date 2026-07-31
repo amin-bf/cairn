@@ -101,7 +101,7 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                     if i > 0 {
                         job.append(" ", 0.0, fmt.clone());
                     }
-                    job.append(&fix_digits(w), 0.0, fmt.clone());
+                    append_rtl_word(&mut job, w, &fmt);
                 }
             } else {
                 // Even an LTR-classified run can contain Arabic-Indic digits, which epaint still
@@ -121,6 +121,58 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
         }
     }
     job
+}
+
+/// Bidi mirroring: a bracket keeps its *meaning* across directions, so its glyph flips. An opening
+/// parenthesis before Persian text is drawn as `)`, because "opening" means right-hand side there.
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        '«' => '»',
+        '»' => '«',
+        other => other,
+    }
+}
+
+/// Emits one word of an RTL run in visual order, moving the punctuation at its edges to the other
+/// side.
+///
+/// Reversing whole words is not enough: a sentence-final `.` is part of the last *word*, so it
+/// stayed glued to that word's right-hand side and appeared in the middle of the sentence instead
+/// of at the far left where an RTL reader expects it. The bidi algorithm resolves such a neutral to
+/// the paragraph level, which means it belongs at the run's visual end.
+///
+/// Detaching punctuation is safe for exactly the reason detaching letters is not: punctuation has
+/// no joining behaviour, so shaping is unaffected — the same argument `fix_digits` rests on.
+/// Splitting letters was tried in #8 and broke the joins.
+pub(crate) fn append_rtl_word(job: &mut LayoutJob, word: &str, fmt: &TextFormat) {
+    let is_core = |c: char| c.is_alphanumeric();
+    let start = word.find(is_core);
+    let Some(start) = start else {
+        // All punctuation: still needs mirroring, but there is no core to sit beside.
+        let flipped: String = word.chars().rev().map(mirror).collect();
+        job.append(&flipped, 0.0, fmt.clone());
+        return;
+    };
+    let end = word.rfind(is_core).map(|i| i + word[i..].chars().next().unwrap().len_utf8()).unwrap();
+
+    let flip = |s: &str| -> String { s.chars().rev().map(mirror).collect() };
+    // Visual order inside an RTL run: what trailed the word now leads it, and vice versa.
+    let (leading, core, trailing) = (&word[..start], &word[start..end], &word[end..]);
+    if !trailing.is_empty() {
+        job.append(&flip(trailing), 0.0, fmt.clone());
+    }
+    job.append(&fix_digits(core), 0.0, fmt.clone());
+    if !leading.is_empty() {
+        job.append(&flip(leading), 0.0, fmt.clone());
+    }
 }
 
 /// Byte length of the paragraph separator `para` ends with, or 0. `\r\n` is one separator of two
@@ -235,6 +287,34 @@ mod tests {
         // The separator must never be handed to the word reversal: reordering it would move the
         // line break into the middle of the line it terminates.
         assert_eq!(visual("سلام دنیا\nسلام"), "دنیا سلام\nسلام");
+    }
+
+    #[test]
+    fn a_persian_full_stop_lands_at_the_visual_end_of_the_line() {
+        // Reported from the running app: the dot sat "in the middle of the sentence before the
+        // last word". Reversing whole words is not enough — the full stop belongs to the last
+        // *word*, so it stayed glued to that word's right-hand side, one position too far right.
+        assert_eq!(visual("سگ در خانه است."), ".است خانه در سگ");
+    }
+
+    #[test]
+    fn brackets_around_rtl_text_are_mirrored_to_the_correct_side() {
+        // A bracket keeps its meaning and flips its glyph: "opening" is the right-hand side in RTL.
+        assert_eq!(visual("(سلام)"), "(سلام)");
+    }
+
+    #[test]
+    fn punctuation_inside_a_word_is_not_disturbed() {
+        // Only the *edges* move. An apostrophe or hyphen mid-word has to stay put, or the word
+        // stops being the word.
+        assert_eq!(visual("خانه-باغ"), "خانه-باغ");
+    }
+
+    #[test]
+    fn latin_punctuation_is_untouched() {
+        for t in ["Hello, world.", "(parenthesised)", "a-b"] {
+            assert_eq!(visual(t), t);
+        }
     }
 
     #[test]

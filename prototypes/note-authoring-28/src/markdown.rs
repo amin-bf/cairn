@@ -232,19 +232,22 @@ fn fix_digits(word: &str) -> std::borrow::Cow<'_, str> {
 
 fn append_words(job: &mut LayoutJob, text: &str, fmt: &TextFormat, reversed: bool) {
     let words: Vec<&str> = text.split(' ').collect();
-    let emit = |job: &mut LayoutJob, i: usize, w: &str| {
-        if i > 0 {
-            job.append(" ", 0.0, fmt.clone());
-        }
-        job.append(&fix_digits(w), 0.0, fmt.clone());
-    };
     if reversed {
         for (i, w) in words.iter().rev().enumerate() {
-            emit(job, i, w);
+            if i > 0 {
+                job.append(" ", 0.0, fmt.clone());
+            }
+            // Shared with `bidi`, so a Persian full stop lands at the visual end of the line in a
+            // rendered card exactly as it does in the editor — two implementations of this would
+            // drift and only one of them would be judged.
+            crate::bidi::append_rtl_word(job, w, fmt);
         }
     } else {
         for (i, w) in words.iter().enumerate() {
-            emit(job, i, w);
+            if i > 0 {
+                job.append(" ", 0.0, fmt.clone());
+            }
+            job.append(&fix_digits(w), 0.0, fmt.clone());
         }
     }
 }
