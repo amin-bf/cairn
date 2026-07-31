@@ -160,6 +160,22 @@ Labels are not replay inputs, so they are **not log rows**. They live on the mut
 settle by §7. They are also what makes the deferred sync work expressible at all: *"you are behind
 your laptop"* is a sentence; *"you are behind `7f3a-b21c`"* is not.
 
+> **Amended by [ADR-0015 §14](0015-the-sync-experience.md) — devices label themselves, and the
+> justification above no longer holds.** Two changes, and the identity split itself — machine-owned
+> writer ids, human-owned labels, never adopted — is untouched by both.
+>
+> **The default is inverted.** A device is labelled **by its user at enrolment**, and the label syncs
+> on the mutable surface, so every other device already knows it. Asking a user to name a *stranger*
+> is a puzzle they cannot solve; naming the device in their hand is trivial. The paragraph above
+> becomes the exception — a writer whose label never arrived, and the reinstall case, where typing
+> the same name is what groups several writer ids under one label.
+>
+> **And the sentence that justifies labels is one the app is never entitled to say.** ADR-0015 §4
+> finds *"you are behind"* transient by construction: reachable remote means the handshake *is* the
+> listing, so discovering it and fixing it are one operation; unreachable remote means the device
+> does not know. Labels are retained on two other grounds — the device list in sync settings, and
+> **§8's clock-skew warning, which must name a device to be actionable at all.**
+
 Rejected: **requiring every device to be online at sync time**, which would make adoption safe by
 guaranteeing the true highest sequence is visible. It fails on three counts. Presence requires a
 rendezvous point, which is a server; the realistic transport for a serverless app is a dumb store

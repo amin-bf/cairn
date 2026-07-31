@@ -134,6 +134,22 @@ not to add it.
 > under the same three-arm discipline, `compile_error!` included. What must *not* happen is a third
 > function landing here because the handoff table said so.
 
+> **Amended by [ADR-0015 §15](0015-the-sync-experience.md) — the prohibition is on behaviour, not on
+> capability.** #40 is the next ticket the note above predicted, and it met the rule from an angle
+> that note did not anticipate: not a *function*, and not in this crate. The Android editor must
+> state that non-Latin text cannot be typed there — winit has no IME path, so the failure reaching
+> the user is **silence**, and it can only be said in advance.
+>
+> **What is permitted**: a compile-time constant naming a platform *capability*, so an interface can
+> state a limitation. **What is not**: platform-conditional behaviour, and a growing function seam —
+> both unchanged, and the sentence above still governs them. The distinction is the one
+> [ADR-0003](0003-client-stack.md) won the stack decision with, *a `#[cfg]` the compiler checks beats
+> a runtime `if` nobody checks*: this rule exists to stop divergence becoming **invisible**, and a
+> capability constant exists to make a limitation **visible**.
+>
+> **This does not discharge the contradiction above**, which is about a platform capability *function*
+> for a non-storage crate. That is still open, and its recorded fix still stands.
+
 The two arms are not symmetric in one respect worth recording: `store`'s Android arm reads the JVM
 handle from `ndk_context`, which `android-activity` populates inside `leitner-app`. So the store
 cannot be opened before the activity exists, **`leitner-store` is not independently runnable on

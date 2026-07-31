@@ -157,6 +157,13 @@ A third joins them in §8: **the client must be registered as the "TVs and Limit
 type.** All three are console settings that nothing in this repository can validate, and each fails
 by making sync mysteriously unavailable rather than by producing an error anyone can act on.
 
+> **A fourth, added by [ADR-0015 §16](0015-the-sync-experience.md): the consent screen's application
+> name.** §9's revocation and ADR-0015 §10's *"delete the hidden data yourself"* route both end at a
+> list in the user's account settings, where our application appears under **that** name. The folder
+> is hidden, so there is no path to give and the name is the whole of the instruction — get it wrong
+> and *"find it in the list"* fails with nothing anyone can act on. Same class as the three above,
+> and same remedy: check it in the console, because no code path here can.
+
 **Rejected: Dropbox**, on the ceiling above. Its unauthenticated long-poll — the only push-shaped
 mechanism anywhere in the research, blocking up to 480 seconds with no credential in flight — is
 genuinely elegant and buys less than it appears to, because Android lists network as **Disabled** in
@@ -493,6 +500,18 @@ an unrelated reason gets its own module under the same three-arm discipline.
    adversely affected, which a few-kilobyte sync cannot claim. So the promise available is: **sync
    when the user opens the app, and opportunistically before that.** Anything stronger is
    overpromising, and #33 established it applies identically to every candidate.
+
+   > **Corrected by [ADR-0015 §16](0015-the-sync-experience.md): the binding ceiling is ours, not the
+   > platform's.** Every limit above is real and **none is ever reached**, because nothing schedules.
+   > A periodic job or a foreground service needs Java, a `classes.dex` and a Gradle project —
+   > [ADR-0003](0003-client-stack.md)'s measured prize, which
+   > [ADR-0014 §3](0014-when-parameter-optimisation-runs.md) already declined to spend on a 4.3 s
+   > job. **There is no background sync on either platform**, so the promise narrows to *"your
+   > devices catch up when you open the app"*, with *"and opportunistically before that"* withdrawn.
+   > ADR-0015 §2 accepts that on the ground that **a device not being used has nothing to publish and
+   > nobody waiting to read from it** — and ADR-0015 §6 then makes the absence **load-bearing**,
+   > because it is what allows sync to be deferred during a review session, fixing the mid-session
+   > queue shift [ADR-0014](0014-when-parameter-optimisation-runs.md) called locally unfixable.
 2. **"Am I behind?" is answered by a listing and costs one round trip** (§6). Whatever the UI says
    about divergence, it is not paying for the answer.
 3. **A device that has been away for months may need to re-enrol** (§3). That is a UI moment, and it
