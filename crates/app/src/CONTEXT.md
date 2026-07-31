@@ -57,6 +57,10 @@ will keep"), never reported as a bare number.
 - **Immediate mode has nowhere to `await`.** Spawn the future, store a handle, read the result on a
   later frame, and call `ctx.request_repaint()` on completion or the result sits unseen until the
   next input event.
+- **A backgrounded Android app is frozen, not slowed**, so long work starts from the foreground, by
+  a user action, with nothing persisted until it completes — then a frozen or killed run leaves no
+  partial state to repair. Never schedule it, and never tell the user a started job is still
+  progressing (ADR-0014 §3).
 - **Fonts are installed on the first frame, never in `CreationContext`**, and every added face must
   be registered in **every** family including `Monospace`, or text silently renders as boxes.
 - **Android text input is ASCII-only and cannot be fixed here.** winit's Android backend has no IME
