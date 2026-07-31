@@ -63,14 +63,8 @@ fn kind_chips(ui: &mut egui::Ui, ed: &mut Editor) {
 
 fn form(ui: &mut egui::Ui, ed: &mut Editor) {
     let k = ed.kind_def();
-    // Tab order, so Enter can hand the caret on instead of dropping it. Tags sit last.
-    let tags_id = egui::Id::new("b-tags");
-    let order: Vec<egui::Id> =
-        k.fields.iter().map(|f| egui::Id::new(("b-field", f.name))).chain([tags_id]).collect();
-    let mut advance: Option<egui::Id> = None;
-
     app::panel_frame().show(ui, |ui| {
-        for (i, f) in k.fields.iter().enumerate() {
+        for f in k.fields {
             ui.horizontal(|ui| {
                 core::mono(ui, f.name, 11.0, FG);
                 if let Role::ShownWith(anchor) = f.role {
@@ -78,14 +72,11 @@ fn form(ui: &mut egui::Ui, ed: &mut Editor) {
                 }
             });
 
-            let id = order[i];
+            let id = egui::Id::new(("b-field", f.name));
             let mut val = ed.value(f.name);
             let out = core::text_field(ui, id, &mut val, f.multiline, 3, 15.0, FG);
             if out.changed {
                 ed.values.insert(f.name.to_string(), val);
-            }
-            if out.submitted {
-                advance = Some(order[i + 1]);
             }
 
             if k.is_cloze() {
@@ -117,19 +108,10 @@ fn form(ui: &mut egui::Ui, ed: &mut Editor) {
 
         core::mono(ui, "tags", 11.0, FG);
         let mut tags = ed.tags.clone();
-        let out = core::text_field(ui, tags_id, &mut tags, false, 1, 13.0, FG);
-        if out.changed {
+        if core::text_field(ui, egui::Id::new("b-tags"), &mut tags, false, 1, 13.0, FG).changed {
             ed.tags = tags;
         }
-        // Last field — hand focus back to itself, so Enter is a no-op rather than an ejection.
-        if out.submitted {
-            advance = Some(tags_id);
-        }
     });
-
-    if let Some(to) = advance {
-        core::advance_focus(ui, to);
-    }
 }
 
 fn stack(ui: &mut egui::Ui, ed: &mut Editor) {

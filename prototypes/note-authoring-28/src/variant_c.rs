@@ -35,32 +35,17 @@ pub fn ui(ui: &mut egui::Ui, ed: &mut Editor, _width: Width) {
     ui.add_space(12.0);
 
     let k = ed.kind_def();
-    let tags_id = egui::Id::new("c-tags");
-    let order: Vec<egui::Id> =
-        k.fields.iter().map(|f| egui::Id::new(("c-field", f.name))).chain([tags_id]).collect();
-    let mut advance: Option<egui::Id> = None;
-
-    for (i, f) in k.fields.iter().enumerate() {
-        if field_block(ui, ed, f) {
-            advance = Some(order[i + 1]);
-        }
+    for f in k.fields {
+        field_block(ui, ed, f);
         ui.add_space(16.0);
     }
 
     core::mono(ui, "TAGS", 10.0, DIM);
     let mut tags = ed.tags.clone();
-    let out = core::text_field(ui, tags_id, &mut tags, false, 1, 13.0, FG);
-    if out.changed {
+    if core::text_field(ui, egui::Id::new("c-tags"), &mut tags, false, 1, 13.0, FG).changed {
         ed.tags = tags;
     }
-    if out.submitted {
-        advance = Some(tags_id);
-    }
     core::mono(ui, "travel with the deck when you share it", 10.0, DIM);
-
-    if let Some(to) = advance {
-        core::advance_focus(ui, to);
-    }
 
     ui.add_space(16.0);
     ui.horizontal(|ui| {
@@ -154,8 +139,7 @@ fn kind_line(ui: &mut egui::Ui, ed: &mut Editor) {
     }
 }
 
-/// Returns true when Enter was pressed in this field, so the caller can hand focus to the next one.
-fn field_block(ui: &mut egui::Ui, ed: &mut Editor, f: &'static model::FieldDef) -> bool {
+fn field_block(ui: &mut egui::Ui, ed: &mut Editor, f: &'static model::FieldDef) {
     let is_cloze = ed.kind_def().is_cloze();
 
     ui.horizontal_wrapped(|ui| {
@@ -194,8 +178,6 @@ fn field_block(ui: &mut egui::Ui, ed: &mut Editor, f: &'static model::FieldDef) 
             warning_strip(ui, ed, &dormant);
         }
     }
-
-    out.submitted
 }
 
 /// One row per blank: its number, the text it hides, how much history it carries, and a remove

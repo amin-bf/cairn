@@ -120,12 +120,14 @@ are correctness, not taste:
    and long values wrapped inside a one-row box. Switching to `singleline` fixes both and inherits
    egui's other singleline behaviour: Enter is a *submit*, and the widget **surrenders focus** —
    so the caret vanished and the author had to click back in, which is worse than the newline it
-   replaced. Enter now hands focus to the next field, and to itself on the last one, so it is a
-   no-op rather than an ejection.
+   replaced.
 
-   Left open for the ADR: **whether Enter on the last field should save**. Advancing is the safe
-   default and what a form is expected to do, but "Enter saves" is a real option, and this is a
-   decision rather than a fix.
+   **Decided while judging: Enter in a single-line field does nothing.** The field takes focus
+   straight back. Advancing to the next field was tried first and rejected — this is a note
+   editor, not a wizard, and a caret that jumps somewhere you did not ask for it to go is its own
+   surprise. It is also the cheaper answer: no field order to thread through the variants, and no
+   opinion about what Enter "should" mean. Multiline fields are untouched and still take Enter as
+   a newline, which is what the cloze `Text` field wants.
 8. **A remembered text selection outlives the text it described.** The "blank the selection" button
    needs the selection from *before* the click took focus away, so it is cached — and after
    blanking rewrites the string that cache still pointed at the old offsets, leaving the button
