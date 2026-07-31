@@ -43,6 +43,14 @@ full. A **progress** profile — ADR-0004 §11 interchange lines — is *reserve
 and [#37](https://github.com/amin-bf/leitner/issues/37) decides whether and how a whole-collection
 artifact is offered.
 
+> **Amended by [ADR-0016 §2](0016-backup-and-restore.md): the reserved profile is specified as
+> `collection`, not `progress`.** It carries content *and* the log — unfiled notes, the whole mutable
+> surface with its stamps intact, per-deck revisions and suspensions, none of which the deck profile
+> exports — so the reserved name understates the payload by half. That matters beyond naming: the
+> selection rule is *everything that settles, plus the log, minus device identity and credentials*,
+> and a profile named for half its contents is how the wrong rule gets implemented. The extension is
+> `.lcoll` (ADR-0016 §9), discharging §10's handoff.
+
 Rejected: **one artifact with progress as an inclusion choice** ("export deck ☑ include my progress").
 Not on privacy grounds, though those apply, but because the option is **not expressible**:
 
@@ -308,6 +316,11 @@ A distinct extension per profile, sharing one container format, is how the opera
 user tell a deck file from a whole-collection artifact **before** opening it. Naming the progress
 profile's extension belongs to [#37](https://github.com/amin-bf/leitner/issues/37).
 
+> **Discharged by [ADR-0016 §9](0016-backup-and-restore.md)**: the extension is **`.lcoll`**, with
+> `application/vnd.leitner.collection+zip` in a `stored` `mimetype` member first in the archive, by
+> the mechanism above unchanged. ADR-0016 §5 also supplies what this ADR never had — **how a file
+> reaches the user's filesystem at all**, which was unowned for `.ldeck` too.
+
 ### 11. Authority follows deck id
 
 Read literally, ADR-0005 §2 and §9 disagree, and an implementer meeting a file that names a note held
@@ -346,6 +359,15 @@ is typed deliberately or it is absent.
 **Export is byte-for-byte deterministic**: fixed member order, all member timestamps pinned to a
 constant, a fixed deflate level, no extra fields, and no platform-dependent creator or attribute
 variance.
+
+> **Amended by [ADR-0016 §11](0016-backup-and-restore.md): determinism binds the `deck` profile
+> only.** The reasoning above is entirely about an artifact **sent to strangers** — build time must
+> not leak, and §9's "same revision, same file" must be a property rather than an approximation. The
+> `collection` profile is the opposite artifact: it goes to nobody, it has no revision, and a backup
+> without a date is close to useless, since a user with three archives in a folder must tell them
+> apart before restoring the wrong one. It therefore **carries a creation timestamp in its manifest**
+> and does not inherit this paragraph. **Minimal disclosure above still binds both profiles** — no
+> author name, no device label, no ambient identity ever auto-populated.
 
 > **Amended by [ADR-0011 §7](0011-new-card-rate-and-daily-limits.md): `notes.jsonl` lines are
 > emitted in `(position, note id)` order.** Determinism above fixes the order of zip *members* but

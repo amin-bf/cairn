@@ -71,8 +71,22 @@ snapshot and change stream are the same thing paid for at different times.
 
 **Enrolment**:
 Granting one device access to the remote, once. Uses the device flow: a short code entered on
-whatever device the user likes, so no credential is ever typed into this application.
+whatever device the user likes, so no credential is ever typed into this application. Enrolment also
+runs the **identity check** below.
 _Avoid_: Login, sign-in, pairing — there is no account of ours and no device-to-device step.
+
+**Identity check**:
+One rule, run identically at enrolment and at restore
+([ADR-0016 §10](../../../docs/adr/0016-backup-and-restore.md)): **an empty collection adopts the
+collection id it meets; a non-empty one refuses any but its own.** A brand-new install has already
+minted an id, so a plain "ids differ → refuse" would stop a fresh device ever joining an existing
+account — the commonest path there is. A refusal must name the mismatch *and* state the way out
+(archive, clear data, restore, enrol), or the user is left holding a device that will not sync.
+
+This is what upgrades [ADR-0013 §10](../../../docs/adr/0013-the-sync-transport.md) from a structural
+accident to a real check: "one account is one collection" holds because a device cannot *see* another
+collection's folder, which stops being true the moment a user has two accounts and picks the wrong
+one.
 
 **Grant**:
 What enrolment obtains and what revocation removes. **Revocation is all-or-nothing**: every device

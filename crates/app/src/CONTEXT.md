@@ -57,9 +57,23 @@ _Avoid_: In sync, up to date, synced, a status icon or checkmark anywhere in the
 
 **Set up sync**:
 Granting this device access, once, via the device flow. Ends with the user naming **this** device
-(ADR-0015 §8) and with the app stating what it found — *"the first device here"* or the devices it
-met — because a wrong-account enrolment is otherwise undetectable (ADR-0015 §7).
+(ADR-0015 §8), with ADR-0016 §10's identity check, and with the app stating what it found — *"the
+first device here"* or the devices it met.
 _Avoid_: Login, sign-in, pairing, connecting an account.
+
+**Identity refusal**:
+What a **non-empty** collection shows when it meets an id that is not its own (ADR-0016 §10). It
+**names the mismatch and states the way out** — archive, clear data, restore, enrol — because a
+refusal that only says no leaves the user holding a device that will not sync. An *empty* collection
+adopts silently and shows nothing: a fresh install has already minted an id, so refusing on
+difference alone would block the commonest path there is. Not a counter-example to the two-speakers
+rule — it is the immediate result of an action just taken, not a resting notice (ADR-0015 §7).
+
+**Wrong-account enrolment**:
+Enrolling against the wrong account. **Undetectable, and structurally so** — every collection id
+agrees, because all the devices hold the same collection and merely cannot see each other, so the
+failure is *reachability, not identity* (ADR-0016 §13). The app stating what it found is the whole
+defence; deleting that line as redundant removes the only guard.
 
 **The notice channel**:
 The persistent, non-modal line for the **only two things permitted to speak about sync**: a dead

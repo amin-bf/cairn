@@ -11,7 +11,9 @@
   [ADR-0006](0006-the-review-session-experience.md) (the session, derived position),
   [ADR-0009](0009-crate-and-workspace-layout.md) (the platform seam),
   [ADR-0010](0010-leeches.md) (detect and surface, never intervene),
-  [ADR-0008](0008-the-deck-export-format.md) (the Android intent filter for a deck file)
+  [ADR-0008](0008-the-deck-export-format.md) (the Android intent filter for a deck file),
+  [ADR-0016](0016-backup-and-restore.md) (collection identity and its check; landed just after this
+  ADR and answered both of its handoffs — see the *Requirements* section)
 
 ## Context
 
@@ -249,6 +251,36 @@ one moment the user could notice:
 A user who expected to join an existing collection and reads the first sentence has caught it.
 Detect and surface, in [ADR-0010](0010-leeches.md)'s shape.
 
+**[ADR-0016 §13](0016-backup-and-restore.md) landed after this ADR and answered the handoff below
+`no`, with a sharper reason than the one above** — worth recording, because it explains why no
+mechanism of this shape could ever have worked. **In a wrong-account enrolment every collection id
+agrees.** The devices on the right account and the device on the wrong one hold the *same*
+collection; they simply cannot see each other. **The failure is one of reachability, not identity**,
+so an identity check was never going to catch it. The sentence therefore stands as the whole defence,
+and the one thing that *would* detect it is naming the **account** on the enrolment screen — which
+costs the `email` or `profile` scope this section deliberately declines. That trade is live and owned
+by neither ADR; it is in *Open items* rather than reversed here.
+
+**Enrolment also runs [ADR-0016 §10](0016-backup-and-restore.md)'s identity check**, and both
+outcomes are moments this ADR owns:
+
+- **An empty collection adopts the id it meets, silently.** A brand-new install has already minted
+  one, so a plain *"ids differ → refuse"* would stop a fresh device ever joining an existing account —
+  the commonest path there is.
+- **A non-empty collection refuses any id but its own, and the refusal must name the mismatch *and*
+  state the way out** — archive, clear data, restore, enrol. A refusal that only says no leaves the
+  user holding a device that will not sync, which is the failure this check exists to prevent turned
+  into a different one.
+
+This is the exception to §5's *only two things speak* rule and does not widen it: it is not a resting
+notice but the immediate result of an action the user just took, in the flow they took it in.
+
+**The collection id is published as one small immutable object per writer prefix**
+([ADR-0016 §3](0016-backup-and-restore.md)), under
+[ADR-0013 §4](0013-the-sync-transport.md)'s never-rewritten rule. **It is not on the mutable surface
+and must never be made to settle** — an id that settles is an id that can change, which is the one
+thing it exists not to do.
+
 **The words.** [`crates/sync/src/CONTEXT.md`](../../crates/sync/src/CONTEXT.md) already rules out
 *login*, *sign-in* and *pairing* — there is no account of ours and no device-to-device step. The
 action is **"Set up sync"**. The provider is named, because the user must recognise which account
@@ -460,15 +492,26 @@ producing an error.
 
 ## Requirements this places on downstream tickets
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) — both answered
 
-1. **§10 refuses a delete-remote-data control**, on the reasoning that the sync namespace is
-   disposable. If #37 introduces an artifact that is *not* disposable, that reasoning does not
-   transfer to it, and the two must not share a control.
-2. **§7's "what we found" statement is the only guard against a wrong-account enrolment**, and it is
-   wording rather than detection. If #37's collection identity work makes an import distinguishable
-   from a restore, check whether it also makes this case detectable — it is the same shape, and §7
-   would rather be replaced by a mechanism than kept as a sentence.
+Written while #37 was open; [ADR-0016](0016-backup-and-restore.md) landed shortly after and answered
+both by name in its §13, **one of them negatively**. Recorded as asked and answered rather than
+edited away, because the negative answer is the more useful of the two.
+
+1. ~~**§10 refuses a delete-remote-data control** on the reasoning that the sync namespace is
+   disposable; if #37 introduces an artifact that is *not* disposable, that reasoning does not
+   transfer.~~ — **Correct, and honoured.** [ADR-0016 §5](0016-backup-and-restore.md)'s seam is
+   **put, get, list and deliberately no delete**, diverging from
+   [ADR-0013 §1](0013-the-sync-transport.md)'s four operations by one, in the safe direction: *there,
+   deletion is safe because the objects are disposable; here, it is refused because the artifact is
+   not.*
+2. ~~**§7's "what we found" statement is the only guard against a wrong-account enrolment**; check
+   whether collection identity makes the case detectable.~~ — **Answered `no`, structurally.**
+   [ADR-0016 §13](0016-backup-and-restore.md) found that in a wrong-account enrolment **every
+   collection id agrees**, because all the devices hold the same collection and merely cannot see
+   each other; the failure is **reachability, not identity**. §7's sentence stands as the whole
+   defence, and the live trade it leaves — naming the account, at the cost of a scope
+   [ADR-0013 §8](0013-the-sync-transport.md) declined — is in *Open items*.
 
 ## Consequences
 
@@ -481,7 +524,10 @@ producing an error.
 - **The application never claims two devices agree**, because it cannot know. Any future surface that
   implies it breaks §4.
 - **A wrong-account enrolment remains undetectable**, mitigated only by a sentence. This is the
-  weakest point in the document and is recorded as such.
+  weakest point in the document and is recorded as such — and
+  [ADR-0016 §13](0016-backup-and-restore.md) has since shown it is **structural rather than a gap**:
+  every collection id agrees in that case, so the failure is reachability, not identity, and no check
+  of that shape could have caught it. The remaining lever is naming the account, which costs a scope.
 - **[`AGENTS.md`](../../AGENTS.md) gains sync-experience rules**, because three of the above fail
   silently: the two-speakers rule, "never start a sync while the review screen is up", and the
   no-delete-remote-data refusal, whose reasoning is invisible from the code that would implement it.
@@ -496,4 +542,5 @@ producing an error.
 | The recency floor's value for §2's trigger 1 | Implementation; a debounce, not a compatibility constant |
 | Exact copy for the drive's connected-applications route (§10) — a third party's UI, expected to drift | Implementation |
 | Visual treatment of sync settings, the notice channel and cold-start progress | Map fog — *a visual design pass* |
-| Whether collection identity makes a wrong-account enrolment detectable | [#37](https://github.com/amin-bf/leitner/issues/37) |
+| ~~Whether collection identity makes a wrong-account enrolment detectable~~ — **answered `no` by [ADR-0016 §13](0016-backup-and-restore.md)**: every id agrees, so the failure is reachability rather than identity | — |
+| **Whether to name the account on the enrolment screen**, at the cost of the `email` or `profile` scope §7 and [ADR-0013 §8](0013-the-sync-transport.md) both decline. The only lever left on the wrong-account case, and a live trade owned by neither ADR | Unowned — needs a decision before enrolment ships |

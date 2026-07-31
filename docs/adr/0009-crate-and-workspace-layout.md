@@ -148,7 +148,12 @@ not to add it.
 > capability constant exists to make a limitation **visible**.
 >
 > **This does not discharge the contradiction above**, which is about a platform capability *function*
-> for a non-storage crate. That is still open, and its recorded fix still stands.
+> for a non-storage crate — an orthogonal case, and one
+> [ADR-0016 §5](0016-backup-and-restore.md) has since settled by adopting the very fix that note
+> sketched: the seam rule became **per crate**, `leitner-export` took its own three-arm module for
+> user-visible files, and `leitner-store::platform` stayed at exactly two functions. Functions and
+> capability constants are therefore answered separately, and neither answer weakens the sentence
+> above.
 
 The two arms are not symmetric in one respect worth recording: `store`'s Android arm reads the JVM
 handle from `ndk_context`, which `android-activity` populates inside `leitner-app`. So the store
