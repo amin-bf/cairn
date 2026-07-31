@@ -171,6 +171,37 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
    `--no-default-features --features deflate-flate2-zlib-rs`; the `deflate` umbrella feature builds but
    drags in zopfli for an encoder we do not need.
 
+## Sync
+
+The log is published to **storage we do not own** — a personal cloud drive's application data folder
+— as immutable objects under a per-writer namespace, chosen in
+[ADR-0013](./docs/adr/0013-the-sync-transport.md). The remote is a **rendezvous point, not a system
+of record**: `collection.db` is authoritative and every device holds the whole log, so deleting the
+remote costs one republish and no data.
+
+### Rules that are easy to break silently
+
+1. **The `log` and `state` roll-ups are opposite, and one direction destroys review history.**
+   `…/log/` merges losslessly — ADR-0004 §10 forbids compaction. `…/state/` merges by keeping only
+   the winning stamp per key, because that is what settling means. Apply the state rule to the log
+   and reviews are gone with nothing downstream able to notice.
+2. **Write the merged object before deleting, and delete only what it covers.** Deletion in the
+   application data folder is **permanent** — files there cannot be trashed
+   (`notSupportedForAppDataFolderFiles`), so ordering is the only protection. A `404` on a key that
+   was listed a moment ago means *list again*, never *attempt recovery*.
+3. **Nothing published is ever rewritten, and no code may use a conditional write.** Every key has
+   exactly one author, so compare-and-swap protects against nothing here — and two of three servers
+   tested silently ignored the precondition while returning success, so a design that *depends* on
+   one cannot tell. Adding a shared key reopens a hazard this design is simply not exposed to.
+4. **One writer, one namespace.** A device writes only under its own prefix, for the collection's
+   lifetime. This is the invariant every other property rests on, including rule 3.
+5. **`K` (the roll-up fan-in) is not a compatibility constant, but the key format is.** Readers merge
+   by set union over sequence ranges and never assume a layout, so `K` may be tuned freely; the
+   fixed-width zero-padded range in the key may not, because the listing *is* ADR-0004 §2's version
+   summary and it works by lexicographic sort.
+6. **Never present the sync folder as a backup.** It is hidden, it is deleted when the user removes
+   the app's data, and backup is [#37](https://github.com/amin-bf/leitner/issues/37)'s to specify.
+
 ## Agent skills
 
 ### Issue tracker

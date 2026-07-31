@@ -24,13 +24,14 @@ there and you will spend your budget before writing a line.
 
 ## Crates
 
-Five crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
+Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
 
 | Crate | Path | What it is |
 |---|---|---|
 | `leitner-core` | [`crates/core/`](./crates/core) | The domain, entire and pure. **Zero dependencies**, permanently. |
 | `leitner-store` | [`crates/store/`](./crates/store) | SQLite persistence and the whole platform seam. |
 | `leitner-export` | [`crates/export/`](./crates/export) | The `.ldeck` container and the import policy. Holds the zip dependency. |
+| `leitner-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
 | `leitner-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the Android entry point. |
 | `leitner-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
 
@@ -53,15 +54,17 @@ Two rules about this table that are easy to break:
 | Replay | [`crates/core/src/replay/`](./crates/core/src/replay/CONTEXT.md) | The join: what exists, what state it is in, what is due |
 | Store | [`crates/store/src/`](./crates/store/src/CONTEXT.md) | The two databases, device identity, the platform seam |
 | Export | [`crates/export/src/`](./crates/export/src/CONTEXT.md) | Deck files, profiles, revisions, import policy |
+| Sync | [`crates/sync/src/`](./crates/sync/src/CONTEXT.md) | The remote, namespaces, objects, roll-up, enrolment |
 | UI | [`crates/app/src/`](./crates/app/src/CONTEXT.md) | Screens, the session, the bidi helper |
 
 ### How they relate
 
 ```
-content ──┬──> log ───────┬──> replay ──> store, ui
-          │               │
-          │               └──> export ──> ui
-          └──> scheduling ┘
+content ──┬──> scheduling ──┐
+          │                 ├──> replay ──> store, ui
+          └──> log ─────────┤
+                            ├──> export ──> ui
+                            └──> sync ────> ui
 ```
 
 - **`content` is the base.** A log row carries a `CardRef`, and scheduler fuzz is seeded from
@@ -74,8 +77,11 @@ content ──┬──> log ───────┬──> replay ──> stor
 - **`export` is a crate, not a module, for the same reason `replay` is a context**: it spans content
   and (once #37 specifies the progress profile) the log, so it belongs inside neither — and it holds
   the zip dependency that `leitner-core` cannot.
-- **A `sync` context is anticipated, not created.** It will need a network dependency, which cannot
-  live in `leitner-core`, so expect a *sixth crate* rather than a fifth module.
+- **`sync` is a crate for the reason this file predicted**: it needs HTTP, TLS and OAuth, which
+  `leitner-core` cannot hold. [ADR-0013](./docs/adr/0013-the-sync-transport.md) realised the
+  anticipated sixth crate rather than overturning anything. It depends on `log` and knows nothing
+  about cards — the remote is a **rendezvous point, not a system of record**, so deleting it costs
+  one republish and no data.
 
 ## Which ADRs bind which context
 
@@ -84,13 +90,14 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | Context | Binding ADRs | Also bound by |
 |---|---|---|
 | `content` | [0002](./docs/adr/0002-the-card-model.md), [0005](./docs/adr/0005-the-deck-model.md) | 0011 §7, 0012 §3, 0012 §6 |
-| `log` | [0004](./docs/adr/0004-the-review-event-log.md) | 0002 §7, 0001 §6, 0010 §5, 0011 §5 |
+| `log` | [0004](./docs/adr/0004-the-review-event-log.md) | 0002 §7, 0001 §6, 0010 §5, 0011 §5, 0013 §12 |
 | `scheduling` | [0001](./docs/adr/0001-scheduling-algorithm-and-grade-scale.md) | 0004 §4, 0004 §5 |
 | `replay` | *none of its own* | 0001 §7, 0002 §7, 0004 §9, 0007 §2, 0010 §2, 0011 §8, 0012 §5, 0012 §6 |
-| `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5 |
+| `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md) | 0005, 0002 §9, 0004 §11, 0011 §7 |
+| `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007 |
 | `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md) | 0002 §4 |
-| *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md) | — |
+| *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md) | 0013 §11, 0013 §12 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
 purpose and sit scattered across four documents; its `CONTEXT.md` is the only place they appear as

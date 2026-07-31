@@ -4,6 +4,7 @@ members = [
   "crates/core",
   "crates/store",
   "crates/export",
+  "crates/sync",
   "crates/app",
   "crates/desktop",
 ]

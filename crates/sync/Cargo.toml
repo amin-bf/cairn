@@ -1,0 +1,21 @@
+[package]
+name = "leitner-sync"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# This crate exists because ADR-0013 chose a **key-value namespace on a personal cloud drive** as the
+# transport, and `leitner-core`'s empty dependency list (ADR-0009 §2) has no room for HTTP, TLS or
+# OAuth. `CONTEXT-MAP.md` anticipated exactly this crate before the decision was taken.
+#
+# It must stay testable without a window and without a handset: the transport surface is four
+# operations wide (ADR-0013 §1), so a backend is mockable in-process and the merge rules are
+# ordinary functions over sequence ranges.
+#
+# The network dependencies land here when publishing is built. ADR-0013 §1 records that one crate
+# already implements this seam over every candidate backend and `cargo check`s clean for
+# `aarch64-linux-android`; note the TLS backend compiles C, so the NDK's clang must be exported —
+# see `scripts/android-env.sh`.
+[dependencies]
+leitner-core.workspace = true
