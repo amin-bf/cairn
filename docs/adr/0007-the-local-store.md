@@ -446,6 +446,14 @@ default, and solves a problem a decade of heavy use does not produce. The door s
 **Encryption is untouched.** The map holds *local encryption / device passcode* as fog, and nothing
 here forecloses it.
 
+> **Settled by [ADR-0020](0020-protection-at-rest.md): `collection.db` is never encrypted, and the
+> fog is closed.** Two independent refusals, either sufficient. **No user-supplied secret** — there
+> is no server, no account and no escrow to recover a forgotten one from, so a passphrase or PIN
+> turns a design premised on never losing data into one where forgetting loses all of it (§3). **And
+> no application-held key** — on the handset it duplicates protection the platform already provides,
+> and on the desktop the key is a file beside the data it guards (§4). The desktop exposure to any
+> process running as the user is therefore **conceded in writing** rather than left open.
+
 ## Requirements this places on downstream tickets
 
 ### [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13)
@@ -516,6 +524,6 @@ authoritative, and this ADR keeps the reasoning behind them.
 |---|---|
 | Whether a collection has an identity of its own, so a device can tell a *different* collection from a divergent copy | Sync transport; map fog |
 | A real backup and restore story, given Auto Backup's 25 MB silent cutoff and WAL's `VACUUM INTO` caveat | Map fog: **Backup and restore** |
-| Encryption of the store at rest | Map fog: **Local encryption / device passcode** |
+| ~~Encryption of the store at rest~~ — **discharged** by [ADR-0020 §3 §4](0020-protection-at-rest.md): it is not encrypted, and no secret is asked for | — |
 | Whether the application permits a second window on one collection | UI work; the store is safe either way |
 | Building §10's optional discard below the cutoff | Deferred until someone needs the space |

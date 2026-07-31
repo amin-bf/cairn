@@ -5,13 +5,21 @@ Where a collection is kept on disk, and where the platform seam lives. Two SQLit
 
 **Bound by** [ADR-0007](../../../docs/adr/0007-the-local-store.md), whose glossary this file
 supersedes; also by [ADR-0004 §11](../../../docs/adr/0004-the-review-event-log.md) (relay byte for
-byte) and [ADR-0003 §5](../../../docs/adr/0003-client-stack.md) (the platform seam).
+byte), [ADR-0003 §5](../../../docs/adr/0003-client-stack.md) (the platform seam) and
+[ADR-0020 §3 §4](../../../docs/adr/0020-protection-at-rest.md) (nothing here is encrypted, and no
+secret is asked for).
 
 ## Language
 
 **Collection database** (`collection.db`):
 The authoritative file. Three tables: `log`, `mutable`, `local`. Nothing here can be lost except by
-a failure of SQLite itself.
+a failure of SQLite itself. **Unencrypted, permanently and by decision** — on the handset the platform
+already answers every adversary an encryption layer would, and on the desktop any process running as
+the user reads it. That desktop exposure is *conceded*, not overlooked
+([ADR-0020 §2](../../../docs/adr/0020-protection-at-rest.md)); closing it needs a secret the user
+supplies, which ADR-0020 §3 refuses because there is nowhere to recover a forgotten one from. The
+drive credential lies in the same directory under the same rule, which is
+[ADR-0013 §9](../../../docs/adr/0013-the-sync-transport.md)'s reason for declining a keyring.
 
 **Derived database** (`derived.db`):
 The disposable cache, attached to the same connection. Deletable at any time; losing it costs a full

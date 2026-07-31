@@ -14,7 +14,11 @@ supersedes; also by [ADR-0005](../../../docs/adr/0005-the-deck-model.md) (deck i
 from day one, even though no media ships) and
 [ADR-0011 §7](../../../docs/adr/0011-new-card-rate-and-daily-limits.md), which fixes `notes.jsonl`
 line order as `(position, note id)` — ADR-0008 §12 demanded byte-for-byte determinism without ever
-saying what order the lines took.
+saying what order the lines took — and
+[ADR-0020 §4](../../../docs/adr/0020-protection-at-rest.md): **no archive this crate writes is ever
+encrypted**, on a reason worth knowing before it looks like an omission. A key protecting a file that
+travels must reach every device that opens it, and with no server there is no channel to send it on but
+the one it is protecting; a user-supplied key is refused separately by ADR-0020 §3.
 
 ## Language
 
