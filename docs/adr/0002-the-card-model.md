@@ -306,6 +306,14 @@ So the model needs no retirement flag, no tombstone, no card lifecycle, and no d
 same mechanism absorbs a note changing kind, a kind gaining a card, and a blank being renumbered and
 put back.
 
+> **Amended by [ADR-0012 §6](0012-the-note-authoring-experience.md): absorbing a kind change can
+> reattach history to a semantically different card.** The kind is not part of a `CardRef`, so
+> switching a `vocab` note to `cloze` puts blank 1 at ordinal 1 — the slot the `Meaning → Term`
+> card held — and its reviews project onto a blank never seen. Nothing marks it dormant, because
+> ordinal 1 *is* generated, by a different question. Not fixable downstream: content edits are
+> not log events, so replay cannot know the previous kind. ADR-0012 §6 requires the authoring UI
+> to warn at the kind change until this is settled here.
+
 Two consequences to be honest about:
 
 - **Deleting a blank silently retires a card with history behind it.** The authoring UI must say so
@@ -338,6 +346,10 @@ Explicitly excluded, each for its own reason:
 visible while writing it. This matters more than it sounds: a markup a user cannot see the effect of
 is a markup they will get wrong, and `{{1::…}}` blanks are hard to proofread unrendered.
 
+> **Amended by [ADR-0012 §8](0012-the-note-authoring-experience.md): `**bold**` obliges the app
+> to ship a bold face.** egui bundles none, epaint has no synthetic emboldening, and brightening
+> the colour is invisible against a near-white body. Bold is a face or it is nothing.
+
 ### 9. No media, but the export container must be able to carry it
 
 Fields hold text. There are no image or audio attachments.
@@ -363,6 +375,11 @@ Two reasons to defer rather than build:
 **Audio remains on the map's fog**, called out specifically. For a language whose pronunciation is
 not derivable from spelling, a native speaker's recording is worth more than a phonetic
 transcription, and that case will come back.
+
+> **Amended by [ADR-0012 §8](0012-the-note-authoring-experience.md): the text `Pronunciation`
+> field this section leans on requires a face with IPA coverage.** The bundled faces have none,
+> so `deːɐ̯ hʊnt` renders as boxes — a field the app cannot draw does not solve the case that
+> justified deferring audio.
 
 ### 10. Tags live on notes, and they are content
 
