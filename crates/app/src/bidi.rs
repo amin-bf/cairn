@@ -1,9 +1,10 @@
 //! Bidi, patched **in our app** — no fork of epaint required.
 //!
 //! Carried into the workspace from tag `prototypes/issue-11` per ADR-0003 §7, which records this as
-//! a validated decision rather than a prototype artefact. The logic below is unchanged — only
-//! `rustfmt` has touched it. The tests are new: the prototype verified this by eye, on a handset,
-//! and by a Persian reader, which is evidence but not a regression guard.
+//! a validated decision rather than a prototype artefact. The logic below is the prototype's, with
+//! one fix since: paragraph separators were emitted twice, because a paragraph range already ends
+//! with its own. The tests are new: the prototype verified this by eye, on a handset, and by a
+//! Persian reader, which is evidence but not a regression guard.
 //!
 //! epaint shapes correctly (harfrust + `guess_segment_properties()` infers RTL from the script, so
 //! Arabic letters join and each run is laid out right-to-left *internally*). What it does not do is
@@ -72,37 +73,76 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
         job.halign = egui::Align::RIGHT;
     }
 
-    for (i, para) in info.paragraphs.iter().enumerate() {
-        if i > 0 {
-            job.append("\n", 0.0, fmt.clone());
-        }
-        let (levels, runs) = info.visual_runs(para, para.range.clone());
-        for run in runs {
-            let slice = &text[run.clone()];
-            // epaint re-splits a section into sub-runs and places those left-to-right. So for an
-            // RTL run we emit its *words* in reverse, each word keeping logical character order —
-            // placement comes out right and harfrust still sees well-formed text, so joining holds.
-            if levels[run.start].is_rtl() {
-                let words: Vec<&str> = slice.split(' ').collect();
-                for (i, w) in words.iter().rev().enumerate() {
-                    if i > 0 {
-                        job.append(" ", 0.0, fmt.clone());
+    for para in info.paragraphs.iter() {
+        // A paragraph's range **includes its trailing separator**. Two things follow, and getting
+        // either wrong corrupts the galley:
+        //
+        // 1. Appending our own "\n" between paragraphs duplicates one that is already there, so
+        //    `job.text` grows past the buffer and every caret position after the first line break
+        //    is off by one — compounding per line.
+        // 2. Leaving the separator inside the run hands it to the reordering below, and an RTL
+        //    paragraph then reverses the newline into the middle of its own line.
+        //
+        // So: take the separator off, reorder only the content, then put it back verbatim.
+        let sep = separator_len(&text[para.range.clone()]);
+        let content = para.range.start..para.range.end - sep;
+
+        if !content.is_empty() {
+            let (levels, runs) = info.visual_runs(para, content);
+            for run in runs {
+                let slice = &text[run.clone()];
+                // epaint re-splits a section into sub-runs and places those left-to-right. So for
+                // an RTL run we emit its *words* in reverse, each word keeping logical character
+                // order — placement comes out right and harfrust still sees well-formed text, so
+                // joining holds.
+                if levels[run.start].is_rtl() {
+                    let words: Vec<&str> = slice.split(' ').collect();
+                    for (i, w) in words.iter().rev().enumerate() {
+                        if i > 0 {
+                            job.append(" ", 0.0, fmt.clone());
+                        }
+                        job.append(&fix_digits(w), 0.0, fmt.clone());
                     }
-                    job.append(&fix_digits(w), 0.0, fmt.clone());
-                }
-            } else {
-                // Even an LTR-classified run can contain Arabic-Indic digits, which epaint still
-                // emits right-to-left. A pure-digit string is classified LTR, so it lands here.
-                for (i, w) in slice.split(' ').enumerate() {
-                    if i > 0 {
-                        job.append(" ", 0.0, fmt.clone());
+                } else {
+                    // Even an LTR-classified run can contain Arabic-Indic digits, which epaint
+                    // still emits right-to-left. A pure-digit string is classified LTR, so it
+                    // lands here.
+                    for (i, w) in slice.split(' ').enumerate() {
+                        if i > 0 {
+                            job.append(" ", 0.0, fmt.clone());
+                        }
+                        job.append(&fix_digits(w), 0.0, fmt.clone());
                     }
-                    job.append(&fix_digits(w), 0.0, fmt.clone());
                 }
             }
         }
+
+        if sep > 0 {
+            job.append(
+                &text[para.range.end - sep..para.range.end],
+                0.0,
+                fmt.clone(),
+            );
+        }
     }
     job
+}
+
+/// Byte length of the paragraph separator `para` ends with, or 0.
+///
+/// `\r\n` is matched first so that a slice ending in one is never cut between the halves, which
+/// would leave them on opposite sides of a reordered line. In practice `unicode-bidi` ends a
+/// paragraph after *every* character of Bidi_Class B, so CR closes its own paragraph and the LF
+/// arrives as a separate one whose content is empty — CRLF survives because the loop above never
+/// inserts anything between paragraphs, not because this arm reassembles it. The arm is kept for
+/// the slices this function is handed, not as a claim about how paragraphs are split.
+fn separator_len(para: &str) -> usize {
+    for sep in ["\r\n", "\n", "\r", "\u{0085}", "\u{2028}", "\u{2029}"] {
+        if para.ends_with(sep) {
+            return sep.len();
+        }
+    }
+    0
 }
 
 #[cfg(test)]
@@ -174,6 +214,42 @@ mod tests {
     fn empty_input_survives() {
         assert_eq!(visual(""), "");
         assert!(!is_rtl(""));
+    }
+
+    /// The invariant a `TextEdit` caret rests on: egui maps a cursor position through the galley,
+    /// so if the laid-out text is not byte-identical to the buffer, the caret lands somewhere
+    /// else. Every case below is one the editor actually types.
+    ///
+    /// Byte-identity is **not** universal, and deliberately so — reordering RTL words and
+    /// reversing Arabic-Indic digits both rewrite the text on purpose, which is exactly why the
+    /// caret is imprecise there (`AGENTS.md`, client-stack rule 2). This test pins the case where
+    /// nothing is supposed to move: LTR text with no Arabic-Indic digits, where any drift is a bug.
+    #[test]
+    fn laid_out_text_is_always_byte_identical_to_an_ltr_buffer() {
+        for t in [
+            "hello world",
+            "hello\nworld", // one newline — was doubled, caret off by one after it
+            "a\nb\nc\nd",   // compounding: was off by three by the last line
+            "para\n\nnext", // a blank line between paragraphs
+            "trailing\n",
+            "\nleading",
+            "windows\r\nline",
+            "  double  spaces  ",
+            "",
+        ] {
+            assert_eq!(
+                visual(t),
+                t,
+                "laid-out text drifted from the buffer for {t:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_rtl_paragraph_keeps_its_newline_at_the_end_of_the_line() {
+        // The separator must never be handed to the word reversal: reordering it would move the
+        // line break into the middle of the line it terminates.
+        assert_eq!(visual("سلام دنیا\nسلام"), "دنیا سلام\nسلام");
     }
 
     #[test]
