@@ -39,6 +39,12 @@ follows is D plus the corrections made while driving it.
 The editor is a form on one side and, on the other, **the cards this note currently generates**,
 drawn the way review draws them (ADR-0006) — prompt, separator, answer, with a history badge.
 
+> **Amended by [ADR-0018 §2](0018-the-card-pane-ordering.md): that is true of *live* entries only.**
+> A dormant entry is a **single line** — its name, the word *dormant*, its history — never a card and
+> never a greyed card, because a dormant card is the *absence* of a generated card and so usually has
+> nothing left to draw. The pane therefore holds three entry shapes rather than one: a card, a dormant
+> line, and ADR-0018 §6's statement for a note that currently generates none.
+
 The pane is not a rendering of the *fields*. That distinction is the whole result of round 1:
 a field-rendering preview answers "did I get the markup right", which matters only while typing
 markup, whereas the card preview answers "what will I be asked", which is the question a note
@@ -120,9 +126,29 @@ Three rules:
 > position" sorts **both dormant cards above the live one**. For a pane whose job §1 defines as *"what
 > will I be asked"*, leading with two dormant cards is arguably wrong. Recorded so the rule does not
 > quietly produce it unnoticed.
+>
+> **Settled by [ADR-0018](0018-the-card-pane-ordering.md), which kept this rule.** Ordinal position
+> stands, on the **raw slot number** — no masking, no grouping by dormancy. The defect was never
+> cloze's (a `basic` note switched to `vocab` leads with a dormant card too, with no cloze in sight),
+> and it was never an ordering defect: it assumed a full-size dormant card, which §2 above never
+> specified. As a **line** (ADR-0018 §2), leading costs two lines rather than two screens. What kept
+> ordinal position is a case neither ADR looked at — a deleted cloze blank shows its dormant entry
+> **in its gap**, which is §3's "gaps are shown as normal" delivered by the ordering rule itself, and
+> every partition rule destroys it.
 - **The warning also appears in the form pane**, because on a phone the card pane is behind a
   toggle and an ambient warning that lives only there is invisible exactly when it matters. On
   desktop it therefore appears twice, deliberately.
+
+> **Reason corrected by [ADR-0018 §4](0018-the-card-pane-ordering.md); the rule is unchanged.** The
+> form-pane warning is **primary on both platforms**, and not as redundancy for the phone's benefit:
+> **ordinal position cannot guarantee the card-pane entry is on screen at all.** A twenty-blank cloze
+> note losing blank 18 puts that entry eighteenth — below the fold on desktop too. So the constraint
+> this ADR set, *position is the mechanism*, is not satisfiable by any position rule; visibility is a
+> property of the edit. The card-pane entry **demonstrates**, the form-pane warning **warns**.
+>
+> This also re-reads round 1. Its finding was recorded as *position is the mechanism*; what it showed
+> is that **a count is not a warning** — variant B carried two defects at once, a counter in the header
+> *and* the card below the fold, and the repair was credited to position alone.
 - **It offers Undo**, and the copy says what is true: nothing is deleted, the reviews stay in the
   log, and they reattach by themselves if the content returns.
 
@@ -234,6 +260,10 @@ one-frame deferral to a second reason.
 - **ADR-0002 §9** — its argument for deferring audio is amended by §8 above: it rests on a text
   `Pronunciation` field, which requires a face with IPA coverage.
 
+*(§1 and §5 are in turn amended by [ADR-0018](0018-the-card-pane-ordering.md) — a dormant entry is a
+line rather than a card, and the form-pane warning is primary on both platforms. Both amendments are
+recorded inline above.)*
+
 ## Consequences
 
 - **The authoring surface is the only place two ADR-0002 hazards can be caught.** §5's blank
@@ -255,3 +285,5 @@ one-frame deferral to a second reason.
 - **A soft-keyboard pass on the handset** (§9) — the one question desktop cannot answer.
 - **Saving semantics** (§9) — autosave versus explicit save.
 - **Visual design** — still ADR-0006 §10's open item, now with a second screen waiting on it.
+  Narrowed by [ADR-0018](0018-the-card-pane-ordering.md) for this pane: what a dormant line *says*,
+  where it *sits* and when it appears are settled; only how it *looks* is still that pass's.

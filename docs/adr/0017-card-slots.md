@@ -130,6 +130,14 @@ answer)`. That converts the most dangerous edit in the repository from a documen
 red build, which matters disproportionately here: the destination fixes that **agents implement this**,
 and an agent reads a failing test far more reliably than a prohibition in an ADR nobody pointed it at.
 
+> **Widened by [ADR-0018 §3](0018-the-card-pane-ordering.md): the golden `slot → (prompt, answer)` list
+> is also a *runtime* lookup**, not only a test fixture. Naming a dormant card requires it — the note's
+> current kind does not declare the slot, so the pane resolves the name across every definition the
+> collection holds, and that is answerable **only** because §1 makes a slot mean one question
+> collection-wide. The price of a slot missing from the table rises accordingly: it broke a test, and
+> now also degrades a user-visible name to ADR-0018 §3's bare-number case, which fails silently where
+> the test fails loudly.
+
 ### 5. The kind change stops being a special case
 
 [ADR-0012 §6](0012-the-note-authoring-experience.md)'s bespoke warning — *"changing kind must state
@@ -155,6 +163,16 @@ switched to `cloze` has dormant cards at slots 2 and 3 and its live blank at 327
 [ADR-0012 §1](0012-the-note-authoring-experience.md) defines as *"what will I be asked"*, leading with
 two dormant cards is arguably wrong. The ordering is a layout question, not an identity one; it is
 recorded so that §5's rule does not quietly produce it unnoticed.
+
+> **Discharged by [ADR-0018](0018-the-card-pane-ordering.md), and it was not a layout question.**
+> ADR-0012 §5's rule **stands**, sorting on the raw slot number. Two corrections to the paragraph
+> above: the case is not cloze's — `basic` → `vocab` leads with a dormant card with no cloze in it, the
+> general shape being any change whose old slots sort below its new ones — and "leading with two
+> dormant cards" assumed a full-size dormant card, which ADR-0012 §5 never specified and which the
+> model usually cannot produce, a dormant card being the *absence* of a generated card. Rendered as a
+> **line**, it costs two lines. The masked value `ordinal & 0x7FFF` was rejected as a sort key for
+> asserting an adjacency §3 partitioned these namespaces precisely to deny — **the mask is a name,
+> never a sort key**.
 
 ### 6. An imported file imposes nothing on the registry
 
@@ -248,7 +266,9 @@ definition.
 
 ## Open items handed onward
 
-- **Card-pane ordering when dormant cards outrank live ones** (§5) — the visual design pass, which
-  ADR-0006 §10 opened and ADR-0010 and ADR-0015 have since joined.
+- ~~**Card-pane ordering when dormant cards outrank live ones** (§5) — the visual design pass, which
+  ADR-0006 §10 opened and ADR-0010 and ADR-0015 have since joined.~~ **Discharged by
+  [ADR-0018](0018-the-card-pane-ordering.md)**, which kept the ordering and fixed the rendering
+  instead. What remains with the visual design pass is only what a dormant line *looks* like.
 - **The slot registry's home in the codebase** — implementation, not a decision: the definition table
   is `leitner-core`'s and the tests sit beside it.

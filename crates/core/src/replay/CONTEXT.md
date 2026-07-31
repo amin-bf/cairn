@@ -38,6 +38,8 @@ unprovable is discarded.
 **Dormant card**:
 A `CardRef` with events in the log that the current content no longer generates. **Not a stored
 state** — it is the absence of a generated card, and it reattaches by itself if the content returns.
+Being an absence, it usually has **no content left to render**, which is why its on-screen form in the
+authoring pane is a one-line **dormant entry** rather than a card — see `ui` (ADR-0018 §2).
 _Avoid_: Retired, deleted, orphaned, tombstoned — all of which imply a stored lifecycle that
 deliberately does not exist.
 

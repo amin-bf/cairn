@@ -7,7 +7,10 @@ through, and both platform entry points.
 [ADR-0006](../../../docs/adr/0006-the-review-session-experience.md),
 [ADR-0010](../../../docs/adr/0010-leeches.md) and
 [ADR-0011](../../../docs/adr/0011-new-card-rate-and-daily-limits.md), the last of which **amends
-ADR-0006 §1 and §2** — read those amendments before touching the session; also by
+ADR-0006 §1 and §2** — read those amendments before touching the session;
+[ADR-0012](../../../docs/adr/0012-the-note-authoring-experience.md) and
+[ADR-0018](../../../docs/adr/0018-the-card-pane-ordering.md), the second of which **amends ADR-0012 §1
+and §5** — read those amendments before touching the authoring pane; also by
 [ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind) and
 [ADR-0015](../../../docs/adr/0015-the-sync-experience.md) (everything the user sees about sync — the
 `sync` crate holds the mechanism and none of the surface).
@@ -47,6 +50,31 @@ seen rather than described.
 **Backlog**:
 More cards due than the user will get through. Always *framed* ("pick a comfortable size, the rest
 will keep"), never reported as a bare number.
+
+**Card pane**:
+The authoring editor's second pane: **the cards this note currently generates**, answering "what will
+I be asked" (ADR-0012 §1). Ordered by **raw slot number**, live and dormant alike — never grouped by
+dormancy, and **never sorted on `ordinal & 0x7FFF`**, which would interleave cloze blanks among
+fixed-arity slots and assert an adjacency ADR-0017 §3 partitioned the namespaces to deny (ADR-0018
+§1). The mask is a *name*, never a sort key. On a phone the two panes are a `Write | Cards` toggle.
+_Avoid_: Preview pane — it is not a rendering of the fields, which is the whole result of ADR-0012's
+round 1.
+
+**Dormant entry**:
+How a **dormant card** (see `replay`) appears in the card pane: a **single line** — its name, the word
+*dormant*, its history — never a card and never a greyed card, because a dormant card is the absence
+of a generated card and usually has nothing left to draw (ADR-0018 §2). Named by field roles from the
+collection-wide slot lookup, by masked blank number when the high bit is set, and **by bare slot number
+when neither resolves — shown, never hidden**, since an omission is the header counter that failed
+round 1 (ADR-0018 §3). The history reads *kept*, never *lost*.
+_Avoid_: Dormant card *for the on-screen row* — the card is the domain object, the entry is its line.
+
+**The card pane demonstrates; the form pane warns**:
+Ordinal position **cannot** guarantee a dormant entry is on screen — blank 18 of 20 lands below the
+fold on desktop too — so ADR-0012 §5's form-pane warning is **primary on both platforms**, not
+redundancy for the phone (ADR-0018 §4). Never add a third speaker: a pinned header indicator is the
+counter that failed, and auto-scrolling to a newly-dormant entry needs a before-state that dormancy's
+per-frame recomputation does not have.
 
 **Last caught up**:
 The only resting statement the app makes about sync — *when* it last completed one, a fact.
