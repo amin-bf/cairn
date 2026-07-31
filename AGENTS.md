@@ -43,8 +43,8 @@ never seeing what merged afterwards. Two things break silently because of it.
 
 ## Start with the context map
 
-**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the five crates, the
-seven contexts, and an index saying which ADR sections bind which context. `docs/adr/` is over 2,600
+**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the six crates, the
+eight contexts, and an index saying which ADR sections bind which context. `docs/adr/` is over 2,600
 lines; the index is what stops "read the ADRs" from meaning all of them.
 
 Read this file first, then the context map, then the `CONTEXT.md` for the area you are touching.
@@ -52,13 +52,16 @@ Read this file first, then the context map, then the `CONTEXT.md` for the area y
 
 ## The workspace
 
-Five crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md):
+Six crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
+[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
 `leitner-core` (the domain, pure), `leitner-store` (SQLite and the platform seam), `leitner-export`
-(the `.ldeck` container), `leitner-app` (egui, lib + cdylib), `leitner-desktop` (a shim, forced by
-`cargo-apk`).
+(the `.ldeck` container), `leitner-sync` (publishing to the remote; holds the network dependencies),
+`leitner-app` (egui, lib + cdylib), `leitner-desktop` (a shim, forced by `cargo-apk`).
 
-Contexts are **modules, not crates**. Vocabulary lives in a `CONTEXT.md` beside the code; decisions
-live system-wide in `docs/adr/`, and context-scoped `docs/adr/` directories are not used here.
+Contexts are **modules, not crates** — with two exceptions, both for the same reason: `export` and
+`sync` hold dependencies `leitner-core` may not have. A context becomes a crate only when it must
+carry one. Vocabulary lives in a `CONTEXT.md` beside the code; decisions live system-wide in
+`docs/adr/`, and context-scoped `docs/adr/` directories are not used here.
 
 ### Rules that are easy to break silently
 
