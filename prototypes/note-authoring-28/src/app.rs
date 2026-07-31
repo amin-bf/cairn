@@ -168,7 +168,7 @@ impl ProtoApp {
 ///   prototype: ADR-0002 §9 defers audio on the grounds that the motivating case "is already
 ///   solved as text" by a written `Pronunciation` field, and a field the app cannot draw does not
 ///   solve anything. See PROTOTYPE.md.
-fn install_fonts(ctx: &egui::Context) {
+pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
         "ar".into(),
@@ -186,6 +186,28 @@ fn install_fonts(ctx: &egui::Context) {
         list.push("ar".into());
         list.push("dejavu".into());
     }
+
+    // A **real bold family**, because there is no other way to draw bold. egui bundles no bold
+    // face, and its own `RichText::strong` only brightens the colour — which is invisible here,
+    // since the body colour is already near-white. ADR-0002 §8 puts `**bold**` in the Markdown
+    // subset, so the app has to ship a face for it. Arabic first so Persian in bold is bold too
+    // rather than falling back to tofu.
+    fonts.font_data.insert(
+        "dejavu-bold".into(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../assets/DejaVuSans-Bold.ttf"
+        ))),
+    );
+    fonts.font_data.insert(
+        "ar-bold".into(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../assets/NotoSansArabic-Bold.ttf"
+        ))),
+    );
+    fonts
+        .families
+        .insert(crate::markdown::bold_family(), vec!["dejavu-bold".into(), "ar-bold".into()]);
+
     ctx.set_fonts(fonts);
 }
 
@@ -309,4 +331,47 @@ pub fn panel_frame() -> egui::Frame {
 
 pub fn warn_frame() -> egui::Frame {
     card_frame(WARN_BG, WARN_LINE)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bold must be a **heavier face**, not a brighter colour.
+    ///
+    /// The first attempt brightened the body colour, which on this near-white palette moved
+    /// `#e6e8ec` to about `#f3f3f4` — invisible, and reported as "I can't see bold". Measuring the
+    /// laid-out width is the cheapest way to prove a different face is really being selected, and
+    /// it needs no window: egui lays text out on the CPU.
+    ///
+    /// This also guards a crash. `FontFamily::Name` panics at draw time if nothing is bound to it,
+    /// so if `install_fonts` ever stops registering the bold family, every screen dies on the
+    /// first bold word. Here that failure is a test, not a handset.
+    #[test]
+    fn bold_is_a_heavier_face_than_the_body_text() {
+        let ctx = egui::Context::default();
+        install_fonts(&ctx);
+        let _ = ctx.run_ui(Default::default(), |_| {});
+
+        let width = |family: egui::FontFamily| {
+            let mut job = egui::text::LayoutJob::default();
+            job.append(
+                "strong",
+                0.0,
+                egui::TextFormat {
+                    font_id: egui::FontId::new(15.0, family),
+                    color: FG,
+                    ..Default::default()
+                },
+            );
+            ctx.fonts_mut(|f| f.layout_job(job)).rect.width()
+        };
+
+        let normal = width(egui::FontFamily::Proportional);
+        let bold = width(crate::markdown::bold_family());
+        assert!(
+            bold > normal * 1.05,
+            "bold ({bold}px) must be visibly heavier than normal ({normal}px)"
+        );
+    }
 }

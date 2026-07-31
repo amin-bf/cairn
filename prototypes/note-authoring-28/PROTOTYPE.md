@@ -96,9 +96,17 @@ are correctness, not taste:
    to happen *across* styled spans — an RTL line ending in a bold word puts that word on the left,
    carrying its format — so styling and reordering cannot be two passes. The real renderer will hit
    this the moment ADR-0002 §8's subset meets RTL content.
-4. **Bold has to be a colour, not a face.** egui bundles no bold face and its own `RichText::strong`
-   answers this by brightening. So "**bold**" in the Markdown subset means brighter until the app
-   ships a face of its own.
+4. **ADR-0002 §8's `**bold**` obliges the app to ship a bold face.** egui bundles none, and its own
+   `RichText::strong` answers emphasis by brightening the colour — which is *invisible* on this
+   palette, since the body colour is already `#e6e8ec` and brightening lands around `#f3f3f4`.
+   That was the first attempt here and it was reported as "I can't see bold", which is the finding:
+   there is no colour that works, and epaint has no synthetic emboldening either. Now a real face
+   in its own font family (Latin and Arabic both, so Persian bold is bold rather than tofu),
+   measured at 26% wider than the body face by a headless test.
+
+   Same shape as finding 1, and together they are one requirement: **the shipped font set is not a
+   packaging detail, it is what decides whether the spec's own features can be drawn at all.**
+   Between them the app owes a face with IPA coverage and a bold cut of it, per writing system.
 5. **The caret was wrong on ordinary LTR text, and the cause is a defect in shipped code.**
    `bidi::job` appended its own `"\n"` between paragraphs — but a paragraph's range from
    `unicode-bidi` **already includes its trailing separator**, so every newline came out doubled:

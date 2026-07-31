@@ -76,12 +76,10 @@ impl Theme {
         let mono = FontId::new(self.size * 0.92, FontFamily::Monospace);
         match style {
             Style::Normal => TextFormat { font_id: prop, color: self.fg, ..Default::default() },
+            // A real bold face, registered by `app::install_fonts` under `bold_family()`.
             Style::Bold => TextFormat {
-                font_id: prop,
+                font_id: FontId::new(self.size, bold_family()),
                 color: self.fg,
-                // egui has no synthetic bold; brightening plus a background-free strong colour is
-                // the honest stand-in until a real face is shipped.
-                background: Color32::TRANSPARENT,
                 ..Default::default()
             },
             Style::Italic => {
@@ -110,17 +108,20 @@ impl Theme {
     }
 }
 
-/// Bold is drawn brighter than body text rather than in a bold face.
+/// The font family holding the shipped bold face.
 ///
-/// Not a shortcut taken for the prototype's sake: egui bundles no bold face, and `RichText::strong`
-/// answers this the same way — by moving the colour towards the theme's strong text colour. The
-/// real app inherits the same constraint until it ships a face of its own (AGENTS.md,
-/// client-stack rule 7), so this is what "bold" is going to look like either way.
+/// **Bold has to be a face — there is no colour that works.** egui bundles no bold font, and its
+/// own `RichText::strong` answers emphasis by brightening towards the theme's strong colour. That
+/// is invisible on this palette: the body colour is already `#e6e8ec`, so brightening moves it to
+/// roughly `#f3f3f4` and nobody can see the difference. Synthetic emboldening does not exist in
+/// epaint either.
 ///
-/// `a.blend(b)` composites `b` **over** `a`, so the body colour is the receiver and the white is
-/// the overlay. Getting that backwards returns `fg` unchanged and bold silently disappears.
-fn bold_color(fg: Color32) -> Color32 {
-    fg.blend(Color32::WHITE.gamma_multiply(0.55))
+/// So ADR-0002 §8's `**bold**` obliges the app to **ship a bold face** and register it in its own
+/// family — which is a real consequence for the spec, on top of the IPA coverage the same section
+/// already implies (`AGENTS.md`, client-stack rule 7: register an added face in every family you
+/// use, or text silently renders as boxes).
+pub fn bold_family() -> FontFamily {
+    FontFamily::Name("bold".into())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -291,10 +292,7 @@ fn append_line(job: &mut LayoutJob, spans: &[Span], theme: &Theme) {
         }
 
         for (i, r) in pieces {
-            let mut fmt = theme.format(spans[i].style);
-            if spans[i].style == Style::Bold {
-                fmt.color = bold_color(theme.fg);
-            }
+            let fmt = theme.format(spans[i].style);
             append_words(job, &line[r], &fmt, rtl);
         }
     }
@@ -323,10 +321,7 @@ pub fn job_from_spans(spans: &[Span], theme: Theme) -> LayoutJob {
 mod tests {
     use super::*;
 
-    /// Body colour is deliberately **not** white: `bold_color` brightens towards white, so a white
-    /// body makes bold and normal identical — and `LayoutJob::append` merges adjacent sections
-    /// whose formats are equal, collapsing the very distinction the styling test is checking. The
-    /// app's real palette has the same property, which is why this uses it.
+    /// The app's real body colour, so the tests exercise the palette that is actually shipped.
     fn theme() -> Theme {
         Theme::new(14.0, Color32::from_rgb(0xe6, 0xe8, 0xec), Color32::GRAY, Color32::GREEN)
     }
@@ -385,7 +380,21 @@ mod tests {
         let first = &j.sections[0];
         let (s, e): (usize, usize) = (first.byte_range.start.into(), first.byte_range.end.into());
         assert_eq!(&j.text[s..e], "دنیا");
-        assert_eq!(first.format.color, bold_color(theme().fg));
+        assert_eq!(first.format.font_id.family, bold_family());
+    }
+
+    #[test]
+    fn bold_is_a_different_face_not_a_different_colour() {
+        // Guards the mistake this replaced: bold used to brighten the body colour, which on a
+        // near-white palette is invisible. If bold ever stops selecting its own family, it stops
+        // being distinguishable at all — and `LayoutJob::append` would then merge it into the
+        // surrounding normal text, so the emphasis disappears from the galley entirely.
+        let j = job("plain **strong**", Cloze::Off, theme());
+        let bold: Vec<_> =
+            j.sections.iter().filter(|s| s.format.font_id.family == bold_family()).collect();
+        assert_eq!(bold.len(), 1);
+        assert_eq!(bold[0].format.color, theme().fg, "colour carries no emphasis of its own");
+        assert!(j.sections.len() > 1, "bold must not merge into the normal run");
     }
 
     #[test]
