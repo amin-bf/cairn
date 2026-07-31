@@ -420,6 +420,12 @@ still. A decade of heavy use is therefore around 110 MB raw and 15 MB compressed
 quarter of that. Against the storage of any device we target, this is not a problem in any timeframe
 the application will exist for.
 
+> **Amended by [ADR-0013 §12](0013-the-sync-transport.md)**: the raw figure is confirmed
+> independently to within 1%, but **the compressed figure carries the same condition as §11's ratio**
+> — it silently assumed a large-window compressor over large blocks. 15 MB is right for `zstd` over
+> writer-year-sized blocks; it is roughly 27 MB under `gzip` and roughly 22 MB under daily
+> segmentation. The never-compact conclusion is untouched: it never depended on the ratio.
+
 Trimming would also cost real things:
 
 - **The optimiser trains on full review histories.** Discarding old reviews degrades the parameter
@@ -462,6 +468,16 @@ one**, because every line repeats the same keys and the same handful of writer i
 is smaller than raw binary while remaining something a person can open and read when something has
 gone wrong. This is the same trade ADR-0002 §8 made for note fields, for the same reason: a format
 that can be inspected and repaired by hand is worth real bytes.
+
+> **Amended by [ADR-0013 §12](0013-the-sync-transport.md)**: **"about ten to one" is conditional on
+> two things this section does not fix — the compressor's window and the block size.** Measured on
+> rows in exactly the shape above: a decade compresses **11.76× with `zstd -19`** but only **3.99×
+> with `gzip -9`**, because gzip's 32 KiB window cannot reach back to the repeated writer ids; and
+> block size moves it just as far — **12.01×** as one file per writer-year against **5.02×** as daily
+> segments and **3.04×** for a sync-sized chunk. So the ratio belongs to a *transport* choice this
+> ADR deliberately deferred. ADR-0013 §4 fixes `zstd`, and its §5 roll-up ladder carries blocks up
+> that curve. **The row size needs no amendment**: two independent measurements of this exact shape
+> gave 151.4 B and 152.5 B against "roughly 150 bytes".
 
 **Two rules matter more than the format choice:**
 
@@ -569,6 +585,6 @@ authoritative, and this ADR keeps the reasoning behind them.
 | Local storage engine; the cache; per-value stamps | [#12 — the local store](https://github.com/amin-bf/leitner/issues/12) |
 | Export container; scrubbing writer ids from a progress export | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
 | ~~Suspension as a fourth row kind~~ — **closed by [ADR-0010 §5](0010-leeches.md)**: it is a value on the §7 mutable surface, keyed by `CardRef`, and no fourth row kind exists | [#26 — leeches](https://github.com/amin-bf/leitner/issues/26) |
-| How the mutable store moves between devices — snapshot or change stream | Sync transport; map fog |
+| ~~How the mutable store moves between devices — snapshot or change stream~~ — **closed by [ADR-0013 §7](0013-the-sync-transport.md)**: the question dissolves, because a writer's own counter is monotone, so compacting its change stream to the latest value per key *is* a per-writer snapshot. Deltas per sync, snapshot as the roll-up result. Publishing it **per writer** rather than as one shared document is what keeps conditional writes out of the design | [#39 — the sync transport](https://github.com/amin-bf/leitner/issues/39) |
 | Whether a precise clock-correction row is ever needed | Deferred until the failure is seen |
-| "Everything is merged, you are safe" reassurance in the UI | Sync transport; map fog |
+| "Everything is merged, you are safe" reassurance in the UI | [#40 — the sync experience](https://github.com/amin-bf/leitner/issues/40) |

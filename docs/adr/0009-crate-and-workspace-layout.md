@@ -54,6 +54,13 @@ them splits `eframe` per target.
 
 The rest are chosen, and §2, §4 and §11 say why.
 
+> **Extended by [ADR-0013 §11](0013-the-sync-transport.md)**: a sixth crate, `crates/sync/`
+> (`leitner-sync`, lib), holds HTTP, TLS and OAuth. **This is not an overturning** — `CONTEXT-MAP.md`
+> recorded the prediction as this ADR landed (*"a `sync` context is anticipated, not created… expect
+> a sixth crate rather than a fifth module"*), on §2's ground that a network dependency cannot live
+> in `leitner-core`. The count in this heading is left as written, because it records what was
+> decided here; the live list is `CONTEXT-MAP.md`'s.
+
 ### 2. `leitner-core` has no dependencies, and that is its interface
 
 Its `[dependencies]` section is empty, deliberately and permanently. No `rusqlite`, no `egui`, no
@@ -112,6 +119,20 @@ the message above rather than compiling.
 
 **A third function appearing in this module means the seam is eroding.** That is the signal to stop,
 not to add it.
+
+> **Contradiction recorded by [ADR-0013 §12](0013-the-sync-transport.md).** That sentence and this
+> ADR's handoff entry for *Any ticket that adds a platform capability* — "It goes through
+> `leitner-store::platform` or it does not exist" — cannot both be followed by a ticket needing a
+> platform capability that is **not storage**. #39 was the first to reach for one: the handoff sends
+> `open_url()` into a storage crate, and this section forbids it arriving there.
+>
+> **ADR-0013 does not resolve it**; its §8 chose an enrolment flow needing no platform capability at
+> all, so the collision was routed around rather than settled. It is written here because the next
+> ticket to need one will meet it with no equivalent escape. **The shape of the fix, when it is
+> needed**: the rule becomes per crate rather than per workspace — `leitner-store` keeps exactly two
+> functions, and a crate that must touch the platform for an unrelated reason gets its own module
+> under the same three-arm discipline, `compile_error!` included. What must *not* happen is a third
+> function landing here because the handoff table said so.
 
 The two arms are not symmetric in one respect worth recording: `store`'s Android arm reads the JVM
 handle from `ndk_context`, which `android-activity` populates inside `leitner-app`. So the store
@@ -314,6 +335,10 @@ zero-dependency rule ambiguous on day one. It is cheap to reverse: folding `expo
 
 1. It goes through `leitner-store::platform` or it does not exist. A second `#[cfg(target_os)]`
    elsewhere in the workspace is a defect, not a shortcut.
+2. **Read §4's recorded contradiction first.** Rule 1 holds for anything storage-shaped and collides
+   with §4's "a third function means the seam is eroding" for anything that is not.
+   [ADR-0013 §12](0013-the-sync-transport.md) documents the collision and the shape of the fix; it
+   deliberately did not apply it, because #39 turned out not to need a platform capability.
 
 ## Where the deferred glossaries went
 
