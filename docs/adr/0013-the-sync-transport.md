@@ -411,6 +411,16 @@ review history. Encrypting the token while the data it guards lies in plaintext 
 The map's *Local encryption / device passcode* fog covers both uniformly if it ever lands, which is
 the honest place for this.
 
+> **It landed, and it says no — [ADR-0020](0020-protection-at-rest.md).** Nothing is encrypted, so
+> the plain file here is **permanent rather than provisional**, which is more than this section
+> claimed. ADR-0020 §4 also *generalises* the theatre argument above rather than merely upholding it:
+> it holds for the local store and the credential because the key would sit beside the data, and it
+> holds for the two artifacts that travel — the `.lcoll` archive and the objects published under §1 —
+> for a different and stronger reason. **A key protecting something that travels must reach every
+> device that opens it, and this destination contains no server**, so the only channel available is
+> the one being protected. ADR-0016 §8 was right that this section's reasoning does not transfer;
+> ADR-0020 §4 supplies the reasoning that does.
+
 **The token goes *inside* the Android backup set — deliberately opposite to
 [ADR-0007](0007-the-local-store.md)'s writer marker.** That marker is excluded because a restore that
 carries it manufactures a duplicate writer, the silent-loss failure ADR-0004 §2's identity scheme

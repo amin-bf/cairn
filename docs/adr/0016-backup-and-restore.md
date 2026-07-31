@@ -291,6 +291,20 @@ defensible number to use"* — a documented platform constant is the one case wh
 **How urgent this is: see the ADR-0007 §6 amendment below.** The crossing is roughly nine months of
 heavy use, not two years.
 
+> **Upheld and qualified by [ADR-0020 §6](0020-protection-at-rest.md), which supplies a second reason
+> to keep it on and one fact this section does not state.** The second reason: refusing backup where
+> the platform's stronger encryption is unavailable would spend protection against *loss* — the thing
+> this ADR exists for — to buy confidentiality the specification concedes at every other artifact.
+>
+> **The fact: the payload is not guaranteed to be unreadable by the provider.** It is always encrypted
+> in transit and at rest, but under operator-held keys; the layer keyed to the device lock screen needs
+> **Android 9+ (API 28) and a lock screen actually set**, and this project's `min_sdk_version = 24`
+> puts part of its own supported range permanently outside that. So a user on an API 24–27 handset, or
+> with no lock screen, has their collection **and** the refresh token this section deliberately routes
+> through the backup set held under keys the operator manages. Two asymmetries with the sync folder
+> come with it: a device backup has **no per-application deletion path** and **survives uninstall**.
+> [Evidence](../research/auto-backup-at-rest/README.md).
+
 ### 8. The archive is not encrypted
 
 **Not even optionally.** This is the one artifact designed to leave the device and land on storage we
@@ -318,6 +332,24 @@ argument works because both objects sit in the same app-private directory. **Thi
 anything else in the design. The map's *Local encryption / device passcode* fog is the honest home for
 the general question, and if it lands it must cover the local store and the travelling archive
 together.
+
+> **Landed as [ADR-0020](0020-protection-at-rest.md), which upholds this conclusion and **does not
+> keep its reasoning**.** It covers four artifacts rather than two — the store, the credential, this
+> archive, and the log published to the drive, which this ADR did not count.
+>
+> **The ASCII argument above is no longer load-bearing, and that matters.** It kills a *passphrase*
+> and it does **not reach a PIN**, because digits are ASCII — so a reader who finds this section
+> convincing will one day notice the gap and reopen the question from its weakest point. ADR-0020 §3
+> refuses on two grounds that hold regardless of what can be typed. **The loss asymmetry**, which is
+> this section's own first supporting ground promoted to the decisive one. **And arithmetic**: a
+> short numeric secret is safe on a handset only because the hardware refuses to be asked quickly,
+> and data resting on a provider's disks cannot borrow that, so against unlimited offline guessing a
+> six-digit space is routine.
+>
+> **This section's caveat was correct and is answered.** ADR-0013 §9's theatre argument indeed does
+> not transfer to an artifact that travels; ADR-0020 §4 supplies one that does — **a key protecting a
+> travelling artifact must reach every device that opens it, and with no server the only channel is
+> the one being protected**.
 
 ### 9. `.lcoll`, self-identifying from its first bytes
 
@@ -538,5 +570,7 @@ marker it is minted with.
 |---|---|
 | Running an archive write and a restore on the real handset, including the `MediaStore` path | Implementation |
 | ~~**Whether the enrolment screen should name the account it connected as**, which is the only thing that would detect [ADR-0015](0015-the-sync-experience.md)'s wrong-account case (§13)~~ — **decided by [ADR-0019](0019-naming-the-account-at-enrolment.md)**: it does, and it persists in sync settings; the scope is `openid email` (`profile` declined) and all three are non-sensitive, so [ADR-0013 §3](0013-the-sync-transport.md)'s *no verification, therefore no server* survives. *"The only thing that would detect"* is **corrected**: it diagnoses, and §13 above is widened accordingly | — |
-| Whether the archive should ever be encrypted — must be answered together with the local store, never alone | Map fog: *Local encryption / device passcode* |
+| ~~Whether the archive should ever be encrypted — must be answered together with the local store, never alone~~ — **discharged** by [ADR-0020 §3 §4](0020-protection-at-rest.md), which answered it together with three others rather than two | — |
+| **Whether the 25 MB Auto Backup quota is measured before or after compression.** The platform documentation is silent, and §7's nine-month estimate moves by an order of magnitude on the answer. Surfaced by [ADR-0020](0020-protection-at-rest.md)'s evidence | Not scheduled |
+| **Quota failure is silent** — the whole package is rejected, signalled only by a callback needing a dex ADR-0003 does not ship and by two log lines, with no documented user notification. So §7's *"states the size fact"* cannot be driven by the platform telling us | Not scheduled |
 | Media, if audio on cards is ever built: the archive inherits the size, and §6's manual write becomes a much larger ask | Map fog |
