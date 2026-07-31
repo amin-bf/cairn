@@ -320,6 +320,17 @@ bytes. **Accepted cost**: undeleting restores the schedule but not the text, whi
 backup or an export. Delete means gone, which is also the right answer for a user deleting something
 they want rid of.
 
+> **Discharged by [ADR-0016 §4](0016-backup-and-restore.md)**, which specifies the backup this
+> sentence spends. The mechanism is worth knowing because it looks as though it should not work: the
+> content above is **discarded, not superseded by a competing value**, so an archive predating the
+> delete carries those field values with old stamps and meets nothing to lose to under the counter
+> rule. Undelete the note, restore, and the text returns — ADR-0002 §7's *"history reattaches by
+> itself"* applied to content instead of schedule.
+>
+> **The limit that follows from the same rule**: a note whose text was *overwritten* rather than
+> deleted cannot be recovered this way, because the newer stamp must win or the causality rule above
+> is broken. Backup protects against loss, not against unwanted change.
+
 > **Amended by [ADR-0008 §5 and §8](0008-the-deck-export-format.md)**: a deleted note also retains its
 > `deck` reference — id, flag, deck reference, stamp, roughly sixteen bytes above the figure quoted
 > here. Without it a retraction cannot be attributed to a deck, so a deck-scoped export cannot select
