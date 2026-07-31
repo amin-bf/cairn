@@ -77,6 +77,40 @@ carry one. Vocabulary lives in a `CONTEXT.md` beside the code; decisions live sy
 4. **A new ADR must be added to `CONTEXT-MAP.md`'s index.** One that is not there is invisible to
    the agent it was written for.
 
+## The card model
+
+A note holds content; a card is a generated view of it, identified by
+`CardRef { note: NoteId, ordinal: u16 }` — eighteen canonical bytes, no standalone card id
+([ADR-0002](./docs/adr/0002-the-card-model.md)). The ordinal is a **slot assigned by the kind
+definition**, chosen in [ADR-0017](./docs/adr/0017-card-slots.md).
+
+### Rules that are easy to break silently
+
+1. **A slot number is a card's identity. Never change one, never reuse one for a different question.
+   List order is free.** Slots are drawn from one namespace shared by *every* kind, so `basic` and
+   `basic-reverse` both declare slot 0 for Front→Back — deliberately, because it is the same card, and
+   that sharing is what lets a note gain its reverse direction without orphaning its history. Change a
+   slot and you silently retype every accumulated review onto the wrong card, which the log cannot be
+   edited to repair. This replaces ADR-0002 §4's old "never reorder the `cards` list" rule: **reading
+   the list index instead of the slot field is now the defect.**
+2. **Two tests guard rule 1, and they are the only reason it is enforceable.** Slot uniqueness across
+   the shipped definitions, and slot immutability against a checked-in golden `slot → (prompt, answer)`
+   list. Both need no database, no window and no handset. Deleting or weakening either returns the most
+   destructive edit in this codebase to being a prohibition nobody is pointed at.
+3. **Cloze blanks live above the high bit: blank `n` is slot `0x8000 | n`.** Fixed-arity slots occupy
+   `0x0000–0x7FFF`. The partition is what makes the two schemes unable to collide, so never allocate a
+   fixed-arity slot with the top bit set, and never read a cloze ordinal as a blank number without
+   masking (`ordinal & 0x7FFF`). A raw log row for cloze blank 1 reads `ordinal 32769`; that is correct.
+4. **`CardRef` carries no kind discriminator, and adding one is wrong rather than merely expensive.**
+   Kind-scoped identity orphans the reviews of a `basic` note that gains its reverse — the most likely
+   kind change there is, and one where reattachment is *correct* — with the same silence as the hazard
+   it would fix. When two kinds should share history, give them the same slot.
+5. **An imported kind definition's slots are never validated, and this is safe for one reason.** A card
+   is `(note UUID, slot)`, so two kinds sharing a slot collide only within *the same note* — and the
+   kind dropdown offers the shipped kinds plus the note's own current kind, so a note can never be
+   switched *into* an acquired kind. Add acquired kinds to that dropdown and the importer suddenly owes
+   a check it does not have.
+
 ## The client stack
 
 **egui / eframe**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). One binary per platform,
