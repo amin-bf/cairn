@@ -269,10 +269,10 @@ pub fn render(ui: &mut egui::Ui, job: egui::text::LayoutJob) {
 
 /// Draws a laid-out job flushed to one edge, with the edge chosen by the **caller**.
 ///
-/// A card is one block of text, so its lines have to share an edge: a Persian card whose
-/// pronunciation happens to be Latin must not leave that one line stranded on the opposite side.
-/// The direction therefore comes from the card's main content, not from each line's own script,
-/// which is why this takes `rtl` rather than reading it off the job.
+/// Callers pass the direction of the line's own first strong character — the `dir="auto"` rule —
+/// so a Latin pronunciation under a Persian term sits left while the term sits right. Giving the
+/// whole card one shared edge was tried and rejected: it holds the block together, but pushes
+/// Latin text to the right, where it reads as misplaced.
 ///
 /// The flush is done by laying the label out right-to-left rather than by the job's `halign`.
 /// `halign = Max` produces a galley whose rect runs from negative x to 0 — epaint aligns the rows
@@ -354,20 +354,32 @@ mod tests {
             .collect()
     }
 
-    /// Reported from the running app: Persian sat on the left of the card, and the Latin
-    /// pronunciation under it sat further left still. A card is one block of text and its lines
-    /// must share an edge.
+    /// Each line takes its own direction, so a Persian card with a Latin pronunciation under it
+    /// puts the term on the right and the pronunciation on the left. Judged live: one shared edge
+    /// per card was the alternative, and pushing Latin text rightwards read as misplaced.
     #[test]
-    fn an_rtl_side_flushes_every_line_including_a_latin_one_to_the_right() {
-        let lines = vec![("سگ".to_string(), true), ("sag".to_string(), true)];
-        for (start, end) in draw_extents(&lines, 400.0) {
-            assert!((end - 400.0).abs() < 0.5, "line should end at the right edge, got {end}");
-            assert!(start < end, "and it must not be drawn off the far side");
-        }
+    fn each_line_aligns_by_its_own_direction_not_the_cards() {
+        let term = "سگ".to_string();
+        let pronunciation = "sag".to_string();
+        let lines = vec![
+            (term.clone(), crate::bidi::is_rtl(&term)),
+            (pronunciation.clone(), crate::bidi::is_rtl(&pronunciation)),
+        ];
+        let drawn = draw_extents(&lines, 400.0);
+        assert_eq!(drawn.len(), 2);
+
+        let (_, term_end) = drawn[0];
+        assert!((term_end - 400.0).abs() < 0.5, "Persian must end at the right edge, got {term_end}");
+
+        let (latin_start, _) = drawn[1];
+        assert!(
+            latin_start.abs() < 0.5,
+            "a Latin pronunciation must start at the left edge even inside a Persian card, got {latin_start}"
+        );
     }
 
     #[test]
-    fn an_ltr_side_is_untouched_and_stays_flush_left() {
+    fn an_ltr_line_stays_flush_left() {
         let lines = vec![("der Hund".to_string(), false), ("hʊnt".to_string(), false)];
         for (start, _) in draw_extents(&lines, 400.0) {
             assert!(start.abs() < 0.5, "LTR must still start at the left edge, got {start}");

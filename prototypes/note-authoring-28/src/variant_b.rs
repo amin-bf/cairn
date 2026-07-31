@@ -204,11 +204,14 @@ pub(crate) fn live_card(ui: &mut egui::Ui, ed: &Editor, card: &GenCard) {
 /// One side of a card. Passenger fields (§3) render smaller and dimmer beneath their anchor, which
 /// is what makes "never asked" legible without a caption explaining it.
 ///
-/// **The whole side shares one edge**, chosen from the asked field rather than per line. A Persian
-/// term with a Latin `sag` pronunciation under it is one block of text, and aligning each line by
-/// its own script leaves that one line floating on the far side of the card.
+/// **Each line aligns by its own first strong character** — the rule `dir="auto"` uses. A Persian
+/// term goes right; a Latin pronunciation under it goes left, and that is correct rather than
+/// untidy: `sag` is a Latin word and Latin words start at the left.
+///
+/// Judged live against the alternative, which was to give the whole side one edge taken from the
+/// asked field. That kept the block visually together but pushed Latin text to the right, where it
+/// reads as misplaced.
 fn side(ui: &mut egui::Ui, lines: &[SideLine], size: f32, color: egui::Color32) {
-    let rtl = side_is_rtl(lines);
     for line in lines {
         if line.text.trim().is_empty() {
             continue;
@@ -218,18 +221,9 @@ fn side(ui: &mut egui::Ui, lines: &[SideLine], size: f32, color: egui::Color32) 
         } else {
             markdown::Theme::new(size, color, DIM, ACCENT)
         };
+        let rtl = crate::bidi::is_rtl(&line.text);
         core::render_aligned(ui, markdown::job(&line.text, Cloze::Off, theme), rtl);
     }
-}
-
-/// A side reads right-to-left when its **asked** field does. Passengers do not get a vote: the
-/// pronunciation of a Persian word is often Latin, and it is the term that sets the direction.
-pub(crate) fn side_is_rtl(lines: &[SideLine]) -> bool {
-    lines
-        .iter()
-        .find(|l| !l.passenger && !l.text.trim().is_empty())
-        .or_else(|| lines.iter().find(|l| !l.text.trim().is_empty()))
-        .is_some_and(|l| crate::bidi::is_rtl(&l.text))
 }
 
 pub(crate) fn dormant_card(ui: &mut egui::Ui, ed: &mut Editor, d: &model::Dormant) {
