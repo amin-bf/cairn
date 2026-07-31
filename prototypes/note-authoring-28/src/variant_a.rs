@@ -222,7 +222,7 @@ fn save_modal(ui: &mut egui::Ui, ed: &mut Editor) {
 
     egui::Modal::new(egui::Id::new("a-save-modal")).show(ui.ctx(), |ui| {
         ui.set_max_width(420.0);
-        core::label(ui, "This edit retires cards that have history", 16.0, WARN);
+        core::label(ui, "This edit stops generating cards that have history", 16.0, WARN);
         ui.add_space(8.0);
         for d in &dormant {
             core::label(
@@ -258,7 +258,7 @@ fn save_modal(ui: &mut egui::Ui, ed: &mut Editor) {
 
     if commit {
         ed.pending_save = false;
-        ed.saved_note = Some(format!("Saved — {} card(s) retired.", dormant.len()));
+        ed.saved_note = Some(format!("Saved — {} card(s) now dormant.", dormant.len()));
     } else if close {
         ed.pending_save = false;
     }

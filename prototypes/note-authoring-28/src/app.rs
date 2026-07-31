@@ -134,7 +134,7 @@ impl ProtoApp {
 
         let mut editor = Editor::load(scenario);
         // `PROTO_KIND=basic` opens with the kind already switched, which is the cheapest way to
-        // photograph a draft that has retired a card. Interactively you just click the kind.
+        // photograph a draft with a dormant card. Interactively you just click the kind.
         let forced_kind = env("PROTO_KIND");
         if !forced_kind.is_empty() && model::KINDS.iter().any(|k| k.id == forced_kind) {
             editor.set_kind(&forced_kind);

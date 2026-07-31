@@ -13,7 +13,7 @@
 //! - **Destructive edits are ambient and continuous, never modal.** A card whose blank you deleted
 //!   *stays in the stack*, greyed, labelled with what it is holding. The warning is a permanent
 //!   property of the screen rather than an interruption at save time — which is honest to §7,
-//!   where retirement is not an event but a card the content no longer generates.
+//!   where dormancy is not an event but the absence of a generated card.
 
 use crate::app::{self, Width, ACCENT, DIM, FG, LINE, PANEL, WARN};
 use crate::core::{self, Editor};
@@ -151,7 +151,7 @@ fn stack(ui: &mut egui::Ui, ed: &mut Editor) {
         ui.add_space(8.0);
     }
 
-    // The heart of variant B: a retired card does not vanish, it greys. You cannot delete a blank
+    // The heart of variant B: a dormant card does not vanish, it greys. You cannot delete a blank
     // and fail to notice what it cost, because the cost is sitting in the stack where the card was.
     for d in &dormant {
         dormant_card(ui, ed, d);

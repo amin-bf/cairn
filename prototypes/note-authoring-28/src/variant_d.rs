@@ -13,7 +13,7 @@
 //! rather than settled here:
 //!
 //! - **Dormant cards sit in ordinal position**, not appended after the live ones. This is the fix
-//!   to round 1's open problem: in B the retired card was the last thing in a scrolling column and
+//!   to round 1's open problem: in B the dormant card was the last thing in a scrolling column and
 //!   fell below the fold, so the count in the header did all the warning. Beside the form in its
 //!   own pane, in the slot the card actually occupied, it is where you are already looking.
 //! - **The destructive-edit warning also appears in the *form* pane**, compactly. On a phone the

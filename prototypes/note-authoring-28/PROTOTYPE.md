@@ -59,7 +59,7 @@ Two questions the graft raised that neither parent had to answer — **both are 
 not fixes**:
 
 - **Dormant cards sit in ordinal position**, interleaved with the live ones rather than appended
-  after them. This is the answer to round 1's open problem: in B the retired card was last in a
+  after them. This is the answer to round 1's open problem: in B the dormant card was last in a
   scrolling column and fell below the fold, so the `N DORMANT` counter in the header did all the
   warning. In its own pane, in the slot the card actually occupied, it is where you are already
   looking.
@@ -84,7 +84,7 @@ visual pass is separate later work, and nothing here revisits it.
 | Where it lives | second pane; `Write \| Preview` toggle on a phone | one column, form above the stack | no pane at all, ever |
 | Adding a blank | toolbar button wraps the selection | "Blank it" — the new card appears below | typed by hand |
 | Checking the blank set | a chip row of numbers | the card stack | a row per blank, with what it hides |
-| Destructive edit | **modal at save**, decline outright | **ambient** — the retired card stays in the stack, greyed | **live strip at the edit**, with Undo |
+| Destructive edit | **modal at save**, decline outright | **ambient** — the dormant card stays in the stack, greyed | **live strip at the edit**, with Undo |
 | Changing kind | dropdown, warns at save | chips, stack restacks live | expandable panel showing the field-by-field mapping first |
 
 ## What is shared, and why
