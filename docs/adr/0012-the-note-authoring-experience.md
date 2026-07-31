@@ -59,6 +59,16 @@ while chips spend a permanent row on it.
 **Changing kind later is permitted, and is not a special mechanism** — see §6 for the hazard it
 carries, which is the sharpest finding in this ADR.
 
+> **Amended by [ADR-0017 §6](0017-card-slots.md): the dropdown lists the shipped kinds, plus the
+> note's own current kind when that kind was *acquired*** ([ADR-0008 §7](0008-the-deck-export-format.md)).
+> A note of an imported kind therefore shows its own kind, can be switched away from it, and can be
+> switched back — so reversibility survives — while **no note can ever be switched *into* a kind whose
+> slot namespace this codebase did not mint**. That is what keeps a stranger's kind definition unable
+> to collide with ours, and is why the importer needs no slot validation.
+>
+> §6's hazard is **closed** by the same ADR; a kind change is now an ordinary edit that makes cards
+> dormant, and the sentence above is true without qualification.
+
 ### 3. Blanks: created from a selection, numbered by rule, never tidied
 
 A blank is made by selecting text and invoking *Blank it*, which wraps the selection as
@@ -99,6 +109,17 @@ Three rules:
   card 4 — not appended after the live cards. Round 1 proved position matters: in B the dormant
   card was last in a scrolling column and fell below the fold, leaving a counter in the header to
   do all the warning.
+
+> **Widened by [ADR-0017 §5](0017-card-slots.md): this warning now absorbs the §6 kind change too,
+> needing nothing added to it.** A kind change makes cards dormant and can no longer do anything
+> worse, so `vocab` → `cloze` simply shows two dormant cards instead of one, and the copy below is
+> true unchanged — switching back genuinely restores them.
+>
+> **One layout question is handed to the visual design pass**: under ADR-0017 §3's partition a
+> converted note's dormant cards sit at slots 2–3 while its live blank sits at 32769, so "in ordinal
+> position" sorts **both dormant cards above the live one**. For a pane whose job §1 defines as *"what
+> will I be asked"*, leading with two dormant cards is arguably wrong. Recorded so the rule does not
+> quietly produce it unnoticed.
 - **The warning also appears in the form pane**, because on a phone the card pane is behind a
   toggle and an ambient warning that lives only there is invisible exactly when it matters. On
   desktop it therefore appears twice, deliberately.
@@ -110,6 +131,17 @@ because each implies a stored lifecycle that deliberately does not exist. The pr
 broke this twice before it was caught, which is how the wrong word reaches a spec.
 
 ### 6. Changing a note's kind can reattach history to an unrelated card — and this ADR does not fix it
+
+> **Closed by [ADR-0017](0017-card-slots.md), which took neither of the two options below.** Both
+> treat the ordinal's *meaning* as given and argue about the identity's *encoding*; the defect was in
+> the rule that **assigns** ordinals. A card's ordinal is now a **slot declared in the kind
+> definition**, drawn from one collection-wide namespace, with cloze partitioned into `0x8000 | n` —
+> so `vocab`'s cards and a cloze blank can never share a number, and those reviews go correctly
+> dormant. **`CardRef` keeps its 18-byte encoding and gains no discriminator**, because option 2 turns
+> out to be actively wrong rather than merely expensive: making identity kind-scoped orphans the
+> history of a `basic` note gaining its reverse direction — the most likely kind change there is, and
+> one where reattachment is *correct* — under the same silence. The interim warning this section
+> mandates is **retired** into §5's ambient dormancy warning.
 
 **This is the finding that outranks everything else here, and it is a gap in ADR-0002 rather than
 in the editor.**
@@ -195,7 +227,8 @@ one-frame deferral to a second reason.
 
 - **ADR-0002 §7** — its claim that the replay mechanism "absorbs a note changing kind" is amended
   by §6 above: it absorbs it, and in doing so can reattach history to a semantically different
-  card. §7's list of consequences to be honest about gains this one.
+  card. §7's list of consequences to be honest about gains this one. *(Since **discharged by
+  [ADR-0017](0017-card-slots.md)** — with disjoint slots the claim is true as originally written.)*
 - **ADR-0002 §8** — the restricted Markdown subset is amended by §8 above: `**bold**` obliges the
   app to ship a bold face, since it cannot be rendered by any other means.
 - **ADR-0002 §9** — its argument for deferring audio is amended by §8 above: it rests on a text
@@ -217,8 +250,8 @@ one-frame deferral to a second reason.
 
 ## Open items handed onward
 
-- **`CardRef` and the kind discriminator** (§6) — ADR-0002's decision to take. Until then the
-  warning stands in for it.
+- ~~**`CardRef` and the kind discriminator** (§6)~~ — **discharged by
+  [ADR-0017](0017-card-slots.md)**: no discriminator, and the ordinal becomes an assigned slot instead.
 - **A soft-keyboard pass on the handset** (§9) — the one question desktop cannot answer.
 - **Saving semantics** (§9) — autosave versus explicit save.
 - **Visual design** — still ADR-0006 §10's open item, now with a second screen waiting on it.
