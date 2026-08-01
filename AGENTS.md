@@ -398,6 +398,14 @@ decision that erodes fastest when met without it.
 
 Issues live as GitHub issues on `amin-bf/leitner`, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
+**File issues directly — this repo overrides the global "don't create GitHub issues unprompted" rule.**
+Work here is charted as wayfinder maps whose tickets *are* issues, so a rule against filing them
+unprompted contradicts the workflow: it turns every graduated ticket into a round trip, and a sweep that
+surfaces four decisions has to ask four times before the map can record them. Create the issue, then say
+what you created and why. The global rule still holds outside a map — a bug you noticed in passing, a
+"we should probably…", anything Amin would file himself — where the point is that filing it is a claim
+on his backlog rather than a step in work already agreed.
+
 ### Triage labels
 
 The five canonical triage roles, using the default label strings. See `docs/agents/triage-labels.md`.
