@@ -34,48 +34,85 @@ impl NoteId {
     /// note UUID as canonical text; the 18-byte [`CardRef::encode`] is rebuilt from it plus the
     /// ordinal.
     pub fn parse_canonical(text: &str) -> Option<Self> {
-        let bytes = text.as_bytes();
-        if bytes.len() != 36 {
-            return None;
-        }
-        let mut out = [0u8; 16];
-        let mut out_i = 0;
-        let mut i = 0;
-        while i < bytes.len() {
-            if i == 8 || i == 13 || i == 18 || i == 23 {
-                if bytes[i] != b'-' {
-                    return None;
-                }
-                i += 1;
-                continue;
-            }
-            let hi = hex_val(bytes[i])?;
-            let lo = hex_val(*bytes.get(i + 1)?)?;
-            out[out_i] = (hi << 4) | lo;
-            out_i += 1;
-            i += 2;
-        }
-        if out_i != 16 {
-            return None;
-        }
-        Some(NoteId(out))
+        uuid16_from_canonical(text).map(NoteId)
     }
 
     /// The RFC 9562 canonical text form, lowercase. The inverse of [`NoteId::parse_canonical`].
     pub fn to_canonical(&self) -> String {
-        let mut s = String::with_capacity(36);
-        for (i, byte) in self.0.iter().enumerate() {
-            if i == 4 || i == 6 || i == 8 || i == 10 {
-                s.push('-');
-            }
-            s.push(char::from(HEX[usize::from(byte >> 4)]));
-            s.push(char::from(HEX[usize::from(byte & 0x0f)]));
-        }
-        s
+        uuid16_to_canonical(&self.0)
+    }
+}
+
+/// A deck's identity: sixteen bytes, minted once at creation as a UUIDv4 and **preserved through
+/// export and import** (ADR-0005 §4) — what lets an import be recognised as an update to the same
+/// deck rather than a new one, matched against your notes by note id so review history survives.
+///
+/// A deck is `{ id, name }` and nothing else (ADR-0005 §5): the name is a mutable, non-unique display
+/// label, and no configuration ever lives here. Like [`NoteId`], `leitner-core` never mints one —
+/// minting is a write-time act at the edge (ADR-0009 §8) — and the bytes are stored in RFC 9562 order
+/// so the canonical text form is a fixed, cross-device string. A note's `deck` reference is this id's
+/// [`DeckId::to_canonical`] text; a reference naming no held deck is **unfiled, never lost**
+/// (ADR-0005 §8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DeckId(pub [u8; 16]);
+
+impl DeckId {
+    /// Parse the RFC 9562 canonical text form — the inverse of [`DeckId::to_canonical`]. Returns
+    /// `None` for anything else, so a malformed stored `deck` reference cannot panic the note list.
+    pub fn parse_canonical(text: &str) -> Option<Self> {
+        uuid16_from_canonical(text).map(DeckId)
+    }
+
+    /// The RFC 9562 canonical text form, lowercase — the string a note's `deck` reference carries and
+    /// the deck filter compares.
+    pub fn to_canonical(&self) -> String {
+        uuid16_to_canonical(&self.0)
     }
 }
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
+
+/// The RFC 9562 canonical text form of sixteen bytes, lowercase — shared by [`NoteId`] and
+/// [`DeckId`], whose ids are both UUIDv4s stored in RFC 9562 order (ADR-0002 §6, ADR-0005 §4).
+fn uuid16_to_canonical(bytes: &[u8; 16]) -> String {
+    let mut s = String::with_capacity(36);
+    for (i, byte) in bytes.iter().enumerate() {
+        if i == 4 || i == 6 || i == 8 || i == 10 {
+            s.push('-');
+        }
+        s.push(char::from(HEX[usize::from(byte >> 4)]));
+        s.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    s
+}
+
+/// Parse the RFC 9562 canonical `8-4-4-4-12` text form into sixteen bytes, case-insensitively;
+/// `None` for anything else. The inverse of [`uuid16_to_canonical`], shared by [`NoteId`] and
+/// [`DeckId`] so a malformed id token is rejected rather than panicking.
+fn uuid16_from_canonical(text: &str) -> Option<[u8; 16]> {
+    let bytes = text.as_bytes();
+    if bytes.len() != 36 {
+        return None;
+    }
+    let mut out = [0u8; 16];
+    let mut out_i = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if i == 8 || i == 13 || i == 18 || i == 23 {
+            if bytes[i] != b'-' {
+                return None;
+            }
+            i += 1;
+            continue;
+        }
+        let hi = hex_val(bytes[i])?;
+        let lo = hex_val(*bytes.get(i + 1)?)?;
+        out[out_i] = (hi << 4) | lo;
+        out_i += 1;
+        i += 2;
+    }
+    (out_i == 16).then_some(out)
+}
 
 fn hex_val(c: u8) -> Option<u8> {
     match c {
@@ -371,6 +408,21 @@ mod tests {
             NoteId::parse_canonical("g50e8400-e29b-41d4-a716-446655440000"),
             None
         );
+    }
+
+    #[test]
+    fn deck_id_round_trips_through_the_canonical_form_like_a_note_id() {
+        // ADR-0005 §4: a deck id is a UUIDv4 preserved through export and import, carried as canonical
+        // text (a note's `deck` reference and the deck filter both compare that text).
+        let text = "550e8400-e29b-41d4-a716-446655440000";
+        let id = DeckId::parse_canonical(text).expect("valid canonical uuid");
+        assert_eq!(id.to_canonical(), text);
+        // Case-insensitive on input, lowercase on output — the two ids share one canonical form.
+        assert_eq!(DeckId::parse_canonical(&text.to_uppercase()), Some(id));
+        assert_eq!(DeckId::parse_canonical("not-a-deck"), None);
+        // A deck id and a note id with the same bytes share the same canonical text — the two types
+        // differ in meaning, not in encoding.
+        assert_eq!(id.to_canonical(), NoteId(id.0).to_canonical());
     }
 
     #[test]

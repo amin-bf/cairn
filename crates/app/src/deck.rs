@@ -31,11 +31,19 @@ fn shipped_kind(id: &str) -> Option<&'static KindDefinition> {
 
 /// The set of cards the current content generates — the "current cards" replay projects the log onto
 /// (ADR-0002 §7). A deleted note generates nothing: ADR-0004 §7's delete discards content, so there
-/// is nothing to ask.
+/// is nothing to ask. A note is deleted by its **own** flag or by its **deck's** (ADR-0005 §7), so a
+/// deck deletion drops every card its notes generated from review, exactly as a per-note delete does;
+/// a note whose `deck` names no held deck is unfiled and still reviewed (ADR-0005 §8).
 pub fn current_cards(coll: &Collection) -> Result<HashSet<CardRef>, StoreError> {
+    let deleted_decks = coll.deleted_deck_ids()?;
     let mut set = HashSet::new();
     for id in coll.entity_ids("note")? {
         if coll.mutable_get("note", &id, "deleted")?.as_deref() == Some("true") {
+            continue;
+        }
+        if let Some(deck) = coll.mutable_get("note", &id, "deck")?
+            && deleted_decks.contains(&deck)
+        {
             continue;
         }
         let Some(kind) = coll.mutable_get("note", &id, "kind")? else {
@@ -117,6 +125,38 @@ mod tests {
         coll.mutable_set("note", &id.0, "deleted", Some("true"))
             .unwrap();
         assert!(current_cards(&coll).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_note_in_a_deleted_deck_generates_no_cards_but_a_dangling_ref_still_does() {
+        // ADR-0005 §7: deletedness derives from the deck's flag, so review spans the whole collection
+        // (ADR-0005 §6) minus every note a deleted deck holds. ADR-0005 §8: an unfiled note — a `deck`
+        // reference to nothing held — is still reviewed.
+        let (mut coll, _d, _s) = open();
+        let deck = coll.create_deck("throwaway").unwrap();
+        let filed = coll
+            .create_note("basic", &[("Front", "a"), ("Back", "1")])
+            .unwrap();
+        let loose = coll
+            .create_note("basic", &[("Front", "b"), ("Back", "2")])
+            .unwrap();
+        coll.mutable_set("note", &filed.0, "deck", Some(&deck.to_canonical()))
+            .unwrap();
+        coll.mutable_set(
+            "note",
+            &loose.0,
+            "deck",
+            Some(&leitner_core::content::DeckId([0x11; 16]).to_canonical()),
+        )
+        .unwrap();
+
+        coll.mutable_set("deck", &deck.0, "deleted", Some("true"))
+            .unwrap();
+        assert_eq!(
+            current_cards(&coll).unwrap(),
+            HashSet::from([CardRef::new(loose, 0)]),
+            "only the unfiled note's card survives the deck deletion"
+        );
     }
 
     #[test]

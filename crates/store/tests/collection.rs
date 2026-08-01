@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use leitner_core::content::{BASIC, CardRef, NoteId};
+use leitner_core::content::{BASIC, CardRef, DeckId, NoteId};
 use leitner_core::log::DayScale;
 use leitner_core::replay::replay;
 use leitner_core::scheduling::Grade;
@@ -507,6 +507,90 @@ fn mutable_entity_reads_a_notes_own_field_values_in_one_pass() {
     assert_eq!(map.get("kind").map(String::as_str), Some("basic"));
     assert!(map.contains_key("position"));
     assert!(!map.contains_key("Back"), "a cleared field is not returned");
+}
+
+#[test]
+fn a_deck_is_minted_with_a_name_and_nothing_is_ever_auto_created() {
+    // ADR-0005 §4, §8: a deck is `{ id, name }` with a minted UUIDv4, and **no deck is ever
+    // auto-created** — a fresh collection, and creating a note, both leave the deck set empty.
+    let (mut coll, _d, _s) = open();
+    assert!(
+        coll.decks().unwrap().is_empty(),
+        "a fresh collection has no decks"
+    );
+    coll.create_note("basic", &[("Front", "chien")]).unwrap();
+    assert!(
+        coll.decks().unwrap().is_empty(),
+        "authoring a note must never conjure a deck"
+    );
+
+    let french = coll.create_deck("Français").unwrap();
+    let decks = coll.decks().unwrap();
+    assert_eq!(decks, vec![(french, "Français".to_owned())]);
+    // The id is a canonical UUIDv4 that round-trips — what travels through export and import.
+    assert_eq!(
+        DeckId::parse_canonical(&french.to_canonical()),
+        Some(french)
+    );
+}
+
+#[test]
+fn a_deck_name_carries_double_colons_verbatim_with_no_structural_meaning() {
+    // ADR-0005 §3: decks are a flat set; `::` in a name is stored as-is and nothing reconstructs a
+    // tree from it. The store's job is only to keep the label a user typed.
+    let (mut coll, _d, _s) = open();
+    let id = coll.create_deck("Spanish::Verbs").unwrap();
+    assert_eq!(
+        coll.decks().unwrap(),
+        vec![(id, "Spanish::Verbs".to_owned())]
+    );
+}
+
+#[test]
+fn a_deleted_deck_leaves_the_listing_and_joins_the_deleted_set() {
+    // ADR-0005 §7: deletion is a flag, not a removal. The deck drops out of `decks()` (the filter and
+    // dropdown surfaces) and its id joins `deleted_deck_ids`, which is what derives its notes deleted.
+    let (mut coll, _d, _s) = open();
+    let kept = coll.create_deck("kept").unwrap();
+    let gone = coll.create_deck("gone").unwrap();
+    coll.mutable_set("deck", &gone.0, "deleted", Some("true"))
+        .unwrap();
+
+    assert_eq!(coll.decks().unwrap(), vec![(kept, "kept".to_owned())]);
+    let deleted = coll.deleted_deck_ids().unwrap();
+    assert!(deleted.contains(&gone.to_canonical()));
+    assert!(!deleted.contains(&kept.to_canonical()));
+}
+
+#[test]
+fn tags_are_independent_rows_so_two_offline_additions_both_survive() {
+    // ADR-0002 §10 / ADR-0005 §7: tags settle by set union. Each tag is its own mutable row, so a merge
+    // of two devices — one that added `verb`, one that added `irregular` — keeps both; a single joined
+    // `tags` value would have let one addition overwrite the other. Here the two independent writes
+    // stand in for the two devices' rows, and removal clears one row without touching the other.
+    let (mut coll, _d, _s) = open();
+    let n = coll.create_note("basic", &[("Front", "être")]).unwrap();
+    coll.add_tag(n, "verb").unwrap();
+    coll.add_tag(n, "irregular").unwrap();
+
+    let tags = |coll: &Collection| -> Vec<String> {
+        let mut t: Vec<String> = coll
+            .mutable_entity("note", &n.0)
+            .unwrap()
+            .into_iter()
+            .filter_map(|(a, _)| {
+                a.strip_prefix(leitner_store::TAG_ATTR_PREFIX)
+                    .map(str::to_owned)
+            })
+            .collect();
+        t.sort();
+        t
+    };
+    assert_eq!(tags(&coll), vec!["irregular".to_owned(), "verb".to_owned()]);
+
+    // Removing one tag is a per-row clear; the other is untouched.
+    coll.remove_tag(n, "verb").unwrap();
+    assert_eq!(tags(&coll), vec!["irregular".to_owned()]);
 }
 
 /// Copy `collection.db` (and any WAL sidecars) from one data dir to another — a restore.

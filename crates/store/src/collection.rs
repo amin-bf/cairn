@@ -13,10 +13,11 @@
 //! derived from it and may be dropped and rebuilt (§2) — the tests lean on that by reading state
 //! back through `leitner_core::replay`, which consumes lines and nothing else.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use leitner_core::content::{CardRef, NoteId};
+use leitner_core::content::{CardRef, DeckId, NoteId};
 use leitner_core::log::{DayScale, ParsedLine, Row, day_number, parse_line};
 use leitner_core::scheduling::Grade;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -39,6 +40,20 @@ const APPLICATION_ID: i32 = 0x004c_7401;
 const COLLECTION_DB: &str = "collection.db";
 const DERIVED_DB: &str = "derived.db";
 const WRITER_MARKER: &str = "writer.id";
+
+/// The attribute-name prefix that makes a note's tags **settle by set union** (ADR-0002 §10,
+/// ADR-0005 §7). Each tag is its own mutable row — `tag:<name>` set to `"true"` — rather than a
+/// single multi-valued `tags` attribute, so two devices adding different tags offline each write a
+/// different attribute and **both survive** the merge (ADR-0004 §7's per-attribute settling *is* the
+/// union). A single joined value would instead contend, and one add would lose — the same trap
+/// ADR-0005 §8 named for a member list on a deck. Removal is a per-tag row cleared to NULL, settling
+/// by stamp like any other value.
+pub const TAG_ATTR_PREFIX: &str = "tag:";
+
+/// The mutable-surface entity holding a deck's `{ id, name }` (ADR-0005 §5) — a deck is content, its
+/// name a mutable non-unique label, and **nothing else lives here** (the per-deck preference slot is
+/// deliberately empty, ADR-0005 §5 / ADR-0011 §6).
+const DECK_ENTITY: &str = "deck";
 
 /// Anything that can stop a collection opening or a write completing. Not recoverable in-process for
 /// the most part: without a database there is nowhere to put reviews.
@@ -545,14 +560,76 @@ impl Collection {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT entity_id FROM mutable WHERE entity = ?1 ORDER BY entity_id",
         )?;
-        let rows = stmt.query_map(params![entity], |r| {
-            let bytes: Vec<u8> = r.get(0)?;
-            let mut id = [0u8; 16];
-            let n = bytes.len().min(16);
-            id[..n].copy_from_slice(&bytes[..n]);
-            Ok(id)
-        })?;
+        let rows = stmt.query_map(params![entity], entity_id_from_row)?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    // --- decks --------------------------------------------------------------------------------
+
+    /// Mint a deck and write its name, returning its fresh id (ADR-0005 §4). A deck id is a UUIDv4
+    /// minted once at creation and preserved through export and import; minting is an **edge** act, so
+    /// the store — which already draws entropy for note and identity ids — is its single home.
+    ///
+    /// This is the **only** way a deck comes into being: there is **no auto-created default** (ADR-0005
+    /// §8). A built-in default would mint a different id per device and, the first time two never-synced
+    /// devices met, produce two decks with one name, both genuine and unmergeable. So deck creation is
+    /// always an explicit act with one point of origin, and a collection may legitimately hold zero.
+    pub fn create_deck(&mut self, name: &str) -> Result<DeckId, StoreError> {
+        let id = DeckId(interchange::uuid_v4(interchange::random_bytes()?));
+        self.mutable_set(DECK_ENTITY, &id.0, "name", Some(name))?;
+        Ok(id)
+    }
+
+    /// Every deck the collection currently holds that is **not deleted**, as `(id, name)` in id order
+    /// — the values the note list's deck filter and the editor's deck dropdown draw (ADR-0021 §9). A
+    /// deck flagged deleted (ADR-0005 §7) is omitted here; its id may still dangle on a note, which is
+    /// simply *unfiled* (ADR-0005 §8) and handled where notes are listed. A deck with no `name` row
+    /// (an id met before its name arrived over sync) reads as an empty label rather than vanishing.
+    pub fn decks(&self) -> Result<Vec<(DeckId, String)>, StoreError> {
+        let deleted = self.deleted_deck_ids()?;
+        let mut out = Vec::new();
+        for id in self.entity_ids(DECK_ENTITY)? {
+            let deck = DeckId(id);
+            if deleted.contains(&deck.to_canonical()) {
+                continue;
+            }
+            let name = self
+                .mutable_get(DECK_ENTITY, &id, "name")?
+                .unwrap_or_default();
+            out.push((deck, name));
+        }
+        Ok(out)
+    }
+
+    /// The canonical ids of every deck flagged deleted (ADR-0005 §7) — the set a note's `deck`
+    /// reference is tested against to derive whether the note is deleted. Returned as canonical text so
+    /// it compares directly with the note's stored `deck` value. Deletion is a **flag**, never a row
+    /// removal, so a delete settles like any other value and does not return from the next device to
+    /// sync (ADR-0004 §7).
+    pub fn deleted_deck_ids(&self) -> Result<HashSet<String>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT entity_id FROM mutable \
+             WHERE entity = ?1 AND attr = 'deleted' AND value = 'true'",
+        )?;
+        let rows = stmt.query_map(params![DECK_ENTITY], |r| {
+            Ok(DeckId(entity_id_from_row(r)?).to_canonical())
+        })?;
+        Ok(rows.collect::<Result<HashSet<_>, _>>()?)
+    }
+
+    // --- tags ---------------------------------------------------------------------------------
+
+    /// Add one tag to a note, as its own settling row (ADR-0002 §10, ADR-0005 §7). See
+    /// [`TAG_ATTR_PREFIX`] for why a tag is a row of its own rather than a token in a joined value:
+    /// it is what makes tags merge by **set union**. Adding a tag already present is idempotent.
+    pub fn add_tag(&mut self, note: NoteId, tag: &str) -> Result<(), StoreError> {
+        self.mutable_set("note", &note.0, &tag_attr(tag), Some("true"))
+    }
+
+    /// Remove one tag from a note by clearing its row to NULL — a value change settling by stamp, not
+    /// a row deletion (ADR-0004 §7). Removing a tag that is absent is a harmless no-op edit.
+    pub fn remove_tag(&mut self, note: NoteId, tag: &str) -> Result<(), StoreError> {
+        self.mutable_set("note", &note.0, &tag_attr(tag), None)
     }
 
     // --- identity resolution ------------------------------------------------------------------
@@ -770,6 +847,22 @@ fn guarded_instant_ms(conn: &Connection, now_ms: i64) -> Result<i64, StoreError>
         Some(highest) if now_ms <= highest => highest + 1,
         _ => now_ms,
     })
+}
+
+/// The mutable attribute name a tag occupies: [`TAG_ATTR_PREFIX`] followed by the tag. One tag, one
+/// attribute, so the settling rule unions them (ADR-0002 §10).
+fn tag_attr(tag: &str) -> String {
+    format!("{TAG_ATTR_PREFIX}{tag}")
+}
+
+/// A 16-byte entity id read from a query row's first column. A shorter blob is zero-padded and a
+/// longer one truncated — the store writes neither, so this only keeps a corrupt row from panicking.
+fn entity_id_from_row(r: &rusqlite::Row) -> rusqlite::Result<[u8; 16]> {
+    let bytes: Vec<u8> = r.get(0)?;
+    let mut id = [0u8; 16];
+    let n = bytes.len().min(16);
+    id[..n].copy_from_slice(&bytes[..n]);
+    Ok(id)
 }
 
 fn read_local(conn: &Connection, key: &str) -> Result<Option<String>, StoreError> {
