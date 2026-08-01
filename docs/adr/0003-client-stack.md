@@ -135,6 +135,13 @@ months.
   the Persian `ی` and `ک`, and Persian digits, with no missing glyphs. A Persian-specific face such
   as Vazirmatn would be a typographic preference, not a correctness fix. Latin and Cyrillic come
   from egui's own bundled Hack / Ubuntu-Light.
+
+  > **Amended by [ADR-0012 §8](0012-the-note-authoring-experience.md): the shipped set is four
+  > faces, not one.** A `Pronunciation` field needs IPA the bundled Latin faces lack, and `**bold**`
+  > needs a real cut because epaint has no synthetic emboldening — so the set is Noto Sans Arabic
+  > and DejaVu Sans (IPA extensions), each with a bold cut, the regulars appended as fallbacks to
+  > `Proportional` and `Monospace` and the bolds in their own family. Shipped in `leitner-app`'s
+  > `fonts` module.
 - **An async platform call cannot be awaited in the frame.** Immediate mode redraws every frame, so
   results arrive via a handle polled per frame; the context must be woken with `request_repaint()`
   or a completed task sits unseen until the next input event.
