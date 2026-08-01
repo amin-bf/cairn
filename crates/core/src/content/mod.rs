@@ -6,10 +6,13 @@
 //! (`CardRef`, ADR-0002 §6) and the kind definitions that say which cards a note generates
 //! (ADR-0002 §1, ADR-0017 §1).
 //!
-//! Deliberately narrow, per [#78](https://github.com/amin-bf/leitner/issues/78): **one shipped
-//! kind, `basic`, declaring slot 0 for Front→Back.** The full kind set and the slot namespace are a
-//! separate ticket; what lands here is `basic` plus the two tests that make a slot's immutability
-//! enforceable (ADR-0017 §4).
+//! The four shipped kinds and the slot namespace that gives their cards identity, per
+//! [#81](https://github.com/amin-bf/leitner/issues/81): `basic`, `basic-reverse`, `vocab` and
+//! `cloze`, drawing their slots from **one namespace shared by every kind** (ADR-0017 §1). `basic`
+//! and `basic-reverse` share slot 0 for Front→Back deliberately, and cloze blanks are partitioned
+//! above the high bit (`0x8000 | n`, ADR-0017 §3). The two tests that make a slot's immutability
+//! enforceable — uniqueness across the shipped definitions and a golden `slot → (prompt, answer)`
+//! list (ADR-0017 §4) — sit at the foot of this file.
 
 /// A note's identity: sixteen bytes, minted once at creation as a UUIDv4 (ADR-0002 §6).
 ///
@@ -111,9 +114,23 @@ impl CardRef {
 }
 
 /// The high bit partitions cloze blanks (`0x8000 | n`) from fixed-arity slots (`0x0000–0x7FFF`),
-/// per ADR-0017 §3. `basic` is fixed-arity, so nothing here reaches above the bit; the constant is
-/// recorded so a later slot-namespace ticket cannot silently allocate across the partition.
+/// per ADR-0017 §3. Every shipped fixed-arity slot stays below it (the uniqueness test enforces
+/// this), so the two numbering schemes cannot collide even across a note that changes kind.
 pub const CLOZE_SLOT_BIT: u16 = 0x8000;
+
+/// The slot a `cloze` blank numbered `n` occupies: `0x8000 | n` (ADR-0017 §3). The high bit keeps
+/// authored, unbounded blank numbers ([`CLOZE`]) disjoint from the fixed-arity registry without the
+/// registry ever having to see them — the one bit *is* the check. Its inverse is [`cloze_blank`].
+pub const fn cloze_slot(blank: u16) -> u16 {
+    CLOZE_SLOT_BIT | blank
+}
+
+/// The blank number a `cloze` slot names: `slot & 0x7FFF` (ADR-0017 §3). This mask is a **name,
+/// never a sort key** (ADR-0018 §1): ordering cards by it asserts an adjacency between the two
+/// namespaces the partition exists precisely to deny.
+pub const fn cloze_blank(slot: u16) -> u16 {
+    slot & !CLOZE_SLOT_BIT
+}
 
 /// A field's role on a note (ADR-0002 §3): `Asked` fields may be a card's prompt or answer;
 /// `ShownWith` fields render beside the anchor field named, on whichever side it lands.
@@ -160,6 +177,31 @@ impl KindDefinition {
             .map(|c| CardRef::new(note, c.slot))
             .collect()
     }
+
+    /// The fields rendered on each side of a card — `(prompt, answer)` — with every `shown-with`
+    /// field placed beside the anchor it follows (ADR-0002 §3). A `shown-with(F)` field renders on
+    /// **whichever side `F` lands on**, which is what carries a pronunciation to the answer when the
+    /// term is being *produced* and to the prompt when it is being *recognised*, without either
+    /// direction being special-cased.
+    pub fn render_sides(&self, card: &CardTemplate) -> (Vec<&'static str>, Vec<&'static str>) {
+        (self.render_side(card.prompt), self.render_side(card.answer))
+    }
+
+    /// One side's fields: each anchor, immediately followed by the `shown-with` fields attached to
+    /// it, in field-definition order. Attachment does not chain (ADR-0002 §3), so a single pass
+    /// suffices.
+    fn render_side(&self, anchors: &[&'static str]) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        for &anchor in anchors {
+            out.push(anchor);
+            for field in self.fields {
+                if field.role == FieldRole::ShownWith(anchor) {
+                    out.push(field.name);
+                }
+            }
+        }
+        out
+    }
 }
 
 /// `basic`: two asked fields, one card at slot 0 for Front→Back (ADR-0002 §2, ADR-0017 §1).
@@ -182,9 +224,91 @@ pub const BASIC: KindDefinition = KindDefinition {
     }],
 };
 
-/// Every kind definition this build ships. The two tests below guard the slot rule over exactly
-/// this table (ADR-0017 §4); a second kind is added here, not woven in elsewhere.
-pub const SHIPPED_KINDS: &[&KindDefinition] = &[&BASIC];
+/// `basic-reverse`: the same two asked fields as `basic`, and **slot 0 is deliberately the same
+/// Front→Back card** (ADR-0017 §2), so a note gaining its reverse direction reattaches its history
+/// rather than orphaning it. Slot 1 adds Back→Front.
+pub const BASIC_REVERSE: KindDefinition = KindDefinition {
+    id: "basic-reverse",
+    fields: &[
+        FieldDef {
+            name: "Front",
+            role: FieldRole::Asked,
+        },
+        FieldDef {
+            name: "Back",
+            role: FieldRole::Asked,
+        },
+    ],
+    cards: &[
+        CardTemplate {
+            slot: 0,
+            prompt: &["Front"],
+            answer: &["Back"],
+        },
+        CardTemplate {
+            slot: 1,
+            prompt: &["Back"],
+            answer: &["Front"],
+        },
+    ],
+};
+
+/// `vocab`: two asked fields (Term, Meaning) and two `shown-with` fields that follow Term wherever
+/// it lands (ADR-0002 §3, §4). Slots 2 and 3 are the two directions; the pronunciation and example
+/// are never asked, so they render beside the term on whichever side the term is on.
+pub const VOCAB: KindDefinition = KindDefinition {
+    id: "vocab",
+    fields: &[
+        FieldDef {
+            name: "Term",
+            role: FieldRole::Asked,
+        },
+        FieldDef {
+            name: "Meaning",
+            role: FieldRole::Asked,
+        },
+        FieldDef {
+            name: "Pronunciation",
+            role: FieldRole::ShownWith("Term"),
+        },
+        FieldDef {
+            name: "Example",
+            role: FieldRole::ShownWith("Term"),
+        },
+    ],
+    cards: &[
+        CardTemplate {
+            slot: 2,
+            prompt: &["Term"],
+            answer: &["Meaning"],
+        },
+        CardTemplate {
+            slot: 3,
+            prompt: &["Meaning"],
+            answer: &["Term"],
+        },
+    ],
+};
+
+/// `cloze`: one asked `Text` field. Its cards are **not fixed** — one per numbered blank in the
+/// note's text, at slot [`cloze_slot`]`(n)` (ADR-0002 §5, ADR-0017 §3) — so its `cards` list is
+/// empty and its slots are computed rather than declared. Generating them needs the note's content,
+/// which the fixed-arity [`KindDefinition::generated_cards`] path never sees; that projection lands
+/// with the card pane ([#83](https://github.com/amin-bf/leitner/issues/83)). Shipped here is the
+/// definition and the numbering rule that keeps its slots disjoint from the registry.
+pub const CLOZE: KindDefinition = KindDefinition {
+    id: "cloze",
+    fields: &[FieldDef {
+        name: "Text",
+        role: FieldRole::Asked,
+    }],
+    cards: &[],
+};
+
+/// Every kind definition this build ships (ADR-0002 §2). The set is **closed and code-defined** — a
+/// user never authors a kind. The two tests below guard the slot rule over exactly this table
+/// (ADR-0017 §4); a fifth kind is added here, not woven in elsewhere.
+pub const SHIPPED_KINDS: &[&KindDefinition] = &[&BASIC, &BASIC_REVERSE, &VOCAB, &CLOZE];
 
 #[cfg(test)]
 mod tests {
@@ -204,12 +328,16 @@ mod tests {
     }
 
     #[test]
-    fn cloze_ordinal_is_the_blank_number_above_the_high_bit() {
+    fn cloze_blank_maps_to_a_slot_above_the_high_bit_and_back() {
         // ADR-0017 §3: a raw log row for cloze blank 1 reads ordinal 32769, and the blank number is
-        // `ordinal & 0x7FFF`. `basic` never reaches here, but the encoding must carry it faithfully.
-        let ordinal = CLOZE_SLOT_BIT | 1;
-        assert_eq!(ordinal, 32769);
-        assert_eq!(ordinal & 0x7FFF, 1);
+        // recovered by masking. The two functions are inverse over the whole blank range.
+        assert_eq!(cloze_slot(1), 32769);
+        assert_eq!(cloze_blank(cloze_slot(1)), 1);
+        // Every fixed-arity slot is disjoint from every cloze slot by the one bit.
+        for blank in [1u16, 2, 7, 0x7FFF] {
+            assert_eq!(cloze_slot(blank) & CLOZE_SLOT_BIT, CLOZE_SLOT_BIT);
+            assert_eq!(cloze_blank(cloze_slot(blank)), blank);
+        }
     }
 
     #[test]
@@ -258,16 +386,98 @@ mod tests {
         assert_eq!(BASIC.generated_cards(note), vec![CardRef::new(note, 0)]);
     }
 
+    /// Read a card by its **slot**, never by its position in the `cards` list — the whole point of
+    /// ADR-0017 §1 is that list order carries nothing.
+    fn card_at(kind: &KindDefinition, slot: u16) -> &CardTemplate {
+        kind.cards
+            .iter()
+            .find(|c| c.slot == slot)
+            .unwrap_or_else(|| panic!("kind {} declares no slot {slot}", kind.id))
+    }
+
+    #[test]
+    fn the_four_shipped_kinds_are_exactly_these() {
+        // ADR-0002 §2: the set is closed and code-defined. This pins the identifiers so a rename or
+        // a dropped kind is a red build, not a silent behaviour change on stored notes.
+        let ids: Vec<&str> = SHIPPED_KINDS.iter().map(|k| k.id).collect();
+        assert_eq!(ids, vec!["basic", "basic-reverse", "vocab", "cloze"]);
+    }
+
+    #[test]
+    fn basic_and_basic_reverse_share_slot_zero_for_front_to_back() {
+        // ADR-0017 §2: the same card, deliberately, so gaining the reverse direction reattaches
+        // history rather than orphaning it. Same slot AND same question is what makes that safe.
+        let basic0 = card_at(&BASIC, 0);
+        let reverse0 = card_at(&BASIC_REVERSE, 0);
+        assert_eq!(
+            (basic0.prompt, basic0.answer),
+            (reverse0.prompt, reverse0.answer)
+        );
+        assert_eq!(basic0.prompt, &["Front"]);
+        assert_eq!(basic0.answer, &["Back"]);
+        // The reverse direction is the *new* card, at its own slot.
+        let reverse1 = card_at(&BASIC_REVERSE, 1);
+        assert_eq!(reverse1.prompt, &["Back"]);
+        assert_eq!(reverse1.answer, &["Front"]);
+    }
+
+    #[test]
+    fn basic_reverse_generates_both_directions_as_distinct_cards() {
+        let note = NoteId([9; 16]);
+        assert_eq!(
+            BASIC_REVERSE.generated_cards(note),
+            vec![CardRef::new(note, 0), CardRef::new(note, 1)]
+        );
+    }
+
+    #[test]
+    fn shown_with_follows_its_anchor_to_whichever_side_it_lands() {
+        // ADR-0002 §3: Pronunciation and Example are shown-with(Term). Recognising the term
+        // (Term→Meaning) puts them on the prompt; producing it (Meaning→Term) puts them on the
+        // answer — the same fields, no direction special-cased.
+        let (prompt, answer) = VOCAB.render_sides(card_at(&VOCAB, 2));
+        assert_eq!(prompt, vec!["Term", "Pronunciation", "Example"]);
+        assert_eq!(answer, vec!["Meaning"]);
+
+        let (prompt, answer) = VOCAB.render_sides(card_at(&VOCAB, 3));
+        assert_eq!(prompt, vec!["Meaning"]);
+        assert_eq!(answer, vec!["Term", "Pronunciation", "Example"]);
+    }
+
+    #[test]
+    fn a_kind_without_shown_with_renders_only_its_asked_fields() {
+        let (prompt, answer) = BASIC.render_sides(card_at(&BASIC, 0));
+        assert_eq!(prompt, vec!["Front"]);
+        assert_eq!(answer, vec!["Back"]);
+    }
+
+    #[test]
+    fn cloze_declares_no_fixed_cards_and_numbers_blanks_above_the_bit() {
+        // Cloze cards come from content, not a fixed list (ADR-0002 §5); the fixed-arity generator
+        // therefore yields nothing, and the numbering rule lives in `cloze_slot`.
+        assert!(CLOZE.cards.is_empty());
+        assert_eq!(CLOZE.generated_cards(NoteId([3; 16])), vec![]);
+        assert_eq!(cloze_slot(1), CLOZE_SLOT_BIT | 1);
+    }
+
     // ADR-0017 §4: "the most destructive edit in the codebase becomes a test." The two tests below
     // are the only reason the slot rule is enforceable, and both need no database, no window and no
     // handset.
 
     #[test]
-    fn slots_are_unique_across_every_shipped_definition() {
-        // Slots are drawn from one namespace shared by every kind (ADR-0017 §1). Two kinds may share
-        // a slot only when they mean the same card; within a single definition a repeat is always a
-        // bug, so this checks per-definition uniqueness, which is what the golden list below relies
-        // on to be well-formed.
+    fn a_slot_means_one_question_across_every_shipped_definition() {
+        // Slots are drawn from ONE namespace shared by every kind (ADR-0017 §1). Two things follow,
+        // and both are checked here because both make the golden list and ADR-0018 §3's cross-kind
+        // dormant-name lookup well-formed:
+        //   * within a single definition a repeated slot is always a bug (per-definition
+        //     uniqueness), and
+        //   * two kinds may declare the same slot ONLY when they mean the same card — so a slot
+        //     names one question collection-wide, which is exactly what lets `basic` and
+        //     `basic-reverse` share slot 0 while catching a slot reused for a different question.
+        // Fixed-arity slots must also stay below the cloze high bit (ADR-0017 §3), or the two
+        // numbering schemes could collide.
+        let mut meaning: std::collections::HashMap<u16, (&[&str], &[&str])> =
+            std::collections::HashMap::new();
         for kind in SHIPPED_KINDS {
             let mut seen = std::collections::HashSet::new();
             for card in kind.cards {
@@ -277,6 +487,21 @@ mod tests {
                     kind.id,
                     card.slot
                 );
+                assert_eq!(
+                    card.slot & CLOZE_SLOT_BIT,
+                    0,
+                    "kind {} declares fixed-arity slot {} with the cloze high bit set",
+                    kind.id,
+                    card.slot
+                );
+                if let Some(prev) = meaning.insert(card.slot, (card.prompt, card.answer)) {
+                    assert_eq!(
+                        prev,
+                        (card.prompt, card.answer),
+                        "slot {} means two different questions across kinds",
+                        card.slot
+                    );
+                }
             }
         }
     }
@@ -287,7 +512,14 @@ mod tests {
         // Changing a slot number on an existing entry, or reusing one for a different question,
         // silently retypes accumulated review history onto the wrong card and cannot be repaired
         // from the log. Editing a shipped definition without updating this list is a red build.
-        let golden: &[(&str, u16, &[&str], &[&str])] = &[("basic", 0, &["Front"], &["Back"])];
+        // Cloze contributes no rows: its cards are content-derived, not declared (ADR-0002 §5).
+        let golden: &[(&str, u16, &[&str], &[&str])] = &[
+            ("basic", 0, &["Front"], &["Back"]),
+            ("basic-reverse", 0, &["Front"], &["Back"]),
+            ("basic-reverse", 1, &["Back"], &["Front"]),
+            ("vocab", 2, &["Term"], &["Meaning"]),
+            ("vocab", 3, &["Meaning"], &["Term"]),
+        ];
 
         let mut actual: Vec<(&str, u16, &[&str], &[&str])> = Vec::new();
         for kind in SHIPPED_KINDS {
@@ -295,6 +527,11 @@ mod tests {
                 actual.push((kind.id, card.slot, card.prompt, card.answer));
             }
         }
+        // List order carries nothing (ADR-0017 §4), so compare on a stable (kind, slot) sort — a
+        // reordered `cards` list is harmless and must not break this test.
+        actual.sort_by_key(|(id, slot, ..)| (*id, *slot));
+        let mut golden: Vec<(&str, u16, &[&str], &[&str])> = golden.to_vec();
+        golden.sort_by_key(|(id, slot, ..)| (*id, *slot));
         assert_eq!(
             actual, golden,
             "a shipped slot's meaning changed — update the golden list only if the change is truly \
