@@ -1,6 +1,13 @@
 # Standalone workspace: keeps this throwaway crate out of the repo root package.
 [workspace]
 
+# #67: one line of `egui-winit` disabled on Android — see `vendor/egui-winit/src/lib.rs`. Vendored
+# rather than worked around in app code because the defect is two layers below anything we control:
+# every tap into a text field re-pops the soft keyboard, and there is no hook between egui's
+# platform output and `egui-winit`'s handling of it.
+[patch.crates-io]
+egui-winit = { path = "vendor/egui-winit" }
+
 [package]
 name = "note-authoring-28"
 version = "0.0.0"
