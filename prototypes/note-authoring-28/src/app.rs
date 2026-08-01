@@ -116,6 +116,15 @@ pub struct ProtoApp {
     /// surface being judged, and with a keyboard up every line they take is a line the editor
     /// does not get.
     controls_open: bool,
+    /// Live scroll offset of the editor's `ScrollArea`, read back each frame so a forced offset can
+    /// be expressed relative to where the user actually is.
+    scroll_offset: f32,
+    /// Set for exactly one frame, to pin the offset before layout. See `keep_focus_visible`.
+    forced_scroll: Option<f32>,
+    /// Last frame's visible viewport, in screen coordinates.
+    viewport: egui::Rect,
+    /// Last frame's reserved bottom band, so a *growing* band can be told from a steady one.
+    prev_bottom_pts: f32,
 }
 
 impl ProtoApp {
@@ -168,6 +177,10 @@ impl ProtoApp {
             insets: Default::default(),
             apply_insets: true,
             controls_open: !cfg!(target_os = "android"),
+            scroll_offset: 0.0,
+            forced_scroll: None,
+            viewport: egui::Rect::NOTHING,
+            prev_bottom_pts: 0.0,
         }
     }
 
@@ -376,6 +389,19 @@ impl eframe::App for ProtoApp {
             egui::Panel::bottom("switcher").show(ui, |ui| controls(self, ui));
         }
 
+        // Before the band is reserved, not after: the focused field has to be inside the viewport
+        // on the *same* frame it shrinks, or the keyboard is gone before the next one.
+        //
+        // **Only while the band is growing.** Running it every frame would drag the focused field
+        // back the instant the user scrolled away from it — a different bug wearing the same fix.
+        if bottom_pts > self.prev_bottom_pts + 0.5 {
+            // `ui` has already been shrunk by the panels shown above, so this is the region the
+            // editor is about to get — minus the band that is about to be reserved below it.
+            let bottom = ui.available_rect_before_wrap().bottom() - bottom_pts;
+            self.keep_focus_visible(ui.ctx(), bottom);
+        }
+        self.prev_bottom_pts = bottom_pts;
+
         // The band the keyboard is sitting on. Reserving it is the entire difference between the
         // two states of the switch: with it, `CentralPanel` gets a viewport that matches what the
         // user can see and the `ScrollArea` inside it gains a real scroll range; without it, the
@@ -388,7 +414,14 @@ impl eframe::App for ProtoApp {
         }
 
         egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            // **Force the offset on the frame the band appears**, rather than asking for a scroll
+            // and letting it land next frame. One frame with the focused field outside the viewport
+            // is all it takes to lose the keyboard — see `keep_focus_visible`.
+            let mut area = egui::ScrollArea::vertical().auto_shrink([false, false]);
+            if let Some(offset) = self.forced_scroll.take() {
+                area = area.vertical_scroll_offset(offset);
+            }
+            let out = area.show(ui, |ui| {
                 let avail = ui.available_width();
                 let w = self.width.max_px().min(avail);
                 let pad = ((avail - w) / 2.0).max(0.0);
@@ -419,8 +452,51 @@ impl eframe::App for ProtoApp {
                     });
                 });
             });
+            self.scroll_offset = out.state.offset.y;
+            self.viewport = out.inner_rect;
         });
     }
+}
+
+impl ProtoApp {
+/// Keep the focused text field inside the viewport the keyboard leaves — and **not** as a nicety.
+///
+/// `TextEdit` publishes `output.ime` only from inside `if ui.is_rect_visible(inner_rect)`
+/// (egui 0.35, `widgets/text_edit/builder.rs:832`). `egui-winit` turns the *absence* of that output
+/// into `set_ime_allowed(false)`, and winit's Android backend turns that into `hide_soft_input`.
+///
+/// So reserving the keyboard's band naively closes a loop:
+///
+/// > band reserved → focused field clipped → no `ime` output → keyboard hidden → inset drops to 0
+/// > → viewport grows → field visible → keyboard shown → band reserved → …
+///
+/// which on the handset is a **continuously flickering keyboard**, reported the first time this was
+/// driven by hand. Tapping a field low enough to be covered enters the loop; scrolling a focused
+/// field out of view with the keyboard already up runs one lap of it, which reads as the field
+/// "springing back" — that is the viewport growing again, not a scroll.
+///
+/// The fix is to make the antecedent false: the focused field never leaves the viewport, so the
+/// `ime` output never lapses. It has to be applied **in the same frame** the band appears —
+/// `scroll_to_rect` lands one frame later, and one frame without the output is one hide.
+///
+/// This is a finding about the real client, not about the prototype. Any implementation that reads
+/// IME insets and shrinks its viewport owes this, or it oscillates.
+fn keep_focus_visible(&mut self, ctx: &egui::Context, viewport_bottom: f32) {
+    let Some(focused) = ctx.memory(|m| m.focused()) else {
+        return;
+    };
+    // Last frame's rect, in screen coordinates — which is what we need, since this runs before
+    // the field is laid out again.
+    let Some(rect) = ctx.read_response(focused).map(|r| r.rect) else {
+        return;
+    };
+
+    // A little air under the field, so the caret is not flush against the keyboard.
+    let overshoot = rect.bottom() + 8.0 - viewport_bottom;
+    if overshoot > 0.5 {
+        self.forced_scroll = Some(self.scroll_offset + overshoot);
+    }
+}
 }
 
 // ---------------------------------------------------------------------------------------------
