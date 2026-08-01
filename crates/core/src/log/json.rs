@@ -217,7 +217,7 @@ impl Parser<'_> {
                             let code = self.hex4()?;
                             // The interchange form is ASCII in practice; handle the BMP correctly
                             // and leave surrogate pairs to a future need rather than mis-decoding.
-                            let ch = char::from_u32(code as u32)?;
+                            let ch = char::from_u32(u32::from(code))?;
                             let mut buf = [0u8; 4];
                             out.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
                         }
@@ -243,7 +243,7 @@ impl Parser<'_> {
                 b'A'..=b'F' => digit - b'A' + 10,
                 _ => return None,
             };
-            value = value << 4 | nibble as u16;
+            value = value << 4 | u16::from(nibble);
         }
         Some(value)
     }

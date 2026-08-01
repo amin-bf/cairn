@@ -257,8 +257,8 @@ impl Default for DayScale {
 /// nothing that could read a clock.
 pub fn day_number(epoch_millis: i64, scale: DayScale) -> i64 {
     let epoch_seconds = epoch_millis.div_euclid(1000);
-    let local = epoch_seconds + scale.utc_offset_seconds as i64;
-    let shifted = local - (scale.rollover_hour as i64) * 3600;
+    let local = epoch_seconds + i64::from(scale.utc_offset_seconds);
+    let shifted = local - i64::from(scale.rollover_hour) * 3600;
     shifted.div_euclid(86_400)
 }
 
