@@ -401,6 +401,8 @@ impl eframe::App for ProtoApp {
             self.keep_focus_visible(ui.ctx(), bottom);
         }
         self.prev_bottom_pts = bottom_pts;
+        self.settle_focus_scrolled_away(ui.ctx());
+        self.reopen_keyboard_on_tap(ui.ctx());
 
         // The band the keyboard is sitting on. Reserving it is the entire difference between the
         // two states of the switch: with it, `CentralPanel` gets a viewport that matches what the
@@ -495,6 +497,60 @@ fn keep_focus_visible(&mut self, ctx: &egui::Context, viewport_bottom: f32) {
     let overshoot = rect.bottom() + 8.0 - viewport_bottom;
     if overshoot > 0.5 {
         self.forced_scroll = Some(self.scroll_offset + overshoot);
+    }
+}
+
+/// Raise the keyboard when the user taps a field and it is down.
+///
+/// This is the recovery half of the vendored `egui-winit` change. Once the per-tap
+/// hide-then-show is gone, nothing re-opens the keyboard after the user dismisses it with the IME's
+/// own chevron: egui's state never changed — only Android's did — so `egui-winit`'s debounced
+/// `allow_ime` flag is still `true` and it never re-asserts.
+///
+/// Keyed on a **discrete pointer press** rather than on a per-frame flag, which is what made the
+/// two earlier attempts misbehave: `Memory::request_focus` fires on every pointer interaction
+/// including drags, so anything hung off it runs during scrolling too.
+///
+/// The condition uses the **real** IME height from `insets.rs` rather than any egui-side belief
+/// about it, so "is the keyboard actually down" is answered by the platform.
+fn reopen_keyboard_on_tap(&self, ctx: &egui::Context) {
+    if self.insets.keyboard_is_up() {
+        return;
+    }
+    let pressed = ctx.input(|i| i.pointer.any_pressed());
+    if pressed && ctx.memory(|m| m.focused()).is_some() {
+        ctx.send_viewport_cmd(egui::ViewportCommand::IMEAllowed(true));
+    }
+}
+
+/// Let a focused field that the user has scrolled **completely** away settle, instead of
+/// oscillating.
+///
+/// Without this, scrolling the focused field off-screen re-enters the loop from the other end: the
+/// field is clipped, so `output.ime` lapses, so the keyboard hides, so the reserved band collapses,
+/// so the viewport grows and the field is on screen again — and the keyboard comes straight back.
+/// Dragging it back into view (the fix for the band *growing*) is wrong here, because scrolling away
+/// is deliberate.
+///
+/// Surrendering focus makes the state consistent instead: no focus, no `ime` output, no keyboard,
+/// nothing to oscillate between. Tapping any field brings it back, which works because the vendored
+/// `egui-winit` re-asserts `show_soft_input` on a tap.
+///
+/// **Fully** outside, not merely clipped — a field half off the bottom edge is still being typed
+/// into.
+fn settle_focus_scrolled_away(&mut self, ctx: &egui::Context) {
+    let Some(focused) = ctx.memory(|m| m.focused()) else {
+        return;
+    };
+    let Some(rect) = ctx.read_response(focused).map(|r| r.rect) else {
+        return;
+    };
+    if self.viewport == egui::Rect::NOTHING {
+        return;
+    }
+    let gone = rect.bottom() < self.viewport.top() || rect.top() > self.viewport.bottom();
+    if gone {
+        ctx.memory_mut(|m| m.surrender_focus(focused));
     }
 }
 }

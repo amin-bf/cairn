@@ -161,11 +161,43 @@ requests:
 | **egui-winit as shipped** | **6** | **17** |
 | **one line disabled on Android** | **0** | **1** |
 
-`vendor/egui-winit` is a verbatim copy of 0.35.0 with that block `#[cfg(not(target_os = "android"))]`,
-wired in by `[patch.crates-io]`. Vendored rather than worked around in app code because the defect is
-two layers below anything we control and there is no hook between egui's platform output and
-`egui-winit`'s handling of it — the same shape of conclusion #8 reached about GameActivity, where
-the break was also at winit.
+`vendor/egui-winit` is a verbatim copy of 0.35.0 with that block dropped on Android, wired in by
+`[patch.crates-io]`. Vendored rather than worked around in app code because the defect is two layers
+below anything we control and there is no hook between egui's platform output and `egui-winit`'s
+handling of it — the same shape of conclusion #8 reached about GameActivity, where the break was also
+at winit.
+
+**Two wrong versions came first, and both are the same mistake**: hanging behaviour off a per-frame
+flag that is really a *discrete* event.
+
+- *Hide-then-show*, as upstream — the re-pop above.
+- *Show-only* — no re-pop, but `request_focus` also fires **while dragging**, so a single scroll
+  gesture produced **72 `show_soft_input` requests**. It had also quietly become the only thing
+  re-opening the keyboard after the user dismissed it with the IME's own chevron: `egui-winit`
+  debounces the *allowed* flag, so with `self.allow_ime` still `true`, `is_toggling_ime` stays false
+  and nothing ever asks again. Removing the block without replacing that service left tapping a field
+  doing nothing — egui's state had not changed, only Android's.
+
+The shipped shape is: **no interrupt block on Android**, and the app raises the keyboard itself from a
+real pointer press, tested against the real IME height from `insets.rs` rather than any egui-side
+belief about it (`ProtoApp::reopen_keyboard_on_tap`). A focused field the user scrolls **completely**
+out of view surrenders focus (`settle_focus_scrolled_away`) so the state is consistent — no focus, no
+`ime` output, no keyboard — instead of oscillating.
+
+Measured on the handset, driving it over `adb` and counting Android's own `ImeTracker` requests:
+
+| | hides | shows |
+|---|---|---|
+| tap the already-focused field ×3, as shipped | 6 | 17 |
+| tap the already-focused field ×3, fixed | **0** | **0** |
+| one scroll gesture, *show-only* attempt | 0 | 72 |
+| one scroll gesture, fixed | **0** | **0** |
+| scroll the focused field off the bottom, fixed | 2 | 2, then **settles closed** |
+| chevron dismiss → re-tap the field | never re-opened | **re-opens** |
+
+The scroll-off-the-bottom case converges in about two cycles rather than settling in one, because the
+surrender runs off the previous frame's rect. It stays settled; it is not the unbounded loop it
+replaced.
 
 **This is a decision the map owes an answer to**, and it is larger than #67's layout question: as
 shipped, text entry on Android dismisses and reopens the keyboard on every tap. The options are to

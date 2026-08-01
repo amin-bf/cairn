@@ -1159,6 +1159,23 @@ impl State {
                 window.set_ime_allowed(false);
                 window.set_ime_allowed(true);
             }
+            // On Android the block is **dropped entirely**, and the app re-shows the keyboard
+            // itself. Two wrong versions came first, and both are worth recording.
+            //
+            // *Hide-then-show*, as upstream: a visible dismiss-and-reopen on every tap, because
+            // `Memory::request_focus` interrupts composition unconditionally and `TextEdit` calls it
+            // on every pointer interaction.
+            //
+            // *Show-only*: no re-pop, but `request_focus` also fires **while dragging**, so one
+            // scroll gesture produced **72 `show_soft_input` requests**. It also silently became the
+            // only thing re-opening the keyboard after the user dismissed it with the IME chevron —
+            // `egui-winit` debounces the *allowed* flag, so with `self.allow_ime` still `true`,
+            // `is_toggling_ime` stays false and nothing ever asks again.
+            //
+            // Neither belongs in a per-frame path keyed on composition state that this platform
+            // cannot produce. Recovery is a discrete event — the user tapped a field while the
+            // keyboard was down — so the app raises it from a real pointer press, against the real
+            // IME height read in `insets.rs`. See `ProtoApp::reopen_keyboard_on_tap`.
             #[cfg(target_os = "android")]
             let _ = is_toggling_ime;
 
