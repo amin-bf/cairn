@@ -177,7 +177,10 @@ because they are validated findings, not because a web build ships.
 3. **The storage seam is a compile-time `#[cfg]`.** Keep it that way. Never introduce a runtime
    platform check — the whole stack choice rests on wrong platform code failing the build. It is two
    functions in `leitner-store::platform`, and a **third function appearing there means the seam is
-   eroding**. A `#[cfg(target_os)]` anywhere else in the workspace is a defect.
+   eroding**. A `#[cfg(target_os)]` anywhere else in the workspace is a defect. **The vendored
+   dependency of rule 12 is outside this rule** — it is not a workspace member and it is not our code,
+   so the `#[cfg]` you will find there is correct. Said explicitly because a correct instance of a
+   construct used as a defect signal is how the signal quietly stops meaning anything.
 4. **Immediate mode has nowhere to `await`.** Spawn the future, store a handle, read the result on a
    later frame, and call `ctx.request_repaint()` on completion or the result sits unseen until the
    next input event.
@@ -197,7 +200,9 @@ because they are validated findings, not because a web build ships.
    only motion and key events — it has no IME path, so composed text never reaches the app. This is
    not the activity backend: GameActivity was tried and reverted (see
    [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
-   text on Android.
+   text on Android. **This rule is also rule 12's tripwire**: the patch there is justified by the
+   absence of an IME path, so the day winit grows one, that patch becomes a bug and must be re-judged
+   rather than re-applied. Whoever retires this rule owns that.
 9. **Verify Android on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
    `cargo apk build` needs a **JDK on `PATH`** — `apksigner` is a `java` wrapper, and its absence
    surfaces only at the signing step, *after* a full NDK compile, as
@@ -219,15 +224,38 @@ because they are validated findings, not because a web build ships.
     the content fits, and there is **no scroll range**, so the covered band cannot be reached at all.
     Measured on the handset: **923dp of usable height down to 565dp, 39% of the screen, silently**.
     So the `ui` crate carries a one-function `platform` seam returning the IME and system-bar insets
-    (zero off Android) and reserves the band — a **third** per-crate seam under
+    and reserves the band — a **third** per-crate seam under
     [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md), not a widening of `leitner-store`'s two.
-    **Two guards come with it and an implementation missing either visibly oscillates**: keep the
-    focused field inside the shrunken viewport **in the same frame it shrinks** — a `TextEdit`
+    **That seam's return type must distinguish "this platform has no soft keyboard" from "the keyboard
+    is down"** — collapsing both to zero, as ADR-0025 §2 first wrote it, makes every gate on "the
+    keyboard is down" permanently true off Android
+    ([ADR-0026 §5](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)).
+    **Three guards come with all this and an implementation missing any of them is visibly broken**:
+    keep the focused field inside the shrunken viewport **in the same frame it shrinks** — a `TextEdit`
     publishes `output.ime` only while its rect is visible, `egui-winit` turns that absence into
     `hide_soft_input`, which collapses the inset, which restores the viewport, which shows the field
-    again — and **surrender focus when a focused field is scrolled *completely* out of view**, which
-    is the same loop entered from the other end.
-    [ADR-0025 §1 §2 §3](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md).
+    again — **surrender focus when a focused field is scrolled *completely* out of view**, which
+    is the same loop entered from the other end — and **raise the keyboard from a discrete press on a
+    text field** (rule 12), without which it never comes back after a manual dismiss.
+    [ADR-0025 §1 §2 §3](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md),
+    [ADR-0026 §4 §5](./docs/adr/0026-the-per-tap-keyboard-re-pop.md).
+12. **One dependency is vendored and patched, and a bump is not just a version change.** As published,
+    `egui`'s `TextEdit` calls `request_focus` on *every* pointer interaction with no `has_focus` check,
+    `request_focus` interrupts IME composition unconditionally, and `egui-winit` implements that
+    interruption as `set_ime_allowed(false)` then `(true)` — which winit's Android backend maps onto
+    `hide_soft_input`/`show_soft_input`. So **every tap into a text field dismisses and reopens the
+    keyboard**, measured at **6 hides / 17 shows for three taps on the already-focused field**, and the
+    inset collapse it causes throws away the scroll position that rule 11 exists to make meaningful.
+    It buys nothing here: rule 8's missing IME path means there is never a composition to interrupt.
+    **There is no fix above the dependency** — the interrupt flag is private, its setter is public and
+    its clearer is not, and nothing hooks the platform output before `egui-winit` reads it. So we carry
+    a **verbatim copy of the published crate** with that one block behind `#[cfg(not(target_os =
+    "android"))]`, wired by `[patch.crates-io]`, pinned exactly, verifiable by recursive diff against a
+    pristine copy. **The patch is bound to the block's shape, not its line number: if a release
+    restructures it, re-judge rather than re-apply** — a guard applied to a block that no longer means
+    the same thing looks healthy in a diff. Routine bumps need the diff and the shape check; the handset
+    measurement only when either is unhappy.
+    [ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md).
 
 ## The local store
 

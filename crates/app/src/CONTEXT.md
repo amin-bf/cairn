@@ -12,7 +12,10 @@ ADR-0006 §1 and §2** — read those amendments before touching the session;
 [ADR-0018](../../../docs/adr/0018-the-card-pane-ordering.md) and
 [ADR-0025](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), the second of which
 **amends ADR-0012 §1 and §5** and the third of which **moves §5's warning above the fields and adds
-the inset seam** — read those amendments before touching the authoring pane; also by
+the inset seam** — read those amendments before touching the authoring pane; and
+[ADR-0026](../../../docs/adr/0026-the-per-tap-keyboard-re-pop.md), which **amends ADR-0025 §2 and §3**
+— the seam's return type, and a third guard — and puts the keyboard raise in the shared text-field
+wrapper; also by
 [ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind) and
 [ADR-0015](../../../docs/adr/0015-the-sync-experience.md) and
 [ADR-0019](../../../docs/adr/0019-naming-the-account-at-enrolment.md) (everything the user sees about
@@ -215,12 +218,24 @@ grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks —
   occlusion. Nothing below us reports the IME inset — rule 8's gap has a second half — and the window
   is edge-to-edge, so `adjustResize` does nothing. egui then sizes its `ScrollArea` to a viewport
   taller than the visible one, the content fits, and there is **no scroll range** over the covered
-  39%. This crate's one-function `platform` seam returns the insets and the band is reserved. **Two
-  guards are load-bearing**: keep the focused field inside the shrunken viewport *in the same frame it
-  shrinks* (a `TextEdit` publishes `output.ime` only while visible; `egui-winit` turns its absence
-  into `hide_soft_input`, which collapses the inset, which restores the viewport — a closed loop that
-  presents as a flickering keyboard), and **surrender focus when a focused field is scrolled fully out
-  of view** (the same loop from the other end). ADR-0025 §1–§3.
+  39%. This crate's one-function `platform` seam returns the insets and the band is reserved. **Its
+  return type says whether the platform has a soft keyboard at all** — "no keyboard here" and "keyboard
+  down" both reported zero in ADR-0025 §2's original wording, which makes every "is it down" gate
+  permanently true on desktop (ADR-0026 §5). **Three guards are load-bearing**: keep the focused field
+  inside the shrunken viewport *in the same frame it shrinks* (a `TextEdit` publishes `output.ime` only
+  while visible; `egui-winit` turns its absence into `hide_soft_input`, which collapses the inset, which
+  restores the viewport — a closed loop that presents as a flickering keyboard); **surrender focus when
+  a focused field is scrolled fully out of view** (the same loop from the other end); and **raise the
+  keyboard from a discrete press on a text field**, below. ADR-0025 §1–§3, ADR-0026 §4–§5.
+- **The keyboard is raised from the shared text-field wrapper, on that field's own click.** This is the
+  recovery half of the vendored `egui-winit` patch (rule 12), and it is not optional: once the per-tap
+  interrupt is suppressed, nothing re-asserts show after the user dismisses the keyboard with the IME
+  chevron, because the layer below debounces its allow-IME flag against a state that never changed. It
+  goes through `ViewportCommand::IMEAllowed(true)`, which reaches the window without touching that flag.
+  **Keyed on a discrete click, never on a per-frame "something is focused and the pointer went down"** —
+  `request_focus` fires while *dragging* too, and the version that hung off it issued **72 show requests
+  from a single scroll gesture**. It lives in the wrapper because rule 2 already routes every field
+  through it, which is the only way every field can be promised the same behaviour. ADR-0026 §4.
 - **Verify on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
 
 ## Why this crate has no `main.rs`
