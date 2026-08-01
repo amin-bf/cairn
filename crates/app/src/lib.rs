@@ -14,6 +14,7 @@ pub mod editor;
 pub mod fonts;
 pub mod notes;
 pub mod session;
+pub mod sync;
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -161,6 +162,10 @@ pub struct LeitnerApp {
     editing: Option<Editing>,
     /// The note list's text-search buffer, held across frames (ADR-0021 §2).
     search: String,
+    /// True while the enrolment screen (the *surface* of "Set up sync") is showing, reached from the
+    /// Settings destination (ADR-0015 §7). The device flow that would follow it carries the network
+    /// and is deferred (see `sync`), so this gates only what the screen *says*, not a grant.
+    setting_up_sync: bool,
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
@@ -179,6 +184,7 @@ impl LeitnerApp {
             sitting: None,
             editing: None,
             search: String::new(),
+            setting_up_sync: false,
             fonts_installed: false,
         }
     }
@@ -243,7 +249,7 @@ impl eframe::App for LeitnerApp {
             Destination::Notes => {
                 notes_screen(ui, coll, &mut self.editing, &mut self.search);
             }
-            Destination::Settings => settings_screen(ui),
+            Destination::Settings => settings_screen(ui, &mut self.setting_up_sync),
         }
     }
 }
@@ -559,6 +565,16 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     );
     ui.add_space(8.0);
 
+    // The standing quiet line stating the Android text-input limitation *in advance* (ADR-0015 §9):
+    // the failure is silence — composed non-Latin text never reaches the app — so it can only be
+    // told, never detected. Off the one sanctioned `cfg(target_os)` capability constant (ADR-0015
+    // §15), so on desktop this compiles to nothing rather than a statement about a limitation the
+    // reader does not have.
+    if sync::LATIN_INPUT_ONLY {
+        field_label(ui, sync::DESKTOP_AUTHORING_LINE);
+        ui.add_space(8.0);
+    }
+
     // The kind dropdown: the shipped kinds plus this note's own current kind when acquired, and never
     // another acquired one (ADR-0012 §2, ADR-0017 §6).
     let options = editor::kind_options(&ed.kind);
@@ -628,12 +644,71 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     }
 }
 
-/// The **Settings** destination (ADR-0021 §1): the home enrolment and sync settings hang off. Their
-/// surfaces are their own tickets (#84, #85); this is the reachable door the shell owes them.
-fn settings_screen(ui: &mut egui::Ui) {
+/// The **Settings** destination (ADR-0021 §1), holding the sync surface (ADR-0015 §12, ADR-0019 §1).
+///
+/// This renders the *surface* — the words and the refusals — for the not-yet-enrolled device: the
+/// promise, the entry to enrolment, and the durable removal route. The enrolled surface (the resting
+/// "Last caught up ⟨when⟩", the connected account, Sync now, the device list, Disconnect and the
+/// history cutoff) is modelled and proven in `sync`, but it needs a live grant, and the device flow
+/// that obtains one carries the network this environment lacks (ADR-0013 §11) — so it is wired when
+/// that mechanism lands, not faked here. What is fixed now is what each surface *says*.
+fn settings_screen(ui: &mut egui::Ui, setting_up: &mut bool) {
     heading(ui, "Settings");
     ui.add_space(8.0);
-    body(ui, "Sync and backup settings will live here.");
+
+    if *setting_up {
+        enrolment_screen(ui, setting_up);
+        return;
+    }
+
+    // The promise, worded once (ADR-0015 §3) — never "automatic", never "in the background".
+    body(ui, sync::PROMISE);
+    ui.add_space(8.0);
+
+    // "Set up sync" is the entry, not "login" or "pairing" (ADR-0015 §7): there is no account of ours
+    // and no device-to-device step.
+    if full_width_button(ui, sync::SET_UP_SYNC).clicked() {
+        *setting_up = true;
+    }
+
+    ui.add_space(12.0);
+    // The removal route and the app name, kept permanently because the folder is hidden and cannot be
+    // navigated to (ADR-0015 §10, ADR-0020 §4). Disconnect is the only control this app owns.
+    body(ui, &sync::revocation_and_removal());
+}
+
+/// The enrolment screen's surface (ADR-0015 §7, ADR-0019 §4): what it states *before* the grant. The
+/// device flow, the credential file and the UserInfo fetch that would follow are the deferred network
+/// mechanism (see `sync` and ADR-0013 §11); this screen owns the plain-words scope and the one-time
+/// disclosure, which are decided and need no network to state.
+fn enrolment_screen(ui: &mut egui::Ui, setting_up: &mut bool) {
+    heading(ui, sync::SET_UP_SYNC);
+    ui.add_space(8.0);
+
+    // The scope, in plain words (ADR-0015 §7, ADR-0019 §4): the consent screen asks for two things.
+    body(ui, sync::SCOPE_PLAIN_WORDS);
+    ui.add_space(8.0);
+    // The promise again — it appears at enrolment and in settings, and nowhere else (ADR-0015 §3).
+    body(ui, sync::PROMISE);
+    ui.add_space(8.0);
+    // What leaves the device, stated once (ADR-0020 §7): not a status message, never promoted to a
+    // resting surface.
+    body(ui, sync::DISCLOSURE_CLAUSE);
+
+    ui.add_space(12.0);
+    // The device flow itself needs the network and a handset (ADR-0013 §11): the surface is settled
+    // here, the grant is its own step. Stated plainly rather than offered as a control that cannot
+    // complete.
+    field_label(
+        ui,
+        "Granting access uses the device flow, which needs a network connection — not available in \
+         this build.",
+    );
+
+    ui.add_space(8.0);
+    if full_width_button(ui, "Back").clicked() {
+        *setting_up = false;
+    }
 }
 
 // --- small rendering helpers, every one through the bidi layout so no screen holds a bare label ---
