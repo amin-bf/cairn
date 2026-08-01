@@ -53,9 +53,15 @@ re-minted** — the exact opposite of a writer id's never-adopt rule. Of record 
 container carries.
 
 **User-files seam**:
-`leitner-export`'s own `platform` module: **put, get, list**, three `#[cfg]` arms with a
-`compile_error!` third. How an artifact reaches a place the user can see. Deliberately
-[ADR-0013](../../../docs/adr/0013-the-sync-transport.md) §1's shape reused.
+`leitner-export`'s own `platform` module: **put, get, list, hand_off**, three `#[cfg]` arms with a
+`compile_error!` third. How an artifact reaches a place the user can see, and then leaves it.
+Deliberately [ADR-0013](../../../docs/adr/0013-the-sync-transport.md) §1's shape reused; the fourth
+operation is [ADR-0023](../../../docs/adr/0023-sending-a-written-file.md)'s.
+
+**Hand off**:
+Giving the written file to whatever surface the platform provides for passing a file onward — the
+system share sheet on Android, the file manager with the file **selected** on the desktop. It is not
+*sending*: both arms stop at the hand-over and the application never learns what happened next.
 
 **Revision**:
 A per-deck monotonic integer declared by the file, advancing only when the deck's content digest
@@ -123,7 +129,15 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   restored device must mint a fresh writer id, or two devices become one writer and the union drops
   reviews.
 - **No file picker, on either platform.** Activity *results* need a Java subclass and therefore a
-  dex, which spends the Gradle-free APK. Launch intents and dropped files are fine; results are not.
+  dex, which spends the Gradle-free APK. Launch intents, dropped files and **outbound sends** are
+  fine; results are not. The send was **measured** in the shipped APK shape — manifest plus one
+  `.so`, no `classes.dex`, no `res/`
+  ([evidence](../../../docs/research/android-outbound-share/README.md)) — so the picker's
+  disqualifying property genuinely does not reach it.
+- **`hand_off` never fires by itself, and the two arms are not a divergence to fix.** A sheet or a
+  file manager opening unasked takes the screen. Android sends and the desktop reveals because there
+  is no share portal on the desktop and nothing to drag on Android; making them symmetric means
+  picking a mail client for the user.
 - **The import plan is derived on every read, never cached.** A stored plan is a stored projection of
   the log — the thing ADR-0004 exists to prevent — and a sync landing while the preview is on screen
   can falsify it. Derived, promise and effect cannot diverge, which is why nothing is reported after

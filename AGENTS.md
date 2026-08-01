@@ -278,9 +278,13 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
     user has agreed to anything. Deck names are sanitised **outbound** too, since the export filename
     is derived from one.
 11. **Read back the filename the platform wrote; never echo the one requested.** The Android put is a
-    `MediaStore` insert whose collision behaviour is unverified on the handset — it may overwrite,
-    dedupe or fail — and the user chose neither name nor location, so the report is the only way they
-    can find the file at all.
+    `MediaStore` insert, and the user chose neither name nor location, so the report is the only way
+    they can find the file at all. **Measured on the handset** — it **dedupes**, and the suffix lands
+    *after* the extension: `French A1.ldeck (1)`, not `French A1 (1).ldeck`
+    ([evidence](./docs/research/android-outbound-share/README.md)). `MediaStore` also **discards the
+    media type we declare**, deriving it from the extension instead, and a type the name disagrees
+    with makes it **rename the file**. What that costs the extension-matched launch filter is
+    [#72](https://github.com/amin-bf/leitner/issues/72)'s.
 
 ## Sync
 
@@ -352,7 +356,23 @@ archiving against it.
    typed on the phone — which is why **archives are never encrypted**.
 6. **The platform seam rule is per crate.** `leitner-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm
-   discipline. `leitner-export` has one — put, get, list.
+   discipline. `leitner-export` has one — put, get, list, **hand_off**
+   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)). The count is **not** the invariant:
+   ADR-0016 §5's *"three operations, not four"* was an argument about **delete**, which is still
+   absent. *Opaque, minimal, enumerable* is what binds.
+7. **`hand_off` is named for what it does on both platforms, and the two arms differ on purpose.**
+   Android launches the system share sheet; the desktop reveals the file **selected** in the file
+   manager, because no `org.freedesktop.portal.Share` exists. Calling it `send` invites an
+   implementer to reach for the mail portal on the desktop arm, which
+   [ADR-0023 §4](./docs/adr/0023-sending-a-written-file.md) rejects — attaching to a message picks
+   one channel on the user's behalf, which is what a share sheet exists not to do. **It never fires
+   by itself**: a chooser or a file manager opening unasked takes the screen, and nothing in this
+   specification acts unbidden.
+8. **On Android the context is `android.app.Application`, not the Activity.** `ndk_context` hands
+   back an `Application`, so `startActivity` **requires `FLAG_ACTIVITY_NEW_TASK`** or it throws. Both
+   that flag and `FLAG_GRANT_READ_URI_PERMISSION` go on the **chooser** intent —
+   `Intent.createChooser` returns a fresh `Intent` and inherits neither. Setting the grant only on
+   the inner intent fails *after* the user has picked an application.
 
 ### What the user sees
 
