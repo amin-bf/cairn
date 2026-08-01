@@ -18,7 +18,10 @@ saying what order the lines took — and
 [ADR-0020 §4](../../../docs/adr/0020-protection-at-rest.md): **no archive this crate writes is ever
 encrypted**, on a reason worth knowing before it looks like an omission. A key protecting a file that
 travels must reach every device that opens it, and with no server there is no channel to send it on but
-the one it is protecting; a user-supplied key is refused separately by ADR-0020 §3.
+the one it is protecting; a user-supplied key is refused separately by ADR-0020 §3. Finally by
+[ADR-0022](../../../docs/adr/0022-the-import-preview-and-export-report.md), which specifies what these
+artifacts *say*: an import is gated behind a declinable preview of its effects, and an export reports
+where the file went, since with no picker the user chose neither its name nor its location.
 
 ## Language
 
@@ -70,6 +73,31 @@ build does not ship. Read-only, and never displaces a shipped definition.
 The two import branches, selected by whether the file's deck id is already held. Authority follows
 deck id, never a user's choice.
 
+**Import plan**:
+What an import *would* do to this collection, stated as effects — notes created, notes skipped as
+already held, notes moving deck, tombstones that match a note we hold, a deck about to be renamed, a
+deck about to be left empty, a kind about to be adopted. **Derived on every read, never stored**: it
+is a projection of the log, and a cached one can be falsified by a merge landing underneath it.
+_Avoid_: Import summary, import result — both name something produced after the fact, and there is
+nothing after the fact.
+
+**Preview**:
+The import plan, shown, with the import declinable. The one gate in this specification, and it exists
+because a regretted import is the one destructive act no archive and no peer can undo.
+_Avoid_: Confirmation dialog — this repo refuses those twice, and for reasons that do not reach here.
+
+**Gate / describe**:
+The two stages of reading a file. The **gate** reads the central directory only and refuses a file
+this build must not act on — unknown format integer, wrong profile, revision below the one held, a
+path rule broken. The **describe** stage inflates `notes.jsonl` and diffs it against the collection
+to build the plan. A refusal must never require inflating a payload.
+
+**Authoring value**:
+A value on the deck-id-keyed slot that belongs to *publishing* a deck rather than to using it:
+`{revision, digest}`, author, description, licence. Never exported as deck content, never in the log,
+and **must sync** — otherwise one author's two devices emit inconsistent files as routine behaviour.
+The slot's other half is **personal** values, whose syncing is still open and which do not yet exist.
+
 ## Rules that are easy to break silently
 
 - **A per-deck progress export does not exist, and cannot.** The log has no deck column by design,
@@ -96,3 +124,21 @@ deck id, never a user's choice.
   reviews.
 - **No file picker, on either platform.** Activity *results* need a Java subclass and therefore a
   dex, which spends the Gradle-free APK. Launch intents and dropped files are fine; results are not.
+- **The import plan is derived on every read, never cached.** A stored plan is a stored projection of
+  the log — the thing ADR-0004 exists to prevent — and a sync landing while the preview is on screen
+  can falsify it. Derived, promise and effect cannot diverge, which is why nothing is reported after
+  an import commits.
+- **The preview states effects, not file contents.** The manifest's counts are the wrong numbers in
+  exactly the cases that matter: a file whose notes you almost all hold already, and a file whose
+  retractions match nothing you have. The manifest is for **gating**; the payload is for describing.
+- **A shipped kind winning over the file's definition is silent.** An unknown kind being *adopted* is
+  stated. Announcing the override describes a non-event and advertises the option that rule exists to
+  remove — reordering a kind's `cards` list is the most destructive edit in this codebase.
+- **Every string from a file is hostile.** Author, description, licence and deck names render as
+  plain text, never Markdown, length-bounded — the preview is the one screen showing a stranger's
+  strings before the user has agreed to anything. Deck names are also sanitised **outbound**, since a
+  filename is derived from one.
+- **Read back what the platform wrote.** Never echo the requested filename: `MediaStore` may
+  overwrite, dedupe or fail on a collision, and which it does is unverified on the handset.
+- **The application never deletes a file it wrote or imported.** The seam has no delete; the list
+  grows and tidying it is the file manager's job.

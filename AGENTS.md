@@ -220,6 +220,23 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
 7. **`zip`'s `deflate-flate2` feature does not compile** — it selects no zlib backend. Use
    `--no-default-features --features deflate-flate2-zlib-rs`; the `deflate` umbrella feature builds but
    drags in zopfli for an encoder we do not need.
+8. **An import is gated, and the plan behind the gate is derived on every read.** Caching it stores a
+   projection of the log — the thing ADR-0004 exists to prevent — and a sync landing while the preview
+   is on screen falsifies it. Derived, promise and effect cannot diverge, which is why **nothing is
+   reported after an import commits** ([ADR-0022 §1, §5](./docs/adr/0022-the-import-preview-and-export-report.md)).
+9. **The manifest gates; the payload describes.** A refusal — unknown `format`, wrong profile,
+   revision below the one held, a broken path rule — must never require inflating a payload. The
+   preview then states **effects on this collection**, not the manifest's counts, which are the wrong
+   numbers in exactly the cases the preview exists for: how many notes are genuinely new after the
+   collision skip, how many move deck, and how many tombstones match a note we actually hold.
+10. **Every string arriving in a file is hostile.** Author, description, licence and deck names render
+    as plain text, never Markdown, length-bounded — the preview shows a stranger's strings *before* the
+    user has agreed to anything. Deck names are sanitised **outbound** too, since the export filename
+    is derived from one.
+11. **Read back the filename the platform wrote; never echo the one requested.** The Android put is a
+    `MediaStore` insert whose collision behaviour is unverified on the handset — it may overwrite,
+    dedupe or fail — and the user chose neither name nor location, so the report is the only way they
+    can find the file at all.
 
 ## Sync
 
