@@ -14,7 +14,7 @@ A six-crate workspace, laid out in
 
 | Crate | What it is |
 |---|---|
-| `leitner-core` | The domain, entire and pure. Zero dependencies — testable with no database, window or handset. |
+| `leitner-core` | The domain, entire and pure. One dependency, `fsrs` ([ADR-0027](./docs/adr/0027-the-scheduler-dependency.md)) — testable with no database, window or handset. |
 | `leitner-store` | SQLite persistence and the whole platform seam (two functions wide). |
 | `leitner-export` | The `.ldeck` deck-file container and import policy. Holds the zip dependency. |
 | `leitner-sync` | Publishing the log to the remote and reading it back. Holds the network dependencies. |

@@ -10,9 +10,12 @@ Depends on `content` (a row carries a `CardRef`). Depends on nothing else.
 supersedes; also by [ADR-0002 §7](../../../../docs/adr/0002-the-card-model.md) and
 [ADR-0001 §6](../../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md).
 
-> **Naming hazard.** This module is called `log` and would shadow the `log` crate. `leitner-core`
-> therefore takes no dependencies at all (ADR-0009 §2), which makes the collision unreachable rather
-> than merely unlikely. Logging belongs at the edges, in `leitner-store` and `leitner-app`.
+> **Naming hazard.** This module is called `log` and would shadow the `log` crate. It still cannot
+> collide — but the guarantee **narrowed** when ADR-0027 admitted `fsrs`, which itself depends on
+> `log`. What prevents the shadowing now is that `log` is not a **direct** dependency of
+> `leitner-core`: only direct dependencies enter a crate's extern prelude, so a transitive one is
+> invisible to our source (ADR-0009 §6, as amended by ADR-0027 §4). Adding `log` here for tracing
+> would break it immediately — logging belongs at the edges, in `leitner-store` and `leitner-app`.
 
 ## Language
 
