@@ -19,7 +19,7 @@
 //! to fall out of step with an edit made from the review screen (ADR-0021 §6).
 
 use leitner_core::content::NoteId;
-use leitner_store::{Collection, StoreError};
+use leitner_store::{Collection, StoreError, TAG_ATTR_PREFIX};
 
 /// One note as the browse surface sees it. Carries what narrows the list (deck, tags, field values)
 /// and what identifies it (id, kind) — and **deliberately no schedule information**: no box, no due
@@ -29,8 +29,11 @@ use leitner_store::{Collection, StoreError};
 pub struct NoteRow {
     pub id: NoteId,
     pub kind: String,
-    /// The deck this note is filed under, or `None` when unfiled — a legal, still-reviewable state
-    /// (ADR-0005 §7).
+    /// The deck this note is filed under — its **deck id** in canonical text (ADR-0005 §8) — or
+    /// `None` when the note carries no `deck` reference. A reference naming no deck the collection
+    /// currently holds is **unfiled**, a legal and still-reviewable state (ADR-0005 §8): such a note
+    /// keeps its id here and is listed like any other; only a reference to a deck that *exists and is
+    /// deleted* derives the note deleted (and so drops out of the list entirely).
     pub deck: Option<String>,
     /// The note's tags, as authored. Empty when untagged.
     pub tags: Vec<String>,
@@ -99,34 +102,49 @@ impl Filter {
 /// projection, not stored state, so an edit from the review screen is reflected on the next read
 /// (ADR-0021 §6).
 pub fn list(coll: &Collection, filter: &Filter) -> Result<Vec<NoteRow>, StoreError> {
+    // The decks flagged deleted, read once: a note filed under one of them derives *deleted* even
+    // though its own flag is unset (ADR-0005 §7), and so is not listed. A note whose `deck` names no
+    // held deck is not in this set — it is unfiled, not deleted, and stays in the list (ADR-0005 §8).
+    let deleted_decks = coll.deleted_deck_ids()?;
+
     // Sort key held beside each row: the `position` value (absent sorts first, though creation always
     // assigns one) then the note id, the deterministic tie-break every device computes identically.
     let mut rows: Vec<(Option<String>, NoteRow)> = Vec::new();
     for id in coll.entity_ids("note")? {
         let attrs = coll.mutable_entity("note", &id)?;
 
-        // A deleted note is not listed, and there is no undelete here (ADR-0021 §2, ADR-0004 §7).
-        if attrs.iter().any(|(a, v)| a == "deleted" && v == "true") {
-            continue;
-        }
-
         // Split a note's attributes into its metadata (kind, position, deck, tags, the delete marker)
         // and everything else — its authored **field values**, which the text search scans without
-        // needing the note's kind definition (an acquired kind would not supply one anyway).
+        // needing the note's kind definition (an acquired kind would not supply one anyway). A tag is
+        // its own `tag:<name>` row (ADR-0002 §10's set-union storage), collected back into a set here.
         let mut kind = String::new();
         let mut position = None;
         let mut deck = None;
         let mut tags = Vec::new();
         let mut fields = Vec::new();
+        let mut own_deleted = false;
         for (attr, value) in attrs {
+            if let Some(tag) = attr.strip_prefix(TAG_ATTR_PREFIX) {
+                tags.push(tag.to_owned());
+                continue;
+            }
             match attr.as_str() {
                 "kind" => kind = value,
                 "position" => position = Some(value),
                 "deck" => deck = Some(value),
-                "tags" => tags = parse_tags(&value),
-                "deleted" => {}
+                "deleted" => own_deleted = value == "true",
                 _ => fields.push((attr, value)),
             }
+        }
+        tags.sort();
+
+        // A note is deleted if its **own** flag is set or its **deck's** flag is (ADR-0005 §7) — a
+        // derivation, never a cascade, so a note added offline to a since-deleted deck is simply
+        // deleted with no orphan rule. A deleted note is not listed, and there is no undelete here
+        // (ADR-0021 §2, ADR-0004 §7); recovery is ADR-0016's restore or re-import.
+        let deck_deleted = deck.as_deref().is_some_and(|d| deleted_decks.contains(d));
+        if own_deleted || deck_deleted {
+            continue;
         }
 
         // Present a note's fields in **kind-definition order** (Front before Back), not the
@@ -163,12 +181,6 @@ pub fn any_notes(coll: &Collection) -> Result<bool, StoreError> {
 /// The empty-state sentence (ADR-0015 §7, ADR-0021 §2): the same empty collection seen from the note
 /// list, with a surface now behind each of its three verbs.
 pub const EMPTY_STATE: &str = "Nothing here yet — create a deck, import one, or set up sync";
-
-/// Split a stored `tags` value into individual tags. Whitespace-separated is a reasonable authoring
-/// format until a richer one is specified; a tag with internal structure is the tag ticket's call.
-fn parse_tags(value: &str) -> Vec<String> {
-    value.split_whitespace().map(str::to_owned).collect()
-}
 
 #[cfg(test)]
 mod tests {
@@ -256,30 +268,37 @@ mod tests {
 
     #[test]
     fn deck_and_tag_filters_compose_with_text() {
+        // ADR-0021 §2 / ADR-0005 §6: deck ∩ tag ∩ text, one queue-filter vocabulary. The deck filter
+        // is by deck **id** (ADR-0005 §8), and a tag is its own settling row (ADR-0002 §10).
         let (mut coll, _d, _s) = open();
+        let french = coll.create_deck("Français").unwrap();
         let a = coll.create_note("basic", &[("Front", "one")]).unwrap();
         let b = coll.create_note("basic", &[("Front", "two")]).unwrap();
-        coll.mutable_set("note", &a.0, "deck", Some("french"))
+        coll.mutable_set("note", &a.0, "deck", Some(&french.to_canonical()))
             .unwrap();
-        coll.mutable_set("note", &a.0, "tags", Some("verb common"))
-            .unwrap();
-        coll.mutable_set("note", &b.0, "deck", Some("french"))
+        coll.add_tag(a, "verb").unwrap();
+        coll.add_tag(a, "common").unwrap();
+        coll.mutable_set("note", &b.0, "deck", Some(&french.to_canonical()))
             .unwrap();
 
-        let french = list(
+        let by_deck = list(
             &coll,
             &Filter {
-                deck: Some("french".to_owned()),
+                deck: Some(french.to_canonical()),
                 ..Filter::default()
             },
         )
         .unwrap();
-        assert_eq!(french.len(), 2, "both notes are in the french deck");
+        assert_eq!(by_deck.len(), 2, "both notes are in the french deck");
+        assert_eq!(
+            by_deck[0].tags,
+            vec!["common".to_owned(), "verb".to_owned()]
+        );
 
         let tagged = list(
             &coll,
             &Filter {
-                deck: Some("french".to_owned()),
+                deck: Some(french.to_canonical()),
                 tag: Some("verb".to_owned()),
                 ..Filter::default()
             },
@@ -287,6 +306,46 @@ mod tests {
         .unwrap();
         assert_eq!(tagged.len(), 1, "only the tagged one survives deck ∩ tag");
         assert_eq!(tagged[0].id, a);
+    }
+
+    #[test]
+    fn a_note_in_a_deleted_deck_is_not_listed_but_a_dangling_reference_is_unfiled() {
+        // ADR-0005 §7: note-deletedness derives from the deck's flag — no cascade, no per-note write.
+        // ADR-0005 §8: a `deck` reference naming no held deck is *unfiled*, fully reviewable, never
+        // dropped. The two must not be confused: a deleted deck removes its notes; a missing one does
+        // not.
+        let (mut coll, _d, _s) = open();
+        let deck = coll.create_deck("throwaway").unwrap();
+        let filed = coll.create_note("basic", &[("Front", "filed")]).unwrap();
+        let dangling = coll.create_note("basic", &[("Front", "loose")]).unwrap();
+        coll.mutable_set("note", &filed.0, "deck", Some(&deck.to_canonical()))
+            .unwrap();
+        // A reference to a deck that was never created — unfiled, not deleted.
+        let ghost = leitner_core::content::DeckId([0xab; 16]).to_canonical();
+        coll.mutable_set("note", &dangling.0, "deck", Some(&ghost))
+            .unwrap();
+
+        // Before deletion both are listed.
+        assert_eq!(list(&coll, &Filter::default()).unwrap().len(), 2);
+
+        // Deleting the deck derives its note deleted; the dangling-reference note is untouched.
+        coll.mutable_set("deck", &deck.0, "deleted", Some("true"))
+            .unwrap();
+        let ids: Vec<NoteId> = list(&coll, &Filter::default())
+            .unwrap()
+            .into_iter()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(
+            ids,
+            vec![dangling],
+            "the filed note is gone, the unfiled one remains"
+        );
+        assert_eq!(
+            list(&coll, &Filter::default()).unwrap()[0].deck.as_deref(),
+            Some(ghost.as_str()),
+            "an unfiled note keeps its dangling deck reference"
+        );
     }
 
     #[test]

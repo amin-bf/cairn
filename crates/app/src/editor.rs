@@ -16,7 +16,7 @@
 //! the destructive-edit warning that sits above the fields is its neighbour there; neither is here.
 //! What *is* here is testable without a window: the commit rule and the dropdown's contents.
 
-use leitner_core::content::{KindDefinition, NoteId, SHIPPED_KINDS};
+use leitner_core::content::{DeckId, KindDefinition, NoteId, SHIPPED_KINDS};
 use leitner_store::{Collection, StoreError};
 
 /// The kinds the dropdown offers for a note whose current kind is `current` (ADR-0012 §2 as amended
@@ -81,6 +81,23 @@ pub fn commit_field(
     }
 }
 
+/// File a note under a deck, or clear its deck reference (ADR-0005 §8, ADR-0021 §9). A note belongs to
+/// **exactly one** deck, so this is a single settling value on the note — the same mechanism as a
+/// field or a tag (ADR-0005 §8) — carrying the deck's **id** in canonical text, never its name. `None`
+/// clears the reference, leaving the note *unfiled* and still fully reviewable (ADR-0005 §8); nothing
+/// obliges a note to have a deck, and no deck is ever created as a side effect of filing (ADR-0005 §8).
+///
+/// The deck's own existence is not checked here: a reference may legitimately name a deck that has not
+/// yet arrived over sync, or one since deleted, both of which read as unfiled where notes are listed.
+pub fn set_note_deck(
+    coll: &mut Collection,
+    note: NoteId,
+    deck: Option<DeckId>,
+) -> Result<(), StoreError> {
+    let value = deck.map(|d| d.to_canonical());
+    coll.mutable_set("note", &note.0, "deck", value.as_deref())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,6 +134,30 @@ mod tests {
 
     fn is_shipped(kind: &str) -> bool {
         SHIPPED_KINDS.iter().any(|k| k.id == kind)
+    }
+
+    #[test]
+    fn a_note_is_filed_under_one_deck_by_id_and_can_be_unfiled() {
+        // ADR-0005 §8 / ADR-0021 §9: filing is one settling value on the note, carrying the deck id
+        // (not its name); clearing it leaves the note unfiled. Assigned where the note is written.
+        let (mut coll, _d, _s) = open();
+        let deck = coll.create_deck("Français").unwrap();
+        let note = coll.create_note("basic", &[("Front", "chien")]).unwrap();
+
+        set_note_deck(&mut coll, note, Some(deck)).unwrap();
+        assert_eq!(
+            coll.mutable_get("note", &note.0, "deck")
+                .unwrap()
+                .as_deref(),
+            Some(deck.to_canonical().as_str()),
+            "the note carries the deck's id, never its name"
+        );
+
+        set_note_deck(&mut coll, note, None).unwrap();
+        assert!(
+            coll.mutable_get("note", &note.0, "deck").unwrap().is_none(),
+            "clearing the reference leaves the note unfiled"
+        );
     }
 
     #[test]

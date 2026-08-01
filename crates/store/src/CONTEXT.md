@@ -47,6 +47,22 @@ never be swapped:
 It is **not** on the mutable surface — it must never settle — and **not** in the log, since it is not
 an input to replay.
 
+**Deck**:
+A `{ id, name }` on the mutable surface (`entity = "deck"`): the `name` attribute, and a `deleted`
+flag settling like any other value (ADR-0005 §4, §5, §7). Minted only by `create_deck` — **never
+auto-created** (ADR-0005 §8), so a collection may hold zero. A note's membership is a single `deck`
+attribute on the *note*, holding the deck's canonical id, so moving a note between decks is one
+value changing (ADR-0005 §8); an id naming no held deck is **unfiled**, and a note derives deleted
+from its **own** flag or its **deck's** (ADR-0005 §7).
+
+**Tag row**:
+One tag on a note, stored as its **own** mutable attribute — `tag:<name>` set to `"true"`, cleared
+to NULL to remove (see [`TAG_ATTR_PREFIX`]). One attribute per tag is what makes tags settle by
+**set union** (ADR-0002 §10): two devices adding different tags offline write different attributes
+and both survive, where a single joined `tags` value would let one addition overwrite the other —
+the same trap ADR-0005 §8 named for a member list on a deck.
+_Avoid_: A single joined `tags` value — it contends and loses additions.
+
 **Empty collection**:
 One that has authored **no log rows under this device's own writer id and nothing on the mutable
 surface**. The test that decides whether a device adopts a collection id it meets or refuses it. Not
@@ -93,6 +109,12 @@ disown every earlier `reviewed` row.
   with `leitner_core::replay::DERIVATION_VERSION`; a missing or mismatched stamp clears it on open.
   The derivation is versioned, the projection is not — there is no cache migration (ADR-0004 §9).
 - **WAL on both files; `synchronous=FULL` on the collection, `OFF` on the cache.**
+- **A tag is one attribute per tag, never a joined `tags` value.** Set union is the required merge
+  (ADR-0002 §10); it only holds because each tag settles independently. Collapsing them into one
+  value silently reintroduces last-write-wins, and one device's added tag vanishes on the next merge.
+- **No deck is ever auto-created**, and there is no default deck (ADR-0005 §8). Two never-synced
+  devices would each mint a different id for a built-in default, producing an unmergeable duplicate
+  the first time they meet. `create_deck` is the sole origin; zero decks is a legal resting state.
 
 ## The platform seam
 

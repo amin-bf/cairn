@@ -17,7 +17,7 @@ pub mod session;
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use leitner_core::content::NoteId;
+use leitner_core::content::{DeckId, NoteId};
 use leitner_core::log::{DayScale, day_number};
 use leitner_core::replay::replay;
 use leitner_core::scheduling::Grade;
@@ -89,6 +89,13 @@ struct Editing {
     note: Option<NoteId>,
     kind: String,
     fields: Vec<(String, String)>,
+    /// The deck this note is filed under, chosen in the editor's deck dropdown beside the kind one
+    /// (ADR-0021 §9). `None` is unfiled — a legal, still-reviewable state (ADR-0005 §8). On a draft
+    /// the choice is held here until the note is born on its first non-empty field, then written once.
+    deck: Option<DeckId>,
+    /// The new-deck name buffer for *create a new deck*, available from the deck dropdown (ADR-0021
+    /// §9): the moment you need a deck that does not exist is while filing the note that wants it.
+    new_deck: String,
 }
 
 impl Editing {
@@ -102,6 +109,8 @@ impl Editing {
                 .into_iter()
                 .map(|name| (name.to_owned(), String::new()))
                 .collect(),
+            deck: None,
+            new_deck: String::new(),
         }
     }
 
@@ -125,10 +134,17 @@ impl Editing {
                 (name.to_owned(), value)
             })
             .collect();
+        let deck = coll
+            .mutable_get("note", &note.0, "deck")
+            .ok()
+            .flatten()
+            .and_then(|d| DeckId::parse_canonical(&d));
         Editing {
             note: Some(note),
             kind,
             fields,
+            deck,
+            new_deck: String::new(),
         }
     }
 
@@ -161,6 +177,12 @@ pub struct LeitnerApp {
     editing: Option<Editing>,
     /// The note list's text-search buffer, held across frames (ADR-0021 §2).
     search: String,
+    /// The note list's deck filter, held across frames — one of ADR-0005 §6's three composable
+    /// filters. `None` narrows by no deck (every note, filed or not).
+    deck_filter: Option<DeckId>,
+    /// The note list's *new deck* name buffer: decks are created where they are filtered (ADR-0021
+    /// §9), so the create control sits beside the deck filter.
+    new_deck: String,
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
@@ -179,6 +201,8 @@ impl LeitnerApp {
             sitting: None,
             editing: None,
             search: String::new(),
+            deck_filter: None,
+            new_deck: String::new(),
             fonts_installed: false,
         }
     }
@@ -241,7 +265,14 @@ impl eframe::App for LeitnerApp {
                 }
             }
             Destination::Notes => {
-                notes_screen(ui, coll, &mut self.editing, &mut self.search);
+                notes_screen(
+                    ui,
+                    coll,
+                    &mut self.editing,
+                    &mut self.search,
+                    &mut self.deck_filter,
+                    &mut self.new_deck,
+                );
             }
             Destination::Settings => settings_screen(ui),
         }
@@ -475,6 +506,8 @@ fn notes_screen(
     coll: &mut Collection,
     editing: &mut Option<Editing>,
     search: &mut String,
+    deck_filter: &mut Option<DeckId>,
+    new_deck: &mut String,
 ) {
     if let Some(ed) = editing {
         if full_width_button(ui, "Done").clicked() {
@@ -490,9 +523,13 @@ fn notes_screen(
     ui.add_space(8.0);
 
     // Create opens a fresh draft; the note is not committed until its first non-empty field
-    // (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is a plain front/back.
+    // (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is a plain front/back. It
+    // opens already filed under the deck the list is filtered to, if any — the deck you are looking at
+    // is the likeliest one for the note you are about to write.
     if full_width_button(ui, "Create note").clicked() {
-        *editing = Some(Editing::new_draft("basic"));
+        let mut draft = Editing::new_draft("basic");
+        draft.deck = *deck_filter;
+        *editing = Some(draft);
         return;
     }
 
@@ -504,13 +541,20 @@ fn notes_screen(
         return;
     }
 
-    // Text search — the load-bearing filter (ADR-0021 §2), a plain substring over field values. Deck
-    // and tag filters share the surface but have no authoring path yet (a later ticket), so only text
-    // is wired here.
+    // The deck filter and the deck authoring surface (ADR-0021 §9): decks are **created where they
+    // are filtered**, so the filter dropdown, *new deck*, and the delete of the filtered deck all sit
+    // together here. Deletion is ADR-0005 §7's flag, deriving through to the deck's notes.
+    ui.add_space(8.0);
+    deck_controls(ui, coll, deck_filter, new_deck);
+
+    // Text search — the load-bearing filter (ADR-0021 §2), a plain substring over field values,
+    // composing with the deck filter above (deck ∩ text; the tag filter shares the vocabulary and is
+    // set on notes but has no dedicated control yet).
     ui.add_space(8.0);
     field_label(ui, "Search");
     text_field(ui, search, false);
     let filter = Filter {
+        deck: deck_filter.map(|d| d.to_canonical()),
         text: (!search.trim().is_empty()).then(|| search.trim().to_owned()),
         ..Filter::default()
     };
@@ -543,6 +587,100 @@ fn notes_screen(
     if let Some(id) = open {
         *editing = Some(Editing::for_note(coll, id));
     }
+}
+
+/// The note list's deck surface (ADR-0021 §9): the deck **filter** dropdown, *new deck* creation
+/// beside it, and — for the deck currently filtered to — a delete. A deck is `{ id, name }` with a
+/// minted id (ADR-0005 §4); the dropdown shows names but the filter is by id, so two decks may share
+/// a name without merging. *All decks* and *Unfiled* are filter values, not decks: **no deck is ever
+/// auto-created** (ADR-0005 §8), so a collection may legitimately hold none.
+fn deck_controls(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    deck_filter: &mut Option<DeckId>,
+    new_deck: &mut String,
+) {
+    let decks = coll.decks().unwrap_or_default();
+
+    field_label(ui, "Deck");
+    let selected = deck_filter
+        .and_then(|id| decks.iter().find(|(d, _)| *d == id).map(|(_, n)| n.clone()))
+        .unwrap_or_else(|| "All decks".to_owned());
+    egui::ComboBox::from_id_salt("deck-filter")
+        .selected_text(text(ui, &selected))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(deck_filter, None, text(ui, "All decks"));
+            for (id, name) in &decks {
+                ui.selectable_value(deck_filter, Some(*id), text(ui, name));
+            }
+        });
+
+    ui.horizontal(|ui| {
+        let created = ui.button(text(ui, "New deck")).clicked();
+        text_field(ui, new_deck, false);
+        // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
+        if created
+            && !new_deck.trim().is_empty()
+            && let Ok(id) = coll.create_deck(new_deck.trim())
+        {
+            *deck_filter = Some(id);
+            new_deck.clear();
+        }
+    });
+
+    // Delete is reachable from the same place (ADR-0021 §9); it flags the filtered deck deleted
+    // (ADR-0005 §7), which derives its notes deleted too. The binding warning naming how many notes
+    // lose content, and the *move to another deck* alternative (ADR-0005 §7), are the visual pass's.
+    if let Some(id) = *deck_filter
+        && ui.button(text(ui, "Delete deck")).clicked()
+    {
+        let _ = coll.mutable_set("deck", &id.0, "deleted", Some("true"));
+        *deck_filter = None;
+    }
+}
+
+/// The editor's deck dropdown (ADR-0021 §9): the note's single deck (ADR-0005 §2), *Unfiled* for
+/// none, and *create a new deck* inline. A change to a **stored** note is written at once; on a draft
+/// it is held in `ed.deck` and applied when the note is born (see [`editor_pane`]). Creating a deck
+/// here files the note under it immediately — the one reason you made it (ADR-0021 §9).
+fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
+    let decks = coll.decks().unwrap_or_default();
+    let current = ed
+        .deck
+        .and_then(|id| decks.iter().find(|(d, _)| *d == id).map(|(_, n)| n.clone()))
+        .unwrap_or_else(|| "Unfiled".to_owned());
+
+    field_label(ui, "Deck");
+    let mut chosen = ed.deck;
+    egui::ComboBox::from_id_salt("note-deck")
+        .selected_text(text(ui, &current))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut chosen, None, text(ui, "Unfiled"));
+            for (id, name) in &decks {
+                ui.selectable_value(&mut chosen, Some(*id), text(ui, name));
+            }
+        });
+    if chosen != ed.deck {
+        ed.deck = chosen;
+        if let Some(id) = ed.note {
+            let _ = editor::set_note_deck(coll, id, ed.deck);
+        }
+    }
+
+    ui.horizontal(|ui| {
+        let created = ui.button(text(ui, "New deck")).clicked();
+        text_field(ui, &mut ed.new_deck, false);
+        if created
+            && !ed.new_deck.trim().is_empty()
+            && let Ok(id) = coll.create_deck(ed.new_deck.trim())
+        {
+            ed.deck = Some(id);
+            ed.new_deck.clear();
+            if let Some(note) = ed.note {
+                let _ = editor::set_note_deck(coll, note, ed.deck);
+            }
+        }
+    });
 }
 
 /// The editor's **form pane** (ADR-0012 §1, §2): the kind dropdown and the note's fields, each field
@@ -582,6 +720,13 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
 
     ui.add_space(8.0);
 
+    // The deck dropdown, beside the kind one (ADR-0021 §9): the note's one deck (ADR-0005 §2), with
+    // *create a new deck* right here — the moment you need a deck that does not exist is while filing
+    // the note that wants it. On a draft the choice is held until the note is born, then written once.
+    editor_deck_dropdown(ui, coll, ed);
+
+    ui.add_space(8.0);
+
     // Bare Enter is inert in every single-line field, the last one included (ADR-0012 §7, ADR-0021
     // §8); the *New note* rhythm is a modifier chord, never bare Enter — `cloze`'s multiline field
     // would need Enter for a newline anyway, so "Enter on the last field" could never be uniform.
@@ -589,6 +734,7 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     let new_note_chord = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
 
     let kind = ed.kind.clone();
+    let was_committed = ed.note.is_some();
     let mut note = ed.note;
     for idx in 0..ed.fields.len() {
         let name = ed.fields[idx].0.clone();
@@ -612,6 +758,11 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
                 note = committed;
             }
         }
+    }
+    // A draft born this frame carries the deck chosen before it existed (ADR-0021 §9): apply it once,
+    // on the None→Some transition, so a note filed at creation lands under its deck.
+    if !was_committed && let Some(id) = note {
+        let _ = editor::set_note_deck(coll, id, ed.deck);
     }
     ed.note = note;
 
