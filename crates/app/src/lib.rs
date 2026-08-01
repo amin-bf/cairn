@@ -10,16 +10,20 @@
 
 pub mod bidi;
 pub mod deck;
+pub mod editor;
 pub mod fonts;
+pub mod notes;
 pub mod session;
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use leitner_core::content::NoteId;
 use leitner_core::log::{DayScale, day_number};
 use leitner_core::replay::replay;
 use leitner_core::scheduling::Grade;
 use leitner_store::Collection;
 
+use notes::Filter;
 use session::{Offered, ReviewState};
 
 /// Re-exported so `leitner-desktop` needs no `eframe` dependency of its own — it cannot then
@@ -65,11 +69,98 @@ impl Sitting {
     }
 }
 
-/// The application: an open collection (or the message saying why it would not open) and the
-/// transient review sitting.
+/// The three top-level destinations (ADR-0021 §1, `ui` `CONTEXT.md`): the smallest set that makes
+/// every already-specified screen reachable. The leech screen hangs off review's end-of-session
+/// pointer and enrolment sits inside settings, so those are not destinations of their own. How the
+/// three are *rendered* — a tab bar, a drawer, something else — is the visual design pass's; what is
+/// fixed is that all three are reachable from a persistent affordance, which the nav row is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Destination {
+    Review,
+    Notes,
+    Settings,
+}
+
+/// The editor's live state (ADR-0012 §2, ADR-0021 §7): one editor, four entrances. `note` is `None`
+/// for an uncommitted new draft — under autosave the note is not born until its first non-empty field
+/// (ADR-0021 §7), so before that there is nothing for a kill to lose. `fields` are the per-field text
+/// buffers in kind-definition order.
+struct Editing {
+    note: Option<NoteId>,
+    kind: String,
+    fields: Vec<(String, String)>,
+}
+
+impl Editing {
+    /// A fresh draft of `kind`, carrying that kind's fields as empty buffers. Used by **create** and
+    /// by the *New note* chord, which carries the current kind forward (ADR-0021 §8).
+    fn new_draft(kind: &str) -> Self {
+        Editing {
+            note: None,
+            kind: kind.to_owned(),
+            fields: editor::field_names(kind)
+                .into_iter()
+                .map(|name| (name.to_owned(), String::new()))
+                .collect(),
+        }
+    }
+
+    /// Load a stored note into the editor — the **edit** entrance from the note list, the leech
+    /// screen, or the review screen (ADR-0021 §5). Reads the note's kind and each declared field's
+    /// current value; a value replay never denies, since the editor reads the same mutable surface.
+    fn for_note(coll: &Collection, note: NoteId) -> Self {
+        let kind = coll
+            .mutable_get("note", &note.0, "kind")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let fields = editor::field_names(&kind)
+            .into_iter()
+            .map(|name| {
+                let value = coll
+                    .mutable_get("note", &note.0, name)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                (name.to_owned(), value)
+            })
+            .collect();
+        Editing {
+            note: Some(note),
+            kind,
+            fields,
+        }
+    }
+
+    /// Rebuild the field buffers for a newly chosen kind, carrying forward any value whose field name
+    /// the new kind shares (ADR-0012 §2). A kind change is an ordinary edit — the cards it makes
+    /// dormant are §5's ambient warning's concern, not a special mechanism (ADR-0017 §5).
+    fn switch_kind(&mut self, kind: &str) {
+        let carried = std::mem::take(&mut self.fields);
+        self.kind = kind.to_owned();
+        self.fields = editor::field_names(kind)
+            .into_iter()
+            .map(|name| {
+                let prior = carried
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map_or_else(String::new, |(_, v)| v.clone());
+                (name.to_owned(), prior)
+            })
+            .collect();
+    }
+}
+
+/// The application: an open collection (or the message saying why it would not open), the current
+/// destination, the transient review sitting, and the editor's live state when one is open.
 pub struct LeitnerApp {
     store: Result<Collection, String>,
+    dest: Destination,
     sitting: Option<Sitting>,
+    /// The open editor, or `None` when the note list is showing its list rather than the form.
+    editing: Option<Editing>,
+    /// The note list's text-search buffer, held across frames (ADR-0021 §2).
+    search: String,
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
@@ -84,7 +175,10 @@ impl LeitnerApp {
         let store = Self::open_store();
         Self {
             store,
+            dest: Destination::Review,
             sitting: None,
+            editing: None,
+            search: String::new(),
             fonts_installed: false,
         }
     }
@@ -121,25 +215,70 @@ impl eframe::App for LeitnerApp {
         // reads at the default 4am scale; a real device timezone is a later ticket.
         let today = day_number(now_ms, DayScale::default());
 
-        match self.store.as_mut() {
+        let coll = match self.store.as_mut() {
             Err(message) => {
                 heading(ui, "Leitner");
                 body(ui, message);
+                return;
             }
-            Ok(coll) => review(ui, coll, &mut self.sitting, now_ms, today),
+            Ok(coll) => coll,
+        };
+
+        // The persistent affordance that makes all three destinations reachable (ADR-0021 §1): a
+        // destination reachable only by completing a session is not reachable, so the nav row is drawn
+        // every frame, above whatever the current destination shows.
+        nav_bar(ui, &mut self.dest);
+        ui.separator();
+        ui.add_space(4.0);
+
+        match self.dest {
+            Destination::Review => {
+                // Opening the editor from the review screen counts as a reveal (ADR-0021 §6): the
+                // request carries the note, and `review` has already flipped the card face over.
+                if let Some(note) = review(ui, coll, &mut self.sitting, now_ms, today) {
+                    self.editing = Some(Editing::for_note(coll, note));
+                    self.dest = Destination::Notes;
+                }
+            }
+            Destination::Notes => {
+                notes_screen(ui, coll, &mut self.editing, &mut self.search);
+            }
+            Destination::Settings => settings_screen(ui),
         }
     }
 }
 
+/// The nav row: three buttons, the current one marked. This is the persistent affordance ADR-0021 §1
+/// fixes; its *appearance* (a tab bar, a drawer) is the visual design pass's, and a row of buttons is
+/// the honest floor.
+fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination) {
+    ui.horizontal(|ui| {
+        for (target, label) in [
+            (Destination::Review, "Review"),
+            (Destination::Notes, "Notes"),
+            (Destination::Settings, "Settings"),
+        ] {
+            if ui
+                .selectable_label(*dest == target, text(ui, label))
+                .clicked()
+            {
+                *dest = target;
+            }
+        }
+    });
+}
+
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
-/// otherwise the current card.
+/// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
+/// screen is one of the editor's four entrances (ADR-0021 §5), and opening it counts as a reveal
+/// (ADR-0021 §6), which is why the card is flipped here before the request leaves.
 fn review(
     ui: &mut egui::Ui,
     coll: &mut Collection,
     sitting: &mut Option<Sitting>,
     now_ms: i64,
     today: i64,
-) {
+) -> Option<NoteId> {
     // Everything on screen is derived from the log this frame — there is no cached session state to
     // fall out of step with it.
     let current = deck::current_cards(coll).unwrap_or_default();
@@ -156,7 +295,7 @@ fn review(
         if let Some(count) = picker(ui, &queue, total) {
             *sitting = Some(Sitting::new(queue.sitting(count)));
         }
-        return;
+        return None;
     }
 
     // A running sitting: keep the frame ticking so the 10-minute checkpoint can surface without an
@@ -164,6 +303,7 @@ fn review(
     ui.ctx().request_repaint_after(Duration::from_secs(1));
 
     let mut end_sitting = false;
+    let mut edit_request: Option<NoteId> = None;
     {
         let s = sitting.as_mut().expect("just checked it is Some");
 
@@ -193,6 +333,19 @@ fn review(
                     // the back. Identical by touch and by mouse — egui does not distinguish them.
                     if card_face(ui, &rendered.prompt).clicked() {
                         s.revealed = true;
+                    }
+
+                    // Edit this note, at any point in the card's life (ADR-0021 §6): the honest
+                    // diagnosis of most leeches is a defective card, and the moment to fix it is when
+                    // it is in front of you, not twenty cards later. Opening the editor **counts as a
+                    // reveal** — the editor shows the back, so without flipping the card here
+                    // ADR-0006 §4's "no grading before the answer is seen" would be quietly false. An
+                    // edit that makes the card dormant needs no mechanism: the next frame re-derives
+                    // the queue and simply does not offer it (ADR-0021 §6).
+                    ui.add_space(4.0);
+                    if full_width_button(ui, "Edit note").clicked() {
+                        s.revealed = true;
+                        edit_request = Some(offered.card.note);
                     }
 
                     if s.revealed {
@@ -236,6 +389,7 @@ fn review(
     if end_sitting {
         *sitting = None;
     }
+    edit_request
 }
 
 /// The count picker and the explicit worded states (issue #94). Returns the chosen sitting size when
@@ -313,6 +467,175 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
     pressed
 }
 
+/// The **Notes** destination (ADR-0021 §2): the browse surface and the app's authoring home. Shows
+/// the editor when one is open, otherwise the note list — create, the text search, and the rows,
+/// each row offering **edit and delete** (never suspend, which is the leech screen's, ADR-0021 §2).
+fn notes_screen(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    editing: &mut Option<Editing>,
+    search: &mut String,
+) {
+    if let Some(ed) = editing {
+        if full_width_button(ui, "Done").clicked() {
+            *editing = None;
+            return;
+        }
+        ui.add_space(8.0);
+        editor_pane(ui, coll, ed);
+        return;
+    }
+
+    heading(ui, "Notes");
+    ui.add_space(8.0);
+
+    // Create opens a fresh draft; the note is not committed until its first non-empty field
+    // (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is a plain front/back.
+    if full_width_button(ui, "Create note").clicked() {
+        *editing = Some(Editing::new_draft("basic"));
+        return;
+    }
+
+    // The empty state is the empty *collection* (ADR-0015 §7): shown when there is no note at all, not
+    // when a filter happens to match nothing.
+    if !notes::any_notes(coll).unwrap_or(false) {
+        ui.add_space(8.0);
+        body(ui, notes::EMPTY_STATE);
+        return;
+    }
+
+    // Text search — the load-bearing filter (ADR-0021 §2), a plain substring over field values. Deck
+    // and tag filters share the surface but have no authoring path yet (a later ticket), so only text
+    // is wired here.
+    ui.add_space(8.0);
+    field_label(ui, "Search");
+    text_field(ui, search, false);
+    let filter = Filter {
+        text: (!search.trim().is_empty()).then(|| search.trim().to_owned()),
+        ..Filter::default()
+    };
+
+    ui.add_space(8.0);
+    let rows = notes::list(coll, &filter).unwrap_or_default();
+    if rows.is_empty() {
+        body(ui, "No notes match.");
+        return;
+    }
+    // The list's own sequence is the rendering of `position` order — there is no sort control and the
+    // key is never shown (ADR-0021 §4). No row carries schedule information (ADR-0021 §2).
+    let mut open: Option<NoteId> = None;
+    let mut delete: Option<NoteId> = None;
+    for row in &rows {
+        ui.horizontal(|ui| {
+            if ui.button(text(ui, row.preview())).clicked() {
+                open = Some(row.id);
+            }
+            if ui.button(text(ui, "Delete")).clicked() {
+                delete = Some(row.id);
+            }
+        });
+    }
+    if let Some(id) = delete {
+        // ADR-0004 §7's delete: a marker on the mutable surface that discards the content. There is no
+        // undelete here — recovery is ADR-0016's restore (ADR-0021 §2).
+        let _ = coll.mutable_set("note", &id.0, "deleted", Some("true"));
+    }
+    if let Some(id) = open {
+        *editing = Some(Editing::for_note(coll, id));
+    }
+}
+
+/// The editor's **form pane** (ADR-0012 §1, §2): the kind dropdown and the note's fields, each field
+/// autosaved per blur (ADR-0021 §7). The card pane — *"what will I be asked"* — and the
+/// destructive-edit warning above the fields are #83's, not here.
+fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
+    heading(
+        ui,
+        if ed.note.is_some() {
+            "Edit note"
+        } else {
+            "New note"
+        },
+    );
+    ui.add_space(8.0);
+
+    // The kind dropdown: the shipped kinds plus this note's own current kind when acquired, and never
+    // another acquired one (ADR-0012 §2, ADR-0017 §6).
+    let options = editor::kind_options(&ed.kind);
+    let mut chosen = ed.kind.clone();
+    field_label(ui, "Kind");
+    egui::ComboBox::from_id_salt("note-kind")
+        .selected_text(text(ui, &ed.kind))
+        .show_ui(ui, |ui| {
+            for option in &options {
+                ui.selectable_value(&mut chosen, option.clone(), text(ui, option));
+            }
+        });
+    if chosen != ed.kind {
+        ed.switch_kind(&chosen);
+        // On a stored note a kind change is an ordinary edit (ADR-0017 §5); on a draft it only
+        // re-shapes the buffers, and the note is still born on its first non-empty field.
+        if let Some(id) = ed.note {
+            let _ = coll.mutable_set("note", &id.0, "kind", Some(&chosen));
+        }
+    }
+
+    ui.add_space(8.0);
+
+    // Bare Enter is inert in every single-line field, the last one included (ADR-0012 §7, ADR-0021
+    // §8); the *New note* rhythm is a modifier chord, never bare Enter — `cloze`'s multiline field
+    // would need Enter for a newline anyway, so "Enter on the last field" could never be uniform.
+    let bare_enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.command);
+    let new_note_chord = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
+
+    let kind = ed.kind.clone();
+    let mut note = ed.note;
+    for idx in 0..ed.fields.len() {
+        let name = ed.fields[idx].0.clone();
+        // `cloze`'s Text field is the one multiline field — Enter inserts a newline there.
+        let multiline = kind == "cloze" && name == "Text";
+        field_label(ui, &name);
+        let resp = {
+            let buffer = &mut ed.fields[idx].1;
+            text_field(ui, buffer, multiline)
+        };
+        // Enter keeps focus in a single-line field: egui treats it as submit-and-blur, so re-grab
+        // focus and let nothing else happen (ADR-0012 §7).
+        if !multiline && bare_enter && resp.lost_focus() {
+            resp.request_focus();
+        }
+        // Autosave on blur (ADR-0021 §7): a field settles as one row when it loses focus, and the
+        // note is created here if this is its first non-empty field.
+        if resp.lost_focus() {
+            let value = ed.fields[idx].1.clone();
+            if let Ok(committed) = editor::commit_field(coll, note, &kind, &name, &value) {
+                note = committed;
+            }
+        }
+    }
+    ed.note = note;
+
+    // *New note* (ADR-0021 §8): commit the current buffers, then start a fresh draft carrying the kind
+    // forward — under autosave, that is all "save and add another" ever meant. Bound to the modifier
+    // chord, so it can never collide with a field's own Enter.
+    if new_note_chord {
+        for (field, value) in ed.fields.clone() {
+            if let Ok(committed) = editor::commit_field(coll, note, &kind, &field, &value) {
+                note = committed;
+            }
+        }
+        *ed = Editing::new_draft(&kind);
+    }
+}
+
+/// The **Settings** destination (ADR-0021 §1): the home enrolment and sync settings hang off. Their
+/// surfaces are their own tickets (#84, #85); this is the reachable door the shell owes them.
+fn settings_screen(ui: &mut egui::Ui) {
+    heading(ui, "Settings");
+    ui.add_space(8.0);
+    body(ui, "Sync and backup settings will live here.");
+}
+
 // --- small rendering helpers, every one through the bidi layout so no screen holds a bare label ---
 
 fn now_ms() -> i64 {
@@ -369,6 +692,52 @@ fn full_width_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
 fn card_face(ui: &mut egui::Ui, s: &str) -> egui::Response {
     let job = text(ui, s);
     ui.add_sized([ui.available_width(), 96.0], egui::Button::new(job))
+}
+
+/// A small label for a field or control — a form-pane caption, weaker than body text.
+fn field_label(ui: &mut egui::Ui, s: &str) {
+    ui.label(bidi::job(
+        s,
+        egui::TextStyle::Small.resolve(ui.style()),
+        ui.visuals().weak_text_color(),
+    ));
+}
+
+/// A text field routed through the bidi layouter (`AGENTS.md` client-stack rule 2): a `TextEdit` lays
+/// out its own text and otherwise bypasses the helper, so Persian would render with the words
+/// backwards. The layouter resets `halign` to `LEFT` — an RTL job otherwise spans negative x and the
+/// field clips its last character (see `bidi::job`) — and the field's own `horizontal_align` carries
+/// the direction, chosen per the buffer's first strong character (ADR-0012 §7's `dir="auto"`).
+///
+/// `multiline` is the one `cloze` Text field; every other field is single-line, so Enter is a submit
+/// egui turns into a blur, which the caller re-grabs to keep Enter inert (ADR-0012 §7, ADR-0021 §8).
+fn text_field(ui: &mut egui::Ui, buffer: &mut String, multiline: bool) -> egui::Response {
+    let rtl = bidi::is_rtl(buffer);
+    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
+        let mut job = bidi::job(
+            text.as_str(),
+            egui::TextStyle::Body.resolve(ui.style()),
+            ui.visuals().text_color(),
+        );
+        job.halign = egui::Align::LEFT;
+        job.wrap.max_width = wrap_width;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    let field = if multiline {
+        egui::TextEdit::multiline(buffer)
+    } else {
+        egui::TextEdit::singleline(buffer)
+    };
+    ui.add(
+        field
+            .desired_width(f32::INFINITY)
+            .horizontal_align(if rtl {
+                egui::Align::RIGHT
+            } else {
+                egui::Align::LEFT
+            })
+            .layouter(&mut layouter),
+    )
 }
 
 /// Android entry point. `NativeActivity` hosts the app directly: the APK is this `.so` plus a
