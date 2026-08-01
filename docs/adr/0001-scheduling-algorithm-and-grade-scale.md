@@ -334,4 +334,4 @@ authoritative, and this ADR keeps the reasoning behind them.
 | New-card rate, daily limits, backlog pacing | [Decide: new-card introduction rate and daily limits](https://github.com/amin-bf/leitner/issues/21) |
 | Whether the optimiser runs on web and Android, and at what cost | [Prove FSRS parameter optimisation runs in-client](https://github.com/amin-bf/leitner/issues/20) |
 | Grade button presentation, where boxes appear, backlog feel | [Prototype: the review session experience](https://github.com/amin-bf/leitner/issues/11) |
-| Leech handling for repeatedly failed cards | Newly surfaced; not yet owned |
+| ~~Leech handling for repeatedly failed cards~~ — **closed by [ADR-0010](0010-leeches.md)**: detect and surface, never intervene. **The scheduler is untouched** — a leech is four failure *days* in a trailing ninety, and FSRS difficulty was rejected as the signal precisely because binding a user-facing surface to a scheduler parameter re-couples what constraint 4 decoupled | [#26 — leeches](https://github.com/amin-bf/leitner/issues/26) |

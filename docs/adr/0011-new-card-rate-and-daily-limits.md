@@ -413,7 +413,7 @@ in [`ui`](../../crates/app/src/CONTEXT.md), which owns the session.
 
 | Item | Owner |
 |---|---|
-| **Workload prediction as advice** — showing *"at this rate, expect roughly N reviews a day once it settles"* using `expected_workload`. Useful, and explicitly never allowed to *control* the rate (§3). | Map fog |
-| **Per-deck new-card on/off** — shape known (§6), not built. | Map fog |
-| **Whether notes are user-reorderable**, and how `position` is surfaced while authoring. | [#28](https://github.com/amin-bf/leitner/issues/28) |
+| **Workload prediction as advice** — showing *"at this rate, expect roughly N reviews a day once it settles"* using `expected_workload`. Useful, and explicitly never allowed to *control* the rate (§3). | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. §3 already fixed the hard part, and the interim answer — this ADR's own estimate table — ships; what remains is a read-only figure beside the rate setting |
+| **Per-deck new-card on/off** — shape known (§6), not built. | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31, on **scope not sharpness**: the decision was taken (defer) and the mechanism is written down, so what remains is a build. It carries one live sub-question a fresh effort inherits — [ADR-0005](0005-the-deck-model.md)'s row on whether such a preference syncs or stays device-local |
+| **Whether notes are user-reorderable**, and how `position` is surfaced while authoring. | [Decide: note ordering, saving, and where authoring is entered from](https://github.com/amin-bf/leitner/issues/66) — **re-owned on 2026-08-01**: [#28](https://github.com/amin-bf/leitner/issues/28) was named here and closed without touching it, which the *Open items* sweep caught |
 | **Revisiting 10/20/40 and five a day against real usage** — §4 records the relationship between them; neither number is measured. | Post-implementation |

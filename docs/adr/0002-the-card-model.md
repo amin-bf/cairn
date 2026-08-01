@@ -511,7 +511,7 @@ authoritative, and this ADR keeps the reasoning behind them.
 | Export container format; what a "share without progress" export contains | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
 | Whether a note may belong to more than one deck | [#10 — the deck model](https://github.com/amin-bf/leitner/issues/10) |
 | Note id encoding in the physical store | [#12 — the local store](https://github.com/amin-bf/leitner/issues/12) |
-| Authoring UI: preview, blank entry, destructive-edit warning | Newly surfaced |
-| Audio on cards | Map fog |
-| Mathematical notation in fields | Map fog |
-| Removing or renaming a field on an existing kind | Not yet owned |
+| ~~Authoring UI: preview, blank entry, destructive-edit warning~~ — **closed by [ADR-0012](0012-the-note-authoring-experience.md)**: a form beside the cards the note generates, blanks numbered one above the highest ever used, and the destructive-edit warning **ambient and recomputed every frame** rather than modal at save | [#28 — note authoring and editing](https://github.com/amin-bf/leitner/issues/28) |
+| Audio on cards | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1) ruled it out on 2026-07-31. Left *de-risked* rather than free: [ADR-0008](0008-the-deck-export-format.md) ships a binary-capable container from day one and its importer accepts a `media/` prefix, so re-entry fills a reserved slot |
+| Mathematical notation in fields | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. §8's re-entry hazard stands as written, and **reserving the delimiter now was considered and rejected**: note content is a plain string settled by §7's last-write-wins, so a later syntax collision is *repairable*, where reserving `$` today taxes every note containing a currency amount |
+| Removing or renaming a field on an existing kind | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-08-01. On **scope, not sharpness**: §4 makes kinds a closed, code-defined set, so no user can reach this — it arises only when a later release of ours changes a shipped kind's fields, which this destination does not contain. Adding a field stays free (a note predating it reads it as empty) |

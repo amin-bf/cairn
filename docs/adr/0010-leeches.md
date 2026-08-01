@@ -333,6 +333,6 @@ New terms are of record in the `CONTEXT.md` files, per
 
 | Item | Owner |
 |---|---|
-| The exact visual design of the leech screen and the end-of-session notice | A look-and-feel pass, per ADR-0006 §10 |
+| The exact visual design of the leech screen and the end-of-session notice | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened and ADR-0015, ADR-0017, ADR-0018 and ADR-0019 have joined; [the map](https://github.com/amin-bf/leitner/issues/1) ruled it out on 2026-07-31, on the ground that these surfaces have specified existence, content and wording, so an agent fleet handed the spec today is not blocked |
 | Whether the four-in-ninety thresholds survive real usage | Post-implementation, not a spec question |
-| How the mutable surface (and so suspension) moves between devices | Sync transport; map fog |
+| ~~How the mutable surface (and so suspension) moves between devices~~ — **answered by [ADR-0013 §7](0013-the-sync-transport.md)**: published **per writer**, which is what keeps conditional writes out of the design, and a writer's own counter being monotone means compacting its change stream to the latest value per key *is* a per-writer snapshot | [#39 — the sync transport](https://github.com/amin-bf/leitner/issues/39) |

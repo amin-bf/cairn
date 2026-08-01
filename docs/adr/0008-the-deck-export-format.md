@@ -486,6 +486,6 @@ authoritative, and this ADR keeps the reasoning behind them.
 | Item | Owner |
 |---|---|
 | Progress profile, restore-keeps-stamps, compression hatch, backup extension | [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) |
-| Whether a *personal* deck-id-keyed preference syncs | [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21) |
-| Collection identity, needed to tell import from restore | Map fog; unowned |
-| Export/import reporting surfaces | [#28 — note authoring and editing](https://github.com/amin-bf/leitner/issues/28) |
+| Whether a *personal* deck-id-keyed preference syncs | **Out of scope** — [#21](https://github.com/amin-bf/leitner/issues/21) never needed such a preference to exist (the new-card rate is global), so the question survives it unanswered and is now [ADR-0005](0005-the-deck-model.md)'s open row, inherited by whatever effort builds *per-deck new-card on/off* |
+| ~~Collection identity, needed to tell import from restore~~ — **settled by [ADR-0016 §4](0016-backup-and-restore.md)**: a UUIDv4 adopted and never re-minted, which also **upgrades [ADR-0013 §10](0013-the-sync-transport.md) from a structural accident to a checked invariant** | — |
+| **Export/import reporting surfaces** — what the user is shown when a deck is exported, and what an import preview says. §5 makes the manifest readable from the central directory *without inflating the payload* precisely so an import can be previewed, but no ADR says what the preview states | **Unowned.** [#28](https://github.com/amin-bf/leitner/issues/28) was named here and closed without reaching it; surfaced by the 2026-08-01 *Open items* sweep |

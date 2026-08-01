@@ -282,8 +282,19 @@ recorded inline above.)*
 
 - ~~**`CardRef` and the kind discriminator** (§6)~~ — **discharged by
   [ADR-0017](0017-card-slots.md)**: no discriminator, and the ordinal becomes an assigned slot instead.
-- **A soft-keyboard pass on the handset** (§9) — the one question desktop cannot answer.
-- **Saving semantics** (§9) — autosave versus explicit save.
-- **Visual design** — still ADR-0006 §10's open item, now with a second screen waiting on it.
+- **A soft-keyboard pass on the handset** (§9) — the one question desktop cannot answer. Now owned by
+  [Prototype: the authoring screen under a soft keyboard](https://github.com/amin-bf/leitner/issues/67).
+- **Saving semantics** (§9) — autosave versus explicit save, and what Enter means on the last field.
+  Now owned by [Decide: note ordering, saving, and where authoring is entered from](https://github.com/amin-bf/leitner/issues/66).
+- **Editing a note mid-review, and where authoring is entered from** (§9) — owned by the same ticket.
+  *This row was missing from the table until 2026-08-01*, along with saving semantics: §9 named four
+  things this ADR does not settle and the table carried two, so the map's fog triage — which sweeps
+  these tables — never saw them. Recorded rather than quietly added, because the gap is the reason a
+  session's worth of decisions sat unowned for a month.
+- **Whether notes are user-reorderable, and how `position` is surfaced while authoring** — handed
+  *here* by [ADR-0011](0011-new-card-rate-and-daily-limits.md) and never answered; also now
+  [#66](https://github.com/amin-bf/leitner/issues/66)'s.
+- **Visual design** — **out of scope** for the map as of 2026-07-31, as *the visual design pass* that
+  [ADR-0006 §10](0006-the-review-session-experience.md) opened.
   Narrowed by [ADR-0018](0018-the-card-pane-ordering.md) for this pane: what a dormant line *says*,
   where it *sits* and when it appears are settled; only how it *looks* is still that pass's.

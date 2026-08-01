@@ -619,7 +619,7 @@ that a glossary lives beside the code it describes.
 |---|---|
 | ~~Whether `drive.appdata` is permitted in the limited-input-device flow~~ — **closed in §8**: it is on the allowlist, and the client type must be *TVs and Limited Input devices* | — |
 | Running an enrolment and a sync on the real handset, per `AGENTS.md` rule 9 | Implementation |
-| How long a real handset left alone actually goes between successful background syncs | [#40](https://github.com/amin-bf/leitner/issues/40) |
+| ~~How long a real handset left alone actually goes between successful background syncs~~ — **dissolved by [ADR-0015 §2](0015-the-sync-experience.md)**: there are none. §6 bounded the promise by Android's standby buckets, but the binding ceiling is one step earlier and it is **ours** — a scheduled job needs Java, a `classes.dex` and a Gradle project, which [ADR-0003](0003-client-stack.md) measured as a prize and [ADR-0014 §3](0014-when-parameter-optimisation-runs.md) already declined to spend | — |
 | Tuning `K` (§5) against real object counts | Implementation; not a compatibility constant |
-| Media, if audio on cards is ever built — the map's fog notes media is where sync stops being cheap | Map fog |
+| Media, if audio on cards is ever built — media is where sync stops being cheap | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1) ruled audio out on 2026-07-31, left *de-risked* rather than free: [ADR-0008](0008-the-deck-export-format.md) already ships a binary-capable container and its importer accepts a `media/` prefix |
 | A second backend, if the audience ever makes one worthwhile | Not scheduled |

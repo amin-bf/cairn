@@ -396,7 +396,7 @@ replaced by a pointer to its context:
 
 | Item | Owner |
 |---|---|
-| A `sync` crate, once the transport is chosen | [#39](https://github.com/amin-bf/leitner/issues/39) |
+| ~~A `sync` crate, once the transport is chosen~~ — **created by [ADR-0013](0013-the-sync-transport.md)**: `leitner-sync` is the sixth crate, which `CONTEXT-MAP.md` had predicted before the decision existed. That ADR also recorded a **contradiction on this ADR's own seam** — its handoff sends any new platform capability into `leitner-store::platform`, which §4 forbids — left unresolved there and since answered by [ADR-0016 §9](0016-backup-and-restore.md): the seam rule is **per crate**, so `leitner-export` gets its own platform module and `leitner-store::platform` keeps exactly two functions | [#39](https://github.com/amin-bf/leitner/issues/39) |
 | Whether `export` should have been a module in `content` after all | Reversible while the crate is empty |
 | Release signing configuration for the APK | Out of scope: deployment and CI |
 | Build sequencing for the implementing fleet — what lands first | The fleet, not this map |

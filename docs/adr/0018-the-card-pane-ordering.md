@@ -245,4 +245,6 @@ sentence and is reachable by an ordinary edit.
 
 - **The visual design pass** ([ADR-0006 §10](0006-the-review-session-experience.md)) — the typography,
   weight and spacing of a dormant line, and how *dormant* reads against a live card without becoming a
-  second warning.
+  second warning. **Out of scope** for [the map](https://github.com/amin-bf/leitner/issues/1) as of
+  2026-07-31: what a dormant entry *says*, where it *sits* and when it appears are settled above, and
+  only how it *looks* belongs to that pass.

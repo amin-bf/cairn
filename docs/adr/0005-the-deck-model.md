@@ -317,5 +317,6 @@ Decks did not earn a context of their own — see ADR-0009 §6. Deck *files* did
 | Item | Owner |
 |---|---|
 | Deck content revision; author/description/licence metadata; export policy for §9 | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
-| Whether a per-deck limit exists, whether it syncs, how it composes with one queue | [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21) |
-| A personal display-name override for an imported deck | Recorded in §9; not yet owned |
+| ~~Whether a per-deck limit exists, and how it composes with one queue~~ — **answered `no` by [ADR-0011 §6](0011-new-card-rate-and-daily-limits.md)**: the rate is **global**, because with one collection-wide queue per-deck rates make the real daily obligation a **sum shown on no screen**. §5's deck-id slot stays deliberately empty | [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21) |
+| **Whether a deck-id-keyed *personal* preference syncs between a user's own devices or stays device-local.** The one part of the row above that survives it, since ADR-0011 never needed such a preference to exist | **Out of scope** — inherited by whatever effort builds *per-deck new-card on/off*, which [the map](https://github.com/amin-bf/leitner/issues/1) ruled out on 2026-07-31 and which names this as its one live sub-question |
+| A personal display-name override for an imported deck | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. Nothing left to decide: §11 records the shape (a personal setting keyed by deck id on §5's slot, never exported and therefore never overwritten), so what remains is a build |

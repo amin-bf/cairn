@@ -522,8 +522,8 @@ authoritative, and this ADR keeps the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| Whether a collection has an identity of its own, so a device can tell a *different* collection from a divergent copy | Sync transport; map fog |
-| A real backup and restore story, given Auto Backup's 25 MB silent cutoff and WAL's `VACUUM INTO` caveat | Map fog: **Backup and restore** |
+| ~~Whether a collection has an identity of its own, so a device can tell a *different* collection from a divergent copy~~ — **settled by [ADR-0016 §4](0016-backup-and-restore.md)**: a UUIDv4 **adopted and never re-minted**, the exact opposite of the writer id's never-adopt rule, with one rule at both the restore and enrolment seams — an empty collection adopts, a non-empty one refuses | — |
+| ~~A real backup and restore story, given Auto Backup's 25 MB silent cutoff and WAL's `VACUUM INTO` caveat~~ — **closed by [ADR-0016](0016-backup-and-restore.md)**: a whole-collection `.lcoll` archive, written only on request, and restore is a **merge** that never removes anything. It also found two arithmetic errors in §6 below — this ADR reads the wrong row of its own table, so the cutoff arrives in about **nine months** of heavy use rather than two years (since confirmed by measurement), and `derived.db` is inside the backup set | [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) |
 | ~~Encryption of the store at rest~~ — **discharged** by [ADR-0020 §3 §4](0020-protection-at-rest.md): it is not encrypted, and no secret is asked for | — |
 | Whether the application permits a second window on one collection | UI work; the store is safe either way |
 | Building §10's optional discard below the cutoff | Deferred until someone needs the space |
