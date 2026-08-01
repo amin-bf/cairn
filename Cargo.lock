@@ -1782,6 +1782,7 @@ dependencies = [
  "leitner-core",
  "leitner-export",
  "leitner-store",
+ "tempfile",
  "unicode-bidi",
  "winit",
 ]
@@ -1811,10 +1812,12 @@ dependencies = [
 name = "leitner-store"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.3.4",
  "jni 0.21.1",
  "leitner-core",
  "ndk-context",
  "rusqlite",
+ "tempfile",
 ]
 
 [[package]]

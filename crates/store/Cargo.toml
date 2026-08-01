@@ -10,6 +10,17 @@ leitner-core.workspace = true
 # ADR-0007 §2: two SQLite files via rusqlite, `bundled` so no system SQLite is required and the
 # cross-compile proven in #7 keeps working.
 rusqlite.workspace = true
+# ADR-0007 §5, §6: minting a writer id and a collection id needs randomness, and it is randomness
+# only — no clock, no global state. `getrandom` is the OS entropy call and nothing more, so it does
+# not grow this crate's surface the way a UUID library would. `now`/day-scale arithmetic reads the
+# clock through `std::time`, which needs no dependency.
+getrandom.workspace = true
+
+[dev-dependencies]
+# ADR-0009 §3 / store `CONTEXT.md`: there is no fake store — every store test opens a real SQLite
+# database in a temp directory, because the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and
+# `INSERT OR IGNORE`.
+tempfile.workspace = true
 
 # ADR-0003 §5 / ADR-0007 §6: Android's data directory is reachable only through hand-written JNI.
 # These two crates exist solely for `platform/android.rs` and must not be used anywhere else.

@@ -12,6 +12,10 @@ leitner-export.workspace = true
 egui.workspace = true
 unicode-bidi.workspace = true
 
+[dev-dependencies]
+# The session and deck logic is tested against a real store in a temp dir (there is no fake store).
+tempfile.workspace = true
+
 # ADR-0003 §5: eframe's default features include accesskit, which eframe refuses alongside
 # android-native-activity. So the dependency is split per target — this is not tidiness, the
 # unified form does not build for Android.
