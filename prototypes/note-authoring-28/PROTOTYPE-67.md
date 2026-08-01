@@ -108,6 +108,69 @@ Round 2 predates it, and three of its changes land on the surface being judged:
 - **§9 — a deck dropdown beside the kind dropdown.** A second picker opening into the space the
   keyboard wants.
 
+## Two keyboard defects, found by driving it rather than by reading it
+
+Both were reported the first time this was put in a hand, and neither is visible from a desktop.
+They are recorded before the layout findings because the second one is the more serious result in
+this document.
+
+### A. Reserving the band naively makes the keyboard flicker continuously
+
+`TextEdit` publishes `output.ime` only from inside `if ui.is_rect_visible(inner_rect)` (egui 0.35,
+`widgets/text_edit/builder.rs:832`), and `egui-winit` turns the *absence* of that output into
+`set_ime_allowed(false)` — which winit's Android backend maps onto `hide_soft_input`. So:
+
+> band reserved → focused field clipped → no `ime` output → keyboard hidden → inset drops to 0 →
+> viewport grows → field visible → keyboard shown → band reserved → …
+
+Tapping a field low enough to be covered enters the loop. Scrolling a focused field out of view with
+the keyboard already up runs **one lap**, which reads as the field springing back into view — that
+is the viewport growing again, not a scroll.
+
+Fixed by pinning the focused field inside the viewport, forced *before* layout (`scroll_to_rect`
+lands a frame late, and one frame without the output is one hide), and scoped to frames where the
+band grows so it cannot fight a deliberate scroll. **Any implementation that reads IME insets and
+shrinks its viewport owes this, or it oscillates.**
+
+### B. Every tap into a text field re-pops the soft keyboard — and this one is not ours
+
+Independent of insets, and present with the switch **off**. `Memory::request_focus` interrupts IME
+composition unconditionally (`memory/mod.rs:902`), and `TextEdit` calls it on **every** pointer
+interaction without checking whether the widget is already focused
+(`widgets/text_edit/builder.rs:773`). `egui-winit` implements that interruption as:
+
+```rust
+window.set_ime_allowed(false);
+window.set_ime_allowed(true);
+```
+
+On Android that pair is `hide_soft_input()` then `show_soft_input()`, so the keyboard visibly
+dismisses and reopens on every tap — including a tap on the field that already has focus. The
+re-pop collapses and restores the IME inset, which is what resets the scroll position.
+
+**It buys nothing here.** winit's Android backend handles only motion and key events and has no IME
+path at all — the same gap [`AGENTS.md`](../../AGENTS.md) client-stack rule 8 records for non-Latin
+text — so there is never a composition to interrupt. The cost is paid for a benefit that cannot
+exist on this platform.
+
+Measured, tapping the already-focused field three times and counting Android's own `ImeTracker`
+requests:
+
+| | hide requests | show requests |
+|---|---|---|
+| **egui-winit as shipped** | **6** | **17** |
+| **one line disabled on Android** | **0** | **1** |
+
+`vendor/egui-winit` is a verbatim copy of 0.35.0 with that block `#[cfg(not(target_os = "android"))]`,
+wired in by `[patch.crates-io]`. Vendored rather than worked around in app code because the defect is
+two layers below anything we control and there is no hook between egui's platform output and
+`egui-winit`'s handling of it — the same shape of conclusion #8 reached about GameActivity, where
+the break was also at winit.
+
+**This is a decision the map owes an answer to**, and it is larger than #67's layout question: as
+shipped, text entry on Android dismisses and reopens the keyboard on every tap. The options are to
+carry a patched `egui-winit`, to upstream the guard, or to accept it.
+
 ## Findings
 
 1. **The split view survives horizontally, and that was not the risk.** At 448pt the two panes fit
