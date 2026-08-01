@@ -173,6 +173,20 @@ the card below the fold — and the ADR credited the repair to position alone.
 The card-pane entry keeps the job §1 gives it, which is **demonstration**: it shows *which* card and
 *how much* history, in the place the pane already puts that card.
 
+> **Narrowed by [ADR-0025 §4](0025-the-authoring-screen-under-a-soft-keyboard.md); the conclusion is
+> unchanged.** *"The only warning that is always visible"* is true of the form pane on a desktop and of
+> **the form pane's first screen** on a handset: a soft keyboard takes 39% of the display, and the
+> warning specified after the last field is not in that first screen. What is left on screen at the
+> moment of a destructive edit is the `· 1 dormant` marker on the pane toggle — **the counter this
+> section established does not warn**, arriving from the opposite direction, because the keyboard
+> leaves only the counter standing rather than because a counter was chosen.
+>
+> So this section's own argument applies to the form pane one level up, and ADR-0025 moves the warning
+> **above the fields**. Nothing here is overturned: the form pane still warns, the card pane still
+> demonstrates, and there are still exactly two speakers. Note also that reading the platform's IME
+> insets makes the warning *reachable* and not *visible* — the two are different, and only the second
+> is what this section requires.
+
 Rejected: **a pinned indicator in the card pane's header.** It is the counter that failed, and it would
 be a third thing speaking about one edit.
 

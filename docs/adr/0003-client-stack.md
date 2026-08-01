@@ -172,6 +172,15 @@ repeats the experiment.
 discarding whatever it composes. GameActivity implements IME correctly underneath; winit never reads
 it. Verified on the handset: Persian still could not be typed.
 
+> **Second half recorded by [ADR-0025 §1](0025-the-authoring-screen-under-a-soft-keyboard.md).** The
+> gap above costs **composed text**, which is what this section measured. It also costs the
+> **insets**: the backend reports the keyboard's height to nobody, so the app is never told the
+> keyboard is there. On a window enforced edge-to-edge the old resize soft-input mode is inert too, so
+> nothing resizes and nothing is reported. The cost is not occlusion but **unreachability** — the UI
+> layer sizes its scroll area to a viewport taller than the visible one, so the covered band has no
+> scroll range at all: **39% of the screen, silently**. The client therefore reads the insets from the
+> platform itself, through a second per-crate seam in the UI crate.
+
 | | NativeActivity | GameActivity (tested) |
 |---|---|---|
 | Non-Latin text input | ❌ | ❌ **still broken** |
