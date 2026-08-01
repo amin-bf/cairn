@@ -278,6 +278,16 @@ Notes, by contrast, *are* created by a user action, so a minted identifier is co
 > it stays a random UUIDv4 and is not made time-ordered, so this section's clock-skew argument
 > stands. An empty `position` on a note predating the field is the defined state §4 already
 > provides for.
+>
+> > **Revised by [ADR-0021 §3](0021-note-ordering-saving-and-the-note-list.md): `position` is an
+> > **order key with infill**, not a plain integer.** *"Need not be dense or unique, only to sort"*
+> > above was a permission ADR-0011's own assignment rule never let anyone exercise — a high-water
+> > counter and a line index both produce consecutive integers — so a user could not be offered
+> > *"put this note between those two"* without renumbering a run of notes, which scrambles order
+> > across devices under ADR-0004 §7's per-value settling. The assignment rules survive with only
+> > the type changed, and **the id is untouched a second time**: still a random UUIDv4.
+
+
 
 #### Canonical encoding
 

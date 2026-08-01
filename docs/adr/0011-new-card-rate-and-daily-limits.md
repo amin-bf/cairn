@@ -267,6 +267,28 @@ in `(position, ordinal)` order.
 This closes ADR-0008 §12's gap rather than adding an obligation: the export already needed a fixed
 emission order for determinism to be honest, and `position` is now it. One concept serves both.
 
+> **Amended by [ADR-0021 §3](0021-note-ordering-saving-and-the-note-list.md): `position` is an
+> **order key with infill**, not a plain integer — and the user *can* reorder notes, which is the
+> question this section handed onward and is now discharged.**
+>
+> **The bullet above granted a freedom this section then specified away.** *"Need not be dense"* is a
+> permission that the assignment rule never lets anyone exercise: a local high-water counter and a
+> `notes.jsonl` line index both produce **consecutive** integers, so *"put this note between those
+> two"* has no value to write. Every way of writing it by renumbering costs N writes on ADR-0004 §7's
+> surface, each settling independently — and **order is a gestalt, so one lost value scrambles the
+> whole list**: two devices reordering concurrently produce neither device's order, and nothing
+> reports it.
+>
+> So `position` becomes a key that always admits a value between any two neighbours (a fractional
+> index). **A move writes exactly one value, forever.** The three rules above survive with only the
+> type changed — a key after the current last on creation, keys in line order on import, ties broken
+> by note id — and *"need not be dense or globally unique"* becomes true and load-bearing rather than
+> decorative. **Nothing reaches the export**: the file carries line order, not the value, exactly as
+> the import rule above already said, so ADR-0008 §12's emission clause is textually unchanged and
+> still byte-for-byte deterministic. *One concept serves both* survives the field becoming editable,
+> which only this option allows — the two readers want different things, introduction order needing
+> only "what comes next" where emission order needs the whole authored sequence.
+
 ### 8. The cap counts cards, and at most one card per note is introduced per day
 
 **Counting cards rather than notes is forced by the cap's purpose.** An eight-blank `cloze` note is
@@ -364,6 +386,18 @@ ADR-0010 (its requirement on this ticket is honoured in §8 unchanged).
 2. **Introduction order is visible to the author**, so a deck built for sequence needs the authoring
    surface to show what that sequence is.
 
+> **Both discharged by [ADR-0021](0021-note-ordering-saving-and-the-note-list.md), not by #28** —
+> which closed without reaching either, which is why the map re-owned them.
+>
+> Requirement 1: **yes, and it is one mutable-surface edit exactly as anticipated** — but only because
+> §7's type changed. Under the plain integer it would have been N edits, which is the hazard ADR-0021
+> §3 closes.
+>
+> Requirement 2 is met **somewhere this ADR did not expect**. Sequence is visible on the **note
+> list**, not in the editor: ADR-0021 §4 shows order as the list's own sequence and never as a number,
+> because order is a property of the collection rather than of a note in isolation. *"How `position`
+> is surfaced while authoring"* therefore has the answer **not in the editor at all**.
+
 ### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
 
 1. **The new-card rate is personal, not content**: it belongs to the progress profile, must survive
@@ -415,5 +449,5 @@ in [`ui`](../../crates/app/src/CONTEXT.md), which owns the session.
 |---|---|
 | **Workload prediction as advice** — showing *"at this rate, expect roughly N reviews a day once it settles"* using `expected_workload`. Useful, and explicitly never allowed to *control* the rate (§3). | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. §3 already fixed the hard part, and the interim answer — this ADR's own estimate table — ships; what remains is a read-only figure beside the rate setting |
 | **Per-deck new-card on/off** — shape known (§6), not built. | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31, on **scope not sharpness**: the decision was taken (defer) and the mechanism is written down, so what remains is a build. It carries one live sub-question a fresh effort inherits — [ADR-0005](0005-the-deck-model.md)'s row on whether such a preference syncs or stays device-local |
-| **Whether notes are user-reorderable**, and how `position` is surfaced while authoring. | [Decide: note ordering, saving, and where authoring is entered from](https://github.com/amin-bf/leitner/issues/66) — **re-owned on 2026-08-01**: [#28](https://github.com/amin-bf/leitner/issues/28) was named here and closed without touching it, which the *Open items* sweep caught |
+| ~~**Whether notes are user-reorderable**, and how `position` is surfaced while authoring~~ — **answered by [ADR-0021 §3 and §4](0021-note-ordering-saving-and-the-note-list.md)**: they are, `position` becomes an **order key with infill** so a move is one write rather than a renumber, and it is surfaced as the note list's own sequence — never as a number, and not in the editor at all | — *(was [#66](https://github.com/amin-bf/leitner/issues/66), **re-owned on 2026-08-01**: [#28](https://github.com/amin-bf/leitner/issues/28) was named here and closed without touching it, which the* Open items *sweep caught)* |
 | **Revisiting 10/20/40 and five a day against real usage** — §4 records the relationship between them; neither number is measured. | Post-implementation |

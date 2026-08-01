@@ -111,6 +111,50 @@ definition**, chosen in [ADR-0017](./docs/adr/0017-card-slots.md).
    switched *into* an acquired kind. Add acquired kinds to that dropdown and the importer suddenly owes
    a check it does not have.
 
+## Authoring and the note list
+
+The app has three top-level destinations — **Review, Notes, Settings** — and the **note list** is the
+browse surface all authoring hangs off, specified in
+[ADR-0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md). Until it existed, two ADRs were
+already leaning on a screen nobody had built.
+
+### Rules that are easy to break silently
+
+1. **Reordering a note writes exactly one value. Never renumber.** `position` is an **order key with
+   infill**, not an integer, precisely so a move costs one write. A bulk rewrite — a "tidy up
+   positions", a compaction, a migration that redistributes keys — is N independent writes on ADR-0004
+   §7's surface, and **order is a gestalt, so one lost value scrambles the whole list**: two devices
+   reordering concurrently agree on neither order and nothing reports it. The integer looks simpler and
+   is the trap; ADR-0011 §7's *"need not be dense"* was a permission its own high-water counter never
+   let anyone use.
+2. **The note list has one order and no sort control.** A sort makes reordering meaningless while it is
+   active — a drag inside an alphabetical view has no definable result — and nothing fails when someone
+   adds one. Filters narrow; nothing re-sorts. Text search is the answer to "find this note".
+3. **Never put schedule information on the note list — not even aggregated.** A note generates several
+   cards in several boxes, so any per-note figure is boxes **counted**, which ADR-0001 §3 forbids
+   outright. This is constraint 4 deciding a rendering, and it reads as a helpful addition every time.
+4. **Never bind a key to "the last field".** Which field is last is a property of the **kind
+   definition**, which is *data*, so a kind gaining a field silently changes what the key does with no
+   code change and nothing failing — and ADR-0008 §7 lets a note carry an *acquired* kind, putting that
+   in a stranger's hands. Enter is inert in every single-line field, the last included; the *New note*
+   rhythm is a modifier chord.
+5. **The editor holds no unsaved state, and that is a durability rule rather than a preference.**
+   Autosave is per field on blur or a short idle. Client-stack rule 10 means a backgrounded Android app
+   is **frozen, then possibly killed** — so under an explicit save, putting the phone down mid-note is
+   the standard way to lose work, with no error and no chance for the app to warn. Adding a Save button
+   also un-does ADR-0012 §5, which deliberately moved the only decision a save could carry onto the
+   ambient warning.
+6. **"Never sync while the review screen is up" does not mean "nothing may change the queue
+   mid-session".** A note edited from the review screen changes it immediately and correctly. That rule
+   (sync rule 2 below, ADR-0015 §6) bans an **unannounced** recompute caused by another device — not
+   the visible result of the user's own act on the card in front of them. Read broadly, it deletes
+   mid-review editing as a violation, which is the predictable mistake.
+7. **Opening the editor from the review screen counts as a reveal.** The editor shows the back, so
+   without this ADR-0006 §4's *"self-grading can't happen before the answer is seen"* is quietly false.
+   The alternatives both need state this design does not have: skipping a card ungraded needs an
+   in-session deferred set, which ADR-0006 §2 proved does not exist, and flagging it for later is the
+   stored *"since you last looked"* ADR-0010 §9 refused.
+
 ## The client stack
 
 **egui / eframe**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). One binary per platform,

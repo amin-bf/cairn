@@ -415,6 +415,15 @@ identical content twice would yield different bytes — leaking build time, maki
 control diff as changed when nothing did, and weakening §9's "same revision, same file" from a property
 to an approximation.
 
+> **Touched but unchanged by [ADR-0021 §3](0021-note-ordering-saving-and-the-note-list.md), recorded
+> so nobody re-derives it.** That ADR makes `position` an **order key with infill** rather than a plain
+> integer, so that a user reordering notes writes one value instead of renumbering a run of them. **No
+> byte of this format moves.** Emission stays `(position, note id)` and stays byte-for-byte
+> deterministic, because the file carries **line order** rather than the value — ADR-0011 §7 already
+> specified import as reading the `notes.jsonl` line index, so the representation was never in the
+> container to begin with. A reader who notices `position`'s type changing and comes looking for a
+> format version bump should stop here: there isn't one, and there does not need to be.
+
 **Verification of constraint 2's content/progress split, which the ticket asked for.** Every channel is
 clean: writer ids are absent because the deck profile carries no log; device labels are never exported;
 scheduler configuration lives in the log, not in content; personal per-deck preferences are excluded by
