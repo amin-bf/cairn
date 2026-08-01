@@ -218,6 +218,29 @@ The Android side needs **no activity result and no permission at API 29+**, and 
 from the Context the existing shim already obtains. It is not verified on the handset — see *Open
 items*, and `AGENTS.md` rule 9.
 
+> **Verified, and the seam is now four operations wide — [ADR-0023](0023-sending-a-written-file.md).**
+> The `MediaStore` put works exactly as written: insert returned a URI, `openOutputStream` accepted
+> the bytes, a read-back reported them, and **no permission was requested or needed** at API 37
+> ([evidence](../research/android-outbound-share/README.md)). This paragraph's caveat is discharged.
+>
+> **The count in this section is no longer the invariant.** ADR-0023 §1 adds a fourth operation,
+> `hand_off`, having found that *"three operations, not four"* was an argument about **delete** — which
+> remains absent — and that this seam was sized against what **backup** needs rather than what the
+> deck file needs. What still binds is *opaque, minimal, enumerable*.
+>
+> **The picker argument holds and is now bounded by measurement.** A *send* was launched from
+> `NativeActivity` in the shipped APK shape — manifest plus one `.so`, no `classes.dex`, no `res/` —
+> so it really is in the launch-intent category this section admits rather than the result category
+> it refuses. **One correction to the mechanism named above**: the context the shim obtains is
+> `android.app.Application`, **not** the Activity, so `startActivity` requires
+> `FLAG_ACTIVITY_NEW_TASK`.
+>
+> **And the extension this section leans on does not survive the write.** `MediaStore` derives the
+> media type from the extension and discards ours, and a colliding name is deduped to
+> `archive.lcoll (1)` — a name that no longer ends in `.lcoll`, and which the *"intent filter on the
+> extension"* above will therefore not match. That is
+> [#72](https://github.com/amin-bf/leitner/issues/72)'s, not ADR-0023's.
+
 **Three additional entry points, each costing nothing:**
 
 - **Desktop drag-and-drop.** egui surfaces dropped files directly, with no operating-system dialog and

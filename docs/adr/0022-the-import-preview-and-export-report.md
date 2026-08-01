@@ -426,6 +426,27 @@ the user moves it off the device"* fact does **not** transfer: it exists to corr
 about safety, and a deck file exists to be sent to someone. There is no false belief here to correct.
 Whether the application helps send it is [#70](https://github.com/amin-bf/leitner/issues/70)'s.
 
+> **It does — and this section is amended rather than replaced, by
+> [ADR-0023](0023-sending-a-written-file.md).** This section's handoff predicted that *"§10's location
+> line is what it replaces."* It is not replaced. **Both lines stand and the report gains an action
+> beside them**, because the affordance is declinable in one gesture and the file exists either way:
+> a report that spent the location on a send button would leave everyone who declines unable to find
+> their file. This section's own premise — *"the user chose neither the name nor the location"* — is
+> untouched by adopting a send.
+>
+> **Two of this section's unverified points are now measured**
+> ([evidence](../research/android-outbound-share/README.md)). Its *"differs by platform and API
+> level"* caveat is answered: on API 37 a colliding display name **dedupes**. And its worked example
+> guessed the shape wrongly in an instructive direction — the handset writes **`French A1.ldeck (1)`**,
+> suffix *after* the extension, not `French A1 (1).ldeck`. **The rule this section chose in place of
+> the collision behaviour is what makes that knowable**, and it is vindicated: state the name the
+> platform actually wrote, never the one requested.
+>
+> **One thing this section could not have known.** `MediaStore` discards the media type we declare
+> and derives it from the extension, so a `.ldeck` and a `.lcoll` are both `application/octet-stream`
+> on the device. That is [#72](https://github.com/amin-bf/leitner/issues/72)'s, and it reaches
+> §11's list — *"query `MediaStore` for our extensions"* — as well as this section.
+
 ### 11. The list reads manifests
 
 [ADR-0016 §5](0016-backup-and-restore.md)'s seam is put / get / **list**, and on Android the list is
@@ -559,6 +580,6 @@ the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| **Whether the application helps send an exported deck file**, and what it costs on each platform. The picker's disqualifying property — delivery through an activity *result* — does not reach a send intent, and nobody has checked | [#70 — sending an exported deck file](https://github.com/amin-bf/leitner/issues/70) |
-| **`MediaStore` collision behaviour on the handset** — whether a colliding display name overwrites, dedupes or fails. §10 is written to be correct under all three, so nothing is blocked; it is the same unverified Android surface [ADR-0016 §5](0016-backup-and-restore.md) records, under `AGENTS.md` rule 9 | Implementation |
+| ~~**Whether the application helps send an exported deck file**~~ — **closed by [ADR-0023](0023-sending-a-written-file.md)**: it does, on both platforms, never automatically. The picker argument was confirmed not to reach a send, by measurement in the shipped APK shape rather than by inference | [#70 — sending an exported deck file](https://github.com/amin-bf/leitner/issues/70) |
+| ~~**`MediaStore` collision behaviour on the handset**~~ — **answered**: it **dedupes**, to `French A1.ldeck (1)` — suffix after the extension. §10 was written to be correct under all three outcomes and is. What the mangled extension costs is a new question | [#72 — how a written file is identified again](https://github.com/amin-bf/leitner/issues/72) |
 | Visual treatment of the preview, the export screen, the export report and the file list. What they *say* and when they appear is settled here; only how they look is open | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened and [the map](https://github.com/amin-bf/leitner/issues/1) ruled out on 2026-07-31 |
