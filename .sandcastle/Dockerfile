@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
   git \
   curl \
   jq \
+  unzip \
   build-essential \
   pkg-config \
   libssl-dev \
@@ -43,7 +44,8 @@ USER ${AGENT_UID}:${AGENT_GID}
 # /etc/profile resets PATH and the toolchain silently disappears.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal \
-  && /home/agent/.cargo/bin/rustup component add clippy rustfmt
+  && /home/agent/.cargo/bin/rustup component add clippy rustfmt \
+  && /home/agent/.cargo/bin/rustup target add aarch64-linux-android
 
 # Give the agent a git identity. The host's ~/.gitconfig is not mounted into
 # the sandbox and the repo carries no local user.*, so without this every
@@ -58,6 +60,51 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Add cargo and Claude to PATH
 ENV PATH="/home/agent/.cargo/bin:/home/agent/.local/bin:$PATH"
+
+# --- Android cross-compilation: compile and link, never package ---
+#
+# Without this the sandbox cannot so much as *compile* the
+# `#[cfg(target_os = "android")]` arms, so any issue can break the Android build
+# and nothing notices until someone builds by hand. With it,
+# `cargo build --target aarch64-linux-android` works.
+#
+# rustup's target alone is not enough, and this is the part that surprises:
+# `cargo check` runs build scripts, and rusqlite's `bundled` feature compiles
+# SQLite's C with `cc`, so a cross C toolchain is needed even to type-check.
+#
+# Deliberately omitted: the JDK, the SDK platforms and Gradle. `cargo apk build`
+# therefore does NOT run here, and packaging regressions — the emitted manifest,
+# the intent filters — stay a human check on the handset. Adding them would
+# roughly double the image for a check that still could not answer the questions
+# a device answers.
+#
+# Pinned to the NDK the host carries (29.0.13846066, r29-beta3, clang 21.0.0) so
+# a failure here means a real failure rather than a toolchain difference. The
+# Android findings in AGENTS.md — `--link-builtins` not needed, 16 KB page
+# alignment working out of the box — were established against this one.
+# Installed by direct download rather than `sdkmanager`, which is a Java program
+# and would drag in the JDK this whole tier exists to avoid.
+#
+# Costs ~0.73 GB to fetch and ~4 GB in the image. It is one layer, shared by
+# every sandbox, so it is paid once rather than per parallel pipeline.
+ARG ANDROID_NDK_RELEASE=r29-beta3
+ENV ANDROID_NDK_HOME=/home/agent/android-ndk
+RUN curl -fsSL -o /tmp/ndk.zip \
+  "https://dl.google.com/android/repository/android-ndk-${ANDROID_NDK_RELEASE}-linux.zip" \
+  && unzip -q /tmp/ndk.zip -d /home/agent \
+  && mv "/home/agent/android-ndk-${ANDROID_NDK_RELEASE}" "${ANDROID_NDK_HOME}" \
+  && rm /tmp/ndk.zip
+
+# The API level in the compiler wrapper's name must match `min_sdk_version` in
+# crates/app/Cargo.toml. Raise one and the other stops being true silently: the
+# build keeps succeeding and the artifact stops running on the oldest handset it
+# claims to support.
+ENV ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}" \
+  NDK_HOME="${ANDROID_NDK_HOME}" \
+  PATH="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin:${PATH}" \
+  CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=aarch64-linux-android24-clang \
+  CC_aarch64_linux_android=aarch64-linux-android24-clang \
+  AR_aarch64_linux_android=llvm-ar
 
 WORKDIR /home/agent
 
