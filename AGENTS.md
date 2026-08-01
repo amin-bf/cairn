@@ -65,9 +65,15 @@ carry one. Vocabulary lives in a `CONTEXT.md` beside the code; decisions live sy
 
 ### Rules that are easy to break silently
 
-1. **`leitner-core` has no dependencies, and adding one is an ADR-sized decision.** Its empty
-   `[dependencies]` is what makes `cargo test -p leitner-core` need no database, no window and no
-   handset. `rusqlite` belongs in `leitner-store`; `egui` and `eframe` belong in `leitner-app`.
+1. **`leitner-core` has exactly one dependency — `fsrs` — and adding a second is an ADR-sized
+   decision.** What makes `cargo test -p leitner-core` need no database, no window and no handset is
+   not the *count* but [ADR-0027 §2](./docs/adr/0027-the-scheduler-dependency.md)'s test: the spec
+   must name the crate, it must be computation and nothing else, it must build for every target, it
+   must be pinned exactly, and it needs its own ADR. `rusqlite` belongs in `leitner-store`; `egui`
+   and `eframe` belong in `leitner-app`. **`rand`, `serde`, `rayon` and `ndarray` are in the lockfile
+   transitively and are not thereby available** — finding one there is not a precedent for reaching
+   for it, and `log` must still never be a *direct* dependency here (it would shadow the `log`
+   context module).
 2. **Time and identity are values, never injected traits.** Replay needs no clock at all — day
    numbers are frozen on the row at write time, and fuzz is seeded from card identity. The two call
    sites that need "now" take it as a parameter. A `SystemTime::now()` inside `leitner-core` breaks

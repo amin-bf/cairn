@@ -28,7 +28,7 @@ Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
 
 | Crate | Path | What it is |
 |---|---|---|
-| `leitner-core` | [`crates/core/`](./crates/core) | The domain, entire and pure. **Zero dependencies**, permanently. |
+| `leitner-core` | [`crates/core/`](./crates/core) | The domain, entire and pure. **One dependency — `fsrs` — and nothing else** ([ADR-0027](./docs/adr/0027-the-scheduler-dependency.md)). |
 | `leitner-store` | [`crates/store/`](./crates/store) | SQLite persistence and the whole platform seam. |
 | `leitner-export` | [`crates/export/`](./crates/export) | The `.ldeck` and `.lcoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
 | `leitner-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
@@ -37,9 +37,12 @@ Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
 
 Two rules about this table that are easy to break:
 
-- **Nothing is added to `leitner-core`'s `[dependencies]` casually.** Its emptiness is what makes
-  `cargo test -p leitner-core` need no database, no window and no handset. Adding to it is an ADR-
-  sized decision.
+- **Nothing is added to `leitner-core`'s `[dependencies]` casually.** It holds exactly one entry,
+  `fsrs`, admitted by [ADR-0027](./docs/adr/0027-the-scheduler-dependency.md) because ADR-0001 §1
+  names it and `scheduling` is a module here. What makes `cargo test -p leitner-core` need no
+  database, no window and no handset is ADR-0027 §2's five-part test, not the count — and `rand`,
+  `serde`, `rayon` and `ndarray` sitting in the lockfile transitively are **not** available to our
+  code.
 - **`leitner-app` has no `src/main.rs`, and `leitner-desktop` has no logic.** `cargo-apk` panics
   after signing when one crate has both a cdylib and a bin, so the split is load-bearing, and code
   put in `desktop` is never compiled for Android and never runs on the handset.
@@ -96,13 +99,13 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 |---|---|---|
 | `content` | [0002](./docs/adr/0002-the-card-model.md), [0005](./docs/adr/0005-the-deck-model.md), [0017](./docs/adr/0017-card-slots.md) | 0011 §7, 0012 §3, 0018 §3, 0021 §3 |
 | `log` | [0004](./docs/adr/0004-the-review-event-log.md) | 0002 §7, 0001 §6, 0010 §5, 0011 §5, 0013 §12, 0014 §6 |
-| `scheduling` | [0001](./docs/adr/0001-scheduling-algorithm-and-grade-scale.md) | 0004 §4, 0004 §5, 0014 §6 |
+| `scheduling` | [0001](./docs/adr/0001-scheduling-algorithm-and-grade-scale.md), [0027](./docs/adr/0027-the-scheduler-dependency.md) | 0004 §4, 0004 §5, 0014 §6 |
 | `replay` | *none of its own* | 0001 §7, 0002 §7, 0004 §9, 0007 §2, 0010 §2, 0011 §8, 0012 §5, 0017 §1, 0017 §5, 0018 §2 |
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3 |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
 | `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3 |
-| *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
+| *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
 purpose and sit scattered across four documents; its `CONTEXT.md` is the only place they appear as
@@ -147,6 +150,13 @@ type is discarded, so the `mimetype` member inside the archive is the sole autho
 is. It also narrows [0016 §5](./docs/adr/0016-backup-and-restore.md)'s file list to *files this
 application wrote* — the single fact most likely to be assumed away by someone implementing the
 import surfaces.
+
+**[0027](./docs/adr/0027-the-scheduler-dependency.md) is the first ADR written after the map closed,
+and it exists because two accepted ADRs contradicted each other.** ADR-0001 §1 requires the scheduler
+to be FSRS-6 *via the `fsrs` crate*; ADR-0009 §3 puts `scheduling` inside `leitner-core`; ADR-0009 §2
+said that crate's dependency list was empty *"permanently"*. Read it before adding **anything** to
+`leitner-core`, and before reading a crate's presence in `Cargo.lock` as permission to use it — its
+§3 is entirely about what arrives transitively and stays off-limits.
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.

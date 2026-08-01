@@ -63,6 +63,15 @@ The rest are chosen, and §2, §4 and §11 say why.
 
 ### 2. `leitner-core` has no dependencies, and that is its interface
 
+> **Amended by [ADR-0027 §1 §2](0027-the-scheduler-dependency.md): one entry, not none.** This
+> section originally read *"empty, deliberately and permanently"*, which could not hold beside
+> [ADR-0001 §1](0001-scheduling-algorithm-and-grade-scale.md)'s requirement that the scheduler be
+> FSRS-6 **via the `fsrs` crate** — and `scheduling` is a module in this crate by §3 below. The
+> `fsrs` crate is admitted; ADR-0027 §2 states the five-part test any second entry must pass, and
+> §3 there records that the `rand` and `serde` now reachable **transitively** are not thereby
+> available to our code. **The property this section bought is unchanged**: `cargo test -p
+> leitner-core` still needs no database, no window and no handset.
+
 Its `[dependencies]` section is empty, deliberately and permanently. No `rusqlite`, no `egui`, no
 clock, no random number generator, no serialisation crate.
 
@@ -215,6 +224,12 @@ is an ambiguity an agent will resolve wrongly at some point.
 **Naming hazard, recorded because it is invisible until it bites:** the `log` module would shadow
 the `log` crate. §2's zero-dependency rule makes that collision unreachable rather than merely
 unlikely — logging belongs at the edges, in `store` and `app`.
+
+> **Amended by [ADR-0027 §4](0027-the-scheduler-dependency.md): the guarantee narrowed, the hazard
+> did not.** `fsrs` depends on `log`, so this crate now compiles it transitively. The collision still
+> cannot fire, because only **direct** dependencies enter a crate's extern prelude — but what
+> prevents it is `log` not being a direct dependency, rather than there being no dependencies at all.
+> Logging still belongs at the edges.
 
 ### 7. ADRs are system-wide; `CONTEXT.md` files are local
 

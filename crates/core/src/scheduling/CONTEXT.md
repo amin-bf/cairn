@@ -9,7 +9,19 @@ list with no rows, no writers and no merge.
 
 **Bound by** [ADR-0001](../../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md), whose
 glossary this file supersedes; also by
-[ADR-0004 §4 and §5](../../../../docs/adr/0004-the-review-event-log.md).
+[ADR-0004 §4 and §5](../../../../docs/adr/0004-the-review-event-log.md) and by
+[ADR-0027](../../../../docs/adr/0027-the-scheduler-dependency.md), which admits the `fsrs` crate into
+`leitner-core` for this context's sake and states what that does **not** license.
+
+> **This context owns the crate's only dependency, so two of its rules are about the crate rather
+> than about the arithmetic.** `fsrs` brings `rand`, `serde`, `rayon` and `ndarray` transitively;
+> none of them is available to our code (ADR-0027 §3). **The fuzz is ours, not the crate's** — the
+> crate ships its own over `rand`, and ADR-0001 §7 seeds ours from `CardRef`, so the implementation
+> takes the *un-fuzzed* interval and fuzzes it itself. **`rayon` is compiled in and never reached**:
+> `compute_parameters` is single-threaded, inferred in
+> [#2](https://github.com/amin-bf/leitner/issues/2) and measured in
+> [#20](https://github.com/amin-bf/leitner/issues/20). A future version that does reach it is a
+> change to notice, not a default to absorb.
 
 ## Language
 
