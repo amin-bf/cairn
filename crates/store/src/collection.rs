@@ -560,13 +560,7 @@ impl Collection {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT entity_id FROM mutable WHERE entity = ?1 ORDER BY entity_id",
         )?;
-        let rows = stmt.query_map(params![entity], |r| {
-            let bytes: Vec<u8> = r.get(0)?;
-            let mut id = [0u8; 16];
-            let n = bytes.len().min(16);
-            id[..n].copy_from_slice(&bytes[..n]);
-            Ok(id)
-        })?;
+        let rows = stmt.query_map(params![entity], entity_id_from_row)?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
@@ -618,11 +612,7 @@ impl Collection {
              WHERE entity = ?1 AND attr = 'deleted' AND value = 'true'",
         )?;
         let rows = stmt.query_map(params![DECK_ENTITY], |r| {
-            let bytes: Vec<u8> = r.get(0)?;
-            let mut id = [0u8; 16];
-            let n = bytes.len().min(16);
-            id[..n].copy_from_slice(&bytes[..n]);
-            Ok(DeckId(id).to_canonical())
+            Ok(DeckId(entity_id_from_row(r)?).to_canonical())
         })?;
         Ok(rows.collect::<Result<HashSet<_>, _>>()?)
     }
@@ -863,6 +853,16 @@ fn guarded_instant_ms(conn: &Connection, now_ms: i64) -> Result<i64, StoreError>
 /// attribute, so the settling rule unions them (ADR-0002 §10).
 fn tag_attr(tag: &str) -> String {
     format!("{TAG_ATTR_PREFIX}{tag}")
+}
+
+/// A 16-byte entity id read from a query row's first column. A shorter blob is zero-padded and a
+/// longer one truncated — the store writes neither, so this only keeps a corrupt row from panicking.
+fn entity_id_from_row(r: &rusqlite::Row) -> rusqlite::Result<[u8; 16]> {
+    let bytes: Vec<u8> = r.get(0)?;
+    let mut id = [0u8; 16];
+    let n = bytes.len().min(16);
+    id[..n].copy_from_slice(&bytes[..n]);
+    Ok(id)
 }
 
 fn read_local(conn: &Connection, key: &str) -> Result<Option<String>, StoreError> {
