@@ -189,6 +189,20 @@ property that [ADR-0009](0009-crate-and-workspace-layout.md) and
 > **The seam is three operations: put a named file, get a named file, list the files we recognise.
 > Nothing else. No picker, no dialog, no path typed by a user.**
 
+> **[ADR-0022](0022-the-import-preview-and-export-report.md) says what those three surface.** §11:
+> the **list** describes each file from its own manifest rather than by filename. §10: because there
+> is no picker and no typed text, **the user chose neither the name nor the location**, so the
+> post-export report states both — and states the name the platform *actually wrote*, since this
+> section records that the `MediaStore` path is unverified on the handset and a colliding display
+> name may overwrite, dedupe or fail. §6: all three entry points above produce **one** screen, which
+> the launch intent requires to be cold-start capable.
+>
+> **One thing this section decided against is now a live question rather than a settled one.** The
+> disqualifying property above is delivery through an activity **result** — and a *send* intent has
+> no result, exactly like the launch intent this section admits two paragraphs down. Whether the
+> application helps a user send an exported deck was never asked; it is
+> [#70](https://github.com/amin-bf/leitner/issues/70)'s.
+
 This is deliberately [ADR-0013 §1](0013-the-sync-transport.md)'s shape — *"put an object, get an
 object, list a prefix, delete an object. Nothing else"* — reused rather than reinvented. This
 specification has already priced an opaque, minimal, enumerable seam once and liked the result; using
@@ -427,6 +441,20 @@ an import can be previewed."* Before anything merges:
 
 This is also where §10's gate fires: a mismatched collection id is reported here, by name, rather than
 after the fact.
+
+> **Confirmed — not amended — by [ADR-0022 §12](0022-the-import-preview-and-export-report.md), which
+> specifies a far richer preview for a deck import and explains why this one stays a single line.**
+> The rule generating both: *a preview states effects in proportion to what can be lost.* §4 makes
+> restore a merge that only ever adds — it cannot delete a note, rename a deck or move anything — so
+> there are no destructive effects to enumerate and a description of the *file* is the whole of what
+> is useful. A deck import can do all three, which is what buys ADR-0022 §3's line set. **Recorded
+> because the asymmetry reads as an oversight**, and an agent bringing this line "into line" would be
+> adding machinery to describe consequences that cannot occur.
+>
+> **The date this section puts in the manifest also becomes visible one step earlier**: ADR-0022 §11
+> describes each file in §5's list from its own manifest, so three archives are told apart *before*
+> one is opened — which is what this paragraph's *"needs to tell them apart before restoring the wrong
+> one"* actually asked for, and could not get from filenames this ADR never specifies.
 
 ### 12. What a restore restores, stated plainly
 

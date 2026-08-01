@@ -169,6 +169,12 @@ are offline from each other can emit two different files both claiming revision 
 this **reportable rather than silent** — same revision, different bytes — and the consequence needs no
 new rule, because equal revisions are already allowed and resolve by file-wins.
 
+> **[ADR-0022 §4](0022-the-import-preview-and-export-report.md) supplies the surface this word
+> needed.** *Reportable* had nowhere to be reported: it is a **preview line, not a refusal**, since
+> this section accepts equal revisions deliberately. It is also the **only** revision fact the user
+> is shown — ADR-0022 §3 rejects displaying the counter itself as authoring machinery that answers a
+> question about the number rather than about the collection.
+
 ### 5. Note deletions travel; deck deletion never does
 
 **A retracted note travels as a tombstone**: its id, marked deleted, and nothing else. There is no
@@ -192,6 +198,13 @@ retiring a deck publishes an update that empties it, and §9 already says what h
 
 **Import reports the tombstone count it applied.** A destructive update is never silent.
 
+> **Discharged by [ADR-0022 §1 and §3](0022-the-import-preview-and-export-report.md), and *before*
+> the commit rather than after.** The count appears as a preview line — *"3 of your notes will be
+> deleted"* — stating the tombstones that actually match a note the recipient holds, which is not the
+> file's tombstone count and is not readable from the manifest. §11's *"before or immediately after
+> committing"* permitted either; the preview is the stronger half, because it is the only version the
+> user can act on.
+
 ### 6. Layout
 
 ```
@@ -214,6 +227,16 @@ and a deleted marker with no fields.
 **The manifest is what earns the container choice.** Deck names, counts and required kinds are readable
 from the zip central directory **without inflating the payload**, so the application can show *"3 decks,
 1,240 notes, 12 retractions, requires kinds: vocab, cloze"* before committing to an import.
+
+> **Spent by [ADR-0022](0022-the-import-preview-and-export-report.md), and not where this section
+> expected.** Its §2 finds that inflating one deck's `notes.jsonl` costs milliseconds — a few hundred
+> kilobytes of JSON Lines — so read-without-inflating buys little in a *single-file* preview, and the
+> preview it specifies therefore states **effects on the collection** rather than the file-level
+> counts sketched above. Three of the facts that matter most are not in the manifest at all: how many
+> notes are genuinely new after ADR-0005 §2's collision skip, how many move deck under §11, and how
+> many of the tombstones match a note the recipient actually holds. **The property pays in the file
+> *list*** ([ADR-0022 §11](0022-the-import-preview-and-export-report.md)) — *N* files described from
+> *N* manifests with zero payloads inflated, including `.lcoll` archives holding a decade of log rows.
 
 **One member per kind, not one combined file.** The central directory listing alone then answers "what
 does this file need in order to render?", and because ADR-0002 §4 makes kind definitions evolve under
@@ -356,6 +379,18 @@ an operating-system user name, a device label, or any other ambient identity. AD
 to this ADR as file-level metadata; a name in a file sent to strangers is identity, not content, so it
 is typed deliberately or it is absent.
 
+> **Amended by [ADR-0022 §8](0022-the-import-preview-and-export-report.md): the three values
+> persist per deck id and sync.** This section never said whether they survive an export, and they
+> must — otherwise an author publishing updates from a laptop and a phone credits themselves on one
+> file and is anonymous on the other, which is §9's own *"routine behaviour rather than a rare
+> offline edge"* argument arriving unchanged. They join `{revision, digest}` in the **authoring**
+> half of ADR-0005 §5's deck-id-keyed slot. **No weakening of the rule above**: the prohibition is on
+> *ambient* identity — a name the system knows without being told — and a value the user typed into
+> this field for this deck is their own prior deliberate act. Empty stays the default and a legal,
+> silent state. They also finally acquire a **reader**: [ADR-0022 §7](0022-the-import-preview-and-export-report.md)
+> displays them as the import preview's header, without which they were written to every deck file
+> and shown nowhere.
+
 **Export is byte-for-byte deterministic**: fixed member order, all member timestamps pinned to a
 constant, a fixed deflate level, no extra fields, and no platform-dependent creator or attribute
 variance.
@@ -455,6 +490,13 @@ syncing is open at all.
 3. Author, description and licence are **typed deliberately or left empty** (§12) — never
    auto-populated.
 
+> **All three discharged by [ADR-0022](0022-the-import-preview-and-export-report.md)**, which took
+> them over after [#28](https://github.com/amin-bf/leitner/issues/28) closed without reaching any of
+> them — one of two dropped handoffs onto that ticket caught by the 2026-08-01 *Open items* sweep.
+> §9 there states the unfiled count, as a **collection-wide fact rather than a property of the deck
+> selection**, since an unfiled note is in no deck and no selection can reach it. §3 states both
+> reports as preview lines, **before** the commit. §7 gives the metadata a reader and §8 a memory.
+
 ## Glossary
 
 **Moved.** These terms are now of record in [`export`](../../crates/export/src/CONTEXT.md), per
@@ -488,4 +530,4 @@ authoritative, and this ADR keeps the reasoning behind them.
 | Progress profile, restore-keeps-stamps, compression hatch, backup extension | [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) |
 | Whether a *personal* deck-id-keyed preference syncs | **Out of scope** — [#21](https://github.com/amin-bf/leitner/issues/21) never needed such a preference to exist (the new-card rate is global), so the question survives it unanswered and is now [ADR-0005](0005-the-deck-model.md)'s open row, inherited by whatever effort builds *per-deck new-card on/off* |
 | ~~Collection identity, needed to tell import from restore~~ — **settled by [ADR-0016 §4](0016-backup-and-restore.md)**: a UUIDv4 adopted and never re-minted, which also **upgrades [ADR-0013 §10](0013-the-sync-transport.md) from a structural accident to a checked invariant** | — |
-| **Export/import reporting surfaces** — what the user is shown when a deck is exported, and what an import preview says. §5 makes the manifest readable from the central directory *without inflating the payload* precisely so an import can be previewed, but no ADR says what the preview states | [Decide: what an import preview states, and what export reports back](https://github.com/amin-bf/leitner/issues/68) — **re-owned on 2026-08-01**: [#28](https://github.com/amin-bf/leitner/issues/28) was named here and closed without reaching it, which the *Open items* sweep caught |
+| ~~**Export/import reporting surfaces** — what the user is shown when a deck is exported, and what an import preview says~~ — **closed by [ADR-0022](0022-the-import-preview-and-export-report.md)**: an import is **gated**, previewed and declinable, on the ground that ADR-0016 §4 makes a regretted import the one destructive operation in this specification with no recovery path. The manifest **gates** (§7's format integer, §4's revision floor, §6's path rules, §1's profile) and the payload **describes** — the preview states effects on the collection, not the file's contents. Export reports **where the file went**, since ADR-0016 §5's no-picker rule means the user chose neither name nor location | — |
