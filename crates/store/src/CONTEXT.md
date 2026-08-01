@@ -57,6 +57,17 @@ The `log.line` column: the interchange row exactly as received. **The only autho
 every other column in the table, and everything in `derived.db`, is derived from it and may be
 dropped and rebuilt.
 
+**Clock-skew guard**:
+The pair of measures from [ADR-0004 §8](../../../docs/adr/0004-the-review-event-log.md) that this
+crate is the sole home of, because it is the edge where the wall clock is read. *Guard on write*: a
+new row's instant is never at or below the highest already in the log — if the clock reads earlier
+(the flat-battery boot), it is lifted to that highest plus a millisecond and the day is stamped to
+match, so a bad clock cannot write rows that sort into an order that never happened. *Detect on
+merge*: a merged `reviewed` row dated more than a day ahead of this device's clock is reported as a
+`SkewWarning` and **never blocked** — someone is wrong, though never who. The remedy for skew already
+written is the **history cutoff**, a collection-wide `history-cutoff-set` row that makes replay
+disown every earlier `reviewed` row.
+
 ## Rules that are easy to break silently
 
 - **`INSERT OR IGNORE` is for merge-ingest only. Our own writes use plain `INSERT`.** On another
@@ -70,7 +81,17 @@ dropped and rebuilt.
 - **`derived.db` lives outside the backup set too.** It is disposable by design, so backing it up
   protects nothing while burning the 25 MB platform quota and hastening the silent cutoff.
 - **A writer id is never adopted; a collection id is never re-minted.** Applying either rule to the
-  other identity is silent and destructive in opposite directions.
+  other identity is silent and destructive in opposite directions. At the seam where a device *meets*
+  an identity (restore, enrolment), one rule decides both: an **empty** collection adopts the id it
+  meets, a **non-empty** one refuses — and a refusal names the mismatch **and** the way out, never
+  only "no" (ADR-0016 §10).
+- **A new row's instant never sorts at or below the log's highest.** The clock-skew guard on write
+  (ADR-0004 §8) lifts a backwards clock above the log rather than writing a row into an order that
+  never happened. It needs every row's instant, so `ingest` populates the derived `instant` column
+  for absorbed rows too — best-effort, NULL when the token is not the canonical form.
+- **A cache that cannot prove its derivation is discarded, not trusted.** `derived.db` is stamped
+  with `leitner_core::replay::DERIVATION_VERSION`; a missing or mismatched stamp clears it on open.
+  The derivation is versioned, the projection is not — there is no cache migration (ADR-0004 §9).
 - **WAL on both files; `synchronous=FULL` on the collection, `OFF` on the cache.**
 
 ## The platform seam

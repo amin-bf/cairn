@@ -11,4 +11,4 @@ mod collection;
 mod interchange;
 pub mod platform;
 
-pub use collection::{Collection, StoreError};
+pub use collection::{Collection, MergeReport, SkewWarning, StoreError};

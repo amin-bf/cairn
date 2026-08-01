@@ -110,6 +110,22 @@ pub fn reviewed_line(
     )
 }
 
+/// The `history-cutoff-set` interchange line authored here (ADR-0004 §1, §8). The `d` token is the
+/// **disown-before day** the user chose — replay ignores every `reviewed` row strictly before it
+/// (replay `CONTEXT.md`) — while the instant is write time, used only for ordering. It is the escape
+/// hatch for the clock-skew a badly-wrong offline clock writes permanently (ADR-0004 §8).
+pub fn history_cutoff_line(
+    writer_hex: &str,
+    sequence: u64,
+    cutoff_day: i64,
+    instant_iso: &str,
+) -> String {
+    format!(
+        r#"{{"k":"cut","w":"{}","s":{},"t":"{}","d":{}}}"#,
+        writer_hex, sequence, instant_iso, cutoff_day
+    )
+}
+
 /// Format epoch-milliseconds as an ISO 8601 UTC instant, `YYYY-MM-DDTHH:MM:SS.mmmZ` (ADR-0004 §5).
 ///
 /// Replay never parses this token — it is a lexicographic tie-break only (`log/mod.rs`), and the Z
@@ -130,6 +146,73 @@ pub fn iso8601_millis(epoch_millis: i64) -> String {
     );
     let (year, month, day) = civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
+}
+
+/// Parse a canonical ISO 8601 UTC instant, `YYYY-MM-DDTHH:MM:SS.mmmZ`, back to epoch-milliseconds —
+/// the inverse of [`iso8601_millis`]. `None` for anything not in that exact form.
+///
+/// [`iso8601_millis`]'s doc-comment says replay never parses this token, and it does not. But the
+/// clock-skew guard does (ADR-0004 §8): to refuse writing a row that would sort before the log, and
+/// to detect a skewed row arriving in a merge, the store needs the instant of *every* row as a
+/// comparable number — including rows ingested from other devices, which carry only the text token.
+/// A foreign implementation that emits a differently-shaped token simply is not counted, which is
+/// the best-effort §8 already is (it "cannot help a device that has never synced").
+pub fn epoch_millis_from_iso8601(token: &str) -> Option<i64> {
+    let b = token.as_bytes();
+    // Exactly `YYYY-MM-DDTHH:MM:SS.mmmZ` — 24 bytes with fixed separators.
+    if b.len() != 24 {
+        return None;
+    }
+    for (i, sep) in [
+        (4, b'-'),
+        (7, b'-'),
+        (10, b'T'),
+        (13, b':'),
+        (16, b':'),
+        (19, b'.'),
+    ] {
+        if b[i] != sep {
+            return None;
+        }
+    }
+    if b[23] != b'Z' {
+        return None;
+    }
+    let num = |lo: usize, hi: usize| -> Option<i64> {
+        let mut v: i64 = 0;
+        for &c in &b[lo..hi] {
+            if !c.is_ascii_digit() {
+                return None;
+            }
+            v = v * 10 + i64::from(c - b'0');
+        }
+        Some(v)
+    };
+    let year = num(0, 4)?;
+    let month = num(5, 7)?;
+    let day = num(8, 10)?;
+    let hour = num(11, 13)?;
+    let minute = num(14, 16)?;
+    let second = num(17, 19)?;
+    let millis = num(20, 23)?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let days = days_from_civil(year, u32::try_from(month).ok()?, u32::try_from(day).ok()?);
+    let seconds = days * 86_400 + hour * 3600 + minute * 60 + second;
+    Some(seconds * 1000 + millis)
+}
+
+/// `(year, month, day)` to days since 1970-01-01, proleptic Gregorian — Howard Hinnant's algorithm,
+/// the inverse of [`civil_from_days`]. Used only to parse an instant token back to epoch-millis.
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let mp = i64::from(if m > 2 { m - 3 } else { m + 9 }); // [0, 11]
+    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146_097 + doe - 719_468
 }
 
 /// Days since 1970-01-01 to `(year, month, day)`, proleptic Gregorian. Howard Hinnant's algorithm,
@@ -202,6 +285,35 @@ mod tests {
         // The one property replay leans on: earlier instant, earlier string (ADR-0004 §9).
         assert!(iso8601_millis(1_000) < iso8601_millis(2_000));
         assert!(iso8601_millis(1_772_409_480_000) < iso8601_millis(1_772_424_000_000));
+    }
+
+    #[test]
+    fn epoch_millis_round_trips_through_the_iso_token() {
+        // The clock-skew guard leans on this inverse (ADR-0004 §8): the token a device wrote, read
+        // back as the same number, so a merged row can be compared to this device's clock.
+        for ms in [0i64, -1, 1_772_424_000_418, 1_000, 1_772_409_480_000] {
+            assert_eq!(
+                epoch_millis_from_iso8601(&iso8601_millis(ms)),
+                Some(ms),
+                "round trip failed for {ms}"
+            );
+        }
+        // Anything not in the exact canonical form is not counted, rather than mis-parsed.
+        assert_eq!(epoch_millis_from_iso8601("2026-03-02"), None);
+        assert_eq!(epoch_millis_from_iso8601("2026-03-02T04:00:00Z"), None);
+        assert_eq!(epoch_millis_from_iso8601("2026-13-02T04:00:00.000Z"), None);
+        assert_eq!(epoch_millis_from_iso8601("not a time at all!!!!!!!!"), None);
+    }
+
+    #[test]
+    fn a_history_cutoff_line_parses_back_through_core() {
+        // What the store writes for the escape hatch, core reads (ADR-0004 §1, §8).
+        let line = history_cutoff_line(&hex16(&[0xab; 16]), 7, 20_500, "2026-03-02T04:00:00.000Z");
+        let ParsedLine::Row(Row::HistoryCutoff(row)) = parse_line(&line) else {
+            panic!("store-written cutoff did not parse: {line}");
+        };
+        assert_eq!(row.id.sequence, 7);
+        assert_eq!(row.day, 20_500, "the d token is the disown-before day");
     }
 
     #[test]

@@ -53,6 +53,10 @@ pub enum StoreError {
     /// The `collection.db` was written by a newer build whose schema this one does not understand
     /// (ADR-0007 §9). Carries the version found.
     SchemaTooNew(i64),
+    /// A non-empty collection met an identity that is not its own (ADR-0016 §10). Carries the id held
+    /// and the id met; its `Display` names both **and** states the way out, because a refusal that
+    /// only says no leaves a device that will not talk to its account (ADR-0016 §10).
+    CollectionIdMismatch { held: String, met: String },
 }
 
 impl std::fmt::Display for StoreError {
@@ -65,6 +69,12 @@ impl std::fmt::Display for StoreError {
                 f,
                 "collection.db schema version {v} is newer than this build understands \
                  (knows {SCHEMA_VERSION}); refusing to open"
+            ),
+            StoreError::CollectionIdMismatch { held, met } => write!(
+                f,
+                "this collection is {held}, but the one it met is {met}; they cannot be joined. \
+                 To use this device with {met}: make an archive, clear this app's data, then \
+                 restore the archive and enrol."
             ),
         }
     }
@@ -87,6 +97,36 @@ impl From<getrandom::Error> for StoreError {
         StoreError::Entropy(e)
     }
 }
+
+/// What a merge did: how many rows it newly stored, and whether it saw clock skew (ADR-0004 §8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeReport {
+    /// Rows newly stored by the union merge — a duplicate `(writer, seq)` is dropped, not counted.
+    pub stored: usize,
+    /// Set when an ingested `reviewed` row is dated implausibly ahead of this device's clock. The
+    /// merge still stores it: §8 detects and warns, never blocks.
+    pub skew: Option<SkewWarning>,
+}
+
+/// The two facts a clock-skew warning is built from (ADR-0004 §8): what this device's clock said at
+/// merge time, and the furthest-ahead instant a merged row carried. Which of the two clocks is wrong
+/// is unknowable — "someone is wrong, though never who" — so the store reports the facts and the app
+/// builds the sentence (its wording, and the device name it names, are the sync surface's, #90/#91).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkewWarning {
+    /// This device's clock at merge time, epoch-millis — the value the caller passed to [`Collection::ingest`].
+    pub device_now_ms: i64,
+    /// The canonical instant token of the furthest-ahead merged row.
+    pub ahead_instant: String,
+}
+
+/// How far ahead of this device's clock a merged row may be dated before it is called skew rather
+/// than the normal lag of an asynchronous peer (ADR-0004 §8). A review cannot happen after the true
+/// present, so a row dated meaningfully after *now* means a clock is wrong — but seconds-to-hours of
+/// difference is benign (§8's severity table), so the boundary sits at a full day. The guard on
+/// write already fixes the flat-battery case for the writing device; this catches the residual §8
+/// names: a device that has never synced, with a badly wrong clock.
+const SKEW_TOLERANCE_MS: i64 = 86_400_000;
 
 /// An open collection: one SQLite connection with `derived.db` attached, plus the resolved identity
 /// this install writes under.
@@ -118,6 +158,7 @@ impl Collection {
         configure(&conn, &state_dir.join(DERIVED_DB))?;
         check_schema_version(&conn)?;
         install_schema(&conn)?;
+        validate_cache(&conn)?;
 
         let mut collection = Collection {
             conn,
@@ -180,12 +221,17 @@ impl Collection {
         }
 
         let writer_hex = interchange::hex16(&self.writer);
-        let day = day_number(now_ms, scale);
-        let instant = interchange::iso8601_millis(now_ms);
 
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+        // Guard on write (ADR-0004 §8): never emit an instant at or below the highest already in the
+        // log. Read inside the same `BEGIN IMMEDIATE` as the sequence — both are read-modify-writes
+        // on the log — and freeze the day to match, so a backwards clock cannot sort into the past.
+        let guarded_ms = guarded_instant_ms(&tx, now_ms)?;
+        let day = day_number(guarded_ms, scale);
+        let instant = interchange::iso8601_millis(guarded_ms);
 
         // The next sequence is the stored high-water plus one — never MAX(seq) (ADR-0007 §5).
         let highwater: i64 = read_local_i64(&tx, "seq_highwater")?.unwrap_or(0);
@@ -213,7 +259,7 @@ impl Collection {
                 &card.note.0[..],
                 i64::from(card.ordinal),
                 day,
-                now_ms,
+                guarded_ms,
             ],
         )?;
         write_local(&tx, "seq_highwater", &sequence.to_string())?;
@@ -238,17 +284,24 @@ impl Collection {
     /// Merge another source's log lines in (a restore, or a future sync). This is the **union merge**
     /// of ADR-0004 §2 and the one place `INSERT OR IGNORE` is correct: two rows with the same
     /// `(writer, seq)` *are* the same row, so a duplicate is dropped, not folded twice (ADR-0007 §8).
-    /// Malformed and unknown-kind lines are skipped, never fatal (ADR-0004 §11). Returns how many
-    /// rows were newly stored.
+    /// Malformed and unknown-kind lines are skipped, never fatal (ADR-0004 §11). The [`MergeReport`]
+    /// carries how many rows were newly stored and any clock skew seen.
     ///
-    /// The derived `instant` column is left NULL for an ingested row: it is not authoritative and
-    /// need not round-trip (ADR-0007 §2), and reconstructing epoch-millis from the ISO token buys
-    /// nothing replay uses, since replay sorts on the token inside `line`.
-    pub fn ingest(&mut self, lines: &[&str]) -> Result<usize, StoreError> {
+    /// The derived `instant` column *is* populated for an ingested row — still not authoritative and
+    /// still free to not round-trip (ADR-0007 §2), but the clock-skew guard on write (ADR-0004 §8)
+    /// needs every row's instant as a comparable number, ingested rows included, so a restored device
+    /// that has authored nothing still knows the log's newest instant. A token that does not parse to
+    /// the canonical form is stored NULL and not counted — best-effort, as §8 is.
+    ///
+    /// `now_ms` is this device's clock at merge time (a value; the store reads no clock, ADR-0009 §8)
+    /// and the only reference §8 has for detection: a reviewed row dated more than a day ahead of it
+    /// is clock skew — someone is wrong, though never who — reported and never blocked.
+    pub fn ingest(&mut self, lines: &[&str], now_ms: i64) -> Result<MergeReport, StoreError> {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut stored = 0usize;
+        let mut ahead: Option<(i64, String)> = None;
         for line in lines {
             let ParsedLine::Row(row) = parse_line(line) else {
                 continue; // malformed or unknown kind — skipped, never fatal
@@ -267,9 +320,10 @@ impl Collection {
                 Row::ConfigSet(r) => ("config-set", None, None, r.day),
                 Row::HistoryCutoff(r) => ("history-cutoff-set", None, None, r.day),
             };
+            let instant_ms = interchange::epoch_millis_from_iso8601(row.instant());
             let changed = tx.execute(
                 "INSERT OR IGNORE INTO log (writer, seq, line, kind, note, ordinal, day, instant) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     &writer[..],
                     row.id().sequence as i64,
@@ -278,12 +332,96 @@ impl Collection {
                     note.as_ref().map(|n| &n[..]),
                     ordinal,
                     day,
+                    instant_ms,
                 ],
             )?;
             stored += changed;
+
+            // Detect skew only on reviewed rows (a review cannot be dated after the true present) and
+            // keep only the furthest-ahead one, so the warning names a single date.
+            if changed == 1
+                && matches!(row, Row::Reviewed(_))
+                && let Some(ms) = instant_ms
+                && ms > now_ms + SKEW_TOLERANCE_MS
+                && ahead.as_ref().is_none_or(|(seen, _)| ms > *seen)
+            {
+                ahead = Some((ms, row.instant().to_owned()));
+            }
         }
         tx.commit()?;
-        Ok(stored)
+        Ok(MergeReport {
+            stored,
+            skew: ahead.map(|(_, ahead_instant)| SkewWarning {
+                device_now_ms: now_ms,
+                ahead_instant,
+            }),
+        })
+    }
+
+    /// Write a `history-cutoff-set` row (ADR-0004 §1, §8): replay will ignore every `reviewed` row
+    /// whose frozen day is strictly before `cutoff_day`, collection-wide. This is the escape hatch —
+    /// the one repair for a clock-skew corrupted history a never-synced device wrote permanently
+    /// (ADR-0004 §8), and it discards good history along with the bad, so the caller owns the choice
+    /// of `cutoff_day`.
+    ///
+    /// The row is authored like a review: sequence from the high-water (ADR-0007 §5), instant guarded
+    /// so it sorts after the log (§8). The instant is *write time*; `cutoff_day` is the disown-before
+    /// day and the two are independent — a cutoff written now can disown days long past.
+    pub fn set_history_cutoff(&mut self, cutoff_day: i64, now_ms: i64) -> Result<u64, StoreError> {
+        if self.someone_else_is_writing_as_us()? {
+            self.mint_writer(false)?;
+        }
+        let writer_hex = interchange::hex16(&self.writer);
+
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+        let guarded_ms = guarded_instant_ms(&tx, now_ms)?;
+        let instant = interchange::iso8601_millis(guarded_ms);
+        let highwater: i64 = read_local_i64(&tx, "seq_highwater")?.unwrap_or(0);
+        let sequence = highwater + 1;
+
+        let line =
+            interchange::history_cutoff_line(&writer_hex, sequence as u64, cutoff_day, &instant);
+        tx.execute(
+            "INSERT INTO log (writer, seq, line, kind, note, ordinal, day, instant) \
+             VALUES (?1, ?2, ?3, 'history-cutoff-set', NULL, NULL, ?4, ?5)",
+            params![
+                &self.writer[..],
+                sequence,
+                line.as_bytes(),
+                cutoff_day,
+                guarded_ms
+            ],
+        )?;
+        write_local(&tx, "seq_highwater", &sequence.to_string())?;
+        tx.commit()?;
+        Ok(sequence as u64)
+    }
+
+    /// The one identity rule ADR-0016 §10 places at both the restore and the enrolment seam: **an
+    /// empty collection adopts the id it meets; a non-empty one refuses any id but its own.** Empty
+    /// is [`Collection::is_empty`]'s precise sense — nothing authored here — so a fresh install that
+    /// minted an id at first launch still adopts, which is the trap §10 exists for (a fresh install
+    /// must be able to enrol into an existing account).
+    ///
+    /// A refusal names both ids **and** the way out (§10), because a device left holding only "no"
+    /// cannot talk to its account and no code can substitute for the sentence.
+    pub fn adopt_or_verify_collection_id(&mut self, met: &str) -> Result<(), StoreError> {
+        if met == self.collection_id {
+            return Ok(()); // already ours — normal sync / restore of our own archive
+        }
+        if self.is_empty()? {
+            // Adopt, never re-mint (ADR-0016 §4): overwrite the id minted at first launch.
+            write_local(&self.conn, "collection_id", met)?;
+            self.collection_id = met.to_owned();
+            return Ok(());
+        }
+        Err(StoreError::CollectionIdMismatch {
+            held: self.collection_id.clone(),
+            met: met.to_owned(),
+        })
     }
 
     /// Set one value on the mutable surface (ADR-0004 §7, ADR-0007 §4): one attribute table, the
@@ -538,7 +676,61 @@ fn install_schema(conn: &Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
+/// Discard the cache unless it can prove it was built by this exact derivation (replay `CONTEXT.md`,
+/// ADR-0004 §9). The derivation is versioned and the projection is not, so there is no migration: a
+/// cache whose stamp is missing or does not match [`leitner_core::replay::DERIVATION_VERSION`] — a
+/// cache that cannot prove how far it got, or that a crate upgrade made stale — is cleared and
+/// restamped rather than trusted. Losing it costs a replay; trusting a stale one costs wrong state
+/// that looks right. (Population of the cache is a later perf ticket; this is the guard it needs
+/// first, so a future build's cache is discarded on the downgrade rather than silently believed.)
+fn validate_cache(conn: &Connection) -> Result<(), StoreError> {
+    let stamped: Option<String> = conn
+        .query_row(
+            "SELECT value FROM cache.cache_meta WHERE key = 'derivation_version'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if stamped.as_deref() == Some(leitner_core::replay::DERIVATION_VERSION) {
+        return Ok(());
+    }
+    // Clear every table in the cache schema, then restamp. Table names come from `sqlite_master`,
+    // not from input, so interpolating them into the `DELETE` is safe.
+    let names: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT name FROM cache.sqlite_master WHERE type = 'table'")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    for name in names {
+        conn.execute(&format!("DELETE FROM cache.\"{name}\""), [])?;
+    }
+    conn.execute(
+        "INSERT INTO cache.cache_meta (key, value) VALUES ('derivation_version', ?1)",
+        params![leitner_core::replay::DERIVATION_VERSION],
+    )?;
+    Ok(())
+}
+
 // --- `local` helpers -----------------------------------------------------------------------------
+
+/// The highest instant (epoch-millis) held in the log, across our own rows and every ingested one —
+/// the lower bound on the true time the clock-skew guard writes above (ADR-0004 §8). NULL instants
+/// (an ingested row whose token did not parse) are ignored by `MAX`, which is the best-effort §8 is.
+fn max_instant_ms(conn: &Connection) -> Result<Option<i64>, StoreError> {
+    Ok(conn.query_row("SELECT MAX(instant) FROM log", [], |r| r.get(0))?)
+}
+
+/// The instant to stamp on a row authored now, guarded against the log's own contents (ADR-0004 §8):
+/// never at or below the highest already in the log, so a backwards clock (the flat-battery boot)
+/// cannot write a row that sorts into an order that never happened. The caller freezes the day from
+/// the returned instant. Call inside the write transaction — the read and the row it guards are one
+/// read-modify-write.
+fn guarded_instant_ms(conn: &Connection, now_ms: i64) -> Result<i64, StoreError> {
+    Ok(match max_instant_ms(conn)? {
+        Some(highest) if now_ms <= highest => highest + 1,
+        _ => now_ms,
+    })
+}
 
 fn read_local(conn: &Connection, key: &str) -> Result<Option<String>, StoreError> {
     Ok(conn
@@ -626,6 +818,61 @@ mod tests {
         assert_eq!(journal("cache"), "wal");
         assert_eq!(sync("main"), 2, "collection.db must be FULL");
         assert_eq!(sync("cache"), 0, "derived.db must be OFF");
+    }
+
+    #[test]
+    fn a_cache_that_cannot_prove_its_derivation_is_discarded_on_open() {
+        // ADR-0004 §9 / replay `CONTEXT.md`: the derivation is versioned, the projection is not. A
+        // cache whose stamp does not match this build's derivation — a crate upgrade, a fix to our
+        // arithmetic — is discarded rather than trusted, and losing it costs only a replay.
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        {
+            let coll = Collection::open(data.path(), state.path()).unwrap();
+            // Stand in for a cache built by an older derivation: a high-water it consumed through,
+            // stamped with a version this build does not recognise.
+            coll.conn
+                .execute(
+                    "INSERT OR REPLACE INTO cache.cache_meta (key, value) VALUES ('high_water', 'w:999')",
+                    [],
+                )
+                .unwrap();
+            coll.conn
+                .execute(
+                    "INSERT OR REPLACE INTO cache.cache_meta (key, value) \
+                     VALUES ('derivation_version', 'ancient')",
+                    [],
+                )
+                .unwrap();
+        } // dropped — the derived.db file persists in the state dir
+
+        let coll = Collection::open(data.path(), state.path()).unwrap();
+        let high_water: Option<String> = coll
+            .conn
+            .query_row(
+                "SELECT value FROM cache.cache_meta WHERE key = 'high_water'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .unwrap();
+        assert!(
+            high_water.is_none(),
+            "a stale cache's high-water must be discarded, not trusted"
+        );
+        let version: String = coll
+            .conn
+            .query_row(
+                "SELECT value FROM cache.cache_meta WHERE key = 'derivation_version'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            version,
+            leitner_core::replay::DERIVATION_VERSION,
+            "the discarded cache is restamped with the current derivation"
+        );
     }
 
     #[test]

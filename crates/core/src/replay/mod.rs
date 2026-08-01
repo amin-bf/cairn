@@ -16,6 +16,14 @@ use crate::content::CardRef;
 use crate::log::{ParsedLine, Row, Setting, parse_line};
 use crate::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, box_of};
 
+/// The constant identifying our replay arithmetic together with the pinned scheduler version (replay
+/// `CONTEXT.md`, ADR-0004 §9). A cache stamped with a different value cannot be trusted and is
+/// discarded and rebuilt — **the derivation is versioned; the projection is not**, so there is no
+/// migration path. Bump the `replay-N` half whenever a change here would make old cached state
+/// disagree with fresh arithmetic; the `fsrs-x.y.z` half must track the `=` pin in the workspace
+/// `Cargo.toml`, since a scheduler change re-derives every interval.
+pub const DERIVATION_VERSION: &str = "replay-1/fsrs-6.6.1";
+
 /// The replayed state of one currently-generated card that has at least one projected review.
 ///
 /// A card the current content generates but which has no reviews does not appear in [`Replayed`];
@@ -297,6 +305,70 @@ mod tests {
                 baseline,
                 "interleaving {order:?} diverged"
             );
+        }
+    }
+
+    #[test]
+    fn every_permutation_of_two_devices_rows_replays_identically() {
+        // The claim the whole sync design rests on (ADR-0004 §2, replay `CONTEXT.md`), pinned by
+        // brute force rather than a handful of hand-picked orderings: merge is set union with
+        // duplicates dropped, so *every* interleaving of two devices' rows — all 720 permutations of
+        // six — must replay to one state. No RNG: exhaustion is both stronger and reproducible.
+        let a = note(1);
+        let b = note(2);
+        let cards = current_cards(&[a, b]);
+        let all = [
+            rev("L", 1, a, 0, 3, 0),
+            rev("L", 2, a, 0, 2, 5),
+            rev("L", 3, b, 0, 4, 6),
+            rev("P", 1, b, 0, 3, 1),
+            rev("P", 2, a, 0, 4, 9),
+            rev("P", 3, b, 0, 1, 12),
+        ];
+        let baseline = replay(&cards, &all.iter().map(String::as_str).collect::<Vec<_>>());
+
+        let mut indices = [0, 1, 2, 3, 4, 5];
+        let mut seen: HashSet<[usize; 6]> = HashSet::new();
+        let len = indices.len();
+        permutations(&mut indices, len, &mut |order| {
+            seen.insert(order.try_into().expect("six indices"));
+            let shuffled: Vec<&str> = order.iter().map(|&i| all[i].as_str()).collect();
+            assert_eq!(
+                replay(&cards, &shuffled),
+                baseline,
+                "permutation {order:?} diverged"
+            );
+            // The same rows with an arbitrary duplicate appended must not change the result either.
+            let mut with_dup = shuffled.clone();
+            with_dup.push(all[order[0]].as_str());
+            assert_eq!(
+                replay(&cards, &with_dup),
+                baseline,
+                "a duplicate row changed the result"
+            );
+        });
+        assert_eq!(
+            seen.len(),
+            720,
+            "all 6! distinct interleavings must have been checked"
+        );
+    }
+
+    /// Heap's algorithm — every permutation of the first `k` elements of `slice`, handed to `emit`
+    /// exactly once. Kept local to the test: exhaustive interleaving is the one property here worth
+    /// proving without leaning on a crate.
+    fn permutations(slice: &mut [usize], k: usize, emit: &mut impl FnMut(&[usize])) {
+        if k <= 1 {
+            emit(slice);
+            return;
+        }
+        for i in 0..k {
+            permutations(slice, k - 1, emit);
+            if k.is_multiple_of(2) {
+                slice.swap(i, k - 1);
+            } else {
+                slice.swap(0, k - 1);
+            }
         }
     }
 
