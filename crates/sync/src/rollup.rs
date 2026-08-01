@@ -31,13 +31,11 @@
 //! 2. Deletion in the application data folder is **permanent**. There is no undo, so rule 1 is a
 //!    rule and not a preference.
 
-use std::collections::BTreeMap;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use leitner_core::log::Json;
 
-use crate::backend::Backend;
-use crate::backend::TransportError;
+use crate::backend::{Backend, TransportError};
 use crate::codec;
 use crate::key::{Key, Stream};
 
@@ -73,17 +71,17 @@ pub fn plan_rollup(keys: &[Key], k: usize) -> Vec<Vec<Key>> {
             .last()
             .is_some_and(|last| last.span() == key.span() && last.end + 1 == key.start);
         if !extends {
-            flush_run(&mut run, k, &mut groups);
+            flush_run(&run, k, &mut groups);
             run.clear();
         }
         run.push(key);
     }
-    flush_run(&mut run, k, &mut groups);
+    flush_run(&run, k, &mut groups);
     groups
 }
 
 /// Chunk one equal-span adjacent run into full groups of `k`, appending each to `groups`.
-fn flush_run(run: &mut [Key], k: usize, groups: &mut Vec<Vec<Key>>) {
+fn flush_run(run: &[Key], k: usize, groups: &mut Vec<Vec<Key>>) {
     for chunk in run.chunks_exact(k) {
         groups.push(chunk.to_vec());
     }
@@ -143,10 +141,10 @@ fn execute_group<B: Backend>(
     };
 
     // Rule 1: the merged object is written FIRST.
-    backend.put(&merged_key.encode(), &codec::compress(&merged))?;
+    let merged_text = merged_key.encode();
+    backend.put(&merged_text, &codec::compress(&merged))?;
     // ...then the sources are deleted, and only the sources. The merged key differs from every
     // source (its range is strictly wider), so this never deletes what was just written.
-    let merged_text = merged_key.encode();
     for source in group {
         let source_text = source.encode();
         if source_text != merged_text {
