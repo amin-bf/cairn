@@ -162,6 +162,16 @@ Also handed onward: **author, description, licence** and similar deck metadata a
 *file* declares about itself — [#13](https://github.com/amin-bf/leitner/issues/13)'s concern, not the
 deck object's.
 
+> **Widened by [ADR-0022 §8](0022-the-import-preview-and-export-report.md): those three land back
+> here, in the authoring half.** They are still what the *file* declares — nothing about them exports
+> as deck content — but they have to be **remembered per deck id and synced**, or the same defect
+> ADR-0008 §9 named for the revision recurs verbatim: an author publishing updates from two devices
+> emits one file crediting them and one anonymous. So the authoring half now holds
+> `{revision, digest}` **and** author, description and licence, and the sentence above is right about
+> ownership while being incomplete about storage. **The personal half stays empty and stays #21's** —
+> ADR-0011 §6 made the new-card rate global, so no personal per-deck preference exists yet, and the
+> syncing question survives unanswered.
+
 ### 6. Review spans the whole collection; a session is not a domain object
 
 The default and primary flow is **everything due, collection-wide**, in one queue. Per-deck queues
