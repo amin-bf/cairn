@@ -10,6 +10,7 @@
 
 pub mod bidi;
 pub mod deck;
+pub mod fonts;
 pub mod session;
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -69,19 +70,22 @@ impl Sitting {
 pub struct LeitnerApp {
     store: Result<Collection, String>,
     sitting: Option<Sitting>,
+    /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
+    /// not in `CreationContext` — see `fonts` and the note on `new`.
+    fonts_installed: bool,
 }
 
 impl LeitnerApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        // Fonts are installed on the **first frame**, never here. Registering a face during
-        // creation was found in #8 to break rendering on some backends; deferring it one frame
-        // fixes it. When the Arabic face lands, it goes in `update`, guarded by a `bool` — and it
-        // must be registered into *every* family including `Monospace`, or text silently renders
-        // as boxes (ADR-0003 §4).
+        // Fonts are installed on the **first frame**, never here (see `ui` and the `fonts` module).
+        // Registering a face during creation was found in #8 to break rendering on some backends;
+        // deferring it one frame fixes it, and a newly-named family (bold) is not referenceable on
+        // the frame it is registered anyway (ADR-0012 §8).
         let store = Self::open_store();
         Self {
             store,
             sitting: None,
+            fonts_installed: false,
         }
     }
 
@@ -101,6 +105,17 @@ impl LeitnerApp {
 
 impl eframe::App for LeitnerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // The shipped font set is installed here, on the first frame, and this frame draws nothing:
+        // `set_fonts` applies at the start of the *next* pass, so the newly-named bold family is not
+        // referenceable yet and any text drawn now would use the stock faces (ADR-0012 §8, ADR-0003
+        // §7, client-stack rule 7). One repaint is requested so the deferral costs no input event.
+        if !self.fonts_installed {
+            fonts::install(ui.ctx());
+            self.fonts_installed = true;
+            ui.ctx().request_repaint();
+            return;
+        }
+
         let now_ms = now_ms();
         // "Due today" is the **device's local** day (replay `CONTEXT.md`), which the walking skeleton
         // reads at the default 4am scale; a real device timezone is a later ticket.

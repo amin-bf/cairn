@@ -192,7 +192,15 @@ grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks —
   partial state to repair. Never schedule it, and never tell the user a started job is still
   progressing (ADR-0014 §3).
 - **Fonts are installed on the first frame, never in `CreationContext`**, and every added face must
-  be registered in **every** family including `Monospace`, or text silently renders as boxes.
+  be registered in **every** family including `Monospace`, or text silently renders as boxes. The
+  shipped set lives in `fonts` — Noto Sans Arabic (Persian) and DejaVu Sans (the IPA extensions the
+  bundled Latin faces lack) as fallbacks, plus a bold cut of each in its own family. The install
+  frame draws nothing: a newly-named family is not referenceable until the next pass (ADR-0012 §8).
+- **Bold is a face, never a colour — this is the note the editor meets.** There is no synthetic
+  emboldening: epaint has none, and `RichText::strong` only *brightens*, which is invisible against
+  this near-white body (measured as "I can't see bold"). To draw the `**bold**` Markdown subset
+  (ADR-0002 §8) select `fonts::bold_family()`, a real heavier face — never a brighter shade. Do not
+  reach for `strong` in the card pane or the answer-emphasis renderer (ADR-0012 §8).
 - **Android text input is ASCII-only and cannot be fixed here.** winit's Android backend has no IME
   path. Never design a feature that requires typing non-Latin text on Android. Because we receive no
   events, the failure is *silence* — so the editor states it in advance, off a compile-time
