@@ -14,6 +14,10 @@
 //! enforceable — uniqueness across the shipped definitions and a golden `slot → (prompt, answer)`
 //! list (ADR-0017 §4) — sit at the foot of this file.
 
+/// The `position` order key: a fractional index with infill (ADR-0021 §3), the value that fixes a
+/// note's place in authored order.
+pub mod order;
+
 /// A note's identity: sixteen bytes, minted once at creation as a UUIDv4 (ADR-0002 §6).
 ///
 /// `leitner-core` never mints one — minting is a write-time act at the edge, and this crate takes

@@ -459,6 +459,56 @@ fn the_mutable_surface_is_one_table_settling_by_stamp() {
     );
 }
 
+#[test]
+fn a_created_note_is_placed_after_the_current_last_in_authored_order() {
+    // ADR-0021 §3: a new note is created at the end of the collection's order, its `position` a
+    // fractional-index key after the current largest. Create three and their keys strictly increase,
+    // so reading them back in `MAX`/`<` order recovers creation order.
+    let (mut coll, _d, _s) = open();
+    let a = coll.create_note("basic", &[("Front", "one")]).unwrap();
+    let b = coll.create_note("basic", &[("Front", "two")]).unwrap();
+    let c = coll.create_note("basic", &[("Front", "three")]).unwrap();
+
+    let pos = |id: &NoteId| {
+        coll.mutable_get("note", &id.0, "position")
+            .unwrap()
+            .unwrap()
+    };
+    let (pa, pb, pc) = (pos(&a), pos(&b), pos(&c));
+    assert!(
+        pa < pb && pb < pc,
+        "positions must ascend with creation: {pa} {pb} {pc}"
+    );
+
+    // Every note carries exactly one position value — creation never renumbers (ADR-0021 §3).
+    for id in [a, b, c] {
+        assert!(
+            coll.mutable_get("note", &id.0, "position")
+                .unwrap()
+                .is_some()
+        );
+    }
+}
+
+#[test]
+fn mutable_entity_reads_a_notes_own_field_values_in_one_pass() {
+    // ADR-0021 §2: the note list's substring search scans a note's own field values, and does so
+    // without knowing its kind — one read of the whole entity. Cleared (NULL) attributes are absent,
+    // matching `mutable_get`.
+    let (mut coll, _d, _s) = open();
+    let id = coll
+        .create_note("basic", &[("Front", "chien"), ("Back", "dog")])
+        .unwrap();
+    coll.mutable_set("note", &id.0, "Back", None).unwrap(); // clear a field
+
+    let attrs = coll.mutable_entity("note", &id.0).unwrap();
+    let map: std::collections::HashMap<_, _> = attrs.into_iter().collect();
+    assert_eq!(map.get("Front").map(String::as_str), Some("chien"));
+    assert_eq!(map.get("kind").map(String::as_str), Some("basic"));
+    assert!(map.contains_key("position"));
+    assert!(!map.contains_key("Back"), "a cleared field is not returned");
+}
+
 /// Copy `collection.db` (and any WAL sidecars) from one data dir to another — a restore.
 fn copy_collection(from: &std::path::Path, to: &std::path::Path) {
     for name in ["collection.db", "collection.db-wal", "collection.db-shm"] {

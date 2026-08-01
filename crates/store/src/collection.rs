@@ -458,25 +458,65 @@ impl Collection {
         Ok(())
     }
 
-    /// Mint a note and write its kind and fields onto the mutable surface, returning its fresh id.
+    /// Mint a note and write its kind, `position` and fields onto the mutable surface, returning its
+    /// fresh id.
     ///
     /// A note id is a UUIDv4 minted once at creation (ADR-0002 §6), and minting is an **edge** act —
     /// `leitner-core` takes identity as a value and never mints one (ADR-0009 §8). The store already
     /// draws entropy for its own ids, so it is the natural single home for this one too; keeping it
-    /// here means the app never reaches for `getrandom`. The full authoring surface (ADR-0012,
-    /// ADR-0021) is a later ticket — this is the seam #94 needs to turn a seeded `basic` note into a
-    /// reviewable card.
+    /// here means the app never reaches for `getrandom`.
+    ///
+    /// The new note is placed **at the end of the collection's authored order** (ADR-0021 §3): its
+    /// `position` is a fractional-index key after the current largest, computed by
+    /// [`leitner_core::content::order::between`]. Byte order over that alphabet is lexicographic, so
+    /// `MAX(value)` names the current last without decoding anything. Creation always writes exactly
+    /// one `position` value, never a renumber.
     pub fn create_note(
         &mut self,
         kind: &str,
         fields: &[(&str, &str)],
     ) -> Result<NoteId, StoreError> {
+        let last = self.max_position()?;
+        let position = leitner_core::content::order::between(last.as_deref(), None);
+
         let id = NoteId(interchange::uuid_v4(interchange::random_bytes()?));
         self.mutable_set("note", &id.0, "kind", Some(kind))?;
+        self.mutable_set("note", &id.0, "position", Some(&position))?;
         for (name, value) in fields {
             self.mutable_set("note", &id.0, name, Some(value))?;
         }
         Ok(id)
+    }
+
+    /// The largest `position` value held by any note, or `None` when no note has one yet — the
+    /// current last of authored order (ADR-0021 §3). SQLite's `MAX` over the key's lowercase-ASCII
+    /// alphabet is a BINARY comparison, which is exactly the order key's own total order, so no note
+    /// need be decoded to find where "the end" is.
+    fn max_position(&self) -> Result<Option<String>, StoreError> {
+        Ok(self.conn.query_row(
+            "SELECT MAX(value) FROM mutable WHERE entity = 'note' AND attr = 'position'",
+            [],
+            |r| r.get::<_, Option<String>>(0),
+        )?)
+    }
+
+    /// Every set attribute of one entity, as `(attr, value)` pairs in attribute order — the note-list
+    /// screen's way to read a note's own field values in one pass for its substring search (ADR-0021
+    /// §2), without knowing the note's kind. Attributes set to SQL NULL (a cleared field) are omitted,
+    /// exactly as [`Collection::mutable_get`] reports them absent.
+    pub fn mutable_entity(
+        &self,
+        entity: &str,
+        entity_id: &[u8],
+    ) -> Result<Vec<(String, String)>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT attr, value FROM mutable \
+             WHERE entity = ?1 AND entity_id = ?2 AND value IS NOT NULL ORDER BY attr",
+        )?;
+        let rows = stmt.query_map(params![entity, entity_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
     /// Read the settled value of one mutable attribute, or `None` if it was never set (or set to
