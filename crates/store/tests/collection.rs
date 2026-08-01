@@ -261,13 +261,7 @@ fn a_backwards_clock_cannot_write_a_row_that_sorts_before_the_log() {
     assert_eq!(lines.len(), 2);
     // Read the two instants back: the second row must sort strictly after the first, and its frozen
     // day must be stamped to match the guarded instant (not the 1970 the clock claimed).
-    let mut instants: Vec<(u64, String, i64)> = lines
-        .iter()
-        .map(|l| {
-            let obj = json_fields(l);
-            (obj.0, obj.1, obj.2)
-        })
-        .collect();
+    let mut instants: Vec<(u64, String, i64)> = lines.iter().map(|l| json_fields(l)).collect();
     instants.sort_by_key(|r| r.0); // by sequence: the order they were written
     let (_, first_instant, first_day) = instants[0].clone();
     let (_, second_instant, second_day) = instants[1].clone();
