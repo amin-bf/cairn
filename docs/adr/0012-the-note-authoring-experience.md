@@ -65,6 +65,14 @@ while chips spend a permanent row on it.
 **Changing kind later is permitted, and is not a special mechanism** — see §6 for the hazard it
 carries, which is the sharpest finding in this ADR.
 
+> **Extended by [ADR-0021 §9](0021-note-ordering-saving-and-the-note-list.md): there is a second
+> dropdown beside it, for the note's *deck*, with *create a new deck* available from it.** This ADR
+> specified the kind dropdown and was silent on deck, and no other ADR said where a note's `deck`
+> reference is set — so between them nothing did. Creation belongs on the dropdown because the moment
+> you need a deck that does not exist is while filing the note that wants it, and
+> [ADR-0005 §8](0005-the-deck-model.md) forbids ever auto-creating one. Declining costs nothing:
+> ADR-0005 §7 makes an absent reference legal, and such a note is unfiled and still reviewable.
+
 > **Amended by [ADR-0017 §6](0017-card-slots.md): the dropdown lists the shipped kinds, plus the
 > note's own current kind when that kind was *acquired*** ([ADR-0008 §7](0008-the-deck-export-format.md)).
 > A note of an imported kind therefore shows its own kind, can be switched away from it, and can be
@@ -209,6 +217,18 @@ implementation.
 - **Enter in a single-line field does nothing**, and the field keeps focus. egui treats Enter in a
   `TextEdit::singleline` as a submit and surrenders focus, which leaves the caret nowhere.
   Advancing to the next field was tried and rejected: a note editor is not a wizard.
+
+> **Widened by [ADR-0021 §8](0021-note-ordering-saving-and-the-note-list.md) to the *last* field,
+> which §9 below left unowned — the rule holds without exception.** Under ADR-0021 §7's autosave there
+> is nothing for Enter to commit, so the only meaning left would be *"and now give me a fresh note"* —
+> a navigation act, and it must not be bound to Enter for two reasons. **"The last field" is a
+> property of the kind definition, which is *data***, so a kind gaining a field would silently change
+> what a key does, with no code change and nothing failing — and
+> [ADR-0008 §7](0008-the-deck-export-format.md) lets a note carry an **acquired** kind, putting that
+> in a stranger's hands. And the rule could not be uniform anyway: `cloze`'s field is multiline, where
+> Enter must insert a newline, so the carve-out would be invisible to a user pressing Enter in the
+> last field of two different notes. The rhythm instead gets a **New note** action carrying kind and
+> deck forward, with one modifier-chord accelerator that can never collide with a field's own Enter.
 - **Single-line fields must be `singleline`**, or Enter inserts a newline into a `Term` and long
   values wrap inside a one-row box.
 - **Each line aligns by its own first strong character** — the `dir="auto"` rule. A Persian term
@@ -249,6 +269,25 @@ one-frame deferral to a second reason.
 - **Saving semantics** — autosave versus explicit save, and what Enter means on the last field.
 - **Editing a note mid-review**, and where authoring is entered from.
 
+> **The last two are closed by [ADR-0021](0021-note-ordering-saving-and-the-note-list.md).**
+>
+> **Saving is automatic, per field** (§7) — and the decisive argument is *this ADR's own §5*. Making
+> the destructive-edit warning ambient *"rather than a check at save time"* already spent the only
+> decision a save could have carried, leaving a control that commits bytes and asks nothing. Two
+> further grounds: this ADR's *Consequences* note that *"the editor holds a draft the store has not
+> seen"* describes the one piece of state in the whole design a kill can lose, against
+> [ADR-0006 §2](0006-the-review-session-experience.md)'s proof that nothing else does; and on Android
+> an app is **frozen, not slowed**, so under explicit save putting the phone down mid-note is the
+> standard way to lose work, silently. It also makes §5's Undo copy **literally** true rather than
+> approximately: undo becomes an ordinary edit writing the old value back with a fresh stamp.
+>
+> **Where authoring is entered from** (§5, §6) turned out to need a screen that did not exist —
+> **no browse surface is specified anywhere in twenty ADRs**, which is why
+> [ADR-0010 §7](0010-leeches.md) could say *"edit … already exists"* about a door nobody had built.
+> ADR-0021 specifies a **note list** and makes this one editor with four entrances. **A note is
+> editable mid-review**, and **entering the editor counts as a reveal** — without which §4 of
+> ADR-0006 is quietly false, since the editor shows the back.
+
 ## Amendments to accepted ADRs
 
 - **ADR-0002 §7** — its claim that the replay mechanism "absorbs a note changing kind" is amended
@@ -263,6 +302,10 @@ one-frame deferral to a second reason.
 *(§1 and §5 are in turn amended by [ADR-0018](0018-the-card-pane-ordering.md) — a dormant entry is a
 line rather than a card, and the form-pane warning is primary on both platforms. Both amendments are
 recorded inline above.)*
+
+*(§2, §7 and §9 are amended by [ADR-0021](0021-note-ordering-saving-and-the-note-list.md) — the
+editor gains a deck dropdown, the Enter rule widens to the last field, and two of §9's four unsettled
+items close. All three are recorded inline above.)*
 
 ## Consequences
 
@@ -284,16 +327,22 @@ recorded inline above.)*
   [ADR-0017](0017-card-slots.md)**: no discriminator, and the ordinal becomes an assigned slot instead.
 - **A soft-keyboard pass on the handset** (§9) — the one question desktop cannot answer. Now owned by
   [Prototype: the authoring screen under a soft keyboard](https://github.com/amin-bf/leitner/issues/67).
-- **Saving semantics** (§9) — autosave versus explicit save, and what Enter means on the last field.
-  Now owned by [Decide: note ordering, saving, and where authoring is entered from](https://github.com/amin-bf/leitner/issues/66).
-- **Editing a note mid-review, and where authoring is entered from** (§9) — owned by the same ticket.
+- ~~**Saving semantics** (§9)~~ — **discharged by
+  [ADR-0021 §7 and §8](0021-note-ordering-saving-and-the-note-list.md)**: autosave, per field, on blur
+  or a short idle, with a new note committed on its first non-empty field; and Enter stays inert in
+  every single-line field, the last one included.
+- ~~**Editing a note mid-review, and where authoring is entered from** (§9)~~ — **discharged by
+  [ADR-0021 §5 and §6](0021-note-ordering-saving-and-the-note-list.md)**: one editor with four
+  entrances, one of them the review screen, where opening it counts as a reveal.
   *This row was missing from the table until 2026-08-01*, along with saving semantics: §9 named four
   things this ADR does not settle and the table carried two, so the map's fog triage — which sweeps
   these tables — never saw them. Recorded rather than quietly added, because the gap is the reason a
   session's worth of decisions sat unowned for a month.
-- **Whether notes are user-reorderable, and how `position` is surfaced while authoring** — handed
-  *here* by [ADR-0011](0011-new-card-rate-and-daily-limits.md) and never answered; also now
-  [#66](https://github.com/amin-bf/leitner/issues/66)'s.
+- ~~**Whether notes are user-reorderable, and how `position` is surfaced while authoring**~~ — handed
+  *here* by [ADR-0011](0011-new-card-rate-and-daily-limits.md) and never answered; **discharged by
+  [ADR-0021 §3 and §4](0021-note-ordering-saving-and-the-note-list.md)**, which found that ADR-0011
+  §7's *"need not be dense"* permission was one its own assignment rule never let anyone use, and made
+  `position` an order key with infill so a move is one write. Surfaced on the **note list**, not here.
 - **Visual design** — **out of scope** for the map as of 2026-07-31, as *the visual design pass* that
   [ADR-0006 §10](0006-the-review-session-experience.md) opened.
   Narrowed by [ADR-0018](0018-the-card-pane-ordering.md) for this pane: what a dormant line *says*,

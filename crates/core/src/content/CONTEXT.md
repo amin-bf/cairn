@@ -54,11 +54,20 @@ Another card generated from the same note. **At most one card per note is introd
 skills they exist to schedule separately.
 
 **Position**:
-The integer fixing a note's place in authored order. From a local high-water counter on creation,
-from the `notes.jsonl` line index on import, ties broken by note id. **Not dense and not unique** —
-it only has to sort. Two things read it: new cards are introduced in `(position, ordinal)` order, and
-`export` emits notes in it (ADR-0011 §7).
-_Avoid_: Index, sequence number (which means `log`'s per-writer counter), sort key.
+The **order key** fixing a note's place in authored order — not an integer, and not a counter. Its
+defining property is **infill**: there is always a value between any two neighbours, so reordering a
+note writes **exactly one value** (ADR-0021 §3). A key after the current last on creation, keys in
+line order on import, ties broken by note id. **Not dense and not unique** — it only has to sort, and
+under ADR-0021 that is finally true rather than decorative. Two things read it: new cards are
+introduced in `(position, ordinal)` order, and `export` emits notes in it (ADR-0011 §7) — the file
+carries **line order**, never the key, so the representation reaches no byte of `.ldeck`.
+_Avoid_: Index, sequence number (which means `log`'s per-writer counter), sort key, position *number*
+— it is not one and is never shown as one.
+
+**Never renumber positions.** A move is one write. Any bulk rewrite — a "tidy up", a compaction, a
+migration that redistributes keys — is N independent writes on ADR-0004 §7's surface, and **order is a
+gestalt, so one lost value scrambles the whole list**: two devices reordering concurrently then agree
+on neither order, and nothing anywhere reports it. This is the entire reason the type is what it is.
 
 ### Kinds and fields
 

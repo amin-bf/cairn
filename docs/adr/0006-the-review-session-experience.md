@@ -95,6 +95,20 @@ The card itself is the tap target for revealing the answer — not a separate "S
 Verified by real touch on the Pixel 8 Pro and by mouse click on desktop; no divergence between the
 two was needed or found.
 
+> **Amended by [ADR-0021 §6](0021-note-ordering-saving-and-the-note-list.md): reveal has a second
+> cause.** The review screen gains an *edit this note* action opening
+> [ADR-0012](0012-the-note-authoring-experience.md)'s editor, and **entering the editor counts as a
+> reveal** — because the editor shows the back, so without this §4's *"self-grading can't happen
+> before the answer is seen"* is quietly false. Tap-the-card is unchanged as the ordinary cause.
+>
+> The tidier alternatives both fail on this ADR's own terms: *skip the card ungraded* needs an
+> in-session set of deferred cards, which §2 spent a handset force-stop proving does not exist; *flag
+> it and edit at the end* is the stored *"since you last looked"* state
+> [ADR-0010 §9](0010-leeches.md) already refused. And an edit that makes the current card dormant
+> needs no mechanism at all — §2 recomputes the queue on read, so it is simply gone, and
+> [ADR-0011 §9](0011-new-card-rate-and-daily-limits.md)'s counting of *gradings* means the counter
+> does not advance.
+
 ### 4. Grading: four buttons, full-width, stacked vertically, shown only after reveal
 
 No swipes, no dedicated keyboard-only path (the prototype's variant switcher used arrow keys, but
@@ -111,6 +125,13 @@ The same layout, the same button sizes, worked identically for real touch on the
 mouse clicks on desktop. No platform-specific interaction path — larger touch targets, different
 gestures — was needed. (Keyboard-only grading was not requested or explored; if it's wanted later,
 it's additive, not a redesign.)
+
+> **Amended by [ADR-0021 §8](0021-note-ordering-saving-and-the-note-list.md): the app acquires
+> exactly one keyboard shortcut, and it is not here.** A modifier chord for *New note* in the editor,
+> admitted because bulk authoring is the case ADR-0021 §3's ordering work exists to serve and
+> `AGENTS.md` client-stack rule 8 already makes serious authoring desktop-only. **Review remains
+> keyboard-free**, and the first shortcut is recorded deliberately so that a second is a decision
+> rather than a drift.
 
 ### 6. Constraint 4's box display: a quiet badge, only after reveal
 

@@ -15,9 +15,47 @@ and §5** — read those amendments before touching the authoring pane; also by
 [ADR-0015](../../../docs/adr/0015-the-sync-experience.md) and
 [ADR-0019](../../../docs/adr/0019-naming-the-account-at-enrolment.md) (everything the user sees about
 sync — the `sync` crate holds the mechanism and none of the surface; the second **amends ADR-0015 §7
-and §12**, adding the connected account to enrolment and to sync settings).
+and §12**, adding the connected account to enrolment and to sync settings); and
+[ADR-0021](../../../docs/adr/0021-note-ordering-saving-and-the-note-list.md), which adds the **note
+list** and the app's navigation shell and **amends ADR-0012 §2, §7 and §9 and ADR-0006 §3 and §5** —
+read those before touching the editor or the review screen's actions.
 
 ## Language
+
+**Top-level destination**:
+One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR-0021 §1). The floor
+that makes every specified screen reachable — the leech screen hangs off review's end-of-session
+pointer, enrolment sits inside settings. How the three are rendered is the visual design pass's.
+_Avoid_: Tab, page, route — none of which is fixed here.
+
+**Note list**:
+The browse surface, and the app's authoring home (ADR-0021 §2). Lists **notes, not cards** — the
+card-level list is the leech screen, and two would be two speakers for one fact. Narrowed by three
+composable filters, **deck, tag and text**, reusing ADR-0005 §6's queue-filter vocabulary; text search
+is load-bearing, not a convenience, because without it "find note 200 of 500" is browsing. Offers
+**create, edit, delete** — never **suspend**, which belongs to the leech screen's permanent home for
+suspended cards (ADR-0010 §8). Carries **no schedule information at all**: a note generates several
+cards in several boxes, so any per-note figure is boxes *counted*, which ADR-0001 §3 forbids. Deleted
+notes are not listed — ADR-0004 §7's delete discards the content, so there is nothing to list.
+_Avoid_: Browser, card browser, deck view.
+
+**List order**:
+The note list has **exactly one order — `position` — and no sort control** (ADR-0021 §4). Filters
+narrow; nothing re-sorts. This is load-bearing rather than tidy: a drag inside an alphabetical view
+has no definable result, so a sort silently makes reordering meaningless while it is active. **The key
+is never shown** — the list's own sequence *is* the rendering of order — and reordering inside a
+filtered list is well-defined, hidden notes staying between the neighbours they were between. A new
+note goes to the end of the **collection's** order, not of the filtered view.
+_Avoid_: Sort, sort order, position number.
+
+**Autosave**:
+How the editor saves: **per field, on blur or a short idle**, with a new note committed on its first
+non-empty field (ADR-0021 §7). **There is no Save button and no discard.** ADR-0012 §5 already moved
+the only decision a save could carry onto the ambient warning, and a draft the store has not seen is
+the one thing in this design an Android freeze can lose. One write is one row on ADR-0004 §7's
+surface with one stamp — the granularity §7 already chose. It also makes ADR-0012 §5's Undo copy
+literally true: undo is an ordinary edit writing the old value back.
+_Avoid_: Save, commit, draft, dirty state.
 
 **Session**:
 One sitting of review: a chosen card count, with a 10-minute timer running from the same moment.
@@ -154,6 +192,15 @@ grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks —
   is not a lock on review — the app never blocks reviewing (ADR-0015 §1) — it is what stops a merge
   recomputing every `(S, D)` mid-session, which ADR-0014 called locally unfixable. It works only
   because there is no background sync, so treat that absence as load-bearing (ADR-0015 §6).
+  **This does not mean "nothing may change the queue mid-session".** A note edited from the review
+  screen changes it immediately and correctly (ADR-0021 §6) — the rule bans an *unannounced* recompute
+  caused by another device, not the visible result of the user's own act on the card in front of them.
+  Reading it the broad way deletes mid-review editing as a violation, which is the predictable mistake.
+- **Enter is inert in every single-line field, the last one included** (ADR-0012 §7, widened by
+  ADR-0021 §8). Never bind a key to "the last field": which field is last is a property of the **kind
+  definition**, which is data — and ADR-0008 §7 lets a note carry an *acquired* kind, so a stranger's
+  file would be deciding what a key does. Nothing fails when it changes. The *New note* rhythm is an
+  action with a modifier chord, never bare Enter, which `cloze`'s multiline field would need anyway.
 - **Only two things may speak about sync**, and every future feature will have a reason to want a
   third. A badge, a toast on success, a "syncing…" indicator in the chrome — each is a defect
   against ADR-0015 §4, not a UX improvement.
