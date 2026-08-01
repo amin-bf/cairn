@@ -65,9 +65,15 @@ than per workspace, keeping `leitner-store::platform` at exactly two functions a
 belongs there: an inset is a fact about the window the UI is drawing into, and routing it through the
 store would make the store answer a question about layout.
 
-It is bound by the same discipline: **one function, returning the insets, with a non-Android
-implementation that returns zero** — not a family of window queries that grows a helper per platform
-question. The compile-time storage seam of client-stack rule 3 is unaffected.
+It is bound by the same discipline: **one function, returning the insets** — not a family of window
+queries that grows a helper per platform question. The compile-time storage seam of client-stack rule 3
+is unaffected.
+
+> **Amended by [ADR-0026 §5](0026-the-per-tap-keyboard-re-pop.md).** This section originally specified
+> *"a non-Android implementation that returns zero"*. Zero is also what a **down** keyboard reports, so
+> off Android the two states are indistinguishable and any gate on "the keyboard is down" is permanently
+> true. The return type therefore distinguishes **no soft keyboard on this platform** from **keyboard
+> down**. Still one function; the type gets honest, the seam does not widen.
 
 ### 3. Two guards, without which the keyboard oscillates
 
@@ -87,6 +93,14 @@ shrink the viewport" is *not* a sufficient instruction.
   because scrolling away is deliberate; surrendering focus makes the state consistent — no focus, no
   IME output, no keyboard, nothing to oscillate between. **Completely**, not merely clipped: a field
   half off the edge is still being typed into.
+
+> **Amended by [ADR-0026 §4](0026-the-per-tap-keyboard-re-pop.md): there are three guards, not two.**
+> The third is **raise the keyboard from a discrete press on a text field**, and it has a different
+> origin — these two follow from *reading insets*, that one follows from *carrying the patch*. Once the
+> per-tap interrupt is suppressed, nothing re-asserts show after the user dismisses the keyboard with
+> the IME's own chevron, because the layer below debounces its allow-IME flag against a state that never
+> changed. An implementation that takes this section as complete ships a keyboard the user cannot get
+> back.
 
 ### 4. The destructive-edit warning moves above the fields
 
@@ -140,8 +154,9 @@ was.
   soft keyboard on **every tap** into a text field, including a tap on the field that already has
   focus, because the UI layer interrupts IME composition on every pointer interaction and the layer
   below implements that interruption as hide-then-show. It is independent of everything above — it
-  reproduces with inset handling switched off, and it is not a layout question. Owned by
-  [Decide: whether we carry a patched `egui-winit`](https://github.com/amin-bf/leitner/issues/75).
+  reproduces with inset handling switched off, and it is not a layout question. **Since settled by
+  [ADR-0026](0026-the-per-tap-keyboard-re-pop.md)**: the guard is carried as a patch to the vendored
+  windowing adapter, with the recovery half in this crate's shared text-field wrapper.
 - **Visual design**, unchanged from [ADR-0012 §9](0012-the-note-authoring-experience.md) and out of
   scope for the map. Where the warning sits is behaviour; what it looks like is not.
 - **Non-Latin authoring on the handset**, which client-stack rule 8 forecloses and this ADR does not
@@ -173,9 +188,9 @@ was.
 
 ## Open items handed onward
 
-- **The per-tap keyboard re-pop** (§6) — owned by
-  [Decide: whether we carry a patched `egui-winit`](https://github.com/amin-bf/leitner/issues/75).
-  Until it is settled, an implementation of this ADR is correct and still visibly flickers on each tap.
+- ~~**The per-tap keyboard re-pop** (§6)~~ — **settled by
+  [ADR-0026](0026-the-per-tap-keyboard-re-pop.md)**, which also amends §2's seam return type and adds a
+  third guard to §3. Read it before implementing either.
 - **What the moved warning looks like** — the visual design pass's, on the same terms
   [ADR-0018](0018-the-card-pane-ordering.md) left for a dormant line: what it says and where it sits are
   settled here, only how it looks is not.

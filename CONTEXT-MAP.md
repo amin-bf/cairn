@@ -101,7 +101,7 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3 |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -125,9 +125,20 @@ surface the app cannot see.** On Android nothing below the app reports the soft 
 is enforced edge-to-edge, so the old resize mode is inert, and winit reports no insets — so the UI
 layer is handed a viewport taller than the visible one. Read it before touching any screen with a text
 field: the cost is not occlusion but **unreachability**, since the scroll area sizes itself to the
-viewport it was given and the covered band has no scroll range. It also carries the two guards without
+viewport it was given and the covered band has no scroll range. It also carries the guards without
 which the keyboard oscillates, and it is why [0012 §5](./docs/adr/0012-the-note-authoring-experience.md)'s
-destructive-edit warning sits *above* the fields rather than after the last one.
+destructive-edit warning sits *above* the fields rather than after the last one. **Read
+[0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) with it, never instead of it** — 0026 amends its
+seam return type and turns its two guards into three.
+
+**[0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) is the only ADR about a dependency we do not
+take as published**, and it is why a bump of the client stack is not just a version change. As shipped,
+every tap into a text field on Android dismisses and reopens the soft keyboard, because the UI toolkit
+interrupts IME composition on any pointer interaction and the layer below implements that as
+hide-then-show — on a platform whose backend has no IME path, so there was never a composition to
+interrupt. No fix exists above the dependency: the interrupt flag has a public setter and no public
+clearer. Read it before bumping `egui`, before touching the shared text-field wrapper, and before
+assuming the inset seam reports zero off Android.
 
 **[0024](./docs/adr/0024-identifying-a-written-file.md) is an Android-only correction, and it amends
 four accepted ADRs rather than deciding much of its own.** Read it before touching anything that
