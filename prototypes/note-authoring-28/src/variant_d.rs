@@ -29,6 +29,7 @@ use eframe::egui;
 pub fn ui(ui: &mut egui::Ui, ed: &mut Editor, width: Width) {
     // A's kind selector, reused rather than reimplemented.
     variant_a::kind_row(ui, ed);
+    deck_row(ui, ed);
     ui.add_space(10.0);
 
     if width.is_phone() {
@@ -61,18 +62,50 @@ pub fn ui(ui: &mut egui::Ui, ed: &mut Editor, width: Width) {
     }
 
     ui.add_space(14.0);
-    ui.horizontal(|ui| {
-        if ui.add(egui::Button::new("Save").min_size(egui::vec2(90.0, 34.0))).clicked() {
-            let n = ed.dormant().len();
-            ed.saved_note = Some(if n == 0 {
-                "Saved.".to_string()
-            } else {
-                format!("Saved — {n} card(s) now dormant.")
-            });
+    action_row(ui, ed);
+}
+
+/// **No Save button** — [ADR-0021 §7](../../../docs/adr/0021-note-ordering-saving-and-the-note-list.md)
+/// landed after #28 was judged and made saving automatic, per field, on blur or a short idle. What
+/// stood here in round 2 was a `Save` button, and removing it is not cosmetic for *this* ticket: it
+/// is the one control that used to sit at the very bottom of the editor, so a pass that kept it
+/// would be judging a keyboard against a layout the spec no longer describes.
+///
+/// What replaces it is §8's **New note**, which carries the current kind and deck forward. On
+/// desktop that has a modifier-chord accelerator; the handset has no chord, so on a phone this
+/// button is the *only* way to take the action — and it is competing with the keyboard for the
+/// bottom of the screen. That is a #67 question, not an ADR-0021 one.
+fn action_row(ui: &mut egui::Ui, ed: &mut Editor) {
+    ui.horizontal_wrapped(|ui| {
+        if ui.add(egui::Button::new("New note").min_size(egui::vec2(90.0, 34.0))).clicked() {
+            let scenario = ed.scenario;
+            *ed = Editor::load(scenario);
         }
-        if let Some(note) = &ed.saved_note {
-            core::mono(ui, note, 11.0, ACCENT);
-        }
+        core::mono(ui, "saved automatically · no discard", 10.0, DIM);
+    });
+}
+
+/// The deck dropdown, beside the kind dropdown — [ADR-0021 §9](../../../docs/adr/0021-note-ordering-saving-and-the-note-list.md).
+/// ADR-0012 specified a kind dropdown and was silent on deck, so round 2 had no such control; it is
+/// here because it is a second picker opening into the space the keyboard wants.
+fn deck_row(ui: &mut egui::Ui, ed: &mut Editor) {
+    const DECKS: [&str; 3] = ["German A1", "Kanji — grade 1", "(no deck)"];
+    app::panel_frame().show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            core::mono(ui, "deck", 11.0, DIM);
+            egui::ComboBox::from_id_salt("d-deck").selected_text(ed.deck.clone()).show_ui(
+                ui,
+                |ui| {
+                    for d in DECKS {
+                        if ui.selectable_label(ed.deck == d, d).clicked() {
+                            ed.deck = d.to_string();
+                        }
+                    }
+                    ui.separator();
+                    let _ = ui.button("+ create a new deck…");
+                },
+            );
+        });
     });
 }
 

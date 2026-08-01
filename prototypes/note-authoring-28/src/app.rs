@@ -105,6 +105,17 @@ pub struct ProtoApp {
     variant: Variant,
     width: Width,
     editor: Editor,
+    /// Live platform insets, re-read every frame. See `insets.rs` for why the app has to ask.
+    insets: crate::insets::Insets,
+    /// **The #67 switch.** Off is what the app does today: no inset is applied, so egui is handed a
+    /// screen rect that includes the band the keyboard is drawn over. On is what it would do if it
+    /// read the insets itself. Both are on the handset at once so the difference is judged rather
+    /// than described.
+    apply_insets: bool,
+    /// The prototype's own controls are collapsed by default on the handset — they are not the
+    /// surface being judged, and with a keyboard up every line they take is a line the editor
+    /// does not get.
+    controls_open: bool,
 }
 
 impl ProtoApp {
@@ -120,9 +131,14 @@ impl ProtoApp {
             "c" => Variant::C,
             _ => Variant::D,
         };
+        // On the handset the phone preset is the *default*, not a toggle to remember to press:
+        // #28's pass had to fake phone width on a desktop, and this one does not have to fake
+        // anything. Desktop still opens on the desktop preset.
+        let default_width = if cfg!(target_os = "android") { Width::Phone } else { Width::Desktop };
         let width = match env("PROTO_WIDTH").as_str() {
             "phone" => Width::Phone,
-            _ => Width::Desktop,
+            "desktop" => Width::Desktop,
+            _ => default_width,
         };
         let scenario = match env("PROTO_SCENARIO").as_str() {
             "new" => Scenario::NewNote,
@@ -149,6 +165,9 @@ impl ProtoApp {
             variant,
             width,
             editor,
+            insets: Default::default(),
+            apply_insets: true,
+            controls_open: !cfg!(target_os = "android"),
         }
     }
 
@@ -259,43 +278,114 @@ impl eframe::App for ProtoApp {
             });
         }
 
-        egui::Panel::bottom("switcher").show(ui, |ui| {
+        // ---- #67: what the platform says, and whether we listen to it -------------------------
+        //
+        // Re-read every frame. The keyboard animates in over ~250ms and `getRootWindowInsets`
+        // reports the *current* frame of that animation, so a value cached at focus time would be
+        // whatever the inset happened to be one frame in — usually near zero.
+        let previous = self.insets;
+        self.insets = crate::insets::read();
+        if self.insets != previous {
+            // Immediate mode only repaints on input, and the keyboard sliding up is not input as
+            // far as winit is concerned — without this the reflow lands one stray touch later.
+            ui.ctx().request_repaint();
+        }
+        let ppp = ui.ctx().pixels_per_point();
+        let top_pts = if self.apply_insets { self.insets.top / ppp } else { 0.0 };
+        let bottom_pts =
+            if self.apply_insets { self.insets.bottom_occluded() / ppp } else { 0.0 };
+
+        // The status bar. Unapplied, the app draws its first line of text *under* the clock — which
+        // is true of this prototype on `main` today and is a finding in its own right.
+        if top_pts > 0.5 {
+            egui::Panel::top("inset-top")
+                .exact_size(top_pts)
+                .frame(egui::Frame::NONE)
+                .show(ui, |_| {});
+        }
+
+        // The controls live at the **top** on the handset. At the bottom they are the first thing
+        // the keyboard eats, and then there is no way to turn the inset handling back on — the
+        // switch being judged would be unreachable in exactly the state it exists to fix.
+        let controls_at_top = cfg!(target_os = "android");
+        let controls = |app: &mut Self, ui: &mut egui::Ui| {
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
+                // The #67 switch, first and always visible.
+                let label = if app.apply_insets { "insets: ON" } else { "insets: OFF" };
+                let tint = if app.apply_insets { ACCENT } else { WARN };
+                if ui.add(egui::Button::new(egui::RichText::new(label).color(tint))).clicked() {
+                    app.apply_insets = !app.apply_insets;
+                }
+                core::mono(
+                    ui,
+                    &format!(
+                        "kbd {:.0}px · bars {:.0}/{:.0} · ppp {ppp:.2}",
+                        app.insets.ime, app.insets.top, app.insets.bottom
+                    ),
+                    10.0,
+                    if app.insets.keyboard_is_up() { ACCENT } else { DIM },
+                );
+                if ui.button(if app.controls_open { "▾" } else { "▸" }).clicked() {
+                    app.controls_open = !app.controls_open;
+                }
+            });
+            if !app.controls_open {
+                ui.add_space(4.0);
+                return;
+            }
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("◀").clicked() {
-                    self.variant = self.variant.prev();
+                    app.variant = app.variant.prev();
                 }
                 ui.label(
-                    egui::RichText::new(format!("{} — {}", self.variant.key(), self.variant.name()))
+                    egui::RichText::new(format!("{} — {}", app.variant.key(), app.variant.name()))
                         .strong()
                         .color(FG),
                 );
                 if ui.button("▶").clicked() {
-                    self.variant = self.variant.next();
+                    app.variant = app.variant.next();
                 }
                 ui.separator();
                 for s in Scenario::ALL {
-                    let selected = s == self.editor.scenario;
+                    let selected = s == app.editor.scenario;
                     if ui.selectable_label(selected, s.label()).clicked() && !selected {
-                        self.reload(s);
+                        app.reload(s);
                     }
                 }
                 ui.separator();
                 for (w, name) in [(Width::Phone, "phone width"), (Width::Desktop, "desktop width")] {
-                    let selected = w == self.width;
+                    let selected = w == app.width;
                     if ui.selectable_label(selected, name).clicked() {
-                        self.width = w;
+                        app.width = w;
                     }
                 }
                 ui.separator();
                 if ui.button("⟲ reset draft").clicked() {
-                    let s = self.editor.scenario;
-                    self.reload(s);
+                    let s = app.editor.scenario;
+                    app.reload(s);
                 }
             });
-            core::mono(ui, self.variant.pitch(), 10.0, DIM);
+            core::mono(ui, app.variant.pitch(), 10.0, DIM);
             ui.add_space(6.0);
-        });
+        };
+
+        if controls_at_top {
+            egui::Panel::top("switcher").show(ui, |ui| controls(self, ui));
+        } else {
+            egui::Panel::bottom("switcher").show(ui, |ui| controls(self, ui));
+        }
+
+        // The band the keyboard is sitting on. Reserving it is the entire difference between the
+        // two states of the switch: with it, `CentralPanel` gets a viewport that matches what the
+        // user can see and the `ScrollArea` inside it gains a real scroll range; without it, the
+        // content below the fold is unreachable rather than scrollable.
+        if bottom_pts > 0.5 {
+            egui::Panel::bottom("inset-bottom")
+                .exact_size(bottom_pts)
+                .frame(egui::Frame::NONE)
+                .show(ui, |_| {});
+        }
 
         egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {

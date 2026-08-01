@@ -27,6 +27,9 @@ pub struct Editor {
     pub kind: String,
     pub values: Values,
     pub tags: String,
+    /// ADR-0021 §9 puts a deck dropdown beside the kind dropdown. Landed after #28 was judged, so
+    /// round 2 had no such field.
+    pub deck: String,
     pub undo: Option<Undo>,
     /// Set by a variant that wants a modal confirm before committing (variant A's answer).
     pub pending_save: bool,
@@ -42,6 +45,7 @@ impl Editor {
             kind: scenario.kind_id().to_string(),
             values: scenario.values(),
             tags: scenario.tags().to_string(),
+            deck: "German A1".to_string(),
             undo: None,
             pending_save: false,
             saved_note: None,

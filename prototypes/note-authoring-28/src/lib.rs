@@ -3,6 +3,7 @@
 pub mod app;
 pub mod bidi;
 pub mod core;
+pub mod insets;
 pub mod markdown;
 pub mod model;
 pub mod variant_a;
@@ -25,6 +26,10 @@ pub use app::ProtoApp;
 #[unsafe(no_mangle)]
 fn android_main(app: android_activity::AndroidApp) {
     use winit::platform::android::EventLoopBuilderExtAndroid as _;
+
+    // The activity handle, for `insets::read`. `ndk_context`'s context is the *Application* and has
+    // no `getWindow()`; this is the only handle in the process that does.
+    insets::ACTIVITY.store(app.activity_as_ptr(), std::sync::atomic::Ordering::Relaxed);
 
     let options = eframe::NativeOptions {
         android_app: Some(app.clone()),
