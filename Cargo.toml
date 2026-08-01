@@ -34,6 +34,13 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 getrandom = "0.3"
 tempfile = "3"
 
+# ADR-0013 §4 fixes `zstd` as the compressor for published objects, and ADR-0004 §11 (as amended by
+# ADR-0013 §12) pins level 19 as the ratio the decade projection assumes. It is a container, not a
+# re-encoding, so the exact interchange bytes come back out. Only `leitner-sync` publishes objects,
+# so only it depends on this; declared here so the version cannot drift. Like `rusqlite bundled` it
+# compiles C, so an Android build needs the NDK's clang exported (`scripts/android-env.sh`).
+zstd = "0.13"
+
 # `eframe` is deliberately absent. Its two arms disagree on `default-features` (ADR-0003 §5), and a
 # workspace entry cannot be overridden that way — so both arms are declared literally in
 # `crates/app`, side by side in one file where they cannot drift apart. `crates/desktop` gets it by

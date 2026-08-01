@@ -130,3 +130,25 @@ rather than by any code in this crate ([ADR-0019 §3](../../../docs/adr/0019-nam
 **Grant**:
 What enrolment obtains and what revocation removes. **Revocation is all-or-nothing**: every device
 holds a token issued against one client id, so revoking for a lost device logs out all of them.
+
+## Layout
+
+The transport mechanism is implemented and proven in-process against `MemoryBackend`; the crate holds
+no network code yet, so it stays testable without a window or a handset (ADR-0013 §11).
+
+- `backend.rs` — the four-operation seam (`Backend`) and `TransportError`, whose one meaningful
+  variant is `NotFound`: a `404` after a listing means **list again**, never recover (§5). No
+  conditional write appears anywhere on the trait, and that is the point (§4).
+- `key.rs` — the key shape. One writer owns one prefix (`w<writer>/{log,state}/`), and `SEQ_WIDTH` is
+  the **compatibility constant** that makes the listing the version summary (§6, §7). The fan-in is
+  not a constant and lives in `rollup.rs`.
+- `codec.rs` — the `zstd` container over interchange lines; a container, never a re-encoding (§4).
+- `publish.rs` — write a segment (exactly the rows since the last publish) and read one back.
+- `rollup.rs` — the count-triggered, write-before-delete roll-up, and the **two opposite merges**:
+  `merge_log` lossless, `merge_state` winning-stamp-per-key. This is the sharpest edge in the crate.
+- `summary.rs` — `{writer → highest sequence}` reduced from a listing; the whole handshake.
+
+**Deferred, because it needs a network and a handset this environment lacks**: enrolment (the device
+flow, §8), the credential file (§9) and the connected account (ADR-0019). Every term above it in this
+glossary — **Scope set**, **Identity check**, **Connected account**, **Disclosure clause**, **Grant**
+— describes that way-in and is specified but not yet built. The mechanism below it is complete.

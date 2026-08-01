@@ -19,3 +19,8 @@ license.workspace = true
 # see `scripts/android-env.sh`.
 [dependencies]
 leitner-core.workspace = true
+# ADR-0013 §4: published objects carry `zstd`-compressed interchange lines and nothing else. The
+# compressor is a container over ADR-0004 §11's byte-for-byte rows, never a re-encoding — the exact
+# bytes come back out — so it lives at the transport edge, not in `leitner-core`. Level is pinned in
+# `codec.rs`. Compiles C, like `rusqlite bundled`; the Android note in the package header applies.
+zstd.workspace = true
