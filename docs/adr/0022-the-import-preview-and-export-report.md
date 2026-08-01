@@ -476,6 +476,15 @@ meets it *before* a file is opened.
 is opened. Hiding it means a user who deliberately put a file there sees an empty list and concludes
 the application cannot see the folder — sending them after a permissions problem that does not exist.
 
+> **Reconciled by [ADR-0024 §3](0024-identifying-a-written-file.md): on Android there now *is* a
+> permissions problem, and it is not one the user can fix.** The list returns only files this
+> application wrote — a file another application put in `Downloads` is invisible to the query, not
+> merely unreadable. The reasoning above is preserved where it still applies: a file **we** wrote and
+> cannot parse is listed, marked `unreadable`, never hidden. What must change is the implication that
+> the list is a view of the folder — **it is not**, and the interface must not invite a user to
+> expect a file there that can never arrive. On the desktop the folder scan is unchanged and this
+> note does not apply.
+
 **The list grows and is never tidied.** [ADR-0016 §13](0016-backup-and-restore.md) has no delete in
 the seam — *"removing files from a user-visible folder is the file manager's job"* — and that is
 unchanged. The application never removes an imported file.
