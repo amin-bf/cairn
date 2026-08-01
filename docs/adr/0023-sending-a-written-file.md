@@ -237,6 +237,17 @@ decision to state *"the name the platform actually wrote, never the name request
 that knowable at all, and it is vindicated. What the mangled name costs is
 [#72](https://github.com/amin-bf/leitner/issues/72)'s.
 
+> **Corrected by [ADR-0024 §4](0024-identifying-a-written-file.md): the suffix-after-extension
+> behaviour is conditional, not unconditional.** It happens only when the insert declares a media
+> type that **disagrees with the name** — as the probe here did, asking for
+> `application/vnd.leitner.deck+zip` on a `.ldeck`. Measured across three declarations: with no type,
+> or with the agreeing `application/octet-stream`, the same collision yields
+> `probe72-x (3).ldeck` — **the extension survives**. ADR-0024 §4 therefore has the Android write
+> declare no `mime_type` at all, and the deduped name becomes `French A1 (1).ldeck` after all. **The
+> original guess was right and the measurement that appeared to refute it was reading our own
+> declaration back.** Everything else here stands, including that reading the name back is what makes
+> any of it knowable.
+
 ## Requirements this places on downstream tickets
 
 ### [#72 — how a written file is identified again](https://github.com/amin-bf/leitner/issues/72)

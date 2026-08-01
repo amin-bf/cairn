@@ -32,8 +32,17 @@ _Avoid_: Export, bundle, package — all of which also name the act rather than 
 
 **Profile**:
 Which payload a container carries: `deck` or `collection`. Declared in the manifest, and
-distinguished to the operating system by extension. The **profile is the discriminator that selects
-the stamp rule** — import restamps, restore preserves — which is why it is a profile and not a flag.
+distinguished to the operating system by extension **on the desktop only** — on Android both store as
+`application/octet-stream`, so there the discriminator is the `mimetype` member inside the archive
+and nothing else ([ADR-0024 §1](../../../docs/adr/0024-identifying-a-written-file.md)). The
+**profile is the discriminator that selects the stamp rule** — import restamps, restore preserves —
+which is why it is a profile and not a flag.
+
+**Sniff**:
+Reading the `mimetype` member at its fixed offset to decide what a file is, without parsing the
+archive. The **sole authority** for a file's identity; the extension never decides.
+_Avoid_: Detect, guess — the member is written by us at a known position, so nothing here is
+heuristic.
 
 **Collection archive**:
 A `.lcoll` zip archive carrying the whole collection: the log verbatim, plus everything that settles,

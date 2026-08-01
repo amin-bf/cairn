@@ -214,6 +214,19 @@ for the reason §13 gives.
 | Desktop | write into the user's documents directory | scan documents and downloads |
 | Android | insert into `MediaStore` `Downloads` via `ContentResolver`, write to the returned URI | query `MediaStore` for our extensions |
 
+> **The Android list is narrowed by [ADR-0024 §3](0024-identifying-a-written-file.md): it returns
+> only files this application wrote.** Measured — a `.ldeck` placed in `Downloads` by another package
+> is invisible to us, while a control file we wrote ourselves appears in the same query. The *"no
+> permission at API 29+"* claim above was measured for the **put** and does not extend to reading;
+> scoped storage grants an application its own rows and nothing else, and `READ_MEDIA_*` covers
+> images, video and audio rather than documents. **So the list is not a view of the `Downloads`
+> folder**, and a deck someone sends can never appear in it.
+>
+> **The put is unaffected**, and so is the refusal of the picker below — which now carries a second
+> load: with no picker and no folder visibility, an **intent filter is the only inbound door**, which
+> is what forces ADR-0024 §2's broad media-type filter. The Android write also stops declaring a
+> `mime_type` (ADR-0024 §4), which is what keeps the extension on a deduped name.
+
 The Android side needs **no activity result and no permission at API 29+**, and is reachable by JNI
 from the Context the existing shim already obtains. It is not verified on the handset — see *Open
 items*, and `AGENTS.md` rule 9.
@@ -253,6 +266,14 @@ items*, and `AGENTS.md` rule 9.
   and a *launch* intent is readable from the activity with no result callback and no dex — unlike the
   picker above. [ADR-0008 §10](0008-the-deck-export-format.md) already requires such a filter for
   `.ldeck`; this adds the second extension to the same mechanism.
+
+  > **The entry point survives; the mechanism is replaced by
+  > [ADR-0024 §2](0024-identifying-a-written-file.md).** *"An intent filter on the extension"* cannot
+  > work — no filename reaches a filter. The filter matches on **media type**
+  > (`application/octet-stream`, plus the precise `application/vnd.leitner.deck+zip`) for both
+  > `ACTION_VIEW` and `ACTION_SEND`, and the file is identified by content once opened. Both
+  > extensions land on the same mechanism exactly as this bullet intended — it is simply not the
+  > extension doing the matching.
 - **Text is never typed.** No filename field, no path field. `AGENTS.md` rule 8 makes Android text
   input ASCII-only, so any such field is broken for the users this application exists for.
 

@@ -335,9 +335,23 @@ Custom extensions have no reliable extension-to-type mapping there, and getting 
 file will not open from a file manager or a mail attachment — which is the entire distribution channel
 for a deck.
 
+> **Amended by [ADR-0024 §2](0024-identifying-a-written-file.md), which measured this on the handset.**
+> The stakes above are right and **the mechanism is wrong**: a `pathPattern` never matches, because
+> the providers that matter pass a **row id** where a filename would be — `MediaStore`'s own URIs and
+> a real file manager's alike — so no extension ever reaches a filter. Watched end to end: with the
+> extension filter installed, a tap on a real `.ldeck` offers four unrelated applications and not
+> this one. The entry point is a **media-type** filter plus a content sniff instead.
+
 A distinct extension per profile, sharing one container format, is how the operating system and the
 user tell a deck file from a whole-collection artifact **before** opening it. Naming the progress
 profile's extension belongs to [#37](https://github.com/amin-bf/leitner/issues/37).
+
+> **Half amended by [ADR-0024 §1](0024-identifying-a-written-file.md).** True of the **user**, who
+> reads the name, and true of the **desktop**. False of the **operating system on Android**, which
+> types `.ldeck` and `.lcoll` alike as `application/octet-stream` — so on that platform the two
+> profiles are told apart by the `mimetype` member above and by nothing else. That member is
+> therefore **promoted from a fallback for a mangled extension to the sole authority for what a file
+> is**; the extension is a display string and the `LIKE` clause the list enumerates with.
 
 > **Discharged by [ADR-0016 §9](0016-backup-and-restore.md)**: the extension is **`.lcoll`**, with
 > `application/vnd.leitner.collection+zip` in a `stored` `mimetype` member first in the archive, by
