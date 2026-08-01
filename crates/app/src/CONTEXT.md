@@ -8,9 +8,11 @@ through, and both platform entry points.
 [ADR-0010](../../../docs/adr/0010-leeches.md) and
 [ADR-0011](../../../docs/adr/0011-new-card-rate-and-daily-limits.md), the last of which **amends
 ADR-0006 §1 and §2** — read those amendments before touching the session;
-[ADR-0012](../../../docs/adr/0012-the-note-authoring-experience.md) and
-[ADR-0018](../../../docs/adr/0018-the-card-pane-ordering.md), the second of which **amends ADR-0012 §1
-and §5** — read those amendments before touching the authoring pane; also by
+[ADR-0012](../../../docs/adr/0012-the-note-authoring-experience.md),
+[ADR-0018](../../../docs/adr/0018-the-card-pane-ordering.md) and
+[ADR-0025](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), the second of which
+**amends ADR-0012 §1 and §5** and the third of which **moves §5's warning above the fields and adds
+the inset seam** — read those amendments before touching the authoring pane; also by
 [ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind) and
 [ADR-0015](../../../docs/adr/0015-the-sync-experience.md) and
 [ADR-0019](../../../docs/adr/0019-naming-the-account-at-enrolment.md) (everything the user sees about
@@ -109,12 +111,17 @@ when neither resolves — shown, never hidden**, since an omission is the header
 round 1 (ADR-0018 §3). The history reads *kept*, never *lost*.
 _Avoid_: Dormant card *for the on-screen row* — the card is the domain object, the entry is its line.
 
-**The card pane demonstrates; the form pane warns**:
+**The card pane demonstrates; the form pane warns — and the warning sits *above* the fields**:
 Ordinal position **cannot** guarantee a dormant entry is on screen — blank 18 of 20 lands below the
 fold on desktop too — so ADR-0012 §5's form-pane warning is **primary on both platforms**, not
 redundancy for the phone (ADR-0018 §4). Never add a third speaker: a pinned header indicator is the
 counter that failed, and auto-scrolling to a newly-dormant entry needs a before-state that dormancy's
 per-frame recomputation does not have.
+**Its position is above the fields, not after the last one** (ADR-0025 §4): under a soft keyboard only
+the form pane's *first screen* is on show, and a warning after the last field leaves just the
+`· 1 dormant` marker visible at the moment of the edit — which is the counter ADR-0018 §4 established
+does not warn. Moving it adds no speaker; it is the same warning, placed where it can be read.
+Reserving the IME band makes it *reachable*, which is not the same as *visible*.
 
 **Last caught up**:
 The only resting statement the app makes about sync — *when* it last completed one, a fact.
@@ -204,6 +211,16 @@ grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks —
 - **Only two things may speak about sync**, and every future feature will have a reason to want a
   third. A badge, a toast on success, a "syncing…" indicator in the chrome — each is a defect
   against ADR-0015 §4, not a UX improvement.
+- **The soft keyboard is invisible unless this crate asks**, and the failure is *unreachability*, not
+  occlusion. Nothing below us reports the IME inset — rule 8's gap has a second half — and the window
+  is edge-to-edge, so `adjustResize` does nothing. egui then sizes its `ScrollArea` to a viewport
+  taller than the visible one, the content fits, and there is **no scroll range** over the covered
+  39%. This crate's one-function `platform` seam returns the insets and the band is reserved. **Two
+  guards are load-bearing**: keep the focused field inside the shrunken viewport *in the same frame it
+  shrinks* (a `TextEdit` publishes `output.ime` only while visible; `egui-winit` turns its absence
+  into `hide_soft_input`, which collapses the inset, which restores the viewport — a closed loop that
+  presents as a flickering keyboard), and **surrender focus when a focused field is scrolled fully out
+  of view** (the same loop from the other end). ADR-0025 §1–§3.
 - **Verify on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
 
 ## Why this crate has no `main.rs`
