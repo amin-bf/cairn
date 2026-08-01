@@ -157,6 +157,15 @@ Three rules:
 > This also re-reads round 1. Its finding was recorded as *position is the mechanism*; what it showed
 > is that **a count is not a warning** — variant B carried two defects at once, a counter in the header
 > *and* the card below the fold, and the repair was credited to position alone.
+>
+> **Position corrected by [ADR-0025 §4](0025-the-authoring-screen-under-a-soft-keyboard.md): the
+> warning sits *above* the fields.** After the last field it does not survive a soft keyboard — with
+> the keyboard up, the only thing on screen at the moment of a destructive edit is the `· 1 dormant`
+> marker on the pane toggle, which is the counter ADR-0018 §4 established does not warn. That section's
+> ground, *the form pane is the one always on screen*, is narrowed rather than overturned: on a handset
+> only the form pane's **first screen** is, so its own argument against position applies to the form
+> pane too, one level up. Reading the platform's IME insets makes the warning reachable by scrolling
+> and **not** visible at the moment of the edit, so insets are necessary and not sufficient.
 - **It offers Undo**, and the copy says what is true: nothing is deleted, the reviews stay in the
   log, and they reattach by themselves if the content returns.
 
@@ -300,7 +309,9 @@ one-frame deferral to a second reason.
   `Pronunciation` field, which requires a face with IPA coverage.
 
 *(§1 and §5 are in turn amended by [ADR-0018](0018-the-card-pane-ordering.md) — a dormant entry is a
-line rather than a card, and the form-pane warning is primary on both platforms. Both amendments are
+line rather than a card, and the form-pane warning is primary on both platforms — and §5 again by
+[ADR-0025 §4](0025-the-authoring-screen-under-a-soft-keyboard.md), which moves that warning **above the
+fields** because after the last one it is off-screen under a soft keyboard. All three amendments are
 recorded inline above.)*
 
 *(§2, §7 and §9 are amended by [ADR-0021](0021-note-ordering-saving-and-the-note-list.md) — the
@@ -325,8 +336,12 @@ items close. All three are recorded inline above.)*
 
 - ~~**`CardRef` and the kind discriminator** (§6)~~ — **discharged by
   [ADR-0017](0017-card-slots.md)**: no discriminator, and the ordinal becomes an assigned slot instead.
-- **A soft-keyboard pass on the handset** (§9) — the one question desktop cannot answer. Now owned by
-  [Prototype: the authoring screen under a soft keyboard](https://github.com/amin-bf/leitner/issues/67).
+- ~~**A soft-keyboard pass on the handset** (§9)~~ — **discharged by
+  [ADR-0025](0025-the-authoring-screen-under-a-soft-keyboard.md)**: the split view survives (width was
+  never the risk — both panes fit on the handset), the client reads the platform's IME insets itself
+  because nothing below it reports them, and **§5's warning moves above the fields**. The pass also
+  found that the app is not merely occluded by the keyboard but loses **39% of its height with no
+  scroll range over the covered band**.
 - ~~**Saving semantics** (§9)~~ — **discharged by
   [ADR-0021 §7 and §8](0021-note-ordering-saving-and-the-note-list.md)**: autosave, per field, on blur
   or a short idle, with a new note committed on its first non-empty field; and Enter stays inert in

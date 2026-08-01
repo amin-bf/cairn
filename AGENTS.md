@@ -212,6 +212,22 @@ because they are validated findings, not because a web build ships.
     or killed run holds no partial state and the recovery action is to press the button again. Never
     schedule it, never take a wakelock, and never promise the user that a started job is still
     progressing. [ADR-0014 §3](./docs/adr/0014-when-parameter-optimisation-runs.md).
+11. **The soft keyboard is invisible to the app unless it asks, and the failure is unreachability,
+    not occlusion.** Rule 8's gap has a second half: winit's Android backend reports no **insets**
+    either, and the window is enforced edge-to-edge, so `adjustResize` is inert — nothing resizes and
+    nothing is reported. egui then sizes its `ScrollArea` to a viewport taller than the visible one,
+    the content fits, and there is **no scroll range**, so the covered band cannot be reached at all.
+    Measured on the handset: **923dp of usable height down to 565dp, 39% of the screen, silently**.
+    So the `ui` crate carries a one-function `platform` seam returning the IME and system-bar insets
+    (zero off Android) and reserves the band — a **third** per-crate seam under
+    [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md), not a widening of `leitner-store`'s two.
+    **Two guards come with it and an implementation missing either visibly oscillates**: keep the
+    focused field inside the shrunken viewport **in the same frame it shrinks** — a `TextEdit`
+    publishes `output.ime` only while its rect is visible, `egui-winit` turns that absence into
+    `hide_soft_input`, which collapses the inset, which restores the viewport, which shows the field
+    again — and **surrender focus when a focused field is scrolled *completely* out of view**, which
+    is the same loop entered from the other end.
+    [ADR-0025 §1 §2 §3](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md).
 
 ## The local store
 

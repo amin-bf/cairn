@@ -328,8 +328,12 @@ says *"create a deck"*, but no ADR says where. ADR-0012 specifies a **kind** dro
 - **Appearance.** How the three destinations are rendered, how a list row looks, whether reordering is
   a drag or a *move to…* action, and where the *New note* action sits. All of it is the visual design
   pass, out of scope for the map since 2026-07-31.
-- **The soft-keyboard layout** — owned by
-  [Prototype: the authoring screen under a soft keyboard](https://github.com/amin-bf/leitner/issues/67).
+- ~~**The soft-keyboard layout**~~ — **settled by
+  [ADR-0025](0025-the-authoring-screen-under-a-soft-keyboard.md)**: the split view survives, the client
+  reads the platform's IME insets itself, and ADR-0012 §5's warning moves above the fields. §7's
+  autosave and §8's *New note* are what make that layout judgeable — there is no Save button competing
+  for the bottom of the screen, and *New note* is the only control there that a phone cannot reach by
+  accelerator.
 - **Import preview and export reporting** — owned by
   [Decide: what an import preview states, and what export reports back](https://github.com/amin-bf/leitner/issues/68).
   This ADR puts a surface behind ADR-0015 §7's *"import one"* verb; what that import *says* is not
