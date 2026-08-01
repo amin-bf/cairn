@@ -9,7 +9,8 @@
   [ADR-0006: The review session experience](0006-the-review-session-experience.md),
   [ADR-0008: The deck export format](0008-the-deck-export-format.md),
   [ADR-0012: The note authoring experience](0012-the-note-authoring-experience.md),
-  [ADR-0016: Backup and restore](0016-backup-and-restore.md)
+  [ADR-0016: Backup and restore](0016-backup-and-restore.md),
+  [ADR-0021: Note ordering, saving and the note list](0021-note-ordering-saving-and-the-note-list.md)
 - **Amends**: [ADR-0005 §5](0005-the-deck-model.md), [ADR-0008 §12](0008-the-deck-export-format.md)
   — see [Amendments to accepted ADRs](#amendments-to-accepted-adrs)
 
@@ -243,9 +244,16 @@ A plan computed once and held is a **stored projection of the log**, which is th
 the preview changes the numbers on screen before the user presses Import, and promise and effect
 cannot diverge.
 
-**So nothing is owed after the fact.** The application returns to the deck list, where the imported
-decks are visible. No confirmation screen, no summary — the numbers were stated at the moment the
-user could still say no, which is strictly stronger than the *after* ADR-0008 §11 would have allowed.
+**So nothing is owed after the fact.** No confirmation screen, no summary — the numbers were stated
+at the moment the user could still say no, which is strictly stronger than the *after* ADR-0008 §11
+would have allowed.
+
+**The application returns to the note list**, which is where the imported notes now are.
+[ADR-0021 §1](0021-note-ordering-saving-and-the-note-list.md) fixes three top-level destinations —
+Review, Notes, Settings — so there is no deck list to return to, and §2 there gives the note list a
+**deck filter** that is exactly the right instrument: **set to the imported deck when the file
+carried one, left unfiltered when it carried several.** No new mechanism, and the user lands looking
+at what arrived rather than at a screen asserting that it did.
 
 **Accepted cost.** The import is computed twice in the common path — once to preview, once to apply
 — and on a 5,000-note deck that is two passes over a few hundred kilobytes. Cheaper than the class of
@@ -276,6 +284,13 @@ ADR-0015 §6 had to legislate for.
 
 **Cancelling from a cold start lands on the count picker** — the same place ADR-0006 §2's force-stop
 test lands, for the same reason.
+
+**[ADR-0021 §6](0021-note-ordering-saving-and-the-note-list.md) reached the same conclusion from the
+other side and is worth citing**, because together they fix how ADR-0015 §6 is read. It found a note
+editable mid-review without breaching that rule, since what ADR-0015 §6 bans is *"an unannounced
+recompute caused by another device"* — read more broadly it would delete mid-review editing too. An
+import is the same shape: announced, local, and user-initiated. Two independent decisions landing on
+that reading is what makes it the reading.
 
 **Accepted cost:** confirming an import begun mid-session loses the chosen count and the ten-minute
 timer, both of which ADR-0006 §2 keeps as in-memory state. [ADR-0006 §1](0006-the-review-session-experience.md)
@@ -337,6 +352,15 @@ description on Android at all, `AGENTS.md` rule 8 being unfixable here. This is 
 Export is **not gated**, and the asymmetry with §1 is principled rather than an oversight: an import
 writes irreversibly into the user's collection, and an export writes a file. There is nothing to
 decline.
+
+**It lives in Settings, beside [ADR-0016 §6](0016-backup-and-restore.md)'s archive action, as does
+§11's file list.** [ADR-0021 §1](0021-note-ordering-saving-and-the-note-list.md) requires every
+specified screen to be reachable from one of three destinations, and *"a destination reachable only
+by completing a session is not reachable"* — so this has to be said rather than left to the visual
+pass. Settings rather than Notes because both are **file** operations over whole decks, sharing a
+seam and a container with the archive, where Notes is where individual notes are authored. **Import
+needs no home**: ADR-0016 §5's three entry points reach it without a destination, which is why the
+list is the only inbound surface needing a place to live.
 
 The screen carries the deck selection ([ADR-0008 §8](0008-the-deck-export-format.md) — one or more
 decks), §8's three metadata fields pre-filled from the selected deck, and one required statement:
