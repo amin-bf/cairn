@@ -99,9 +99,9 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `scheduling` | [0001](./docs/adr/0001-scheduling-algorithm-and-grade-scale.md) | 0004 §4, 0004 §5, 0014 §6 |
 | `replay` | *none of its own* | 0001 §7, 0002 §7, 0004 §9, 0007 §2, 0010 §2, 0011 §8, 0012 §5, 0017 §1, 0017 §5, 0018 §2 |
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4 |
-| `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3 |
+| `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3 |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md) | 0002 §4, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md) | 0002 §4, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -119,6 +119,14 @@ mechanism — the **gate/describe** two-stage read, and the rule that an import 
 every read, never cached*. Its `ui` half is what four surfaces say: the import preview, the export
 screen, the export report and the file list. Change either half without the other and the surfaces
 state numbers the mechanism cannot produce.
+
+**[0024](./docs/adr/0024-identifying-a-written-file.md) is an Android-only correction, and it amends
+four accepted ADRs rather than deciding much of its own.** Read it before touching anything that
+identifies a file by its name: on that platform the extension reaches no intent filter and the media
+type is discarded, so the `mimetype` member inside the archive is the sole authority for what a file
+is. It also narrows [0016 §5](./docs/adr/0016-backup-and-restore.md)'s file list to *files this
+application wrote* — the single fact most likely to be assumed away by someone implementing the
+import surfaces.
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.

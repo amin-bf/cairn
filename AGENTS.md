@@ -199,6 +199,9 @@ because they are validated findings, not because a web build ships.
    [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
    text on Android.
 9. **Verify Android on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
+   `cargo apk build` needs a **JDK on `PATH`** — `apksigner` is a `java` wrapper, and its absence
+   surfaces only at the signing step, *after* a full NDK compile, as
+   `apksigner: line 97: exec: java: not found`.
 10. **A backgrounded Android app is frozen, not slowed.** The process moves to the `/background`
     cpuset (~13× the CPU time) and is then frozen outright — `isFrozen=true`, `utime` stopped dead —
     so long work *stops* rather than running slowly: 303 s of wall clock for 4.3 s of work, measured
@@ -279,12 +282,31 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
     is derived from one.
 11. **Read back the filename the platform wrote; never echo the one requested.** The Android put is a
     `MediaStore` insert, and the user chose neither name nor location, so the report is the only way
-    they can find the file at all. **Measured on the handset** — it **dedupes**, and the suffix lands
-    *after* the extension: `French A1.ldeck (1)`, not `French A1 (1).ldeck`
+    they can find the file at all. **Measured on the handset** — it **dedupes**
     ([evidence](./docs/research/android-outbound-share/README.md)). `MediaStore` also **discards the
-    media type we declare**, deriving it from the extension instead, and a type the name disagrees
-    with makes it **rename the file**. What that costs the extension-matched launch filter is
-    [#72](https://github.com/amin-bf/leitner/issues/72)'s.
+    media type we declare**, deriving it from the extension instead.
+12. **The Android write declares no `mime_type`, and that is what keeps the extension.** A declared
+    type that disagrees with the name is the *only* reason a collision produces `French A1.ldeck (1)`
+    instead of `French A1 (1).ldeck` — measured across three declarations
+    ([evidence](./docs/research/android-file-identity/README.md)). `MediaStore` stores
+    `application/octet-stream` either way, so the declaration buys nothing and costs the extension.
+13. **A file is identified by its bytes, never by its name.** The `mimetype` member is stored first
+    and uncompressed so the type sits at a fixed offset, and on Android that is the *sole* authority:
+    `.ldeck` and `.lcoll` both store as `application/octet-stream`, and a file arriving through a
+    share may have no usable name. The extension survives as a display string and as the `LIKE`
+    clause the list enumerates with — never as the thing that decides a file's profile
+    ([ADR-0024 §1](./docs/adr/0024-identifying-a-written-file.md)).
+14. **The Android file list shows only files this application wrote, and the interface must not imply
+    otherwise.** Scoped storage gives us our own `MediaStore` rows and nothing else — a `.ldeck` another
+    application put in `Downloads` is **invisible**, not merely unreadable, and `READ_MEDIA_*` does not
+    cover documents. A deck someone sends can therefore only arrive through an **intent filter**, which
+    is why the manifest declares the broad `application/octet-stream` filter for `ACTION_VIEW` and
+    `ACTION_SEND` and accepts appearing in the Open-with sheet for unrecognised files
+    ([ADR-0024 §2, §3](./docs/adr/0024-identifying-a-written-file.md)).
+15. **Never match an intent filter on the extension.** No filename reaches one: `MediaStore` URIs and
+    a real file manager's alike carry a **row id** in the path. A `pathPattern` is also ignored
+    outright unless the filter declares a host, and `cargo-apk` drops the `\` escape — so verify the
+    emitted `AndroidManifest.xml`, never the source.
 
 ## Sync
 
