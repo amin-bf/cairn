@@ -34,9 +34,9 @@ pub struct NoteRow {
     pub deck: Option<String>,
     /// The note's tags, as authored. Empty when untagged.
     pub tags: Vec<String>,
-    /// The note's own field values, `(name, value)` in attribute order — what the text filter scans
-    /// and what a row renders a preview from. The `position` key is **not** here: it is never shown
-    /// (ADR-0021 §4).
+    /// The note's own field values, `(name, value)` in kind-definition order (Front before Back) —
+    /// what the text filter scans and what a row renders a preview from. The `position` key is
+    /// **not** here: it is never shown (ADR-0021 §4).
     pub fields: Vec<(String, String)>,
 }
 

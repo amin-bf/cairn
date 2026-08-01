@@ -624,7 +624,6 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
                 note = committed;
             }
         }
-        let _ = note;
         *ed = Editing::new_draft(&kind);
     }
 }
