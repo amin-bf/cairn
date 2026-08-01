@@ -22,3 +22,4 @@ license.workspace = true
 # module. `fsrs` depending on it is harmless: only direct dependencies enter the extern prelude
 # (ADR-0009 §6, as amended by ADR-0027 §4).
 [dependencies]
+fsrs.workspace = true

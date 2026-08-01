@@ -23,6 +23,12 @@ leitner-store = { path = "crates/store" }
 leitner-export = { path = "crates/export" }
 leitner-app = { path = "crates/app" }
 
+# `fsrs` is `leitner-core`'s one dependency (ADR-0027 §1), pinned exactly per ADR-0001 §1: the 6.x
+# line shipped nine releases in eleven days with breaking API changes inside the major version, so
+# the pin is a requirement, not caution. Declared here for the same reason every other version is —
+# so the crates cannot drift apart — even though only `leitner-core` depends on it.
+fsrs = "=6.6.1"
+
 egui = "0.35"
 rusqlite = { version = "0.40", features = ["bundled"] }
 
