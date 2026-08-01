@@ -217,6 +217,8 @@ The stated reason is *consent*, not capability: the platform will not silently b
 
 ### 4.3 The interaction the ticket asks about: none is documented
 
+> **Later note — this section's open question was settled by measurement on 2026-08-01, and one claim in §4.2 was corrected.** The quota is measured **before** compression, against uncompressed tar-stream bytes: the transport is handed an uncompressed total at pre-flight, before any app data is streamed. And the two log lines §4.2 quotes as equivalent quota indicators are **not** equivalent — *"Transport rejected backup of … , skipping"* fires for a generic package rejection and was observed on a 1 KB payload. This section is left as written, being the point-in-time record of what the documentation alone establishes; the resolution and its evidence are in [`../auto-backup-quota/README.md`](../auto-backup-quota/README.md) ([#64](https://github.com/amin-bf/leitner/issues/64)).
+
 The quota and the encryption state are both properties of the same transport — it is the transport that rejects an over-quota package (§4.2) and the transport whose flags report client-side encryption (§1.3). But:
 
 - **No source states whether the 25 MB is measured before or after compression and encryption.** The documentation says only *"the amount of data"* (**SILENT**). This matters: `collection.db` is a SQLite file of highly repetitive rows, and the sibling note measured 11.8× compression on that shape with a large-window compressor ([`../sync-transport/object-stores-and-drives.md`](../sync-transport/object-stores-and-drives.md) §3.1) — so a pre- or post-compression reading of the same file differs by an order of magnitude and moves ADR-0016's nine-month cutoff correspondingly. **Do not assume either reading.**
