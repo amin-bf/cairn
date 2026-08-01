@@ -6,7 +6,9 @@ time without costing tokens during implementation.
 
 Architectural decisions live in `docs/adr/` and the per-context `CONTEXT.md`
 files, not here. Where an ADR and this file disagree, the ADR wins — say so
-rather than silently following one.
+rather than silently following one. `CONTEXT-MAP.md` at the repository root
+indexes which ADR sections bind which context; `docs/adr/` is past 2,600 lines,
+and that index is what stops "read the ADRs" from meaning all of them.
 
 ## Style
 
@@ -60,12 +62,26 @@ rather than silently following one.
 
 ## Architecture
 
-- The domain core — scheduling, the event log, replay — stays free of I/O, of
-  the clock, and of any UI or platform dependency. It should be testable with
-  nothing but `cargo test`.
-- Platform-specific code (storage backends, Android specifics, wasm) sits behind
-  a trait at the edge, with the core depending on the trait rather than the
-  implementation.
+- The domain core — content, the event log, scheduling, replay — stays free of
+  I/O, of the clock, and of any UI or platform dependency. `leitner-core` is a
+  crate boundary rather than a convention: `cargo test -p leitner-core` needs no
+  database, no window and no handset (ADR-0009 §2).
+- **The platform seam is a compile-time `#[cfg]`, never a trait and never a
+  runtime check** (ADR-0003 §5, ADR-0009 §4). Three arms, the third a
+  `compile_error!`, so an unrecognised target fails the build instead of
+  silently taking the desktop path. The rule is **per crate**: `leitner-store`
+  stays at exactly two functions and a third appearing there means the seam is
+  eroding; a crate needing the platform for an unrelated reason gets its own
+  module under the same discipline (ADR-0016 §5).
+- **A trait-based store seam was considered and rejected** (ADR-0009 §2). There
+  is one adapter and `rusqlite` opens `:memory:`, so the abstraction would exist
+  only to serve tests that do not need it — which is why there is **no fake
+  store**: store tests open a real database in a temp directory, because the
+  design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and `INSERT OR IGNORE`.
+- **Time and identity are values, never injected traits** (ADR-0009 §8). Replay
+  needs no clock at all — day numbers are frozen on the row at write time and
+  fuzz is seeded from card identity — so a `Clock` trait would be a hypothetical
+  seam. The two call sites that need "now" take it as a parameter.
 - Keep modules focused on one responsibility, and prefer composition and traits
   over deep generic gymnastics. If a signature needs three lines of `where`
   clauses, reconsider the design.
