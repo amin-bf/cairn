@@ -192,6 +192,9 @@ fn review(
                         ui.add_space(12.0);
                         if let Some(grade) = grade_buttons(ui, &offered, today) {
                             let duration_ms = s.card_shown.elapsed().as_millis() as u64;
+                            // A failed append drops this one review rather than wedging the
+                            // session: the card advances, and the next frame re-derives the queue
+                            // from whatever did commit. Surfacing write errors is a later ticket.
                             let _ = coll.append_review(
                                 offered.card,
                                 grade,

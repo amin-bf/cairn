@@ -157,14 +157,12 @@ impl ReviewState {
             return ReviewState::Empty;
         }
         if queue.due.is_empty() {
-            return if queue.new.len() == total {
-                ReviewState::NewDeck {
-                    new: queue.new.len(),
-                }
-            } else if queue.new.is_empty() {
+            // Nothing due: a resting state if there is nothing to introduce either, otherwise a
+            // deck of fresh cards waiting — whether *all* the cards are new or only some makes no
+            // difference to how the picker frames them.
+            return if queue.new.is_empty() {
                 ReviewState::CaughtUp
             } else {
-                // Nothing due, but there are still fresh cards to introduce.
                 ReviewState::NewDeck {
                     new: queue.new.len(),
                 }
