@@ -7,4 +7,8 @@
 //! See `CONTEXT.md` beside this file, and
 //! [ADR-0007](../../../docs/adr/0007-the-local-store.md).
 
+mod collection;
+mod interchange;
 pub mod platform;
+
+pub use collection::{Collection, StoreError};

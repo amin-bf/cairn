@@ -1,0 +1,129 @@
+//! Reading notes back off the store as cards to review. The store keeps content as ADR-0004 §7
+//! mutable values (`note` entity, one row per field); this turns those rows into the two things the
+//! review screen needs — the **card set** the current content generates (what replay projects onto)
+//! and the **rendered prompt and answer** for one card.
+//!
+//! Kept here rather than in the store because it is domain projection, not persistence: which cards
+//! a note generates is a `leitner-core` kind rule (ADR-0002 §4, ADR-0017 §1), and the store owns no
+//! kind definitions. A note carrying a kind this build does not ship is skipped — a note can never
+//! be switched *into* an acquired kind (ADR-0017 §6), so the only kinds that reach a review are the
+//! shipped ones, which in this build is `basic` alone.
+
+use std::collections::HashSet;
+
+use leitner_core::content::{CardRef, KindDefinition, NoteId, SHIPPED_KINDS};
+use leitner_store::{Collection, StoreError};
+
+/// One card ready to show: the joined prompt and the joined answer, each the note's field values in
+/// the kind template's order (ADR-0002 §4). Every string here is untrusted content and must reach
+/// the screen through the `bidi` helper, never a bare `ui.label` (AGENTS.md client-stack rule 1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderedCard {
+    pub prompt: String,
+    pub answer: String,
+}
+
+/// The shipped kind definition for an id, or `None` for an unknown/acquired kind (never validated
+/// here, and safe not to be — a note cannot be switched into an acquired kind, ADR-0017 §6).
+fn shipped_kind(id: &str) -> Option<&'static KindDefinition> {
+    SHIPPED_KINDS.iter().copied().find(|k| k.id == id)
+}
+
+/// The set of cards the current content generates — the "current cards" replay projects the log onto
+/// (ADR-0002 §7). A deleted note generates nothing: ADR-0004 §7's delete discards content, so there
+/// is nothing to ask.
+pub fn current_cards(coll: &Collection) -> Result<HashSet<CardRef>, StoreError> {
+    let mut set = HashSet::new();
+    for id in coll.entity_ids("note")? {
+        if coll.mutable_get("note", &id, "deleted")?.as_deref() == Some("true") {
+            continue;
+        }
+        let Some(kind) = coll.mutable_get("note", &id, "kind")? else {
+            continue;
+        };
+        let Some(def) = shipped_kind(&kind) else {
+            continue;
+        };
+        for card in def.generated_cards(NoteId(id)) {
+            set.insert(card);
+        }
+    }
+    Ok(set)
+}
+
+/// Render one card's prompt and answer from its note's stored fields, or `None` if the note has no
+/// shipped kind or no template at that slot (a dormant card — the content no longer generates it).
+pub fn render(coll: &Collection, card: CardRef) -> Result<Option<RenderedCard>, StoreError> {
+    let Some(kind) = coll.mutable_get("note", &card.note.0, "kind")? else {
+        return Ok(None);
+    };
+    let Some(def) = shipped_kind(&kind) else {
+        return Ok(None);
+    };
+    // The slot is the identity, never the list index (ADR-0017 §1): find the template *by slot*.
+    let Some(template) = def.cards.iter().find(|t| t.slot == card.ordinal) else {
+        return Ok(None);
+    };
+
+    let join = |fields: &[&str]| -> Result<String, StoreError> {
+        let mut parts = Vec::new();
+        for field in fields {
+            if let Some(value) = coll.mutable_get("note", &card.note.0, field)? {
+                parts.push(value);
+            }
+        }
+        Ok(parts.join("\n"))
+    };
+    Ok(Some(RenderedCard {
+        prompt: join(template.prompt)?,
+        answer: join(template.answer)?,
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn open() -> (Collection, TempDir, TempDir) {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let coll = Collection::open(data.path(), state.path()).unwrap();
+        (coll, data, state)
+    }
+
+    #[test]
+    fn a_seeded_basic_note_becomes_one_renderable_card() {
+        // Issue #94's opening line: a seeded `basic` note becomes a card you can review.
+        let (mut coll, _d, _s) = open();
+        let id = coll
+            .create_note("basic", &[("Front", "chien"), ("Back", "dog")])
+            .unwrap();
+
+        let cards = current_cards(&coll).unwrap();
+        assert_eq!(cards, HashSet::from([CardRef::new(id, 0)]));
+
+        let rendered = render(&coll, CardRef::new(id, 0)).unwrap().unwrap();
+        assert_eq!(rendered.prompt, "chien");
+        assert_eq!(rendered.answer, "dog");
+    }
+
+    #[test]
+    fn a_deleted_note_generates_no_cards() {
+        let (mut coll, _d, _s) = open();
+        let id = coll
+            .create_note("basic", &[("Front", "x"), ("Back", "y")])
+            .unwrap();
+        coll.mutable_set("note", &id.0, "deleted", Some("true"))
+            .unwrap();
+        assert!(current_cards(&coll).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unshipped_kind_is_skipped_rather_than_erroring() {
+        let (mut coll, _d, _s) = open();
+        coll.create_note("some-acquired-kind", &[("A", "1")])
+            .unwrap();
+        assert!(current_cards(&coll).unwrap().is_empty());
+    }
+}
