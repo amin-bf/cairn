@@ -52,8 +52,8 @@ pub fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 
     // Regular faces, appended to the existing families so egui's own faces still win where they
-    // have the glyph. Registered into *both* families in use — a face absent from `Monospace`
-    // renders as boxes there silently.
+    // have the glyph, and into *both* families in use — a face absent from `Monospace` renders as
+    // boxes there silently.
     let regular = [
         (
             "ar",
@@ -61,36 +61,33 @@ pub fn install(ctx: &egui::Context) {
         ),
         ("dejavu", &include_bytes!("../assets/DejaVuSans.ttf")[..]),
     ];
-    for (name, bytes) in regular {
+    // The bold cut of each writing system, gathered into its own family (see `bold_family`).
+    // DejaVu-bold is first so the Latin/IPA body it usually wraps stays in the same face;
+    // Arabic-bold follows so Persian rendered bold is *bold*, not a fall back to tofu.
+    let bold = [
+        (
+            "dejavu-bold",
+            &include_bytes!("../assets/DejaVuSans-Bold.ttf")[..],
+        ),
+        (
+            "ar-bold",
+            &include_bytes!("../assets/NotoSansArabic-Bold.ttf")[..],
+        ),
+    ];
+
+    for &(name, bytes) in regular.iter().chain(&bold) {
         fonts
             .font_data
             .insert(name.into(), Arc::new(FontData::from_static(bytes)));
     }
     for family in [FontFamily::Proportional, FontFamily::Monospace] {
         let list = fonts.families.entry(family).or_default();
-        for (name, _) in regular {
-            list.push(name.into());
-        }
+        list.extend(regular.iter().map(|&(name, _)| name.into()));
     }
-
-    // The bold cut of each writing system, in its own family (see `bold_family`). Arabic-bold is
-    // listed so Persian rendered bold is *bold*, not a fall back to tofu; DejaVu-bold first so the
-    // Latin/IPA body it usually wraps stays in the same face.
-    fonts.font_data.insert(
-        "dejavu-bold".into(),
-        Arc::new(FontData::from_static(include_bytes!(
-            "../assets/DejaVuSans-Bold.ttf"
-        ))),
+    fonts.families.insert(
+        bold_family(),
+        bold.iter().map(|&(name, _)| name.into()).collect(),
     );
-    fonts.font_data.insert(
-        "ar-bold".into(),
-        Arc::new(FontData::from_static(include_bytes!(
-            "../assets/NotoSansArabic-Bold.ttf"
-        ))),
-    );
-    fonts
-        .families
-        .insert(bold_family(), vec!["dejavu-bold".into(), "ar-bold".into()]);
 
     ctx.set_fonts(fonts);
 }
