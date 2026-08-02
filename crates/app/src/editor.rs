@@ -12,9 +12,9 @@
 //!   current kind when that kind was acquired — and **never another acquired one**, because no note
 //!   may be switched *into* a kind whose slot namespace this build did not mint.
 //!
-//! The card pane — the other half of the editor, showing *"what will I be asked"* — is #83's, and
-//! the destructive-edit warning that sits above the fields is its neighbour there; neither is here.
-//! What *is* here is testable without a window: the commit rule and the dropdown's contents.
+//! The card pane — the other half of the editor, showing *"what will I be asked"* — and the
+//! destructive-edit warning that sits above the fields are `cards`, not here. What *is* here is the
+//! form pane's own logic: the commit rule and the dropdown's contents.
 
 use leitner_core::content::{DeckId, KindDefinition, NoteId, SHIPPED_KINDS};
 use leitner_store::{Collection, StoreError};

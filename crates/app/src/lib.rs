@@ -9,6 +9,7 @@
 //! [ADR-0006](../../../docs/adr/0006-the-review-session-experience.md).
 
 pub mod bidi;
+pub mod cards;
 pub mod deck;
 pub mod editor;
 pub mod fonts;
@@ -109,6 +110,10 @@ struct Editing {
     /// The new-deck name buffer for *create a new deck*, available from the deck dropdown (ADR-0021
     /// §9): the moment you need a deck that does not exist is while filing the note that wants it.
     new_deck: String,
+    /// Which of the two panes is showing when the screen is too narrow to hold both — the phone's
+    /// `Write | Cards` toggle (ADR-0012 §1, ADR-0025 §5). `false` is *Write*, the form. On a wide
+    /// screen both panes show and this is ignored.
+    show_cards: bool,
 }
 
 impl Editing {
@@ -124,6 +129,7 @@ impl Editing {
                 .collect(),
             deck: None,
             new_deck: String::new(),
+            show_cards: false,
         }
     }
 
@@ -158,6 +164,7 @@ impl Editing {
             fields,
             deck,
             new_deck: String::new(),
+            show_cards: false,
         }
     }
 
@@ -600,7 +607,7 @@ fn notes_screen(
     // set on notes but has no dedicated control yet).
     ui.add_space(8.0);
     field_label(ui, "Search");
-    text_field(ui, search, false);
+    text_field(ui, search);
     let filter = Filter {
         deck: deck_filter.map(|d| d.to_canonical()),
         text: (!search.trim().is_empty()).then(|| search.trim().to_owned()),
@@ -665,7 +672,7 @@ fn deck_controls(
 
     ui.horizontal(|ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
-        text_field(ui, new_deck, false);
+        text_field(ui, new_deck);
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
         if created
             && !new_deck.trim().is_empty()
@@ -717,7 +724,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
 
     ui.horizontal(|ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
-        text_field(ui, &mut ed.new_deck, false);
+        text_field(ui, &mut ed.new_deck);
         if created
             && !ed.new_deck.trim().is_empty()
             && let Ok(id) = coll.create_deck(ed.new_deck.trim())
@@ -731,9 +738,10 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
     });
 }
 
-/// The editor's **form pane** (ADR-0012 §1, §2): the kind dropdown and the note's fields, each field
-/// autosaved per blur (ADR-0021 §7). The card pane — *"what will I be asked"* — and the
-/// destructive-edit warning above the fields are #83's, not here.
+/// The editor's two panes (ADR-0012 §1): the header (kind and deck dropdowns), then the **form body**
+/// — the fields, each autosaved per blur (ADR-0021 §7), with the destructive-edit warning above them
+/// (ADR-0025 §4) — and the **card body**, *"what will I be asked"* (`cards`). On a narrow screen the
+/// two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show together.
 fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     heading(
         ui,
@@ -785,6 +793,75 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
 
     ui.add_space(8.0);
 
+    // The card pane and the ambient destructive-edit warning are recomputed from current content
+    // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
+    // and nothing to auto-scroll to (ADR-0018 §4). A draft not yet born has no stored note, so no
+    // cards and no history — its pane is empty until its first field commits (ADR-0021 §7).
+    let pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
+
+    // On a phone the two panes are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show
+    // together (ADR-0025 §5). Width is the only signal, and it is enough: the soft-keyboard failure
+    // ADR-0025 addresses is vertical, so the toggle stands on its own merits rather than necessity.
+    let both_fit = ui.available_width() >= TWO_PANE_MIN_WIDTH;
+    if !both_fit {
+        pane_toggle(ui, &mut ed.show_cards);
+        ui.add_space(8.0);
+    }
+
+    if both_fit || !ed.show_cards {
+        editor_form_body(ui, coll, ed, pane.as_ref());
+    }
+    if both_fit || ed.show_cards {
+        if both_fit {
+            ui.add_space(16.0);
+            ui.separator();
+            ui.add_space(8.0);
+        }
+        editor_cards_body(ui, pane.as_ref());
+    }
+}
+
+/// Below this width the two editor panes cannot sit side by side, and the screen shows the
+/// `Write | Cards` toggle instead (ADR-0012 §1, ADR-0025 §5). A layout threshold, never a device check.
+const TWO_PANE_MIN_WIDTH: f32 = 640.0;
+
+/// The phone's `Write | Cards` pane toggle (ADR-0012 §1): two mutually exclusive choices, the current
+/// one marked. Which pane is showing is the only thing it changes — there is no third state.
+fn pane_toggle(ui: &mut egui::Ui, show_cards: &mut bool) {
+    ui.horizontal(|ui| {
+        if ui
+            .selectable_label(!*show_cards, text(ui, "Write"))
+            .clicked()
+        {
+            *show_cards = false;
+        }
+        if ui
+            .selectable_label(*show_cards, text(ui, "Cards"))
+            .clicked()
+        {
+            *show_cards = true;
+        }
+    });
+}
+
+/// The editor's **form body** (ADR-0012 §1): the destructive-edit warning **above** the fields
+/// (ADR-0025 §4), then the fields, each autosaved per blur (ADR-0021 §7), plus *Blank it* for a
+/// `cloze` selection and the *New note* chord. The warning sits above the fields because under a soft
+/// keyboard only the form's first screen shows, and after the last field the warning is off it,
+/// leaving only a counter — which does not warn (ADR-0018 §4, ADR-0025 §4).
+fn editor_form_body(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    ed: &mut Editing,
+    pane: Option<&cards::CardPane>,
+) {
+    // The ambient warning, above the fields. It names each dormant card and its kept history and
+    // offers Undo — the form pane's speaker (the card pane demonstrates), and not a bare count.
+    if let Some(warning) = pane.and_then(|p| p.warning.as_ref()) {
+        warning_banner(ui, warning);
+        ui.add_space(8.0);
+    }
+
     // Bare Enter is inert in every single-line field, the last one included (ADR-0012 §7, ADR-0021
     // §8); the *New note* rhythm is a modifier chord, never bare Enter — `cloze`'s multiline field
     // would need Enter for a newline anyway, so "Enter on the last field" could never be uniform.
@@ -796,16 +873,18 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     let mut note = ed.note;
     for idx in 0..ed.fields.len() {
         let name = ed.fields[idx].0.clone();
-        // `cloze`'s Text field is the one multiline field — Enter inserts a newline there.
-        let multiline = kind == "cloze" && name == "Text";
+        // `cloze`'s Text field is the one multiline field — Enter inserts a newline there, and it
+        // carries the *Blank it* action.
+        let cloze_text = kind == "cloze" && name == "Text";
         field_label(ui, &name);
-        let resp = {
-            let buffer = &mut ed.fields[idx].1;
-            text_field(ui, buffer, multiline)
+        let resp = if cloze_text {
+            cloze_text_field(ui, &mut ed.fields[idx].1, pane)
+        } else {
+            text_field(ui, &mut ed.fields[idx].1)
         };
         // Enter keeps focus in a single-line field: egui treats it as submit-and-blur, so re-grab
         // focus and let nothing else happen (ADR-0012 §7).
-        if !multiline && bare_enter && resp.lost_focus() {
+        if !cloze_text && bare_enter && resp.lost_focus() {
             resp.request_focus();
         }
         // Autosave on blur (ADR-0021 §7): a field settles as one row when it loses focus, and the
@@ -835,6 +914,119 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
         }
         *ed = Editing::new_draft(&kind);
     }
+}
+
+/// The `cloze` Text field plus its *Blank it* action (ADR-0012 §3): wrap the current selection as
+/// `{{n::…}}`, numbered **one above the highest ever used** — including this note's dormant blanks,
+/// which the text alone cannot show (`cards::next_blank_number`) — never the lowest free one, so a new
+/// blank can never reclaim a deleted card's identity. Enabled only while text is selected, since a
+/// blank is *made from a selection*. Returns the field's response for the autosave path.
+fn cloze_text_field(
+    ui: &mut egui::Ui,
+    buffer: &mut String,
+    pane: Option<&cards::CardPane>,
+) -> egui::Response {
+    let output = multiline_field_output(ui, buffer);
+    let selection = output.cursor_range.filter(|r| !r.is_empty());
+    let clicked = ui
+        .add_enabled_ui(selection.is_some(), |ui| {
+            full_width_button(ui, "Blank it").clicked()
+        })
+        .inner;
+    if clicked && let Some(range) = selection {
+        blank_selection(buffer, range, pane);
+    }
+    output.response.response
+}
+
+/// Wrap the selected `range` of `buffer` as a new `{{n::…}}` blank (ADR-0012 §3). The number is
+/// [`cards::next_blank_number`] when the note is stored (so its dormant blanks count as "ever used"),
+/// or the text-only rule for an unborn draft.
+fn blank_selection(
+    buffer: &mut String,
+    range: egui::text::CCursorRange,
+    pane: Option<&cards::CardPane>,
+) {
+    let chars = range.as_sorted_char_range();
+    let start = byte_index(buffer, chars.start.0);
+    let end = byte_index(buffer, chars.end.0);
+    let number = match pane {
+        Some(p) => cards::next_blank_number(p, buffer),
+        None => leitner_core::content::next_blank_number(buffer),
+    };
+    let selected = buffer[start..end].to_owned();
+    buffer.replace_range(start..end, &format!("{{{{{number}::{selected}}}}}"));
+}
+
+/// The byte offset of the `char_index`-th character in `s`, or `s.len()` past the end — the bridge
+/// from egui's character-indexed cursor to a byte range `String::replace_range` accepts.
+fn byte_index(s: &str, char_index: usize) -> usize {
+    s.char_indices().nth(char_index).map_or(s.len(), |(b, _)| b)
+}
+
+/// The ambient destructive-edit warning, above the fields (ADR-0012 §5, ADR-0025 §4). It names each
+/// dormant card and its **kept** history and states Undo — it is not the counter ADR-0018 §4 forbids.
+fn warning_banner(ui: &mut egui::Ui, warning: &cards::Warning) {
+    body(ui, "This edit made cards dormant:");
+    for entry in &warning.dormant {
+        badge(ui, &entry.history());
+    }
+    body(ui, cards::UNDO_COPY);
+}
+
+/// The editor's **card body**: the cards this note currently generates, in raw-slot order, live and
+/// dormant interleaved (ADR-0018 §1). A live entry is a card; a **dormant entry is a single line**
+/// (ADR-0018 §2). A pane with nothing live is its own state, distinct from the empty note (ADR-0018
+/// §6). What each row *looks* like is the visual design pass's.
+fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
+    field_label(ui, "Cards");
+    ui.add_space(4.0);
+    let Some(pane) = pane else {
+        body(ui, "No cards yet.");
+        return;
+    };
+    if pane.entries.is_empty() {
+        body(ui, "No cards yet.");
+        return;
+    }
+    for entry in &pane.entries {
+        match entry {
+            cards::Entry::Live(card) => {
+                card_face(ui, &card.prompt);
+                if !card.answer.is_empty() {
+                    card_face(ui, &card.answer);
+                }
+                badge(ui, &format!("Box {}", card.box_));
+                ui.add_space(8.0);
+            }
+            // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
+            cards::Entry::Dormant(dormant) => badge(ui, &dormant.history()),
+        }
+    }
+    if pane.state == cards::State::NoLiveCards {
+        ui.add_space(8.0);
+        body(ui, "This note currently generates no cards.");
+    }
+}
+
+/// The `cloze` Text field rendered through the bidi layouter, returning the full [`egui::text_edit::
+/// TextEditOutput`] so the caller can read the current selection for *Blank it*. Mirrors [`text_field`]
+/// for the multiline case; the shared helper returns only a `Response` and cannot carry the cursor.
+fn multiline_field_output(
+    ui: &mut egui::Ui,
+    buffer: &mut String,
+) -> egui::text_edit::TextEditOutput {
+    let rtl = bidi::is_rtl(buffer);
+    let mut layouter = bidi_layouter;
+    egui::TextEdit::multiline(buffer)
+        .desired_width(f32::INFINITY)
+        .horizontal_align(if rtl {
+            egui::Align::RIGHT
+        } else {
+            egui::Align::LEFT
+        })
+        .layouter(&mut layouter)
+        .show(ui)
 }
 
 /// The **Settings** destination (ADR-0021 §1), holding the sync surface (ADR-0015 §12, ADR-0019 §1).
@@ -898,7 +1090,7 @@ fn new_card_rate_control(
     });
 
     field_label(ui, "New cards a day");
-    let resp = text_field(ui, buffer, false);
+    let resp = text_field(ui, buffer);
     // Commit on blur: a completed edit that parses writes the (clamped) rate back; zero is kept.
     if resp.lost_focus()
         && let Ok(rate) = buffer.trim().parse::<u32>()
@@ -1029,27 +1221,15 @@ fn field_label(ui: &mut egui::Ui, s: &str) {
 /// field clips its last character (see `bidi::job`) — and the field's own `horizontal_align` carries
 /// the direction, chosen per the buffer's first strong character (ADR-0012 §7's `dir="auto"`).
 ///
-/// `multiline` is the one `cloze` Text field; every other field is single-line, so Enter is a submit
-/// egui turns into a blur, which the caller re-grabs to keep Enter inert (ADR-0012 §7, ADR-0021 §8).
-fn text_field(ui: &mut egui::Ui, buffer: &mut String, multiline: bool) -> egui::Response {
+/// Single-line only: Enter is a submit egui turns into a blur, which the caller re-grabs to keep Enter
+/// inert (ADR-0012 §7, ADR-0021 §8). The one multiline field — `cloze`'s Text — goes through
+/// [`multiline_field_output`] instead, which shares [`bidi_layouter`] but exposes the cursor for
+/// *Blank it*.
+fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Response {
     let rtl = bidi::is_rtl(buffer);
-    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
-        let mut job = bidi::job(
-            text.as_str(),
-            egui::TextStyle::Body.resolve(ui.style()),
-            ui.visuals().text_color(),
-        );
-        job.halign = egui::Align::LEFT;
-        job.wrap.max_width = wrap_width;
-        ui.fonts_mut(|f| f.layout_job(job))
-    };
-    let field = if multiline {
-        egui::TextEdit::multiline(buffer)
-    } else {
-        egui::TextEdit::singleline(buffer)
-    };
+    let mut layouter = bidi_layouter;
     ui.add(
-        field
+        egui::TextEdit::singleline(buffer)
             .desired_width(f32::INFINITY)
             .horizontal_align(if rtl {
                 egui::Align::RIGHT
@@ -1058,6 +1238,24 @@ fn text_field(ui: &mut egui::Ui, buffer: &mut String, multiline: bool) -> egui::
             })
             .layouter(&mut layouter),
     )
+}
+
+/// The bidi text-edit layouter shared by every field (`text_field`, `multiline_field_output`): it
+/// runs the field's contents through the `bidi` helper, left-aligned within the edit, so untrusted
+/// mixed-script text lays out correctly wherever it is typed.
+fn bidi_layouter(
+    ui: &egui::Ui,
+    text: &dyn egui::TextBuffer,
+    wrap_width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = bidi::job(
+        text.as_str(),
+        egui::TextStyle::Body.resolve(ui.style()),
+        ui.visuals().text_color(),
+    );
+    job.halign = egui::Align::LEFT;
+    job.wrap.max_width = wrap_width;
+    ui.fonts_mut(|f| f.layout_job(job))
 }
 
 /// Android entry point. `NativeActivity` hosts the app directly: the APK is this `.so` plus a
