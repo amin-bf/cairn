@@ -74,7 +74,7 @@ const HEX: &[u8; 16] = b"0123456789abcdef";
 
 /// The RFC 9562 canonical text form of sixteen bytes, lowercase — shared by [`NoteId`] and
 /// [`DeckId`], whose ids are both UUIDv4s stored in RFC 9562 order (ADR-0002 §6, ADR-0005 §4).
-fn uuid16_to_canonical(bytes: &[u8; 16]) -> String {
+pub(crate) fn uuid16_to_canonical(bytes: &[u8; 16]) -> String {
     let mut s = String::with_capacity(36);
     for (i, byte) in bytes.iter().enumerate() {
         if i == 4 || i == 6 || i == 8 || i == 10 {
@@ -89,7 +89,7 @@ fn uuid16_to_canonical(bytes: &[u8; 16]) -> String {
 /// Parse the RFC 9562 canonical `8-4-4-4-12` text form into sixteen bytes, case-insensitively;
 /// `None` for anything else. The inverse of [`uuid16_to_canonical`], shared by [`NoteId`] and
 /// [`DeckId`] so a malformed id token is rejected rather than panicking.
-fn uuid16_from_canonical(text: &str) -> Option<[u8; 16]> {
+pub(crate) fn uuid16_from_canonical(text: &str) -> Option<[u8; 16]> {
     let bytes = text.as_bytes();
     if bytes.len() != 36 {
         return None;

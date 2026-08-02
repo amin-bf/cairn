@@ -26,6 +26,7 @@
 //! context.
 
 pub mod content;
+pub mod identity;
 pub mod log;
 pub mod replay;
 pub mod scheduling;

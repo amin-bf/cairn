@@ -57,9 +57,22 @@ labels.
 
 **Collection id**:
 A UUIDv4 identifying a collection across devices and files. Minted once, **adopted and never
-re-minted** — the exact opposite of a writer id's never-adopt rule. Of record in
-[`store`](../../store/src/CONTEXT.md), where it is minted; named here because it is what the
-container carries.
+re-minted** — the exact opposite of a writer id's never-adopt rule. The *type* is
+`leitner_core::identity::CollectionId` (the crate both restore and enrolment depend on, so the check
+below is written once); it is **minted** in [`store`](../../store/src/CONTEXT.md); this crate is what
+puts it in the container and reads it back.
+
+**Restore preview**:
+The one line a `collection` archive is shown behind before it merges — `Collection archive, ⟨date⟩.
+⟨N⟩ notes, ⟨M⟩ reviews.` ([`collection::RestorePlan::one_line`]). It states the **file**, not
+effects, because a restore only ever adds and so has no destructive effect to enumerate (ADR-0022
+§12). The one refusal it needs is the **identity gate** (`leitner_core::identity::adopt_or_refuse`,
+run identically at the enrolment seam): an **empty** device adopts the archive's id, a **non-empty**
+one holding a **different** collection is refused **by name**, with the way out stated
+([`collection::RESTORE_MISMATCH_WAY_OUT`]). The log and the mutable surface are never inflated to
+build it — the gate and the one line come from the manifest alone.
+_Avoid_: Restore summary, restore result — a merge reports nothing after the fact, exactly as an
+import does not.
 
 **User-files seam**:
 `leitner-export`'s own `platform` module: **put, get, list, hand_off**, three `#[cfg]` arms with a

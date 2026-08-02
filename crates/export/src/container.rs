@@ -20,12 +20,21 @@ pub const FORMAT: u32 = 1;
 pub const MIMETYPE_MEMBER: &str = "mimetype";
 /// The media type a `.ldeck` archive declares from its first bytes (ADR-0008 §10).
 pub const DECK_MEDIA_TYPE: &str = "application/vnd.leitner.deck+zip";
+/// The media type a `.lcoll` archive declares from its first bytes (ADR-0016 §9) — the third profile
+/// in this same container, selecting the restore stamp rule (ADR-0016 §2).
+pub const COLLECTION_MEDIA_TYPE: &str = "application/vnd.leitner.collection+zip";
 /// The manifest member, readable alone from the central directory (ADR-0008 §6).
 pub const MANIFEST_MEMBER: &str = "manifest.json";
 /// One note or tombstone per line, in `(position, note id)` order (ADR-0008 §6, ADR-0011 §7).
 pub const NOTES_MEMBER: &str = "notes.jsonl";
 /// One member per kind the notes use — `kinds/<kind-id>.json` (ADR-0008 §6).
 pub const KINDS_PREFIX: &str = "kinds/";
+/// The `collection` profile's log member: the review log **verbatim, as received** — one interchange
+/// line per line, never re-encoded (ADR-0016 §2, ADR-0004 §11).
+pub const LOG_MEMBER: &str = "log.jsonl";
+/// The `collection` profile's mutable-surface member: everything that settles, its stamps carried
+/// **byte for byte** because a restore does not cross a collection boundary (ADR-0016 §2).
+pub const MUTABLE_MEMBER: &str = "mutable.jsonl";
 
 /// The fixed deflate level (ADR-0008 §12). Any constant makes emission deterministic; 6 is the zlib
 /// default and the ratio the container was sized against.

@@ -36,8 +36,9 @@ collection was copied here, and a fresh writer id must be minted.
 
 **Collection id**:
 A UUIDv4 naming *this collection*, held in `local`, minted once at first launch beside the writer
-marker. **Adopted and never re-minted** — the exact opposite of the writer id, and the two rules must
-never be swapped:
+marker. The type is `leitner_core::identity::CollectionId` (shared with `export`'s restore and
+`sync`'s enrolment); this crate is the one place it is **minted**. **Adopted and never re-minted** —
+the exact opposite of the writer id, and the two rules must never be swapped:
 
 | | Writer id | Collection id |
 |---|---|---|

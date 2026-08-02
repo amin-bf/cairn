@@ -16,7 +16,9 @@
 //! never by its extension (ADR-0024 §1) — on Android both profiles store as `application/octet-stream`
 //! so the member is the sole authority.
 
-use crate::container::{DECK_MEDIA_TYPE, FORMAT, KINDS_PREFIX, MANIFEST_MEMBER, NOTES_MEMBER};
+use crate::container::{
+    COLLECTION_MEDIA_TYPE, DECK_MEDIA_TYPE, FORMAT, KINDS_PREFIX, MANIFEST_MEMBER, NOTES_MEMBER,
+};
 use leitner_core::content::{DeckId, NoteId, SHIPPED_KINDS};
 use leitner_core::log::Json;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -58,8 +60,13 @@ pub fn plain(s: &str, max: usize) -> String {
 pub enum Profile {
     /// A `.ldeck` — the media type is [`DECK_MEDIA_TYPE`].
     Deck,
-    /// Any other sniffable container, carrying the media type it declared. A `.lcoll` renamed to
-    /// `.ldeck` lands here, and the gate refuses it by name of its profile (ADR-0022 §4).
+    /// A `.lcoll` collection archive — the media type is [`COLLECTION_MEDIA_TYPE`]. Read by
+    /// [`crate::collection::restore_preview`], and refused by deck [`preview`] as the **wrong
+    /// profile**: the two carry opposite stamp rules, so a reader that mistakes one for the other is
+    /// the destructive error a distinct profile exists to make impossible (ADR-0016 §2).
+    Collection,
+    /// Any other sniffable container, carrying the media type it declared. The gate refuses it by
+    /// name of its profile (ADR-0022 §4).
     Other(String),
 }
 
@@ -84,10 +91,10 @@ pub fn sniff(bytes: &[u8]) -> Option<Profile> {
     let data_start = name_end.checked_add(extra_len)?;
     let data_end = data_start.checked_add(comp_size)?;
     let media = std::str::from_utf8(bytes.get(data_start..data_end)?).ok()?;
-    Some(if media == DECK_MEDIA_TYPE {
-        Profile::Deck
-    } else {
-        Profile::Other(media.to_owned())
+    Some(match media {
+        DECK_MEDIA_TYPE => Profile::Deck,
+        COLLECTION_MEDIA_TYPE => Profile::Collection,
+        other => Profile::Other(other.to_owned()),
     })
 }
 
@@ -261,10 +268,11 @@ struct FileNote {
 /// A refusal returns **before** `notes.jsonl` is inflated (ADR-0022 §2): the gate consults the
 /// `mimetype` member, the member-name list and the small `manifest.json` only.
 pub fn preview(bytes: &[u8], collection: &Collection) -> Result<Plan, Refusal> {
-    // Sniff: identity is in the bytes, never the name (ADR-0024 §1).
+    // Sniff: identity is in the bytes, never the name (ADR-0024 §1). A `collection` archive is the
+    // wrong profile for deck import — its stamps travel byte for byte and must never restamp here.
     match sniff(bytes) {
         Some(Profile::Deck) => {}
-        Some(Profile::Other(_)) => return Err(Refusal::WrongProfile),
+        Some(Profile::Collection | Profile::Other(_)) => return Err(Refusal::WrongProfile),
         None => return Err(Refusal::Unreadable),
     }
 
@@ -653,13 +661,14 @@ mod tests {
     fn a_file_is_identified_by_its_mimetype_member_not_its_name() {
         let bytes = real_deck(did(1), "French A1", &[(nid(1), "a")], &[], 1, "d");
         assert_eq!(sniff(&bytes), Some(Profile::Deck));
-        // A container whose first member says something else sniffs as that, whatever the extension.
-        let other = craft("application/vnd.leitner.collection+zip", vec![]);
+        // A collection container sniffs as the collection profile, whatever the extension.
+        let coll = craft(COLLECTION_MEDIA_TYPE, vec![]);
+        assert_eq!(sniff(&coll), Some(Profile::Collection));
+        // Any other first-member media type is carried as-is.
+        let other = craft("application/zip", vec![]);
         assert_eq!(
             sniff(&other),
-            Some(Profile::Other(
-                "application/vnd.leitner.collection+zip".to_owned()
-            ))
+            Some(Profile::Other("application/zip".to_owned()))
         );
         assert_eq!(sniff(b"not a zip at all"), None);
     }
