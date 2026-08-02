@@ -18,8 +18,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use leitner_core::content::{CardRef, DeckId, NoteId};
-use leitner_core::log::{DayScale, ParsedLine, Row, day_number, parse_line};
-use leitner_core::scheduling::Grade;
+use leitner_core::log::{DayScale, ParsedLine, Row, Setting, day_number, parse_line};
+use leitner_core::scheduling::{Grade, PARAMETER_COUNT, SchedulerParameters};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::interchange;
@@ -581,6 +581,94 @@ impl Collection {
             NEW_CARD_RATE_ATTR,
             Some(&clamped.to_string()),
         )
+    }
+
+    /// The scheduler parameter vector currently in effect (ADR-0001 §6): the weights of the **latest**
+    /// `config-set` parameter row in the canonical total order, or the published defaults when no run
+    /// has ever written one. This is what an optimisation run's result is compared against to decide
+    /// whether it changed anything (ADR-0014 §5). The fitted-over count is not returned — it is the
+    /// nudge's concern and is read from the log by `leitner_core::replay::optimisation_nudge`, never
+    /// re-derived here (ADR-0014 §6).
+    pub fn current_scheduler_parameters(&self) -> Result<[f32; PARAMETER_COUNT], StoreError> {
+        // Order by the derived columns, which match replay's `(day, instant, writer, seq)` total order
+        // (ADR-0004 §9) — a later parameter row supersedes an earlier one. `line` stays authoritative;
+        // the ordering columns need not round-trip, only sort (ADR-0007 §2).
+        let mut stmt = self.conn.prepare(
+            "SELECT line FROM log WHERE kind = 'config-set' ORDER BY day, instant, writer, seq",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            let bytes: Vec<u8> = r.get(0)?;
+            Ok(String::from_utf8_lossy(&bytes).into_owned())
+        })?;
+        let mut current = *SchedulerParameters::default().weights();
+        for line in rows {
+            if let ParsedLine::Row(Row::ConfigSet(cfg)) = parse_line(&line?)
+                && let Setting::SchedulerParameters { weights, .. } = cfg.setting
+            {
+                current = weights;
+            }
+        }
+        Ok(current)
+    }
+
+    /// Record an optimisation run's fitted vector as a `config-set` parameter row (ADR-0014 §5, §6).
+    /// **The write is skipped when the vector is unchanged** — a value-less row still enters ADR-0004
+    /// §7's stamp contest and could displace a better-fitted vector, so a run producing the current
+    /// vector writes nothing (ADR-0014 §5), and a history-less collection that fits the defaults
+    /// therefore needs no special case. Returns the sequence written, or `None` when nothing was.
+    ///
+    /// The `fitted_over` count is written onto the row and **frozen** (ADR-0014 §6): a device that
+    /// trained while behind on sync fitted over fewer reviews than the merged log later shows, so the
+    /// count cannot be recovered by counting rows afterwards. This is a real log row — the one place
+    /// the parameter vector is persisted (ADR-0001 §6) — so it takes the same guarded instant, frozen
+    /// day and high-water sequence as a review, and the same self-heal against a forked writer id.
+    pub fn set_scheduler_parameters(
+        &mut self,
+        weights: &[f32; PARAMETER_COUNT],
+        fitted_over: u64,
+        now_ms: i64,
+        scale: DayScale,
+    ) -> Result<Option<u64>, StoreError> {
+        // ADR-0014 §5: an unchanged vector writes nothing.
+        if self.current_scheduler_parameters()? == *weights {
+            return Ok(None);
+        }
+
+        // Self-heal (ADR-0007 §5), before the transaction — minting rewrites the marker file.
+        if self.someone_else_is_writing_as_us()? {
+            self.mint_writer(false)?;
+        }
+        let writer_hex = interchange::hex16(&self.writer);
+
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+        // The same clock-skew guard, frozen day and high-water sequence as a review (ADR-0004 §8, §4).
+        let guarded_ms = guarded_instant_ms(&tx, now_ms)?;
+        let day = day_number(guarded_ms, scale);
+        let instant = interchange::iso8601_millis(guarded_ms);
+        let highwater: i64 = read_local_i64(&tx, "seq_highwater")?.unwrap_or(0);
+        let sequence = highwater + 1;
+
+        let line = interchange::config_set_params_line(
+            &writer_hex,
+            sequence as u64,
+            weights,
+            fitted_over,
+            &instant,
+            day,
+        );
+
+        // A config-set row carries no note or ordinal. Our own write is a plain INSERT (ADR-0007 §8).
+        tx.execute(
+            "INSERT INTO log (writer, seq, line, kind, note, ordinal, day, instant) \
+             VALUES (?1, ?2, ?3, 'config-set', NULL, NULL, ?4, ?5)",
+            params![&self.writer[..], sequence, line.as_bytes(), day, guarded_ms,],
+        )?;
+        write_local(&tx, "seq_highwater", &sequence.to_string())?;
+        tx.commit()?;
+        Ok(Some(sequence as u64))
     }
 
     /// Suspend a card (ADR-0010 §5, §7): "stop showing me this card". A per-`CardRef` value on the

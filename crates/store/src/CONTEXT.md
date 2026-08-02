@@ -64,6 +64,22 @@ content: it **syncs between a user's own devices but never exports** — the sep
 of any export that enumerates content by kind — and it **never enters the log** (ADR-0011 §5). Zero is
 legal, the backlog escape hatch. The per-deck slot ADR-0005 §5 reserved stays empty (ADR-0011 §6).
 
+**Scheduler parameters**:
+The fitted 21-weight vector an optimisation run produces, recorded by `set_scheduler_parameters` as a
+`config-set` parameter row — the **one place** the vector is persisted (ADR-0001 §6), and a **log
+row, not the mutable surface**: it must replay in causal order so every device computes the same
+memory state, which is exactly what the mutable surface's wall-clock settling would break.
+`current_scheduler_parameters` reads the latest such row's weights (or the published defaults) —
+what the write compares against. **An unchanged vector writes nothing** (ADR-0014 §5): a value-less
+row still enters ADR-0004 §7's stamp contest and could displace a better fit, so `set_...` returns
+`None` and emits no row when the vector equals what is current — which also disposes of a
+history-less collection fitting the defaults, with no zero-history guard. The **fitted-over count**
+travels on the row under `fov` and is **frozen at write time** (ADR-0014 §6), never re-derived here;
+`leitner-core::interchange` emits the line and `leitner_core::replay::optimisation_nudge` reads the
+count back. This crate holds no domain rule about *what* to fit — that is `leitner-core::scheduling`.
+_Avoid_: Weights setting, a mutable-surface `params` attribute — settling the vector by stamp
+recomputes memory state under the wall clock.
+
 **Suspension**:
 "Stop showing me this card" (ADR-0010 §5), stored on the mutable surface under a distinct
 `entity = "suspension"` keyed by the `CardRef`'s canonical 18-byte encoding (attr `suspended`, `"true"`

@@ -126,6 +126,35 @@ pub fn history_cutoff_line(
     )
 }
 
+/// The `config-set` scheduler-parameters interchange line authored here (ADR-0004 §6, ADR-0014 §5,
+/// §6). Carries the 21-weight vector under `v` and the frozen **fitted-over count** under `fov` — the
+/// number of reviews the run trained on, recorded at write time and never re-derived (ADR-0014 §6).
+///
+/// Each weight is written with `f32`'s shortest round-trip representation, which
+/// [`leitner_core::log::Json::as_f32_array`] recovers exactly by parsing as `f64` and narrowing. The
+/// `d` token is the frozen write-time day, the `t` token the write instant for ordering — like every
+/// other row (ADR-0004 §4).
+pub fn config_set_params_line(
+    writer_hex: &str,
+    sequence: u64,
+    weights: &[f32],
+    fitted_over: u64,
+    instant_iso: &str,
+    day: i64,
+) -> String {
+    let mut v = String::from("[");
+    for (i, weight) in weights.iter().enumerate() {
+        if i > 0 {
+            v.push(',');
+        }
+        v.push_str(&weight.to_string());
+    }
+    v.push(']');
+    format!(
+        r#"{{"k":"cfg","w":"{writer_hex}","s":{sequence},"t":"{instant_iso}","d":{day},"set":"params","v":{v},"fov":{fitted_over}}}"#
+    )
+}
+
 /// Format epoch-milliseconds as an ISO 8601 UTC instant, `YYYY-MM-DDTHH:MM:SS.mmmZ` (ADR-0004 §5).
 ///
 /// Replay never parses this token — it is a lexicographic tie-break only (`log/mod.rs`), and the Z
@@ -341,6 +370,41 @@ mod tests {
         assert_eq!(row.grade, 3);
         assert_eq!(row.day, 20514);
         assert_eq!(row.duration_ms, 4200);
+    }
+
+    #[test]
+    fn a_config_set_params_line_parses_back_through_core_with_its_count() {
+        // ADR-0014 §6: what the store writes for an optimisation run, core reads — weights exact and
+        // the fitted-over count intact.
+        use leitner_core::log::Setting;
+        use leitner_core::scheduling::{PARAMETER_COUNT, SchedulerParameters};
+
+        let mut weights = *SchedulerParameters::default().weights();
+        weights[0] = 0.123_456_79;
+        weights[PARAMETER_COUNT - 1] = 9.87;
+        let line = config_set_params_line(
+            &hex16(&[0x5c; 16]),
+            42,
+            &weights,
+            3120,
+            "2026-03-02T04:00:00.000Z",
+            20_500,
+        );
+
+        let ParsedLine::Row(Row::ConfigSet(row)) = parse_line(&line) else {
+            panic!("store-written params line did not parse: {line}");
+        };
+        assert_eq!(row.id.sequence, 42);
+        assert_eq!(row.day, 20_500);
+        let Setting::SchedulerParameters {
+            weights: parsed,
+            fitted_over,
+        } = row.setting
+        else {
+            panic!("expected scheduler parameters");
+        };
+        assert_eq!(parsed, weights, "every weight round-trips exactly");
+        assert_eq!(fitted_over, 3120, "the frozen fitted-over count survives");
     }
 
     #[test]

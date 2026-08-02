@@ -58,8 +58,16 @@ pub struct ReviewedRow {
 /// this context consumes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
-    /// The 21-weight FSRS-6 parameter vector (ADR-0001 §6).
-    SchedulerParameters([f32; PARAMETER_COUNT]),
+    /// The scheduler parameters (ADR-0001 §6, ADR-0004 §6): the 21-weight FSRS-6 vector plus the
+    /// **fitted-over count** — how many reviews an optimisation run trained on, frozen at write time
+    /// (ADR-0014 §6). Only the weights enter replay's arithmetic; the count is informational, carried
+    /// so the settings nudge can read the current fit without deriving it from the merged log — which
+    /// would report a fit that never happened (scheduling `CONTEXT.md`). A row from before this amend
+    /// carries no count and reads it as `0`.
+    SchedulerParameters {
+        weights: [f32; PARAMETER_COUNT],
+        fitted_over: u64,
+    },
     /// A recognised setting whose value this ticket's arithmetic does not consume (e.g. the day
     /// scale or desired retention). Named, not dropped, so replay can still order around it.
     Other(String),
@@ -201,7 +209,14 @@ fn parse_config_set(obj: &Json) -> ParsedLine {
             "params" => {
                 let weights = obj.get("v").and_then(Json::as_f32_array)?;
                 let weights: [f32; PARAMETER_COUNT] = weights.try_into().ok()?;
-                Setting::SchedulerParameters(weights)
+                // The fitted-over count is the amendment's third member (ADR-0004 §6). A row that
+                // predates it simply has no `fov` token; read it as 0 rather than rejecting the row,
+                // so an old build's parameter row still installs its weights (ADR-0004 §11).
+                let fitted_over = obj.get("fov").and_then(Json::as_u64).unwrap_or(0);
+                Setting::SchedulerParameters {
+                    weights,
+                    fitted_over,
+                }
             }
             other => Setting::Other(other.to_owned()),
         };
@@ -341,16 +356,46 @@ mod tests {
             weights.push_str(&format!("{}", (i as f32) * 0.5));
         }
         weights.push(']');
-        let line =
-            format!(r#"{{"k":"cfg","w":"w","s":2,"t":"t","d":5,"set":"params","v":{weights}}}"#);
+        let line = format!(
+            r#"{{"k":"cfg","w":"w","s":2,"t":"t","d":5,"set":"params","v":{weights},"fov":3120}}"#
+        );
         let ParsedLine::Row(Row::ConfigSet(row)) = parse_line(&line) else {
             panic!("expected a config-set row, got {:?}", parse_line(&line));
         };
-        let Setting::SchedulerParameters(v) = row.setting else {
+        let Setting::SchedulerParameters {
+            weights: v,
+            fitted_over,
+        } = row.setting
+        else {
             panic!("expected scheduler parameters");
         };
         assert_eq!(v[0], 0.0);
         assert_eq!(v[20], 10.0);
+        // ADR-0004 §6: the frozen fitted-over count travels on the row (ADR-0014 §6).
+        assert_eq!(fitted_over, 3120);
+    }
+
+    #[test]
+    fn a_params_row_without_a_fitted_over_count_reads_it_as_zero() {
+        // ADR-0004 §11: a row predating the §6 amendment carries no `fov` token; its weights still
+        // install, and the count reads 0 rather than the row being rejected.
+        let mut weights = String::from("[");
+        for i in 0..PARAMETER_COUNT {
+            if i > 0 {
+                weights.push(',');
+            }
+            weights.push_str("0.1");
+        }
+        weights.push(']');
+        let line =
+            format!(r#"{{"k":"cfg","w":"w","s":2,"t":"t","d":5,"set":"params","v":{weights}}}"#);
+        let ParsedLine::Row(Row::ConfigSet(row)) = parse_line(&line) else {
+            panic!("expected a config-set row");
+        };
+        let Setting::SchedulerParameters { fitted_over, .. } = row.setting else {
+            panic!("expected scheduler parameters");
+        };
+        assert_eq!(fitted_over, 0);
     }
 
     #[test]

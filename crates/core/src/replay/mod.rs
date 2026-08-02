@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::content::{CardRef, NoteId};
 use crate::log::{ParsedLine, Row, Setting, parse_line};
-use crate::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, box_of};
+use crate::scheduling::{Grade, MemoryState, Review, Scheduler, SchedulerParameters, box_of};
 
 /// The constant identifying our replay arithmetic together with the pinned scheduler version (replay
 /// `CONTEXT.md`, ADR-0004 §9). A cache stamped with a different value cannot be trusted and is
@@ -138,7 +138,7 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
     for row in ordered {
         match row {
             Row::ConfigSet(cfg) => {
-                if let Setting::SchedulerParameters(weights) = &cfg.setting {
+                if let Setting::SchedulerParameters { weights, .. } = &cfg.setting {
                     scheduler = Scheduler::new(SchedulerParameters::new(*weights));
                 }
                 // Other settings do not enter this ticket's arithmetic.
@@ -318,6 +318,128 @@ pub const LEECH_FAILURE_DAYS: u32 = 4;
 /// passes to [`leeches`].
 pub const LEECH_WINDOW_DAYS: i64 = 90;
 
+// --- Parameter optimisation: the training corpus and the settings nudge (ADR-0014) -------------
+
+/// Parse, dedup and order the log into the single total order every device reproduces (ADR-0004 §9),
+/// keeping only the `reviewed` and `config-set` rows, and return it with the history cutoff day.
+/// Shared by [`training_histories`] and [`optimisation_nudge`], and the same ordering [`replay`]
+/// uses — a duplicate `(writer, sequence)` is one row, unknown and malformed lines are dropped.
+fn ordered_log(lines: &[&str]) -> (Vec<Row>, Option<i64>) {
+    let mut rows: Vec<Row> = Vec::new();
+    let mut seen: HashSet<crate::log::RowId> = HashSet::new();
+    for line in lines {
+        if let ParsedLine::Row(row) = parse_line(line)
+            && seen.insert(row.id().clone())
+        {
+            rows.push(row);
+        }
+    }
+    let cutoff = rows
+        .iter()
+        .filter_map(|row| match row {
+            Row::HistoryCutoff(r) => Some(r.day),
+            _ => None,
+        })
+        .max();
+    let mut ordered: Vec<Row> = rows
+        .into_iter()
+        .filter(|row| matches!(row, Row::Reviewed(_) | Row::ConfigSet(_)))
+        .collect();
+    ordered.sort_by(|a, b| {
+        a.day()
+            .cmp(&b.day())
+            .then_with(|| a.instant().cmp(b.instant()))
+            .then_with(|| a.id().writer.cmp(&b.id().writer))
+            .then_with(|| a.id().sequence.cmp(&b.id().sequence))
+    });
+    (ordered, cutoff)
+}
+
+/// One card's review history from the log, for the optimiser (ADR-0014 §1). Returns one entry per
+/// card that carries at least one post-cutoff review, each the card's `(grade, day)` reviews in the
+/// canonical total order — the raw material [`crate::scheduling::optimise`] turns into a training
+/// corpus.
+///
+/// Unlike [`replay`] this takes **no** `current_cards`: an optimisation run fits the collection's own
+/// review history, and a card the current content no longer generates still had genuine recalls that
+/// inform the fit — so a dormant card's reviews are included, where projection would drop them
+/// (ADR-0002 §7). Reviews before a `history-cutoff-set` are disowned exactly as in replay (ADR-0004
+/// §1), and an out-of-range grade is skipped rather than aborting. The cards come back in
+/// [`CardRef`]-encoding order so the corpus is reproducible.
+pub fn training_histories(lines: &[&str]) -> Vec<Vec<Review>> {
+    let (ordered, cutoff) = ordered_log(lines);
+    let mut by_card: HashMap<CardRef, Vec<Review>> = HashMap::new();
+    for row in &ordered {
+        let Row::Reviewed(rev) = row else { continue };
+        if let Some(cut) = cutoff
+            && rev.day < cut
+        {
+            continue;
+        }
+        let Some(grade) = Grade::from_raw(rev.grade) else {
+            continue;
+        };
+        by_card.entry(rev.card).or_default().push(Review {
+            grade,
+            day: rev.day,
+        });
+    }
+    let mut cards: Vec<CardRef> = by_card.keys().copied().collect();
+    cards.sort_by_key(|card| card.encode());
+    cards
+        .into_iter()
+        .map(|card| by_card.remove(&card).expect("key just listed"))
+        .collect()
+}
+
+/// The fact the settings nudge states (ADR-0014 §2). Two shapes, and no third — the nudge carries no
+/// threshold, no floor and no verb, so this type carries only the counts it reports and the app turns
+/// them into the one sentence each. **Absence of a parameter row is the distinction**, not a
+/// default-valued one (ADR-0004 §6): a collection that has never run the optimiser is [`Standard`],
+/// even though its effective vector is the published default.
+///
+/// [`Standard`]: OptimisationNudge::Standard
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OptimisationNudge {
+    /// No optimisation run has ever written a parameter row: the collection uses the published
+    /// defaults. Carries the total reviews, the one honest number there is to state.
+    Standard { reviews_total: u64 },
+    /// A run has fitted a vector. Carries its **frozen** fitted-over count and how many reviews have
+    /// happened since — `reviews_total − fitted_over`, which is exactly the stale-fit signal a device
+    /// that trained while behind exposes (ADR-0014 §6): the count read off the row lags the merged
+    /// log, so `reviews_since` runs large and the user re-runs, which is the correcting action.
+    Fitted {
+        fitted_over: u64,
+        reviews_since: u64,
+    },
+}
+
+/// What the settings nudge should say, derived from the log (ADR-0014 §2). Reads the **latest**
+/// parameter row's frozen fitted-over count — never derived by counting rows around it, which after a
+/// merge reports a fit that never happened (ADR-0014 §6, scheduling `CONTEXT.md`) — and the total
+/// reviews the same way [`training_histories`] counts them, so the two numbers share a unit.
+pub fn optimisation_nudge(lines: &[&str]) -> OptimisationNudge {
+    let reviews_total: u64 = training_histories(lines)
+        .iter()
+        .map(|history| history.len() as u64)
+        .sum();
+    let (ordered, _cutoff) = ordered_log(lines);
+    let latest_fit = ordered.iter().rev().find_map(|row| match row {
+        Row::ConfigSet(cfg) => match &cfg.setting {
+            Setting::SchedulerParameters { fitted_over, .. } => Some(*fitted_over),
+            Setting::Other(_) => None,
+        },
+        _ => None,
+    });
+    match latest_fit {
+        None => OptimisationNudge::Standard { reviews_total },
+        Some(fitted_over) => OptimisationNudge::Fitted {
+            fitted_over,
+            reviews_since: reviews_total.saturating_sub(fitted_over),
+        },
+    }
+}
+
 /// One card that has crossed the leech floor, with the cost that ranks it (ADR-0010 §2, §4).
 ///
 /// **Derived, never stored** — read out of replayed history and fed nowhere back into it, so no leech
@@ -419,6 +541,129 @@ mod tests {
             day,
             day
         )
+    }
+
+    /// A `config-set` params line carrying a fitted-over count, built by hand.
+    fn cfg_params(writer: &str, seq: u64, day: i64, fitted_over: u64) -> String {
+        let mut v = String::from("[");
+        for i in 0..crate::scheduling::PARAMETER_COUNT {
+            if i > 0 {
+                v.push(',');
+            }
+            v.push_str("0.3");
+        }
+        v.push(']');
+        format!(
+            r#"{{"k":"cfg","w":"{writer}","s":{seq},"t":"day-{day:08}","d":{day},"set":"params","v":{v},"fov":{fitted_over}}}"#
+        )
+    }
+
+    #[test]
+    fn training_histories_group_each_cards_reviews_in_order() {
+        // ADR-0014 §1: one entry per card, its reviews in the canonical total order — the corpus the
+        // optimiser fits. Two cards, interleaved across two writers, must come back grouped.
+        let a = note(1);
+        let b = note(2);
+        let lines = [
+            rev("L", 1, a, 0, 3, 0),
+            rev("P", 1, b, 0, 2, 1),
+            rev("L", 2, a, 0, 4, 5),
+            rev("P", 2, b, 0, 3, 6),
+            rev("L", 3, a, 0, 3, 12),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let histories = training_histories(&refs);
+
+        assert_eq!(histories.len(), 2, "two cards, two histories");
+        let total: usize = histories.iter().map(Vec::len).sum();
+        assert_eq!(total, 5, "every review is present exactly once");
+        // Each card's history is day-ascending.
+        for history in &histories {
+            assert!(history.windows(2).all(|w| w[0].day <= w[1].day));
+        }
+    }
+
+    #[test]
+    fn training_histories_include_dormant_cards_but_honour_the_cutoff() {
+        // The corpus is the whole review history (ADR-0014 §1): a card the current content no longer
+        // generates still contributes, unlike projection — but rows before a history cutoff are
+        // disowned exactly as in replay (ADR-0004 §1). No `current_cards` filter exists here.
+        let n = note(1);
+        let lines = [
+            rev("w", 1, n, 0, 3, 0), // disowned by the cutoff below
+            r#"{"k":"cut","w":"w","s":2,"t":"day-00000005","d":5}"#.to_string(),
+            rev("w", 3, n, 0, 3, 10),
+            rev("w", 4, n, 0, 2, 18),
+            rev("w", 5, n, 7, 3, 20), // slot 7: `basic` never generates it — still trained on
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let histories = training_histories(&refs);
+
+        let total: usize = histories.iter().map(Vec::len).sum();
+        assert_eq!(
+            total, 3,
+            "two post-cutoff reviews on slot 0, one on dormant slot 7"
+        );
+        assert_eq!(histories.len(), 2, "the dormant card is its own history");
+    }
+
+    #[test]
+    fn the_nudge_is_standard_until_a_run_writes_a_parameter_row() {
+        // ADR-0014 §2: absence of a parameter row — not a default-valued one — is "using the standard
+        // parameters", and the count is the total reviews.
+        let n = note(1);
+        let lines = [
+            rev("w", 1, n, 0, 3, 0),
+            rev("w", 2, n, 0, 3, 4),
+            rev("w", 3, n, 0, 4, 11),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        assert_eq!(
+            optimisation_nudge(&refs),
+            OptimisationNudge::Standard { reviews_total: 3 }
+        );
+    }
+
+    #[test]
+    fn the_nudge_reads_the_frozen_fit_and_the_reviews_since() {
+        // ADR-0014 §6: the fitted-over count is read off the latest parameter row, frozen, and
+        // "reviews since" is the total now minus it — the stale-fit signal.
+        let n = note(1);
+        let lines = [
+            rev("w", 1, n, 0, 3, 0),
+            rev("w", 2, n, 0, 3, 4),
+            // A run fitted over 2 reviews landed on day 5.
+            cfg_params("w", 3, 5, 2),
+            // Three more reviews since.
+            rev("w", 4, n, 0, 3, 11),
+            rev("w", 5, n, 0, 2, 20),
+            rev("w", 6, n, 0, 3, 33),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        assert_eq!(
+            optimisation_nudge(&refs),
+            OptimisationNudge::Fitted {
+                fitted_over: 2,
+                reviews_since: 3, // 5 reviews total − 2 fitted-over
+            }
+        );
+    }
+
+    #[test]
+    fn the_nudge_takes_the_latest_of_several_fits() {
+        // The current vector is the last parameter row in the total order; its count is the one shown.
+        let n = note(1);
+        let lines = [
+            rev("w", 1, n, 0, 3, 0),
+            cfg_params("w", 2, 1, 1),
+            rev("w", 3, n, 0, 3, 4),
+            cfg_params("w", 4, 5, 2), // the later fit wins
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let OptimisationNudge::Fitted { fitted_over, .. } = optimisation_nudge(&refs) else {
+            panic!("a fit was written");
+        };
+        assert_eq!(fitted_over, 2, "the latest fit's frozen count");
     }
 
     #[test]
