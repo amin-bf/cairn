@@ -29,11 +29,20 @@ Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
 | Crate | Path | What it is |
 |---|---|---|
 | `leitner-core` | [`crates/core/`](./crates/core) | The domain, entire and pure. **One dependency — `fsrs` — and nothing else** ([ADR-0027](./docs/adr/0027-the-scheduler-dependency.md)). |
-| `leitner-store` | [`crates/store/`](./crates/store) | SQLite persistence and the whole platform seam. |
+| `leitner-store` | [`crates/store/`](./crates/store) | SQLite persistence and the two-directory platform seam. |
 | `leitner-export` | [`crates/export/`](./crates/export) | The `.ldeck` and `.lcoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
 | `leitner-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
-| `leitner-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the Android entry point. |
+| `leitner-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point. |
 | `leitner-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
+
+**And one directory that is not a crate.** [`vendor/egui-winit`](./vendor/PATCH.md) is third-party
+source the repository carries: a verbatim copy of the published `egui-winit` 0.35.0 with **one block**
+behind `#[cfg(not(target_os = "android"))]`, reached only through `[patch.crates-io]`. It is excluded
+from the workspace, it is not our code, and it is **outside client-stack rule 3** — the
+`#[cfg(target_os)]` a reader will find there is the patch, not a defect
+([ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)). Bumping the egui family is therefore no
+longer only a version change: `scripts/verify-vendor.sh` runs the recursive diff and the block-shape
+check, and a release that restructures the block is **re-judged, not re-applied**.
 
 Two rules about this table that are easy to break:
 
@@ -55,10 +64,10 @@ Two rules about this table that are easy to break:
 | Log | [`crates/core/src/log/`](./crates/core/src/log/CONTEXT.md) | Rows, writer ids, sequences, day scale, stamps, interchange |
 | Scheduling | [`crates/core/src/scheduling/`](./crates/core/src/scheduling/CONTEXT.md) | FSRS arithmetic, grades, memory state, boxes |
 | Replay | [`crates/core/src/replay/`](./crates/core/src/replay/CONTEXT.md) | The join: what exists, what state it is in, what is due |
-| Store | [`crates/store/src/`](./crates/store/src/CONTEXT.md) | The two databases, device identity, the platform seam |
+| Store | [`crates/store/src/`](./crates/store/src/CONTEXT.md) | The two databases, device identity, its platform seam |
 | Export | [`crates/export/src/`](./crates/export/src/CONTEXT.md) | Deck files, collection archives, profiles, revisions, import policy |
 | Sync | [`crates/sync/src/`](./crates/sync/src/CONTEXT.md) | The remote, namespaces, objects, roll-up, enrolment |
-| UI | [`crates/app/src/`](./crates/app/src/CONTEXT.md) | Screens, the session, the bidi helper |
+| UI | [`crates/app/src/`](./crates/app/src/CONTEXT.md) | Screens, the session, the bidi helper, the inset seam and the reserved band |
 
 ### How they relate
 
@@ -85,6 +94,14 @@ content ──┬──> scheduling ──┐
   [ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md) — three `#[cfg]` arms with a
   `compile_error!` third, so that `leitner-store::platform` stays at exactly two functions. **The
   seam rule is per crate**, and the *number* of operations is not the invariant.
+- **`ui` holds the third platform seam, and it is one function.** An inset is a fact about the window
+  this crate is drawing into, so routing it through the store would make the store answer a question
+  about layout ([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)). Its
+  return type distinguishes *no soft keyboard on this platform* from *the keyboard is down* — zero
+  for both, as §2 first wrote it, makes every gate on "is it down" permanently true off Android
+  ([ADR-0026 §5](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)). `android_main` lives in that arm
+  because the activity handle originates there and `ndk_context` holds the `Application`, not the
+  `Activity`; keeping them together is what leaves the seam one function wide.
 - **`sync` is a crate for the reason this file predicted**: it needs HTTP, TLS and OAuth, which
   `leitner-core` cannot hold. [ADR-0013](./docs/adr/0013-the-sync-transport.md) realised the
   anticipated sixth crate rather than overturning anything. It depends on `log` and knows nothing
@@ -182,6 +199,7 @@ See [`README.md`](./README.md) for prerequisites. In short:
 ```sh
 cargo run -p leitner-desktop            # desktop
 cargo test --workspace                  # everything testable without hardware
+scripts/verify-vendor.sh                # vendor/egui-winit: verbatim plus exactly one change
 
 source scripts/android-env.sh           # required before ANY Android command
 cd crates/app && cargo apk build        # APK: a manifest and one .so

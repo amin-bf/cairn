@@ -149,6 +149,29 @@ the form pane's *first screen* is on show, and a warning after the last field le
 does not warn. Moving it adds no speaker; it is the same warning, placed where it can be read.
 Reserving the IME band makes it *reachable*, which is not the same as *visible*.
 
+**Reserved band**:
+The strip at the top or bottom of the window that the platform's chrome or soft keyboard is sitting
+on, read from this crate's own one-function `platform` seam and held out of the layout by an
+exact-size panel (`keyboard::Band`, ADR-0025 §1). Bottom is a **max, not a sum** — the keyboard is
+drawn *over* the gesture bar. Reserving it is what gives the scroll area a real range over the covered
+region, which is the difference between *below the fold* and *does not exist*; unreserved, the top
+band is why the first line of text drew under the clock. **The reserve is necessary and not
+sufficient** — it makes the warning above the fields *reachable*, never *visible at the moment of the
+edit*, which is what ADR-0025 §4 moved it for.
+_Avoid_: Occluded area, keyboard padding, safe area — the failure is reachability, not occlusion.
+
+**The three guards**:
+The behaviour that has to come with a reserved band, and an implementation missing any one is visibly
+broken (ADR-0025 §3, ADR-0026 §4). **Keep the focused field inside the viewport in the same frame it
+shrinks**; **surrender focus when a focused field is scrolled *completely* out of view** — the same
+oscillation entered from the other end, and *completely*, since a field half off the edge is still
+being typed into; and **raise the keyboard from a discrete click on a text field**, which is the
+recovery half of the vendored adapter patch. The first two are consequences of *reading insets*, the
+third of *carrying the patch*. All three live where every screen with a text field inherits them —
+`keyboard`, and the shared text-field wrapper — never in the editor.
+_Avoid_: Keyboard fix, IME workaround; and never key any of them on a per-frame "something is focused
+and the pointer went down", which is what issued 72 show requests from one scroll gesture.
+
 **Last caught up**:
 The only resting statement the app makes about sync — *when* it last completed one, a fact.
 **Never "in sync"**: after a sync the app knows every writer's highest *published* sequence, and

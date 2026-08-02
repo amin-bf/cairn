@@ -19,13 +19,19 @@ tempfile.workspace = true
 # ADR-0003 §5: eframe's default features include accesskit, which eframe refuses alongside
 # android-native-activity. So the dependency is split per target — this is not tidiness, the
 # unified form does not build for Android.
+#
+# Both arms are pinned exactly for the same reason `egui` is (ADR-0026 §3): `eframe` is what pulls
+# `egui-winit` in, so a floating requirement here is a route to resolving the family past the
+# version the vendored copy was diffed against.
 [target.'cfg(not(target_os = "android"))'.dependencies]
-eframe = "0.35"
+eframe = "=0.35.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity.workspace = true
 winit.workspace = true
-eframe = { version = "0.35", default-features = false, features = [
+jni.workspace = true
+ndk-context.workspace = true
+eframe = { version = "=0.35.0", default-features = false, features = [
   "default_fonts",
   "wgpu",
   "android-native-activity",
