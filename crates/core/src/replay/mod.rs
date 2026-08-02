@@ -51,6 +51,13 @@ pub struct CardState {
     /// date, not a "due today" verdict — the latter is measured against the device-local day at the
     /// edge, which replay has no access to and wants none (ADR-0004 §4, replay `CONTEXT.md`).
     pub due_day: i64,
+    /// The distinct frozen day numbers on which this card was graded `1 Forgot` at least once, in
+    /// ascending order — its **failure days** (ADR-0010 §2, replay `CONTEXT.md`). Counted in days,
+    /// never in rows: a same-session re-show is a real logged row with a zero day gap, so three
+    /// grade-1 rows one evening are **one** failure day, not three. This is the raw material the leech
+    /// query filters to the trailing window; replay itself never reads the edge, so the window is
+    /// applied by [`leeches`], not here.
+    pub failure_days: Vec<i64>,
 }
 
 /// The whole projection: the state of every currently-generated card that carries reviews.
@@ -66,6 +73,10 @@ struct Accumulator {
     last_grade: Grade,
     last_day: i64,
     count: u32,
+    /// Distinct failure days, ascending. Rows arrive in day order, so a failure day is appended only
+    /// when it differs from the last one already recorded — that dedup by day is the whole point of
+    /// counting days rather than rows (ADR-0010 §2).
+    failure_days: Vec<i64>,
 }
 
 /// Replay the log against the set of currently-generated cards.
@@ -162,6 +173,11 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                                 last_grade: grade,
                                 last_day: rev.day,
                                 count: 1,
+                                failure_days: if grade.is_failure() {
+                                    vec![rev.day]
+                                } else {
+                                    Vec::new()
+                                },
                             },
                         );
                     }
@@ -171,6 +187,12 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                         existing.last_grade = grade;
                         existing.last_day = rev.day;
                         existing.count += 1;
+                        // A failure day is recorded once per distinct day (ADR-0010 §2). Rows fold in
+                        // day order, so a new failure day is simply one that differs from the last
+                        // recorded — a same-day re-show never adds a second.
+                        if grade.is_failure() && existing.failure_days.last() != Some(&rev.day) {
+                            existing.failure_days.push(rev.day);
+                        }
                     }
                 }
             }
@@ -193,6 +215,7 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                 last_grade: a.last_grade,
                 last_day: a.last_day,
                 due_day: a.last_day + i64::from(interval),
+                failure_days: a.failure_days,
             },
         );
     }
@@ -281,6 +304,86 @@ pub fn introduction_candidates(
         chosen.push(entry.card);
     }
     chosen
+}
+
+/// The leech floor: a card is a leech at **four or more** failure days in the trailing window
+/// (ADR-0010 §2). An invention, recorded as one — roughly calibrated at both ends but with no
+/// measurement behind it, and free to move (ADR-0010 §2, consequences). Nothing in the mechanism
+/// depends on the exact value.
+pub const LEECH_FAILURE_DAYS: u32 = 4;
+
+/// The trailing window, in days, the failure days are counted within (ADR-0010 §2). A window in
+/// **days**, not reviews, because the harm is a budget harm: a card failed twice a decade apart costs
+/// nothing and a day window excludes it for free. Its right edge is the device-local day the caller
+/// passes to [`leeches`].
+pub const LEECH_WINDOW_DAYS: i64 = 90;
+
+/// One card that has crossed the leech floor, with the cost that ranks it (ADR-0010 §2, §4).
+///
+/// **Derived, never stored** — read out of replayed history and fed nowhere back into it, so no leech
+/// signal reaches memory state (ADR-0010 §1, §3). It is self-clearing: learn the card and its failure
+/// days age out of the window, and it leaves the list with nobody doing anything.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Leech {
+    pub card: CardRef,
+    /// Distinct failure days inside the trailing window — the count that crossed the floor, and the
+    /// primary rank key (worst first).
+    pub failure_days: u32,
+    /// The most recent failure day inside the window, the recency half of the rank.
+    pub last_failure_day: i64,
+}
+
+/// The cards that have crossed the leech floor, **ranked by recent failure cost, worst first** — a
+/// list ordered rather than cut (ADR-0010 §4), so there is no bright line to defend and a healthy
+/// collection's worst card is still below the floor and absent.
+///
+/// A leech is a card with at least [`LEECH_FAILURE_DAYS`] **failure days** in the trailing
+/// [`LEECH_WINDOW_DAYS`], measured with `today` — the **device-local** day — as the window's right
+/// edge (ADR-0010 §2). The failure days themselves are the frozen collection-scale day numbers
+/// [`replay`] recorded ([`CardState::failure_days`]); replay never reads the edge, so the window is
+/// applied here where the caller supplies it (replay `CONTEXT.md`).
+///
+/// This never touches suspension: leech-ness is pure history, so a suspended card is still a leech if
+/// its record says so (its permanent home on the leech screen is ADR-0010 §8's, decided by the
+/// caller). FSRS difficulty is **not** consulted — the load-bearing rejection (ADR-0010 §3): binding
+/// the surface to a scheduler parameter would re-couple what the design keeps swappable.
+pub fn leeches(replayed: &Replayed, today: i64) -> Vec<Leech> {
+    // The window is the LEECH_WINDOW_DAYS ending at `today` inclusive: a failure day counts when it
+    // falls on or after `today - (window - 1)` and on or before `today`. A row dated ahead of today
+    // (clock skew) is outside it and does not count.
+    let earliest = today - (LEECH_WINDOW_DAYS - 1);
+    let mut out: Vec<Leech> = replayed
+        .cards
+        .iter()
+        .filter_map(|(card, state)| {
+            let in_window: Vec<i64> = state
+                .failure_days
+                .iter()
+                .copied()
+                .filter(|&d| d >= earliest && d <= today)
+                .collect();
+            if (in_window.len() as u32) < LEECH_FAILURE_DAYS {
+                return None;
+            }
+            Some(Leech {
+                card: *card,
+                failure_days: in_window.len() as u32,
+                last_failure_day: *in_window
+                    .last()
+                    .expect("at least LEECH_FAILURE_DAYS entries"),
+            })
+        })
+        .collect();
+
+    // Ranked worst first (ADR-0010 §4): most failure days, then most recent failure, then a stable
+    // card-identity tie-break so two devices reach the same order without communicating.
+    out.sort_by(|a, b| {
+        b.failure_days
+            .cmp(&a.failure_days)
+            .then_with(|| b.last_failure_day.cmp(&a.last_failure_day))
+            .then_with(|| a.card.encode().cmp(&b.card.encode()))
+    });
+    out
 }
 
 #[cfg(test)]
@@ -725,6 +828,177 @@ mod tests {
             state.last_grade.is_failure(),
             "the latest projected grade is the failure"
         );
+    }
+
+    #[test]
+    fn four_failure_days_in_the_window_make_a_leech_but_three_do_not() {
+        // ADR-0010 §2: a leech is four or more failure *days* in the trailing ninety. Three fail on
+        // separate days — below the floor; a fourth crosses it.
+        let three = note(1);
+        let four = note(2);
+        let cards = current_cards(&[three, four]);
+        let lines = [
+            rev("w", 1, three, 0, 1, 10),
+            rev("w", 2, three, 0, 1, 20),
+            rev("w", 3, three, 0, 1, 30),
+            rev("w", 4, four, 0, 1, 10),
+            rev("w", 5, four, 0, 1, 20),
+            rev("w", 6, four, 0, 1, 30),
+            rev("w", 7, four, 0, 1, 40),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+        let leeched = leeches(&replayed, 40);
+
+        assert_eq!(
+            leeched.iter().map(|l| l.card).collect::<Vec<_>>(),
+            vec![CardRef::new(four, 0)],
+            "only the card with four failure days crosses the floor"
+        );
+        assert_eq!(leeched[0].failure_days, 4);
+    }
+
+    #[test]
+    fn same_day_re_shows_count_as_one_failure_day() {
+        // ADR-0010 §2: a failure *day* is distinct — three grade-1 rows one evening (a fumbled new
+        // card and its same-session re-shows) are one act of forgetting, never three. Four rows on
+        // one day must not make a leech.
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let lines = [
+            rev("w", 1, n, 0, 1, 5),
+            rev("w", 2, n, 0, 1, 5),
+            rev("w", 3, n, 0, 1, 5),
+            rev("w", 4, n, 0, 1, 5),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+
+        assert_eq!(
+            replayed.cards[&CardRef::new(n, 0)].failure_days,
+            vec![5],
+            "one distinct day, however many rows"
+        );
+        assert!(
+            leeches(&replayed, 5).is_empty(),
+            "four rows in one day is one episode, not a leech"
+        );
+    }
+
+    #[test]
+    fn failures_outside_the_trailing_window_do_not_count() {
+        // ADR-0010 §2: the window is the trailing ninety with the device-local day as its right edge,
+        // and it is self-clearing. Four failure days on days 3..=6: at day 92 the earliest edge is
+        // day 3, so all four are in and the card is a leech; one day later day 3 has aged out, so only
+        // three remain and the leech self-clears — no stored state cleared it.
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let lines = [
+            rev("w", 1, n, 0, 1, 3),
+            rev("w", 2, n, 0, 1, 4),
+            rev("w", 3, n, 0, 1, 5),
+            rev("w", 4, n, 0, 1, 6),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+
+        assert_eq!(
+            leeches(&replayed, 6).len(),
+            1,
+            "all four days are today-or-recent"
+        );
+        // Day 92: earliest = 92 - 89 = 3, so the day-3 failure sits on the inclusive edge — still a
+        // leech at exactly ninety days.
+        assert_eq!(
+            leeches(&replayed, 92).len(),
+            1,
+            "day 3 sits on the window's earliest edge"
+        );
+        // Day 93: earliest = 4, day 3 has fallen out — three failure days left, below the floor.
+        assert!(
+            leeches(&replayed, 93).is_empty(),
+            "the oldest failure has aged out of the trailing ninety and the leech self-clears"
+        );
+    }
+
+    #[test]
+    fn the_list_is_ranked_by_failure_days_then_recency() {
+        // ADR-0010 §4: the list is ranked, not filtered — worst first. The card with more failure days
+        // outranks one with fewer; ties break to the more recent failure.
+        let worst = note(1);
+        let middle = note(2);
+        let recent = note(3);
+        let cards = current_cards(&[worst, middle, recent]);
+        let mut lines = Vec::new();
+        // worst: five failure days.
+        for (i, day) in [10, 20, 30, 40, 50].into_iter().enumerate() {
+            lines.push(rev("w", 1 + i as u64, worst, 0, 1, day));
+        }
+        // middle: four failure days, latest on day 45.
+        for (i, day) in [12, 22, 32, 45].into_iter().enumerate() {
+            lines.push(rev("w", 10 + i as u64, middle, 0, 1, day));
+        }
+        // recent: four failure days, latest on day 60 — more recent than middle.
+        for (i, day) in [15, 25, 35, 60].into_iter().enumerate() {
+            lines.push(rev("w", 20 + i as u64, recent, 0, 1, day));
+        }
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+        let ranked = leeches(&replayed, 60);
+
+        assert_eq!(
+            ranked.iter().map(|l| l.card).collect::<Vec<_>>(),
+            vec![
+                CardRef::new(worst, 0),  // five failure days
+                CardRef::new(recent, 0), // four, most recent failure day 60
+                CardRef::new(middle, 0), // four, most recent failure day 45
+            ],
+            "most failure days first, ties broken by recency"
+        );
+    }
+
+    #[test]
+    fn a_passed_card_is_never_a_leech_and_the_difficulty_is_never_read() {
+        // ADR-0010 §1, §3: nothing but failure days drives the list. A card passed every time — however
+        // hard the scheduler thinks it — is not a leech.
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let lines = [
+            rev("w", 1, n, 0, 3, 0),
+            rev("w", 2, n, 0, 3, 5),
+            rev("w", 3, n, 0, 3, 10),
+            rev("w", 4, n, 0, 3, 20),
+            rev("w", 5, n, 0, 3, 40),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+        assert!(
+            leeches(&replayed, 40).is_empty(),
+            "a card the user keeps passing is not a leech, whatever its difficulty"
+        );
+    }
+
+    #[test]
+    fn a_history_cutoff_clears_the_failures_before_it() {
+        // ADR-0010 §5: a cutoff makes replay ignore earlier reviews, so failures before it stop
+        // counting and the leech clears. Four failure days, a cutoff after three of them, leaves one.
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let lines = [
+            rev("w", 1, n, 0, 1, 10),
+            rev("w", 2, n, 0, 1, 20),
+            rev("w", 3, n, 0, 1, 30),
+            r#"{"k":"cut","w":"w","s":4,"t":"day-00000035","d":35}"#.to_string(),
+            rev("w", 5, n, 0, 1, 40),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+        assert_eq!(
+            replayed.cards[&CardRef::new(n, 0)].failure_days,
+            vec![40],
+            "only the post-cutoff failure survives"
+        );
+        assert!(leeches(&replayed, 40).is_empty());
     }
 
     #[test]

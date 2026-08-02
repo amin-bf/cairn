@@ -579,6 +579,60 @@ fn the_new_card_rate_never_enters_the_log() {
 }
 
 #[test]
+fn suspension_is_a_per_card_flag_that_toggles_and_settles_by_stamp() {
+    // ADR-0010 §5: suspension is a per-`CardRef` value on the mutable surface, keyed by card so one
+    // sibling's suspension never touches another's, and never a one-way door (ADR-0010 §8).
+    let (mut coll, _d, _s) = open();
+    let n = note(1);
+    let front = CardRef::new(n, 0);
+    let back = CardRef::new(n, 1);
+
+    assert!(
+        !coll.is_suspended(front).unwrap(),
+        "nothing is suspended to begin with"
+    );
+
+    coll.suspend(front).unwrap();
+    assert!(coll.is_suspended(front).unwrap());
+    assert!(
+        !coll.is_suspended(back).unwrap(),
+        "a sibling card is unaffected — suspension is per card, not per note"
+    );
+    assert_eq!(
+        coll.suspended().unwrap(),
+        HashSet::from([front]),
+        "the suspended set holds exactly the suspended card"
+    );
+
+    // Suspending again is idempotent.
+    coll.suspend(front).unwrap();
+    assert_eq!(coll.suspended().unwrap(), HashSet::from([front]));
+
+    // Unsuspend clears the flag — never a one-way door, and it does not return from the grave.
+    coll.unsuspend(front).unwrap();
+    assert!(!coll.is_suspended(front).unwrap());
+    assert!(
+        coll.suspended().unwrap().is_empty(),
+        "an unsuspended card leaves the set — the cleared row holds NULL, not 'true'"
+    );
+}
+
+#[test]
+fn suspension_never_enters_the_log() {
+    // ADR-0010 §5: suspension rides the mutable surface, never a log row — a toggle in the log would
+    // be settled by wall clock. Suspending and unsuspending writes nothing to the append-only half.
+    let (mut coll, _d, _s) = open();
+    let before = coll.log_lines().unwrap().len();
+    coll.suspend(CardRef::new(note(1), 0)).unwrap();
+    coll.unsuspend(CardRef::new(note(1), 0)).unwrap();
+    assert_eq!(
+        coll.log_lines().unwrap().len(),
+        before,
+        "suspension is not a log row"
+    );
+}
+
+#[test]
 fn mutable_entity_reads_a_notes_own_field_values_in_one_pass() {
     // ADR-0021 §2: the note list's substring search scans a note's own field values, and does so
     // without knowing its kind — one read of the whole entity. Cleared (NULL) attributes are absent,

@@ -69,6 +69,20 @@ const SETTING_ID: [u8; 16] = [0u8; 16];
 /// The settings attribute holding the global new-card rate (ADR-0011 §3, §5).
 const NEW_CARD_RATE_ATTR: &str = "new_card_rate";
 
+/// The mutable-surface entity holding per-card **suspension** (ADR-0010 §5). A distinct entity from
+/// `note`, `deck` and `setting`, keyed by a `CardRef`'s canonical 18-byte encoding, because
+/// suspension is **per card, not per note** — one cloze blank or one direction of a pair may be agony
+/// while its sibling is solid. It **syncs between a user's own devices but never exports** (ADR-0010
+/// §5): an export enumerating content by entity kind never emits it, exactly as it never emits
+/// `setting`. It is **not** a log row (ADR-0010 §5): a toggle in the log would be settled by wall
+/// clock, which is what the stamp exists to prevent.
+const SUSPENSION_ENTITY: &str = "suspension";
+
+/// The suspension entity's single attribute: `"true"` while suspended, cleared to NULL to unsuspend —
+/// a value change settling by stamp, never a row deletion (ADR-0004 §7). Suspension is never a one-way
+/// door (ADR-0010 §8).
+const SUSPENDED_ATTR: &str = "suspended";
+
 /// Anything that can stop a collection opening or a write completing. Not recoverable in-process for
 /// the most part: without a database there is nowhere to put reviews.
 #[derive(Debug)]
@@ -567,6 +581,58 @@ impl Collection {
             NEW_CARD_RATE_ATTR,
             Some(&clamped.to_string()),
         )
+    }
+
+    /// Suspend a card (ADR-0010 §5, §7): "stop showing me this card". A per-`CardRef` value on the
+    /// mutable surface, stamped and settling like any other, so it syncs between the user's own devices
+    /// and never exports. Suspending an already-suspended card is idempotent.
+    pub fn suspend(&mut self, card: CardRef) -> Result<(), StoreError> {
+        self.mutable_set(
+            SUSPENSION_ENTITY,
+            &card.encode(),
+            SUSPENDED_ATTR,
+            Some("true"),
+        )
+    }
+
+    /// Unsuspend a card (ADR-0010 §8): clears the flag to NULL — a value change settling by stamp, not
+    /// a row deletion. Suspension is never a one-way door, so this is always available; unsuspending a
+    /// card that is not suspended is a harmless no-op edit. There is **no catch-up rule** — an
+    /// enormously overdue card is handled natively by the scheduler (ADR-0010 §8), so nothing here
+    /// resets its schedule.
+    pub fn unsuspend(&mut self, card: CardRef) -> Result<(), StoreError> {
+        self.mutable_set(SUSPENSION_ENTITY, &card.encode(), SUSPENDED_ATTR, None)
+    }
+
+    /// Whether one card is currently suspended.
+    pub fn is_suspended(&self, card: CardRef) -> Result<bool, StoreError> {
+        Ok(self
+            .mutable_get(SUSPENSION_ENTITY, &card.encode(), SUSPENDED_ATTR)?
+            .as_deref()
+            == Some("true"))
+    }
+
+    /// Every currently-suspended card, as the set the review queue excludes from **every** due count
+    /// and introduction (ADR-0010 §8) and the leech screen shows its permanent section from. Read
+    /// straight off the mutable surface — the flag settling there is the whole state — and decoded back
+    /// from the 18-byte key by [`CardRef::decode`]; a key that is not eighteen bytes is not one of ours
+    /// and is skipped. A cleared (unsuspended) row holds NULL and is filtered out by the `= 'true'`
+    /// test, so it never returns from the grave.
+    pub fn suspended(&self) -> Result<HashSet<CardRef>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT entity_id FROM mutable WHERE entity = ?1 AND attr = ?2 AND value = 'true'",
+        )?;
+        let rows = stmt.query_map(params![SUSPENSION_ENTITY, SUSPENDED_ATTR], |r| {
+            let bytes: Vec<u8> = r.get(0)?;
+            Ok(CardRef::decode(&bytes))
+        })?;
+        let mut out = HashSet::new();
+        for card in rows {
+            if let Some(card) = card? {
+                out.insert(card);
+            }
+        }
+        Ok(out)
     }
 
     /// The largest `position` value held by any note, or `None` when no note has one yet — the

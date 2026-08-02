@@ -96,6 +96,26 @@ seen rather than described.
 More cards due than the user will get through. Always *framed* ("pick a comfortable size, the rest
 will keep"), never reported as a bare number.
 
+**Leech screen**:
+The card-level list that hangs off Review — the one place cards are listed, not notes (the note list
+is the other, and two speakers for one fact is forbidden). Shows the **ranked** leeches (worst first,
+`leitner_core::replay::leeches`), each offering **edit** (primary), **suspend** and **delete** — and
+**never a tag**, which would publish a private struggle into a deck (ADR-0010 §7); plus the
+**permanent** section of suspended cards, each with **unsuspend** (ADR-0010 §8). It is a sub-state of
+Review, not a fourth destination, reached from the end-of-session pointer and a durable entry on the
+picker. The floor (four failure days) is what lets its empty state say plainly nothing is hurting.
+_Avoid_: Leech list *for the screen*, difficult-card view — and never a filter that cuts, since the
+list is ranked (ADR-0010 §4).
+
+**End-of-session pointer**:
+The informational, dismissible notice at a sitting's end that **N cards crossed the leech floor during
+that sitting** — leeches now minus those already crossed when it began, held in the in-memory sitting
+so it needs **zero stored state** (no dismissal flag, no last-seen marker, ADR-0010 §6). A **pointer,
+not a decision point**: it states a cost and offers a way through to the leech screen, never a suspend
+or delete in the moment, when the user is most frustrated and least able to choose. Shown once and
+never a nag — a card ignored here stays on the leech screen, the durable recourse.
+_Avoid_: Leech notification, session summary, a per-session dismissal marker.
+
 **Card pane**:
 The authoring editor's second pane: **the cards this note currently generates**, answering "what will
 I be asked" (ADR-0012 §1). Ordered by **raw slot number**, live and dormant alike — never grouped by
