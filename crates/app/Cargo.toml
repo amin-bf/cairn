@@ -51,3 +51,32 @@ target_sdk_version = 36
 
 [package.metadata.android.application]
 label = "Leitner"
+
+# Inbound deck files (ADR-0024 §2, issue #89). A `.ldeck` arriving through a file manager or a
+# messaging app carries a `content://` URI with a **row id** in the path and no filename, and
+# `MediaStore` types both profiles `application/octet-stream` — so a filter can match neither the
+# extension nor a precise media type on the routes that matter. The **broad** octet-stream filter is
+# the only inbound door; the file is then identified by sniffing its `mimetype` member, never its
+# name (ADR-0024 §1), and refused honestly if it is not ours. No `path_pattern` is declared — the
+# filter never matches on the extension (ADR-0024 §2), which is what the deck-export rules require.
+#
+# The **precise** filter is kept because it costs nothing and a phone-to-phone share declaring our
+# own type (ADR-0023 §3) matches it without the broad one.
+#
+# NativeActivity has one activity, so these attach to it. **Verify against the *emitted*
+# `AndroidManifest.xml`, never this source** — `cargo-apk` can drop escapes, and there is no JDK or
+# device in this sandbox to package or run the APK. On-device arrival is issue #99 (a handset
+# ticket blocked by #89), under AGENTS.md rule 9.
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.VIEW", "android.intent.action.SEND"]
+categories = ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"]
+
+[[package.metadata.android.application.activity.intent_filter.data]]
+mime_type = "application/octet-stream"
+
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.VIEW", "android.intent.action.SEND"]
+categories = ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"]
+
+[[package.metadata.android.application.activity.intent_filter.data]]
+mime_type = "application/vnd.leitner.deck+zip"
