@@ -1309,7 +1309,7 @@ fn multiline_field_output(
 ) -> egui::text_edit::TextEditOutput {
     let rtl = bidi::is_rtl(buffer);
     let mut layouter = bidi_layouter;
-    egui::TextEdit::multiline(buffer)
+    let out = egui::TextEdit::multiline(buffer)
         .desired_width(f32::INFINITY)
         .horizontal_align(if rtl {
             egui::Align::RIGHT
@@ -1317,7 +1317,12 @@ fn multiline_field_output(
             egui::Align::LEFT
         })
         .layouter(&mut layouter)
-        .show(ui)
+        .show(ui);
+    // The keyboard raise rides here too (ADR-0026 §4). The two wrappers are one wrapper in the sense
+    // that matters — they share `bidi_layouter` and every field goes through one of them — and a
+    // promise made to "every field" that skipped `cloze`'s Text is not a promise.
+    raise_keyboard(ui.ctx(), &out.response);
+    out
 }
 
 /// The **Settings** destination (ADR-0021 §1), holding the sync surface (ADR-0015 §12, ADR-0019 §1).
@@ -1617,7 +1622,7 @@ fn field_label(ui: &mut egui::Ui, s: &str) {
 fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Response {
     let rtl = bidi::is_rtl(buffer);
     let mut layouter = bidi_layouter;
-    ui.add(
+    let response = ui.add(
         egui::TextEdit::singleline(buffer)
             .desired_width(f32::INFINITY)
             .horizontal_align(if rtl {
@@ -1626,7 +1631,40 @@ fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Response {
                 egui::Align::LEFT
             })
             .layouter(&mut layouter),
-    )
+    );
+    raise_keyboard(ui.ctx(), &response);
+    response
+}
+
+/// **Guard 3** — raise the soft keyboard when the user clicks a text field and it is down
+/// (ADR-0026 §4).
+///
+/// This is the recovery half of the vendored adapter patch (`vendor/PATCH.md`), and it is not
+/// optional. Once the per-tap interrupt is suppressed, nothing re-asserts *show* after the user
+/// dismisses the keyboard with the IME's own chevron: the adapter debounces its allow-IME flag
+/// against its own previous value, and that value never changed — only the platform's did. The
+/// interrupt block was the only thing re-asserting it, so removing the defect removes recovery with
+/// it. An implementation that takes the patch without this ships a keyboard the user cannot get
+/// back.
+///
+/// It goes through `ViewportCommand::IMEAllowed(true)`, which the adapter maps straight onto the
+/// window without touching that debounced flag — public API, and no state to desync.
+///
+/// **Keyed on the field's own discrete click**, never on a per-frame "something is focused and the
+/// pointer went down": `request_focus` fires while *dragging* too, and the version that hung off it
+/// issued **72 show requests from a single scroll gesture**. Both wrong versions made the same
+/// mistake — hanging behaviour off a per-frame flag when the thing being modelled is a discrete
+/// event.
+///
+/// **Gated on a keyboard that exists and is currently down**, read from the seam at the moment of the
+/// click rather than from a cached frame value, so "is it actually down" is answered by the platform.
+/// The gate is what keeps the measured zero-hides-zero-shows shape: without it every click sends a
+/// redundant show. And it is the seam's honest return type that makes the gate correct off Android —
+/// a platform with no soft keyboard answers `Absent`, not "down" (ADR-0026 §5).
+fn raise_keyboard(ctx: &egui::Context, response: &egui::Response) {
+    if response.clicked() && crate::platform::insets().keyboard.is_down() {
+        ctx.send_viewport_cmd(egui::ViewportCommand::IMEAllowed(true));
+    }
 }
 
 /// The bidi text-edit layouter shared by every field (`text_field`, `multiline_field_output`): it
