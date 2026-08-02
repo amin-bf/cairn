@@ -16,9 +16,10 @@ pub mod notes;
 pub mod session;
 pub mod sync;
 
+use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use leitner_core::content::{DeckId, NoteId};
+use leitner_core::content::{CardRef, DeckId, NoteId};
 use leitner_core::log::{DayScale, day_number};
 use leitner_core::replay::replay;
 use leitner_core::scheduling::Grade;
@@ -32,13 +33,23 @@ use session::{Offered, ReviewState};
 /// grow real code unnoticed.
 pub use eframe;
 
-/// A sitting of review, held **only in memory** (ADR-0006 §6, issue #94): its position is never
-/// stored, so a force-quit loses nothing — relaunch re-derives the queue from the log and every
-/// already-graded card is simply no longer due. The chosen cards are snapshotted at the start; the
-/// index walks them; grading appends a row and advances.
+/// A sitting of review, held **only in memory** (ADR-0006 §6, issue #94): nothing about it is stored,
+/// so a force-quit loses nothing — relaunch re-derives the queue from the log and every already-graded
+/// card is simply no longer due. The queue is **re-derived every frame** rather than snapshotted, so
+/// a card failed mid-sitting returns the same session (ADR-0011 §9) and an edit that makes a card
+/// dormant drops it without ceremony.
+///
+/// The size the user picked counts **gradings, not distinct cards** (ADR-0011 §9): every graded event
+/// advances `graded`, re-shows included, so the progress bar always moves when the user acts. A
+/// sitting ends when `graded` reaches `chosen` or the queue empties, whichever comes first.
 struct Sitting {
-    cards: Vec<Offered>,
-    index: usize,
+    /// The count the user chose — the number of **gradings** this sitting runs to.
+    chosen: usize,
+    /// Gradings performed so far. This is the progress numerator, and it counts every grade press,
+    /// including a lapsed card's same-session re-show (ADR-0011 §9).
+    graded: usize,
+    /// The card currently on screen, so a reveal survives a frame and resets when the card changes.
+    shown: Option<CardRef>,
     revealed: bool,
     /// When the sitting began — the quiet 10-minute timer runs from here (issue #94).
     started: Instant,
@@ -50,11 +61,12 @@ struct Sitting {
 }
 
 impl Sitting {
-    fn new(cards: Vec<Offered>) -> Self {
+    fn new(chosen: usize) -> Self {
         let now = Instant::now();
         Sitting {
-            cards,
-            index: 0,
+            chosen,
+            graded: 0,
+            shown: None,
             revealed: false,
             started: now,
             card_shown: now,
@@ -188,6 +200,10 @@ pub struct LeitnerApp {
     /// The note list's *new deck* name buffer: decks are created where they are filtered (ADR-0021
     /// §9), so the create control sits beside the deck filter.
     new_deck: String,
+    /// The settings screen's new-card-rate edit buffer, held across frames. `None` until the settings
+    /// screen first reads the stored rate into it; committed back to the mutable surface on change
+    /// (ADR-0011 §3, §5). Kept as text so a mid-edit empty field does not read as zero.
+    new_card_rate: Option<String>,
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
@@ -209,6 +225,7 @@ impl LeitnerApp {
             setting_up_sync: false,
             deck_filter: None,
             new_deck: String::new(),
+            new_card_rate: None,
             fonts_installed: false,
         }
     }
@@ -280,7 +297,9 @@ impl eframe::App for LeitnerApp {
                     &mut self.new_deck,
                 );
             }
-            Destination::Settings => settings_screen(ui, &mut self.setting_up_sync),
+            Destination::Settings => {
+                settings_screen(ui, coll, &mut self.setting_up_sync, &mut self.new_card_rate)
+            }
         }
     }
 }
@@ -317,12 +336,25 @@ fn review(
     today: i64,
 ) -> Option<NoteId> {
     // Everything on screen is derived from the log this frame — there is no cached session state to
-    // fall out of step with it.
+    // fall out of step with it. The new-card rate and the notes' authored positions ride the mutable
+    // surface (ADR-0011 §5, §7), read fresh alongside the log. Suspension (ADR-0010 §8) is #87's, so
+    // its exclusion set is empty for now — the queue already refuses a suspended card once it lands.
     let current = deck::current_cards(coll).unwrap_or_default();
+    let positions = deck::note_positions(coll).unwrap_or_default();
+    let rate = coll
+        .new_card_rate()
+        .unwrap_or(leitner_core::log::DEFAULT_NEW_CARD_RATE) as usize;
     let lines = coll.log_lines().unwrap_or_default();
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let replayed = replay(&current, &refs);
-    let queue = session::compose(&current, &replayed, today);
+    let queue = session::compose(
+        &current,
+        &positions,
+        &replayed,
+        today,
+        rate,
+        &HashSet::new(),
+    );
     let total = current.len();
 
     heading(ui, "Review");
@@ -330,7 +362,7 @@ fn review(
 
     if sitting.is_none() {
         if let Some(count) = picker(ui, &queue, total) {
-            *sitting = Some(Sitting::new(queue.sitting(count)));
+            *sitting = Some(Sitting::new(count));
         }
         return None;
     }
@@ -339,12 +371,26 @@ fn review(
     // input event (immediate mode has nowhere to wait — client-stack rule 4).
     ui.ctx().request_repaint_after(Duration::from_secs(1));
 
+    // The next card is the head of the **live** queue that still renders — re-derived this frame, so
+    // a card failed a moment ago is back in the running (ADR-0011 §9) and a card just made dormant is
+    // gone. `find` stops at the first that renders, which is virtually always the head; the scan only
+    // matters for the mid-edit race where the head went dormant this very frame.
+    let next = queue.sitting(usize::MAX).into_iter().find_map(|offered| {
+        deck::render(coll, offered.card)
+            .ok()
+            .flatten()
+            .map(|rendered| (offered, rendered))
+    });
+
     let mut end_sitting = false;
     let mut edit_request: Option<NoteId> = None;
     {
         let s = sitting.as_mut().expect("just checked it is Some");
 
-        if s.checkpoint_due() {
+        if s.graded >= s.chosen {
+            // Reaching the chosen count of **gradings** ends the sitting (ADR-0011 §9, issue #94).
+            end_sitting = true;
+        } else if s.checkpoint_due() {
             body(ui, "You've been reviewing for 10 minutes.");
             ui.add_space(8.0);
             if full_width_button(ui, "Finish here").clicked() {
@@ -353,72 +399,70 @@ fn review(
             if full_width_button(ui, "Keep going").clicked() {
                 s.checkpoint_dismissed = true;
             }
-        } else if let Some(offered) = s.cards.get(s.index).copied() {
-            match deck::render(coll, offered.card).ok().flatten() {
-                // A card that no longer renders (its note went dormant mid-sitting) is skipped.
-                None => {
-                    s.index += 1;
-                    s.revealed = false;
-                    s.card_shown = Instant::now();
-                }
-                Some(rendered) => {
-                    let progress = format!("{} of {}", s.index + 1, s.cards.len());
-                    body(ui, &progress);
-                    ui.add_space(8.0);
-
-                    // Reveal is tap-the-card: the prompt is one wide button, and clicking it shows
-                    // the back. Identical by touch and by mouse — egui does not distinguish them.
-                    if card_face(ui, &rendered.prompt).clicked() {
-                        s.revealed = true;
-                    }
-
-                    // Edit this note, at any point in the card's life (ADR-0021 §6): the honest
-                    // diagnosis of most leeches is a defective card, and the moment to fix it is when
-                    // it is in front of you, not twenty cards later. Opening the editor **counts as a
-                    // reveal** — the editor shows the back, so without flipping the card here
-                    // ADR-0006 §4's "no grading before the answer is seen" would be quietly false. An
-                    // edit that makes the card dormant needs no mechanism: the next frame re-derives
-                    // the queue and simply does not offer it (ADR-0021 §6).
-                    ui.add_space(4.0);
-                    if full_width_button(ui, "Edit note").clicked() {
-                        s.revealed = true;
-                        edit_request = Some(offered.card.note);
-                    }
-
-                    if s.revealed {
-                        ui.add_space(4.0);
-                        card_face(ui, &rendered.answer);
-
-                        // The box badge appears only after reveal, is non-interactive, and reports
-                        // durability — never a queue (scheduling `CONTEXT.md`).
-                        ui.add_space(4.0);
-                        badge(ui, &format!("Box {}", offered.box_));
-
-                        ui.add_space(12.0);
-                        if let Some(grade) = grade_buttons(ui, &offered, today) {
-                            let duration_ms = s.card_shown.elapsed().as_millis() as u64;
-                            // A failed append drops this one review rather than wedging the
-                            // session: the card advances, and the next frame re-derives the queue
-                            // from whatever did commit. Surfacing write errors is a later ticket.
-                            let _ = coll.append_review(
-                                offered.card,
-                                grade,
-                                now_ms,
-                                DayScale::default(),
-                                duration_ms,
-                            );
-                            s.index += 1;
-                            s.revealed = false;
-                            s.card_shown = Instant::now();
-                        }
-                    }
-                }
+        } else if let Some((offered, rendered)) = next {
+            // A new card on screen resets the reveal and the answer-timer; the same card across
+            // frames keeps them, so a reveal survives a repaint.
+            if s.shown != Some(offered.card) {
+                s.shown = Some(offered.card);
+                s.revealed = false;
+                s.card_shown = Instant::now();
             }
-            // Reaching the chosen count ends the sitting (issue #94).
-            if s.index >= s.cards.len() {
-                end_sitting = true;
+
+            // Progress counts gradings against the chosen count (ADR-0011 §9), so the bar moves on
+            // every grade press — a lapse re-show included — never freezing when the user struggles.
+            body(ui, &format!("{} of {}", s.graded, s.chosen));
+            ui.add_space(8.0);
+
+            // Reveal is tap-the-card: the prompt is one wide button, and clicking it shows the back.
+            // Identical by touch and by mouse — egui does not distinguish them.
+            if card_face(ui, &rendered.prompt).clicked() {
+                s.revealed = true;
+            }
+
+            // Edit this note, at any point in the card's life (ADR-0021 §6): the honest diagnosis of
+            // most leeches is a defective card, and the moment to fix it is when it is in front of
+            // you, not twenty cards later. Opening the editor **counts as a reveal** — the editor
+            // shows the back, so without flipping the card here ADR-0006 §4's "no grading before the
+            // answer is seen" would be quietly false. An edit that makes the card dormant needs no
+            // mechanism: the next frame re-derives the queue and simply does not offer it.
+            ui.add_space(4.0);
+            if full_width_button(ui, "Edit note").clicked() {
+                s.revealed = true;
+                edit_request = Some(offered.card.note);
+            }
+
+            if s.revealed {
+                ui.add_space(4.0);
+                card_face(ui, &rendered.answer);
+
+                // The box badge appears only after reveal, is non-interactive, and reports
+                // durability — never a queue (scheduling `CONTEXT.md`).
+                ui.add_space(4.0);
+                badge(ui, &format!("Box {}", offered.box_));
+
+                ui.add_space(12.0);
+                if let Some(grade) = grade_buttons(ui, &offered, today) {
+                    let duration_ms = s.card_shown.elapsed().as_millis() as u64;
+                    // A failed append drops this one review rather than wedging the session: the next
+                    // frame re-derives the queue from whatever did commit. Surfacing write errors is
+                    // a later ticket.
+                    let _ = coll.append_review(
+                        offered.card,
+                        grade,
+                        now_ms,
+                        DayScale::default(),
+                        duration_ms,
+                    );
+                    // A grading advances the count whatever the grade — the re-derived queue decides
+                    // whether the card returns (a lapse) or leaves (a pass), not this counter.
+                    s.graded += 1;
+                    s.revealed = false;
+                    s.shown = None;
+                }
             }
         } else {
+            // The queue emptied before the chosen count — every due card passed and the day's new
+            // cards are used up. Nothing is stored; the sitting simply ends (ADR-0006 §8).
             end_sitting = true;
         }
     }
@@ -803,7 +847,12 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
 /// history cutoff) is modelled and proven in `sync`, but it needs a live grant, and the device flow
 /// that obtains one carries the network this environment lacks (ADR-0013 §11) — so it is wired when
 /// that mechanism lands, not faked here. What is fixed now is what each surface *says*.
-fn settings_screen(ui: &mut egui::Ui, setting_up: &mut bool) {
+fn settings_screen(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    setting_up: &mut bool,
+    rate_buffer: &mut Option<String>,
+) {
     heading(ui, "Settings");
     ui.add_space(8.0);
 
@@ -811,6 +860,11 @@ fn settings_screen(ui: &mut egui::Ui, setting_up: &mut bool) {
         enrolment_screen(ui, setting_up);
         return;
     }
+
+    new_card_rate_control(ui, coll, rate_buffer);
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
 
     // The promise, worded once (ADR-0015 §3) — never "automatic", never "in the background".
     body(ui, sync::PROMISE);
@@ -826,6 +880,45 @@ fn settings_screen(ui: &mut egui::Ui, setting_up: &mut bool) {
     // The removal route and the app name, kept permanently because the folder is hidden and cannot be
     // navigated to (ADR-0015 §10, ADR-0020 §4). Disconnect is the only control this app owns.
     body(ui, &sync::revocation_and_removal());
+}
+
+/// The new-card-rate control (ADR-0011 §3): a plain integer field, with the consequence explained
+/// where it is set — no modal, no automatic mode. The buffer is seeded from the stored rate on first
+/// show and committed on a completed edit (blur), clamped and defaulted in the store; **zero is a
+/// legal value and the backlog answer**, so an empty or unparsable field is left for the user to
+/// finish rather than snapped to a number. It never enters the log and never exports (ADR-0011 §5).
+fn new_card_rate_control(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    rate_buffer: &mut Option<String>,
+) {
+    // Seed the buffer from the stored rate the first time this screen is shown.
+    let buffer = rate_buffer.get_or_insert_with(|| {
+        coll.new_card_rate()
+            .unwrap_or(leitner_core::log::DEFAULT_NEW_CARD_RATE)
+            .to_string()
+    });
+
+    field_label(ui, "New cards a day");
+    let resp = text_field(ui, buffer, false);
+    // Commit on blur: a completed edit that parses writes the (clamped) rate back; zero is kept.
+    if resp.lost_focus()
+        && let Ok(rate) = buffer.trim().parse::<u32>()
+    {
+        let _ = coll.set_new_card_rate(rate);
+        // Reflect the clamp back into the buffer so an out-of-range entry shows what was stored.
+        *buffer = coll
+            .new_card_rate()
+            .unwrap_or(leitner_core::log::DEFAULT_NEW_CARD_RATE)
+            .to_string();
+    }
+    ui.add_space(4.0);
+    // The consequence, stated where the choice is (ADR-0011 §3, §4): this is the only enforced limit,
+    // and zero is how a backlog is cleared before turning it back on.
+    body(
+        ui,
+        "The only limit in the app. Set it to zero to clear a backlog, then turn it back on.",
+    );
 }
 
 /// The enrolment screen's surface (ADR-0015 §7, ADR-0019 §4): what it states *before* the grant. The

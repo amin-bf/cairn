@@ -249,6 +249,32 @@ impl Default for DayScale {
     }
 }
 
+/// The default new-card rate — five a day (ADR-0011 §4): the rate whose settled load fits inside
+/// about one session of the shape ADR-0006 designed. Read when the mutable surface holds no value.
+pub const DEFAULT_NEW_CARD_RATE: u32 = 5;
+
+/// The largest new-card rate the setting accepts (ADR-0011 §3). **Zero is legal** — the backlog
+/// escape hatch — so the whole accepted range is `0..=MAX_NEW_CARD_RATE`; there is no automatic mode
+/// and no derived mode, only this plain integer.
+pub const MAX_NEW_CARD_RATE: u32 = 9_999;
+
+/// Interpret the mutable surface's stored `new_card_rate` string as a rate (ADR-0011 §3, §5).
+///
+/// The value is a single **global** integer that syncs, never enters the log and never exports; the
+/// storage form is a plain decimal string. An unset value reads as [`DEFAULT_NEW_CARD_RATE`], a value
+/// above the range clamps to [`MAX_NEW_CARD_RATE`], and a **malformed** value reads as the default
+/// rather than aborting — the rate decides only what is *offered* (replay `CONTEXT.md`), so a garbled
+/// row can never wedge review the way a bad *input to replay* could.
+pub fn new_card_rate(stored: Option<&str>) -> u32 {
+    match stored {
+        Some(text) => match text.trim().parse::<u32>() {
+            Ok(rate) => rate.min(MAX_NEW_CARD_RATE),
+            Err(_) => DEFAULT_NEW_CARD_RATE,
+        },
+        None => DEFAULT_NEW_CARD_RATE,
+    }
+}
+
 /// Compute the day number for an absolute instant under a day scale (ADR-0004 §4).
 ///
 /// This is the write-time computation whose result is **frozen** onto every row; replay never calls
@@ -416,6 +442,30 @@ mod tests {
         let just_before = day_number(ms("2026-03-02T03:59:00Z"), scale);
         let at_four = day_number(ms("2026-03-02T04:00:00Z"), scale);
         assert_eq!(at_four, just_before + 1);
+    }
+
+    #[test]
+    fn the_new_card_rate_defaults_to_five_and_clamps() {
+        // ADR-0011 §3, §4: default five, zero legal, clamped to the range, malformed reads as default.
+        assert_eq!(new_card_rate(None), DEFAULT_NEW_CARD_RATE, "unset is five");
+        assert_eq!(new_card_rate(Some("0")), 0, "zero is a legal value");
+        assert_eq!(new_card_rate(Some("5")), 5);
+        assert_eq!(new_card_rate(Some("50")), 50);
+        assert_eq!(
+            new_card_rate(Some("100000")),
+            MAX_NEW_CARD_RATE,
+            "above the range clamps to the ceiling"
+        );
+        assert_eq!(
+            new_card_rate(Some("not a number")),
+            DEFAULT_NEW_CARD_RATE,
+            "a malformed value reads as the default, never aborts"
+        );
+        assert_eq!(
+            new_card_rate(Some("-3")),
+            DEFAULT_NEW_CARD_RATE,
+            "a negative value is not a legal rate and reads as the default"
+        );
     }
 
     // A tiny epoch-millis helper for the fixed instants above, so the tests read no clock.

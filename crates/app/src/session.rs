@@ -9,10 +9,10 @@
 //! the edge value replay refuses to read (replay `CONTEXT.md`): "due today" is measured against the
 //! device's local day, never the collection day scale.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use leitner_core::content::CardRef;
-use leitner_core::replay::Replayed;
+use leitner_core::content::{CardRef, NoteId};
+use leitner_core::replay::{NewCard, Replayed, introduction_candidates, notes_introduced_today};
 use leitner_core::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, day_gap};
 
 /// More cards due than a sitting will clear: past this, the count picker **frames** the backlog
@@ -71,21 +71,34 @@ impl Queue {
     }
 }
 
-/// Derive the queue from the current card set and the replayed state, against the device-local
-/// `today`.
+/// Derive the queue from the current card set, the notes' authored positions, and the replayed state,
+/// against the device-local `today`.
 ///
-/// A card is **due** if it has a projected state whose `due_day` has arrived; **new** if the content
-/// generates it but no review projects onto it; and simply absent if it was reviewed and is not yet
-/// due — which is exactly how a just-graded card leaves the session without any stored position
-/// (issue #94). Ordering is deterministic so two runs, or a force-quit and relaunch, agree: due by
-/// `(due_day, card bytes)`, new by card bytes.
-pub fn compose(current: &HashSet<CardRef>, replayed: &Replayed, today: i64) -> Queue {
+/// **Due** is due cards *minus those whose latest review was a pass* (ADR-0011 §9): a card is offered
+/// when its scheduled `due_day` has arrived **or** its latest projected grade was a failure — the
+/// same-session lapse re-show, which the bare `due_day` would floor a day out and lose. A passed card
+/// is scheduled ahead and simply absent, which is how a just-graded card leaves the session with no
+/// stored position (issue #94).
+///
+/// **New** is the introduction candidates (ADR-0011 §7, §8): the never-introduced cards, taken in
+/// `(position, ordinal)` order up to `rate`, at most one per note, excluding suspended cards and
+/// notes already introduced today. The rate is the only enforced limit in the app (ADR-0011 §1, §2);
+/// `positions` carries each note's order key, and `suspended` is the mutable-surface flag (empty
+/// until #87). Ordering is deterministic so two runs, or a force-quit and relaunch, agree.
+pub fn compose(
+    current: &HashSet<CardRef>,
+    positions: &HashMap<NoteId, String>,
+    replayed: &Replayed,
+    today: i64,
+    rate: usize,
+    suspended: &HashSet<CardRef>,
+) -> Queue {
     let mut due: Vec<(i64, Offered)> = Vec::new();
-    let mut new: Vec<Offered> = Vec::new();
+    let mut new_cards: Vec<NewCard> = Vec::new();
 
     for &card in current {
         match replayed.cards.get(&card) {
-            Some(state) if state.due_day <= today => due.push((
+            Some(state) if state.due_day <= today || state.last_grade.is_failure() => due.push((
                 state.due_day,
                 Offered {
                     card,
@@ -95,13 +108,10 @@ pub fn compose(current: &HashSet<CardRef>, replayed: &Replayed, today: i64) -> Q
                     last_day: state.last_day,
                 },
             )),
-            Some(_) => {} // reviewed but scheduled ahead — not offered, and not stored anywhere
-            None => new.push(Offered {
+            Some(_) => {} // passed and scheduled ahead — not offered, and not stored anywhere
+            None => new_cards.push(NewCard {
                 card,
-                box_: 1,
-                is_new: true,
-                memory: None,
-                last_day: today,
+                position: positions.get(&card.note).cloned().unwrap_or_default(),
             }),
         }
     }
@@ -110,7 +120,18 @@ pub fn compose(current: &HashSet<CardRef>, replayed: &Replayed, today: i64) -> Q
         a.0.cmp(&b.0)
             .then_with(|| a.1.card.encode().cmp(&b.1.card.encode()))
     });
-    new.sort_by_key(|a| a.card.encode());
+
+    let introduced_today = notes_introduced_today(replayed, today);
+    let new = introduction_candidates(&new_cards, &introduced_today, suspended, rate)
+        .into_iter()
+        .map(|card| Offered {
+            card,
+            box_: 1,
+            is_new: true,
+            memory: None,
+            last_day: today,
+        })
+        .collect();
 
     Queue {
         due: due.into_iter().map(|(_, o)| o).collect(),
@@ -200,12 +221,34 @@ mod tests {
         set
     }
 
+    /// A position map assigning each note an ascending order key by its place in `notes` — enough for
+    /// the introduction order the queue reads. `basic` notes each generate one card, so a note's
+    /// position is its card's introduction rank.
+    fn positions(notes: &[NoteId]) -> HashMap<NoteId, String> {
+        notes
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| (n, format!("{i:04}")))
+            .collect()
+    }
+
+    /// The default new-card rate, high enough not to bind in the tests that are not about the cap.
+    const RATE: usize = 100;
+
     #[test]
     fn a_brand_new_deck_is_all_new_and_nothing_due() {
         // Cards exist, none reviewed: every card is a new-card introduction (issue #94's new-deck
         // state), and the queue offers them as new, not due.
-        let cards = current(&[note(1), note(2)]);
-        let queue = compose(&cards, &Replayed::default(), 0);
+        let notes = [note(1), note(2)];
+        let cards = current(&notes);
+        let queue = compose(
+            &cards,
+            &positions(&notes),
+            &Replayed::default(),
+            0,
+            RATE,
+            &HashSet::new(),
+        );
         assert_eq!(queue.due.len(), 0);
         assert_eq!(queue.new.len(), 2);
         assert_eq!(
@@ -216,16 +259,104 @@ mod tests {
 
     #[test]
     fn an_empty_collection_is_the_empty_state() {
-        let queue = compose(&HashSet::new(), &Replayed::default(), 0);
+        let queue = compose(
+            &HashSet::new(),
+            &HashMap::new(),
+            &Replayed::default(),
+            0,
+            RATE,
+            &HashSet::new(),
+        );
         assert_eq!(ReviewState::of(&queue, 0), ReviewState::Empty);
     }
 
     #[test]
     fn a_sitting_is_capped_by_the_chosen_count_and_by_what_exists() {
-        let cards = current(&[note(1), note(2), note(3)]);
-        let queue = compose(&cards, &Replayed::default(), 0);
+        let notes = [note(1), note(2), note(3)];
+        let cards = current(&notes);
+        let queue = compose(
+            &cards,
+            &positions(&notes),
+            &Replayed::default(),
+            0,
+            RATE,
+            &HashSet::new(),
+        );
         assert_eq!(queue.sitting(2).len(), 2, "capped by the chosen count");
         assert_eq!(queue.sitting(10).len(), 3, "capped by what actually exists");
+    }
+
+    #[test]
+    fn the_new_card_rate_caps_introductions_and_holds_position_order() {
+        // ADR-0011 §2, §7, §8: the rate is the only enforced limit, and candidates come in position
+        // order. Four fresh notes authored 0..3, a rate of two: only the first two are introduced.
+        let notes = [note(1), note(2), note(3), note(4)];
+        let cards = current(&notes);
+        let queue = compose(
+            &cards,
+            &positions(&notes),
+            &Replayed::default(),
+            0,
+            2,
+            &HashSet::new(),
+        );
+        assert_eq!(queue.new.len(), 2, "the rate caps introductions");
+        assert_eq!(
+            queue.new.iter().map(|o| o.card).collect::<Vec<_>>(),
+            vec![CardRef::new(note(1), 0), CardRef::new(note(2), 0)],
+            "in authored position order"
+        );
+    }
+
+    #[test]
+    fn a_failed_card_stays_in_the_queue_for_a_same_session_re_show() {
+        // ADR-0011 §9: the session queue is due cards minus *passes*, so a card failed today is still
+        // offered — the same-session lapse re-show. A passed card the same day is gone.
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let failed = note(1);
+        let passed = note(2);
+        let cards = current(&[failed, passed]);
+        const TODAY: i64 = 20_514;
+        let today_ms = TODAY * 86_400_000 + 4 * 3_600_000;
+
+        coll.append_review(
+            CardRef::new(failed, 0),
+            Grade::Forgot,
+            today_ms,
+            DayScale::default(),
+            1000,
+        )
+        .unwrap();
+        coll.append_review(
+            CardRef::new(passed, 0),
+            Grade::Good,
+            today_ms,
+            DayScale::default(),
+            1000,
+        )
+        .unwrap();
+
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+        let queue = compose(
+            &cards,
+            &HashMap::new(),
+            &replayed,
+            TODAY,
+            RATE,
+            &HashSet::new(),
+        );
+
+        assert_eq!(
+            queue.due.iter().map(|o| o.card).collect::<Vec<_>>(),
+            vec![CardRef::new(failed, 0)],
+            "the failed card stays due; the passed one leaves"
+        );
+        // Both were introduced today, so neither is offered as new (ADR-0011 §8).
+        assert!(queue.new.is_empty());
     }
 
     #[test]
@@ -251,7 +382,14 @@ mod tests {
         let replayed = replay(&cards, &refs);
 
         // Reviewed today, scheduled ahead: neither due nor new — the session no longer offers it.
-        let queue = compose(&cards, &replayed, TODAY);
+        let queue = compose(
+            &cards,
+            &HashMap::new(),
+            &replayed,
+            TODAY,
+            RATE,
+            &HashSet::new(),
+        );
         assert_eq!(
             queue.available(),
             0,
@@ -278,7 +416,14 @@ mod tests {
         let replayed = replay(&cards, &refs);
 
         // Far enough in the future, the scheduled day has passed and it is due once more.
-        let queue = compose(&cards, &replayed, TODAY + 3650);
+        let queue = compose(
+            &cards,
+            &HashMap::new(),
+            &replayed,
+            TODAY + 3650,
+            RATE,
+            &HashSet::new(),
+        );
         assert_eq!(queue.due.len(), 1);
         assert!(!queue.due[0].is_new);
         assert!(queue.due[0].box_ >= 1);
@@ -326,12 +471,21 @@ mod tests {
                     },
                     box_: 2,
                     review_count: 1,
+                    first_day: 0,
+                    last_grade: Grade::Good,
                     last_day: 0,
                     due_day: 1,
                 },
             );
         }
-        let queue = compose(&cards, &replayed, 100);
+        let queue = compose(
+            &cards,
+            &HashMap::new(),
+            &replayed,
+            100,
+            RATE,
+            &HashSet::new(),
+        );
         match ReviewState::of(&queue, cards.len()) {
             ReviewState::Due { backlog, due, .. } => {
                 assert!(

@@ -9,7 +9,7 @@
 //! be switched *into* an acquired kind (ADR-0017 §6), so the only kinds that reach a review are the
 //! shipped ones, which in this build is `basic` alone.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use leitner_core::content::{CardRef, KindDefinition, NoteId, SHIPPED_KINDS};
 use leitner_store::{Collection, StoreError};
@@ -57,6 +57,20 @@ pub fn current_cards(coll: &Collection) -> Result<HashSet<CardRef>, StoreError> 
         }
     }
     Ok(set)
+}
+
+/// Each note's authored `position` key, for the introduction order the review queue reads (ADR-0011
+/// §7). A note that predates the field has no value and is simply absent — the queue reads that as
+/// the empty string, which sorts first, exactly the defined state ADR-0011 §7 gives it. This is the
+/// authored-order half of the queue; which cards a note generates is [`current_cards`]'s job.
+pub fn note_positions(coll: &Collection) -> Result<HashMap<NoteId, String>, StoreError> {
+    let mut positions = HashMap::new();
+    for id in coll.entity_ids("note")? {
+        if let Some(position) = coll.mutable_get("note", &id, "position")? {
+            positions.insert(NoteId(id), position);
+        }
+    }
+    Ok(positions)
 }
 
 /// Render one card's prompt and answer from its note's stored fields, or `None` if the note has no

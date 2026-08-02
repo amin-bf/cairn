@@ -55,6 +55,20 @@ pub const TAG_ATTR_PREFIX: &str = "tag:";
 /// deliberately empty, ADR-0005 §5 / ADR-0011 §6).
 const DECK_ENTITY: &str = "deck";
 
+/// The mutable-surface entity holding this device's **personal settings** — the singleton row a
+/// global preference lives on. A distinct entity from `note` and `deck` on purpose: those are
+/// content and export, this **syncs between a user's own devices but never enters a `.ldeck`**
+/// (ADR-0011 §5), so an export that enumerates content by entity kind never emits it. There is one
+/// row, at a fixed all-zero id, per setting attribute.
+const SETTING_ENTITY: &str = "setting";
+
+/// The fixed entity id of the singleton settings row (there is exactly one). Content on this surface
+/// is otherwise keyed by a minted UUID; the settings row is global, so it takes a constant key.
+const SETTING_ID: [u8; 16] = [0u8; 16];
+
+/// The settings attribute holding the global new-card rate (ADR-0011 §3, §5).
+const NEW_CARD_RATE_ATTR: &str = "new_card_rate";
+
 /// Anything that can stop a collection opening or a write completing. Not recoverable in-process for
 /// the most part: without a database there is nowhere to put reviews.
 #[derive(Debug)]
@@ -501,6 +515,58 @@ impl Collection {
             self.mutable_set("note", &id.0, name, Some(value))?;
         }
         Ok(id)
+    }
+
+    /// Move a note to sit between two neighbours in authored order (ADR-0021 §4), writing **exactly
+    /// one** `position` value and never a renumber (ADR-0021 §3).
+    ///
+    /// `low` and `high` are the notes it lands between — `None` for an open end, so
+    /// `move_note_between(n, None, Some(first))` sends `n` to the front and
+    /// `move_note_between(n, Some(last), None)` to the end. Their `position` keys are read and one
+    /// key strictly between them is minted by [`leitner_core::content::order::between`]. Because it
+    /// touches only the moved note, **reordering inside a filtered list is well-defined**: hidden
+    /// notes that sat between the two neighbours keep their keys and stay between them (ADR-0021 §4).
+    /// A neighbour that carries no position yet reads as an open end, which the infill handles.
+    pub fn move_note_between(
+        &mut self,
+        note: NoteId,
+        low: Option<NoteId>,
+        high: Option<NoteId>,
+    ) -> Result<(), StoreError> {
+        let position_of = |id: Option<NoteId>| -> Result<Option<String>, StoreError> {
+            match id {
+                Some(n) => self.mutable_get("note", &n.0, "position"),
+                None => Ok(None),
+            }
+        };
+        let low_pos = position_of(low)?;
+        let high_pos = position_of(high)?;
+        let position =
+            leitner_core::content::order::between(low_pos.as_deref(), high_pos.as_deref());
+        self.mutable_set("note", &note.0, "position", Some(&position))
+    }
+
+    /// The global new-card rate (ADR-0011 §3): how many cards may be introduced per day. Reads the
+    /// settings singleton, defaulting to [`leitner_core::log::DEFAULT_NEW_CARD_RATE`] when unset and
+    /// clamping to the accepted range — the interpretation lives in `leitner-core` so the store keeps
+    /// no domain rule of its own.
+    pub fn new_card_rate(&self) -> Result<u32, StoreError> {
+        let stored = self.mutable_get(SETTING_ENTITY, &SETTING_ID, NEW_CARD_RATE_ATTR)?;
+        Ok(leitner_core::log::new_card_rate(stored.as_deref()))
+    }
+
+    /// Set the global new-card rate (ADR-0011 §3, §5), clamped to the accepted range and stored as a
+    /// plain decimal string on the settings singleton. Zero is legal — the backlog escape hatch. It
+    /// settles by stamp like any mutable value, so a rate change on a phone is not silently reverted
+    /// by an unrelated write on a laptop; it **never enters the log and never exports**.
+    pub fn set_new_card_rate(&mut self, rate: u32) -> Result<(), StoreError> {
+        let clamped = rate.min(leitner_core::log::MAX_NEW_CARD_RATE);
+        self.mutable_set(
+            SETTING_ENTITY,
+            &SETTING_ID,
+            NEW_CARD_RATE_ATTR,
+            Some(&clamped.to_string()),
+        )
     }
 
     /// The largest `position` value held by any note, or `None` when no note has one yet — the

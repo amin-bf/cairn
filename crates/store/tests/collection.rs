@@ -491,6 +491,94 @@ fn a_created_note_is_placed_after_the_current_last_in_authored_order() {
 }
 
 #[test]
+fn a_note_moves_between_two_neighbours_with_one_write_and_no_renumber() {
+    // ADR-0021 §3, §4: reordering writes exactly one `position` value and never renumbers. Create
+    // a, b, c (ascending). Move c between a and b; only c's key changes, and the new order is a,c,b.
+    let (mut coll, _d, _s) = open();
+    let a = coll.create_note("basic", &[("Front", "a")]).unwrap();
+    let b = coll.create_note("basic", &[("Front", "b")]).unwrap();
+    let c = coll.create_note("basic", &[("Front", "c")]).unwrap();
+
+    let pos = |coll: &Collection, id: &NoteId| {
+        coll.mutable_get("note", &id.0, "position")
+            .unwrap()
+            .unwrap()
+    };
+    let (pa_before, pb_before) = (pos(&coll, &a), pos(&coll, &b));
+
+    coll.move_note_between(c, Some(a), Some(b)).unwrap();
+
+    // c now sorts strictly between a and b — the new authored order is a, c, b.
+    let (pa, pb, pc) = (pos(&coll, &a), pos(&coll, &b), pos(&coll, &c));
+    assert!(pa < pc && pc < pb, "expected a < c < b, got {pa} {pc} {pb}");
+    // The neighbours were untouched — one write, no renumber (ADR-0021 §3).
+    assert_eq!(pa, pa_before, "a's key must not change");
+    assert_eq!(pb, pb_before, "b's key must not change");
+}
+
+#[test]
+fn a_note_moves_to_the_front_and_to_the_end_with_open_ends() {
+    // ADR-0021 §4: an open end sends a note to the front or the end of the collection's order.
+    let (mut coll, _d, _s) = open();
+    let a = coll.create_note("basic", &[("Front", "a")]).unwrap();
+    let b = coll.create_note("basic", &[("Front", "b")]).unwrap();
+    let pos = |coll: &Collection, id: &NoteId| {
+        coll.mutable_get("note", &id.0, "position")
+            .unwrap()
+            .unwrap()
+    };
+
+    coll.move_note_between(b, None, Some(a)).unwrap();
+    assert!(pos(&coll, &b) < pos(&coll, &a), "b moved before a");
+
+    coll.move_note_between(b, Some(a), None).unwrap();
+    assert!(pos(&coll, &b) > pos(&coll, &a), "b moved back after a");
+}
+
+#[test]
+fn the_new_card_rate_defaults_to_five_and_round_trips_including_zero() {
+    // ADR-0011 §3, §4, §5: a single global integer on the mutable surface, default five, zero legal,
+    // clamped to the range, and it settles by stamp like any mutable value.
+    let (mut coll, _d, _s) = open();
+    assert_eq!(
+        coll.new_card_rate().unwrap(),
+        5,
+        "the default is five a day"
+    );
+
+    coll.set_new_card_rate(20).unwrap();
+    assert_eq!(coll.new_card_rate().unwrap(), 20);
+
+    coll.set_new_card_rate(0).unwrap();
+    assert_eq!(
+        coll.new_card_rate().unwrap(),
+        0,
+        "zero is the backlog answer"
+    );
+
+    coll.set_new_card_rate(1_000_000).unwrap();
+    assert_eq!(
+        coll.new_card_rate().unwrap(),
+        9_999,
+        "clamped to the ceiling"
+    );
+}
+
+#[test]
+fn the_new_card_rate_never_enters_the_log() {
+    // ADR-0011 §5: the rate rides the mutable surface, never a log row. Setting it writes nothing to
+    // the append-only half.
+    let (mut coll, _d, _s) = open();
+    let before = coll.log_lines().unwrap().len();
+    coll.set_new_card_rate(42).unwrap();
+    assert_eq!(
+        coll.log_lines().unwrap().len(),
+        before,
+        "the rate is not a log row"
+    );
+}
+
+#[test]
 fn mutable_entity_reads_a_notes_own_field_values_in_one_pass() {
     // ADR-0021 §2: the note list's substring search scans a note's own field values, and does so
     // without knowing its kind — one read of the whole entity. Cleared (NULL) attributes are absent,

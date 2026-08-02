@@ -55,6 +55,22 @@ attribute on the *note*, holding the deck's canonical id, so moving a note betwe
 value changing (ADR-0005 §8); an id naming no held deck is **unfiled**, and a note derives deleted
 from its **own** flag or its **deck's** (ADR-0005 §7).
 
+**New-card rate**:
+The single global integer bounding introductions (ADR-0011 §3), stored on the mutable surface under a
+distinct `entity = "setting"` singleton (one row, a fixed all-zero id, attr `new_card_rate`).
+`new_card_rate`/`set_new_card_rate` read and write it; the default (five), the range and the parse
+live in `leitner-core::log`, so the store holds no domain rule of its own. A **personal setting**, not
+content: it **syncs between a user's own devices but never exports** — the separate entity keeps it out
+of any export that enumerates content by kind — and it **never enters the log** (ADR-0011 §5). Zero is
+legal, the backlog escape hatch. The per-deck slot ADR-0005 §5 reserved stays empty (ADR-0011 §6).
+
+**Reorder**:
+Moving a note in authored order is `move_note_between`, which writes **exactly one** `position` value
+between two neighbours (`leitner_core::content::order::between`) and **never renumbers** (ADR-0021 §3,
+§4). Touching only the moved note is what makes reordering inside a *filtered* list well-defined:
+hidden notes keep their keys and stay between the neighbours they were between. `create_note` places a
+new note after `MAX(position)`; the two are the only writers of a note's place, and both are one write.
+
 **Tag row**:
 One tag on a note, stored as its **own** mutable attribute — `tag:<name>` set to `"true"`, cleared
 to NULL to remove (see [`TAG_ATTR_PREFIX`]). One attribute per tag is what makes tags settle by

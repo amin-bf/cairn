@@ -36,6 +36,15 @@ pub struct CardState {
     pub box_: u8,
     /// How many reviews were projected onto it.
     pub review_count: u32,
+    /// The frozen day number of the card's **earliest** projected review — the day it was
+    /// *introduced* (ADR-0011 §5, replay `CONTEXT.md`). A card is "introduced today" when this equals
+    /// the device-local day, which is how [`notes_introduced_today`] reads it. Never a lapse re-show:
+    /// a re-show is not an earliest row, so it never moves this value.
+    pub first_day: i64,
+    /// The most recent projected grade. What lets the session queue keep a **lapsed** card and drop a
+    /// **passed** one (ADR-0011 §9): a failed card genuinely is still due and returns within the same
+    /// session, where the plain scheduled `due_day` would floor it a day out and lose the re-show.
+    pub last_grade: Grade,
     /// The frozen day number of its most recent projected review.
     pub last_day: i64,
     /// The next scheduled day: the last review's day plus the fuzzed interval. This is a scheduled
@@ -53,6 +62,8 @@ pub struct Replayed {
 /// A card's running accumulator during the fold.
 struct Accumulator {
     state: MemoryState,
+    first_day: i64,
+    last_grade: Grade,
     last_day: i64,
     count: u32,
 }
@@ -140,12 +151,15 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                 match acc.get_mut(&rev.card) {
                     None => {
                         // First projected review of this card: state initialised from the grade,
-                        // day gap ignored.
+                        // day gap ignored. This row's day is the introduction day (ADR-0011 §5) —
+                        // rows arrive in day order, so the first seen is the earliest.
                         let state = scheduler.advance(None, grade, 0);
                         acc.insert(
                             rev.card,
                             Accumulator {
                                 state,
+                                first_day: rev.day,
+                                last_grade: grade,
                                 last_day: rev.day,
                                 count: 1,
                             },
@@ -154,6 +168,7 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                     Some(existing) => {
                         let delta_t = crate::scheduling::day_gap(existing.last_day, rev.day);
                         existing.state = scheduler.advance(Some(existing.state), grade, delta_t);
+                        existing.last_grade = grade;
                         existing.last_day = rev.day;
                         existing.count += 1;
                     }
@@ -174,6 +189,8 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                 memory: a.state,
                 box_: box_of(Some(a.state)),
                 review_count: a.count,
+                first_day: a.first_day,
+                last_grade: a.last_grade,
                 last_day: a.last_day,
                 due_day: a.last_day + i64::from(interval),
             },
@@ -181,6 +198,89 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
     }
 
     Replayed { cards }
+}
+
+/// A never-introduced card paired with the authored `position` of its note — the raw material for
+/// [`introduction_candidates`]. `position` is the order key `content` mints (ADR-0011 §7); an empty
+/// string sorts first, which is exactly the defined state of a note that predates the field
+/// (ADR-0011 §7's *"a note that predates the field reads it as empty"*).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewCard {
+    pub card: CardRef,
+    pub position: String,
+}
+
+/// The notes that already had a card introduced today (ADR-0011 §8), derived from the projection.
+///
+/// A card is *introduced* the day of its **earliest** projected review ([`CardState::first_day`]);
+/// "today" is the **device-local** day, the edge value replay itself refuses to read (replay
+/// `CONTEXT.md`) and the caller passes in. Derived, never stored (ADR-0011 §5): losing the cache
+/// loses nothing. A lapse re-show is not an earliest row, so it never enters this set.
+pub fn notes_introduced_today(replayed: &Replayed, today: i64) -> HashSet<crate::content::NoteId> {
+    let mut notes = HashSet::new();
+    for (card, state) in &replayed.cards {
+        if state.first_day == today {
+            notes.insert(card.note);
+        }
+    }
+    notes
+}
+
+/// Choose the new cards to introduce, in `(position, ordinal)` order up to `rate`, **at most one card
+/// per note**, skipping suspended cards and notes that already had a card introduced today (ADR-0011
+/// §7, §8).
+///
+/// This is **queue composition, never a due-date adjustment** (replay `CONTEXT.md`): it decides only
+/// what is *offered* and touches nothing the log records or any interval computes, which is why it is
+/// permitted where ADR-0001 §7's sibling avoidance was not. `new_cards` are the currently-generated
+/// cards that carry **no** projected review — the caller finds them by difference against
+/// [`Replayed::cards`]; `introduced_today` is [`notes_introduced_today`]; `suspended` is the mutable
+/// surface's per-`CardRef` flag (ADR-0010 §8), empty until #87 wires it.
+///
+/// Order is `(position, note id, ordinal)`: authored `position` first, ties broken by note id exactly
+/// as ADR-0011 §7 fixed, and a note's own cards fall in slot order after that — though at most one of
+/// them is ever taken. A suspended card is skipped **without** consuming its note's one-per-day slot,
+/// so a note keeps its introduction when only a sibling is suspended.
+///
+/// The `rate` is the **daily** total, so cards already introduced today spend it: the remaining
+/// budget is `rate` minus the count in `introduced_today` (which, by the one-per-note rule, is exactly
+/// the number of cards introduced today). A device that has already met its cap earlier today offers
+/// nothing more, and one part-way through offers only the rest — never the full rate a second time.
+pub fn introduction_candidates(
+    new_cards: &[NewCard],
+    introduced_today: &HashSet<crate::content::NoteId>,
+    suspended: &HashSet<CardRef>,
+    rate: usize,
+) -> Vec<CardRef> {
+    // Today's introductions already spent part of the daily rate (ADR-0011 §5, §8). One card per note
+    // per day means the introduced-note count *is* the introduced-card count, so it is the amount
+    // spent; what remains is the whole budget for the rest of today.
+    let remaining = rate.saturating_sub(introduced_today.len());
+
+    let mut ordered: Vec<&NewCard> = new_cards.iter().collect();
+    ordered.sort_by(|a, b| {
+        a.position
+            .cmp(&b.position)
+            .then_with(|| a.card.note.0.cmp(&b.card.note.0))
+            .then_with(|| a.card.ordinal.cmp(&b.card.ordinal))
+    });
+
+    // The one-per-note guard is seeded with the notes already introduced today, so the same rule
+    // covers both "this note's sibling is in this batch" and "this note had a card introduced earlier
+    // today" without a second test.
+    let mut used = introduced_today.clone();
+    let mut chosen = Vec::new();
+    for entry in ordered {
+        if chosen.len() >= remaining {
+            break;
+        }
+        if suspended.contains(&entry.card) || used.contains(&entry.card.note) {
+            continue;
+        }
+        used.insert(entry.card.note);
+        chosen.push(entry.card);
+    }
+    chosen
 }
 
 #[cfg(test)]
@@ -473,6 +573,158 @@ mod tests {
     fn an_empty_log_projects_nothing() {
         let cards = current_cards(&[note(1)]);
         assert_eq!(replay(&cards, &[]).cards.len(), 0);
+    }
+
+    /// A `NewCard` for slot `ord` of `n` at authored `position`.
+    fn new_card(n: NoteId, ord: u16, position: &str) -> NewCard {
+        NewCard {
+            card: CardRef::new(n, ord),
+            position: position.to_owned(),
+        }
+    }
+
+    #[test]
+    fn introductions_are_taken_in_position_order_up_to_the_rate() {
+        // ADR-0011 §8: candidates are taken in (position, ordinal) order up to the rate. Three notes
+        // authored c, a, b — a rate of two takes the first two in *position* order, not input order.
+        let (a, b, c) = (note(1), note(2), note(3));
+        let new = [
+            new_card(c, 0, "c"),
+            new_card(a, 0, "a"),
+            new_card(b, 0, "b"),
+        ];
+        let chosen = introduction_candidates(&new, &HashSet::new(), &HashSet::new(), 2);
+        assert_eq!(
+            chosen,
+            vec![CardRef::new(a, 0), CardRef::new(b, 0)],
+            "position order, capped at the rate"
+        );
+    }
+
+    #[test]
+    fn at_most_one_card_per_note_is_introduced() {
+        // ADR-0011 §8: a note's two siblings are never both offered the same day — the second
+        // measures ninety-second recall, not the separate skill it exists to schedule. One note with
+        // two cards, a generous rate: exactly one card comes back.
+        let n = note(1);
+        let new = [new_card(n, 0, "a"), new_card(n, 1, "a")];
+        let chosen = introduction_candidates(&new, &HashSet::new(), &HashSet::new(), 5);
+        assert_eq!(
+            chosen,
+            vec![CardRef::new(n, 0)],
+            "the lower slot, and only it"
+        );
+    }
+
+    #[test]
+    fn a_note_already_introduced_today_is_skipped() {
+        // ADR-0011 §8: a note that already had a card introduced today is skipped — this is how a
+        // reverse sibling waits until tomorrow. `a` was introduced today; only `b` is offered.
+        let (a, b) = (note(1), note(2));
+        let new = [new_card(a, 0, "a"), new_card(b, 0, "b")];
+        let introduced = HashSet::from([a]);
+        let chosen = introduction_candidates(&new, &introduced, &HashSet::new(), 5);
+        assert_eq!(chosen, vec![CardRef::new(b, 0)]);
+    }
+
+    #[test]
+    fn a_suspended_card_is_skipped_and_does_not_consume_its_notes_slot() {
+        // ADR-0011 §8, ADR-0010 §8: a suspended card is skipped and never counted; a note keeps its
+        // one introduction when only a sibling is suspended.
+        let n = note(1);
+        let new = [new_card(n, 0, "a"), new_card(n, 1, "a")];
+        let suspended = HashSet::from([CardRef::new(n, 0)]);
+        let chosen = introduction_candidates(&new, &HashSet::new(), &suspended, 5);
+        assert_eq!(
+            chosen,
+            vec![CardRef::new(n, 1)],
+            "the un-suspended sibling is still introduced"
+        );
+    }
+
+    #[test]
+    fn cards_already_introduced_today_spend_the_daily_rate() {
+        // ADR-0011 §5, §8: the rate is a daily total. With a rate of two and one note already
+        // introduced today, only one more card may be introduced — never a second full rate.
+        let already = note(1);
+        let (b, c) = (note(2), note(3));
+        let new = [new_card(b, 0, "b"), new_card(c, 0, "c")];
+        let introduced = HashSet::from([already]);
+        let chosen = introduction_candidates(&new, &introduced, &HashSet::new(), 2);
+        assert_eq!(
+            chosen,
+            vec![CardRef::new(b, 0)],
+            "one of the daily budget of two was already spent"
+        );
+    }
+
+    #[test]
+    fn a_rate_already_met_today_introduces_nothing_more() {
+        // ADR-0011 §5: a device that has met its cap earlier today offers no further new cards.
+        let new = [new_card(note(5), 0, "e")];
+        let introduced = HashSet::from([note(1), note(2)]);
+        assert!(
+            introduction_candidates(&new, &introduced, &HashSet::new(), 2).is_empty(),
+            "the daily rate of two is already spent"
+        );
+    }
+
+    #[test]
+    fn a_rate_of_zero_introduces_nothing() {
+        // ADR-0011 §3: zero is legal and is the backlog escape hatch — no card is introduced.
+        let new = [new_card(note(1), 0, "a"), new_card(note(2), 0, "b")];
+        assert!(introduction_candidates(&new, &HashSet::new(), &HashSet::new(), 0).is_empty());
+    }
+
+    #[test]
+    fn equal_positions_break_the_tie_by_note_id() {
+        // ADR-0011 §7: "need not be unique — ties broken by note id", deterministic on every device.
+        // Two notes share a position; the lower note id wins the earlier slot.
+        let (low, high) = (note(1), note(9));
+        let new = [new_card(high, 0, "m"), new_card(low, 0, "m")];
+        let chosen = introduction_candidates(&new, &HashSet::new(), &HashSet::new(), 1);
+        assert_eq!(chosen, vec![CardRef::new(low, 0)]);
+    }
+
+    #[test]
+    fn introduced_today_is_the_earliest_review_day_against_the_local_day() {
+        // ADR-0011 §5, §8: a note is "introduced today" when its card's *earliest* projected review
+        // falls on the device-local day — not its latest. A card first seen on day 5 and re-shown on
+        // day 5, then reviewed again on day 9, is introduced on day 5, never day 9.
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let lines = [
+            rev("w", 1, n, 0, 1, 5),
+            rev("w", 2, n, 0, 3, 5),
+            rev("w", 3, n, 0, 3, 9),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+
+        assert_eq!(replayed.cards[&CardRef::new(n, 0)].first_day, 5);
+        assert_eq!(notes_introduced_today(&replayed, 5), HashSet::from([n]));
+        assert!(
+            notes_introduced_today(&replayed, 9).is_empty(),
+            "the introduction day is the earliest review, not the latest"
+        );
+    }
+
+    #[test]
+    fn last_grade_tracks_the_most_recent_projected_review() {
+        // ADR-0011 §9: the session queue keeps a lapsed card and drops a passed one, which needs the
+        // latest grade. A card passed then failed reads its latest as the failure.
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let passed_then_failed = [rev("w", 1, n, 0, 3, 0), rev("w", 2, n, 0, 1, 0)];
+        let refs: Vec<&str> = passed_then_failed.iter().map(String::as_str).collect();
+        let state = replay(&cards, &refs)
+            .cards
+            .remove(&CardRef::new(n, 0))
+            .unwrap();
+        assert!(
+            state.last_grade.is_failure(),
+            "the latest projected grade is the failure"
+        );
     }
 
     #[test]
