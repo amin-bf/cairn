@@ -8,7 +8,7 @@
 //! the `mimetype` member **first and `stored`** so a file's type sits at a fixed byte offset and can
 //! be read without inflating anything (ADR-0008 §10, the EPUB OCF convention).
 
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use zip::write::{SimpleFileOptions, ZipWriter};
 use zip::{CompressionMethod, DateTime};
 
@@ -102,6 +102,39 @@ pub fn build(members: &[Member]) -> Vec<u8> {
         .finish()
         .expect("in-memory zip finish cannot fail")
         .into_inner()
+}
+
+/// Read one member whole, as text — the small `manifest.json`, or a payload once the gate has
+/// cleared it (ADR-0022 §2). `Err(())` for a missing member or non-UTF-8 bytes; the caller names the
+/// refusal it becomes, so the unit error carries no context of its own.
+pub fn read_member(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String, ()> {
+    let mut member = archive.by_name(name).map_err(|_| ())?;
+    let mut text = String::new();
+    member.read_to_string(&mut text).map_err(|_| ())?;
+    Ok(text)
+}
+
+/// The traversal-safety half of member validation, one rule every profile's reader shares (ADR-0008
+/// §6, the container's classic traversal defect): reject a symlink entry, an absolute path, a `..`
+/// segment, a backslash or colon, or a directory entry. The caller adds its own allow-list of member
+/// names — the safety check lives here so a fix reaches every reader at once, exactly as the identity
+/// gate does in `leitner-core`.
+pub fn member_path_is_safe(entry: &zip::read::ZipFile<'_, Cursor<&[u8]>>) -> bool {
+    let name = entry.name();
+    // A symlink entry is rejected outright — its target is a path we never follow.
+    if let Some(mode) = entry.unix_mode()
+        && mode & 0o170000 == 0o120000
+    {
+        return false;
+    }
+    if name.starts_with('/') || name.contains('\\') || name.contains(':') {
+        return false;
+    }
+    if name.split('/').any(|seg| seg == "..") {
+        return false;
+    }
+    // A directory entry is never one of our members; our container writes none.
+    !entry.is_dir()
 }
 
 #[cfg(test)]

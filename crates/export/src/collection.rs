@@ -37,7 +37,7 @@ use crate::files::COLLECTION_EXTENSION;
 use crate::import::{Profile, plain, sniff};
 use leitner_core::identity::{Adoption, CollectionId, adopt_or_refuse};
 use leitner_core::log::Json;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 /// The longest a date string read from an archive is shown — the one manifest field that is free
 /// text rather than a number or an id, so it is bounded plain text like every other string a file
@@ -217,8 +217,8 @@ pub fn restore_preview(
         }
     }
 
-    let manifest_text =
-        read_member(&mut archive, MANIFEST_MEMBER).map_err(|_| RestoreRefusal::Unreadable)?;
+    let manifest_text = container::read_member(&mut archive, MANIFEST_MEMBER)
+        .map_err(|_| RestoreRefusal::Unreadable)?;
     let manifest = Json::parse(&manifest_text).ok_or(RestoreRefusal::Unreadable)?;
 
     let format = manifest
@@ -264,35 +264,16 @@ pub fn restore_preview(
     })
 }
 
-/// Whether a member is one the restore reader accepts: not an absolute path, no `..` segment, no
-/// symlink, and either a known `collection` member name or the `media/` prefix (ADR-0008 §6).
+/// Whether a member is one the restore reader accepts: traversal-safe (the shared
+/// [`container::member_path_is_safe`]) and either a known `collection` member name or the `media/`
+/// prefix (ADR-0008 §6).
 fn member_is_allowed(entry: &zip::read::ZipFile<'_, Cursor<&[u8]>>) -> bool {
     let name = entry.name();
-    if let Some(mode) = entry.unix_mode()
-        && mode & 0o170000 == 0o120000
-    {
-        return false;
-    }
-    if name.starts_with('/') || name.contains('\\') || name.contains(':') {
-        return false;
-    }
-    if name.split('/').any(|seg| seg == "..") {
-        return false;
-    }
-    if entry.is_dir() {
-        return false;
-    }
-    matches!(
-        name,
-        "mimetype" | MANIFEST_MEMBER | LOG_MEMBER | MUTABLE_MEMBER
-    ) || (name.starts_with("media/") && name.len() > "media/".len())
-}
-
-fn read_member(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String, ()> {
-    let mut member = archive.by_name(name).map_err(|_| ())?;
-    let mut text = String::new();
-    member.read_to_string(&mut text).map_err(|_| ())?;
-    Ok(text)
+    container::member_path_is_safe(entry)
+        && (matches!(
+            name,
+            "mimetype" | MANIFEST_MEMBER | LOG_MEMBER | MUTABLE_MEMBER
+        ) || (name.starts_with("media/") && name.len() > "media/".len()))
 }
 
 #[cfg(test)]
@@ -346,11 +327,11 @@ mod tests {
         let bytes = build_collection(&sample(&id, &log, &mutable));
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
         assert_eq!(
-            read_member(&mut archive, LOG_MEMBER).unwrap(),
+            container::read_member(&mut archive, LOG_MEMBER).unwrap(),
             jsonl_str(&log)
         );
         assert_eq!(
-            read_member(&mut archive, MUTABLE_MEMBER).unwrap(),
+            container::read_member(&mut archive, MUTABLE_MEMBER).unwrap(),
             jsonl_str(&mutable)
         );
     }
@@ -366,7 +347,7 @@ mod tests {
         let id = cid(0xab);
         let bytes = build_collection(&sample(&id, &[], &[]));
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
-        let text = read_member(&mut archive, MANIFEST_MEMBER).unwrap();
+        let text = container::read_member(&mut archive, MANIFEST_MEMBER).unwrap();
         let m = Json::parse(&text).unwrap();
         assert_eq!(m.get("profile").and_then(Json::as_str), Some("collection"));
         assert_eq!(

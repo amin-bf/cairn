@@ -17,12 +17,13 @@
 //! so the member is the sole authority.
 
 use crate::container::{
-    COLLECTION_MEDIA_TYPE, DECK_MEDIA_TYPE, FORMAT, KINDS_PREFIX, MANIFEST_MEMBER, NOTES_MEMBER,
+    self, COLLECTION_MEDIA_TYPE, DECK_MEDIA_TYPE, FORMAT, KINDS_PREFIX, MANIFEST_MEMBER,
+    NOTES_MEMBER,
 };
 use leitner_core::content::{DeckId, NoteId, SHIPPED_KINDS};
 use leitner_core::log::Json;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 /// The longest a stranger's string is shown. Every string arriving in a file renders as **bounded
 /// plain text, never Markdown** (ADR-0022 §7), because the preview is the one surface that shows a
@@ -289,7 +290,7 @@ pub fn preview(bytes: &[u8], collection: &Collection) -> Result<Plan, Refusal> {
     // The manifest gates. Inflating this one small member is not "inflating a payload" — it is the
     // central directory's companion, sized in bytes (ADR-0022 §2).
     let manifest_text =
-        read_member(&mut archive, MANIFEST_MEMBER).map_err(|_| Refusal::Unreadable)?;
+        container::read_member(&mut archive, MANIFEST_MEMBER).map_err(|_| Refusal::Unreadable)?;
     let manifest = Json::parse(&manifest_text).ok_or(Refusal::Unreadable)?;
 
     let format = manifest
@@ -320,45 +321,24 @@ pub fn preview(bytes: &[u8], collection: &Collection) -> Result<Plan, Refusal> {
     }
 
     // Describe: only now is the payload inflated.
-    let notes_text = read_member(&mut archive, NOTES_MEMBER).map_err(|_| Refusal::Unreadable)?;
+    let notes_text =
+        container::read_member(&mut archive, NOTES_MEMBER).map_err(|_| Refusal::Unreadable)?;
     let (notes, tombstones) = parse_notes(&notes_text);
 
     Ok(describe(&decks, &notes, &tombstones, &manifest, collection))
 }
 
-/// Whether a member is one the importer accepts: not an absolute path, no `..` segment, no symlink,
-/// and either a known member name or the `media/` prefix (ADR-0008 §6, the container's classic
-/// traversal defect).
+/// Whether a member is one the importer accepts: traversal-safe (the shared
+/// [`container::member_path_is_safe`]) and either a known member name or the `media/` prefix
+/// (ADR-0008 §6).
 fn member_is_allowed(entry: &zip::read::ZipFile<'_, Cursor<&[u8]>>) -> bool {
     let name = entry.name();
-    // A symlink entry is rejected outright — its target is a path we never follow.
-    if let Some(mode) = entry.unix_mode()
-        && mode & 0o170000 == 0o120000
-    {
-        return false;
-    }
-    if name.starts_with('/') || name.contains('\\') || name.contains(':') {
-        return false;
-    }
-    if name.split('/').any(|seg| seg == "..") {
-        return false;
-    }
-    // A directory entry is never one of our members; our container writes none.
-    if entry.is_dir() {
-        return false;
-    }
-    matches!(name, "mimetype" | MANIFEST_MEMBER | NOTES_MEMBER)
-        || (name.starts_with(KINDS_PREFIX)
-            && name.ends_with(".json")
-            && name.len() > KINDS_PREFIX.len() + ".json".len())
-        || (name.starts_with("media/") && name.len() > "media/".len())
-}
-
-fn read_member(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String, ()> {
-    let mut member = archive.by_name(name).map_err(|_| ())?;
-    let mut text = String::new();
-    member.read_to_string(&mut text).map_err(|_| ())?;
-    Ok(text)
+    container::member_path_is_safe(entry)
+        && (matches!(name, "mimetype" | MANIFEST_MEMBER | NOTES_MEMBER)
+            || (name.starts_with(KINDS_PREFIX)
+                && name.ends_with(".json")
+                && name.len() > KINDS_PREFIX.len() + ".json".len())
+            || (name.starts_with("media/") && name.len() > "media/".len()))
 }
 
 /// The decks the manifest declares, in the order it lists them. `None` if the structure is wrong —
@@ -572,8 +552,9 @@ fn emptied_decks(collection: &Collection, relocated: &HashMap<NoteId, DeckId>) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::container::{self, Member};
+    use crate::container::Member;
     use crate::deck::{DeckContent, DeckExport, DeckRevision, NoteContent, Tombstone};
+    use std::io::Read;
 
     fn nid(b: u8) -> NoteId {
         NoteId([b; 16])
