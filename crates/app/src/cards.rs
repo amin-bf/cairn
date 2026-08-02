@@ -153,8 +153,7 @@ impl CardPane {
 /// dormant card, which replay would normally drop (ADR-0002 §7), is projected here purely to count
 /// its kept history, and the live cards' boxes come from the same pass.
 pub fn card_pane(coll: &Collection, note: NoteId) -> Result<CardPane, StoreError> {
-    let live_slots = live_slots(coll, note)?;
-    let live_set: HashSet<u16> = live_slots.iter().copied().collect();
+    let live_set: HashSet<u16> = live_slots(coll, note)?.into_iter().collect();
 
     let lines = coll.log_lines()?;
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();

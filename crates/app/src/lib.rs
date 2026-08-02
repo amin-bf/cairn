@@ -565,7 +565,7 @@ fn notes_screen(
     // set on notes but has no dedicated control yet).
     ui.add_space(8.0);
     field_label(ui, "Search");
-    text_field(ui, search, false);
+    text_field(ui, search);
     let filter = Filter {
         deck: deck_filter.map(|d| d.to_canonical()),
         text: (!search.trim().is_empty()).then(|| search.trim().to_owned()),
@@ -630,7 +630,7 @@ fn deck_controls(
 
     ui.horizontal(|ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
-        text_field(ui, new_deck, false);
+        text_field(ui, new_deck);
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
         if created
             && !new_deck.trim().is_empty()
@@ -682,7 +682,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
 
     ui.horizontal(|ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
-        text_field(ui, &mut ed.new_deck, false);
+        text_field(ui, &mut ed.new_deck);
         if created
             && !ed.new_deck.trim().is_empty()
             && let Ok(id) = coll.create_deck(ed.new_deck.trim())
@@ -838,7 +838,7 @@ fn editor_form_body(
         let resp = if cloze_text {
             cloze_text_field(ui, &mut ed.fields[idx].1, pane)
         } else {
-            text_field(ui, &mut ed.fields[idx].1, false)
+            text_field(ui, &mut ed.fields[idx].1)
         };
         // Enter keeps focus in a single-line field: egui treats it as submit-and-blur, so re-grab
         // focus and let nothing else happen (ADR-0012 §7).
@@ -975,16 +975,7 @@ fn multiline_field_output(
     buffer: &mut String,
 ) -> egui::text_edit::TextEditOutput {
     let rtl = bidi::is_rtl(buffer);
-    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
-        let mut job = bidi::job(
-            text.as_str(),
-            egui::TextStyle::Body.resolve(ui.style()),
-            ui.visuals().text_color(),
-        );
-        job.halign = egui::Align::LEFT;
-        job.wrap.max_width = wrap_width;
-        ui.fonts_mut(|f| f.layout_job(job))
-    };
+    let mut layouter = bidi_layouter;
     egui::TextEdit::multiline(buffer)
         .desired_width(f32::INFINITY)
         .horizontal_align(if rtl {
@@ -1136,27 +1127,15 @@ fn field_label(ui: &mut egui::Ui, s: &str) {
 /// field clips its last character (see `bidi::job`) — and the field's own `horizontal_align` carries
 /// the direction, chosen per the buffer's first strong character (ADR-0012 §7's `dir="auto"`).
 ///
-/// `multiline` is the one `cloze` Text field; every other field is single-line, so Enter is a submit
-/// egui turns into a blur, which the caller re-grabs to keep Enter inert (ADR-0012 §7, ADR-0021 §8).
-fn text_field(ui: &mut egui::Ui, buffer: &mut String, multiline: bool) -> egui::Response {
+/// Single-line only: Enter is a submit egui turns into a blur, which the caller re-grabs to keep Enter
+/// inert (ADR-0012 §7, ADR-0021 §8). The one multiline field — `cloze`'s Text — goes through
+/// [`multiline_field_output`] instead, which shares [`bidi_layouter`] but exposes the cursor for
+/// *Blank it*.
+fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Response {
     let rtl = bidi::is_rtl(buffer);
-    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
-        let mut job = bidi::job(
-            text.as_str(),
-            egui::TextStyle::Body.resolve(ui.style()),
-            ui.visuals().text_color(),
-        );
-        job.halign = egui::Align::LEFT;
-        job.wrap.max_width = wrap_width;
-        ui.fonts_mut(|f| f.layout_job(job))
-    };
-    let field = if multiline {
-        egui::TextEdit::multiline(buffer)
-    } else {
-        egui::TextEdit::singleline(buffer)
-    };
+    let mut layouter = bidi_layouter;
     ui.add(
-        field
+        egui::TextEdit::singleline(buffer)
             .desired_width(f32::INFINITY)
             .horizontal_align(if rtl {
                 egui::Align::RIGHT
@@ -1165,6 +1144,24 @@ fn text_field(ui: &mut egui::Ui, buffer: &mut String, multiline: bool) -> egui::
             })
             .layouter(&mut layouter),
     )
+}
+
+/// The bidi text-edit layouter shared by every field (`text_field`, `multiline_field_output`): it
+/// runs the field's contents through the `bidi` helper, left-aligned within the edit, so untrusted
+/// mixed-script text lays out correctly wherever it is typed.
+fn bidi_layouter(
+    ui: &egui::Ui,
+    text: &dyn egui::TextBuffer,
+    wrap_width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = bidi::job(
+        text.as_str(),
+        egui::TextStyle::Body.resolve(ui.style()),
+        ui.visuals().text_color(),
+    );
+    job.halign = egui::Align::LEFT;
+    job.wrap.max_width = wrap_width;
+    ui.fonts_mut(|f| f.layout_job(job))
 }
 
 /// Android entry point. `NativeActivity` hosts the app directly: the APK is this `.so` plus a
