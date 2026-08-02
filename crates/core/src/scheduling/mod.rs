@@ -17,7 +17,12 @@
 //! * **`rand`, `serde`, `rayon`, `ndarray` arrive transitively and are not ours to reach for**
 //!   (ADR-0027 §3). Nothing in this module touches them.
 
-use fsrs::{DEFAULT_PARAMETERS, FSRS, FSRSItem, FSRSReview, MemoryState as FsrsMemoryState};
+use std::sync::{Arc, Mutex};
+
+use fsrs::{
+    CombinedProgressState, ComputeParametersInput, DEFAULT_PARAMETERS, FSRS, FSRSItem, FSRSReview,
+    MemoryState as FsrsMemoryState, compute_parameters,
+};
 
 use crate::content::CardRef;
 
@@ -226,6 +231,150 @@ impl Scheduler {
         let interval = self.next_interval_unfuzzed(state);
         apply_fuzz(interval, fuzz_seed(card, review_count))
     }
+}
+
+// --- The optimisation run (ADR-0014) -----------------------------------------------------------
+//
+// Fitting a fresh parameter vector to this collection's own review history. The compute cost is not
+// the constraint (4.3 s for a decade of the heaviest use, ADR-0014 context); the constraint is that
+// Android freezes a backgrounded app, so this is driven from a worker thread the frame loop polls,
+// with progress and cancellation taken from the scheduler crate's own facilities and **nothing
+// persisted until it completes** (client-stack rule 10, ADR-0014 §3). Those facilities are exposed
+// through [`OptimisationProgress`] rather than raw, so a run wraps them and callers above this crate
+// never touch the underlying scheduler types (ADR-0027 §3).
+
+/// The result of an [`optimise`] run: the fitted vector and the **fitted-over count**, the number of
+/// reviews it trained on. The count is frozen onto the `config-set` row at write time and never
+/// recomputed (ADR-0014 §6, scheduling `CONTEXT.md`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct OptimisationOutcome {
+    pub parameters: SchedulerParameters,
+    pub fitted_over: u64,
+}
+
+/// A handle onto an optimisation run's progress and its cancellation flag (ADR-0014 §3, §4). It
+/// wraps the scheduler crate's own `current()`/`total()` progress and `want_abort` — determinate
+/// progress and cooperative cancellation are already supported and cost one `bool` — so the layers
+/// above `leitner-core` read progress and request cancellation without ever seeing a scheduler type.
+///
+/// The two phases fall out of `total()` (ADR-0014 §4, and the corpus-build open item): it reads zero
+/// during the uncancellable corpus build and the pre-training set-up, then becomes positive once the
+/// determinate training loop starts. A caller renders an indeterminate lead-in while it is zero.
+#[derive(Clone, Default)]
+pub struct OptimisationProgress {
+    state: Arc<Mutex<CombinedProgressState>>,
+}
+
+impl OptimisationProgress {
+    pub fn new() -> Self {
+        OptimisationProgress {
+            state: CombinedProgressState::new_shared(),
+        }
+    }
+
+    /// Training steps completed so far. Zero throughout the uncancellable first phase.
+    pub fn current(&self) -> usize {
+        self.state.lock().expect("progress lock poisoned").current()
+    }
+
+    /// Total training steps, or zero before the determinate training loop begins (ADR-0014 §4).
+    pub fn total(&self) -> usize {
+        self.state.lock().expect("progress lock poisoned").total()
+    }
+
+    /// Whether the run has reported completion. A short run can finish without `total()` ever leaving
+    /// zero (fewer than a batch of items never enters the training loop), so this is the honest
+    /// "done" signal, distinct from `current() == total()`.
+    pub fn finished(&self) -> bool {
+        self.state
+            .lock()
+            .expect("progress lock poisoned")
+            .finished()
+    }
+
+    /// Request cancellation (ADR-0014 §4's Cancel). Cooperative: the run stops at the next check and
+    /// [`optimise`] then returns `None`, so nothing is written.
+    pub fn request_abort(&self) {
+        self.state
+            .lock()
+            .expect("progress lock poisoned")
+            .want_abort = true;
+    }
+
+    /// Whether cancellation has been requested.
+    pub fn is_aborted(&self) -> bool {
+        self.state
+            .lock()
+            .expect("progress lock poisoned")
+            .want_abort
+    }
+}
+
+/// Fit a parameter vector to a collection's review history (ADR-0014 §1). `histories` is one entry
+/// per card, each the card's reviews in chronological order — the raw material `replay` extracts
+/// from the log. `progress` carries the determinate training progress and the cancellation flag.
+///
+/// Returns `None` when the run was cancelled (or the optimiser rejected the corpus): there is then
+/// no vector, so the caller writes nothing and the recovery action is to run it again (ADR-0014 §3).
+/// An empty or history-less collection fits the published defaults, which equals what is current, so
+/// the write is skipped upstream (ADR-0014 §5) with no special case here.
+///
+/// The **fitted-over count is every review the run saw**, summed across cards and frozen into the
+/// outcome — not derived by counting rows later, which after a merge reports a fit that never
+/// happened (ADR-0014 §6).
+pub fn optimise(
+    histories: &[Vec<Review>],
+    progress: &OptimisationProgress,
+) -> Option<OptimisationOutcome> {
+    let fitted_over: u64 = histories.iter().map(|h| h.len() as u64).sum();
+    let train_set = training_items(histories);
+    let weights = compute_parameters(ComputeParametersInput {
+        train_set,
+        progress: Some(progress.state.clone()),
+        ..Default::default()
+    })
+    .ok()?;
+    // A cancelled run may still return a (partial) vector; honour the abort and discard it, so a
+    // cancelled run is byte-identical to one never started (ADR-0014 §3).
+    if progress.is_aborted() {
+        return None;
+    }
+    let parameters = SchedulerParameters::from_slice(&weights)?;
+    Some(OptimisationOutcome {
+        parameters,
+        fitted_over,
+    })
+}
+
+/// The corpus build (ADR-0014 §4's uncancellable lead-in): one training item per review carrying its
+/// full prefix. Each card's reviews become `FSRSReview`s — the first with `delta_t = 0`, each later
+/// one with the day gap since the previous — and an item is emitted at every review **from the
+/// second onward whose day gap is positive**. A same-day re-show (gap zero) is not its own training
+/// example, matching how the scheduler crate converts a review history, so the fit sees the same
+/// corpus a from-scratch conversion would.
+fn training_items(histories: &[Vec<Review>]) -> Vec<FSRSItem> {
+    let mut items = Vec::new();
+    for history in histories {
+        let mut reviews: Vec<FSRSReview> = Vec::with_capacity(history.len());
+        let mut prev_day: Option<i64> = None;
+        for review in history {
+            let delta_t = match prev_day {
+                None => 0,
+                Some(prev) => day_gap(prev, review.day),
+            };
+            reviews.push(FSRSReview {
+                rating: u32::from(review.grade.raw()),
+                delta_t,
+            });
+            prev_day = Some(review.day);
+            if reviews.len() >= 2 && delta_t > 0 {
+                items.push(FSRSItem {
+                    reviews: reviews.clone(),
+                });
+            }
+        }
+    }
+    items
 }
 
 /// The FSRS day gap between two frozen day numbers, clamped to the non-negative `u32` the model
@@ -508,6 +657,62 @@ mod tests {
             seen.insert(sched.next_interval(&card(ordinal), 1, state));
         }
         assert!(seen.len() > 1, "fuzz seed had no effect across cards");
+    }
+
+    /// A card's history from a compact `(grade, day)` list, for the optimiser tests.
+    fn history(pairs: &[(Grade, i64)]) -> Vec<Review> {
+        pairs
+            .iter()
+            .map(|&(grade, day)| Review { grade, day })
+            .collect()
+    }
+
+    #[test]
+    fn optimising_empty_history_returns_the_defaults_and_a_zero_count() {
+        // ADR-0014 §5: a collection with no review history fits the defaults, so the outcome equals
+        // what is current and the store then writes nothing. The count is zero.
+        let progress = OptimisationProgress::new();
+        let outcome = optimise(&[], &progress).expect("a fit over nothing still yields a vector");
+        assert_eq!(outcome.parameters, SchedulerParameters::default());
+        assert_eq!(outcome.fitted_over, 0);
+    }
+
+    #[test]
+    fn optimising_real_history_yields_a_valid_vector_and_counts_every_review() {
+        // The corpus build turns each review (from the second, with a positive day gap) into a
+        // training item; the fitted-over count is every review the run saw (ADR-0014 §6).
+        let mut histories = Vec::new();
+        for _ in 0..12 {
+            histories.push(history(&[
+                (Grade::Good, 0),
+                (Grade::Good, 2),
+                (Grade::Barely, 6),
+                (Grade::Good, 15),
+                (Grade::Easy, 40),
+            ]));
+        }
+        let progress = OptimisationProgress::new();
+        let outcome = optimise(&histories, &progress).expect("a real corpus fits");
+
+        // Every review counts toward the fit, across all cards.
+        assert_eq!(outcome.fitted_over, 12 * 5);
+        // The fitted vector is a full, finite 21-weight vector — a scheduler can be built from it.
+        let _ = Scheduler::new(outcome.parameters);
+        assert!(outcome.parameters.weights().iter().all(|w| w.is_finite()));
+    }
+
+    #[test]
+    fn an_aborted_run_yields_nothing_to_write() {
+        // ADR-0014 §3: cancellation is cooperative, and a cancelled run holds no partial state — it
+        // returns None, so the caller writes nothing and the recovery action is to press again.
+        let progress = OptimisationProgress::new();
+        progress.request_abort();
+        let histories = vec![history(&[
+            (Grade::Good, 0),
+            (Grade::Good, 3),
+            (Grade::Good, 9),
+        ])];
+        assert!(optimise(&histories, &progress).is_none());
     }
 
     #[test]

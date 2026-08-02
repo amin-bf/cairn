@@ -735,6 +735,59 @@ fn tags_are_independent_rows_so_two_offline_additions_both_survive() {
     assert_eq!(tags(&coll), vec!["irregular".to_owned()]);
 }
 
+#[test]
+fn an_optimisation_run_writes_a_parameter_row_only_when_the_vector_changes() {
+    // ADR-0014 §5, §6: a changed vector is written with its frozen fitted-over count; an unchanged one
+    // writes nothing, so a value-less row never enters the stamp contest.
+    use leitner_core::replay::{OptimisationNudge, optimisation_nudge};
+    use leitner_core::scheduling::SchedulerParameters;
+
+    let (mut coll, _d, _s) = open();
+
+    // The current vector before any run is the published defaults.
+    assert_eq!(
+        coll.current_scheduler_parameters().unwrap(),
+        *SchedulerParameters::default().weights()
+    );
+
+    // Writing the defaults changes nothing — no row (ADR-0014 §5).
+    let unchanged = coll
+        .set_scheduler_parameters(
+            SchedulerParameters::default().weights(),
+            777,
+            DAY0_MS,
+            DayScale::default(),
+        )
+        .unwrap();
+    assert_eq!(unchanged, None, "an unchanged vector writes nothing");
+
+    // A genuinely different vector is written, carrying its fitted-over count.
+    let mut fitted = *SchedulerParameters::default().weights();
+    fitted[0] += 0.5;
+    let seq = coll
+        .set_scheduler_parameters(&fitted, 3120, DAY0_MS, DayScale::default())
+        .unwrap();
+    assert!(seq.is_some(), "a changed vector is written");
+    assert_eq!(coll.current_scheduler_parameters().unwrap(), fitted);
+
+    // The nudge reads the frozen count off the row (ADR-0014 §2, §6).
+    let lines = coll.log_lines().unwrap();
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    assert_eq!(
+        optimisation_nudge(&refs),
+        OptimisationNudge::Fitted {
+            fitted_over: 3120,
+            reviews_since: 0,
+        }
+    );
+
+    // Re-writing the same fitted vector is a no-op — no phantom row (ADR-0014 §5).
+    let again = coll
+        .set_scheduler_parameters(&fitted, 9999, DAY0_MS + ONE_DAY_MS, DayScale::default())
+        .unwrap();
+    assert_eq!(again, None, "the same vector a second time writes nothing");
+}
+
 /// Copy `collection.db` (and any WAL sidecars) from one data dir to another — a restore.
 fn copy_collection(from: &std::path::Path, to: &std::path::Path) {
     for name in ["collection.db", "collection.db-wal", "collection.db-shm"] {

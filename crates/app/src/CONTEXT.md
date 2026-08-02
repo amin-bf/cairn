@@ -23,7 +23,10 @@ sync — the `sync` crate holds the mechanism and none of the surface; the secon
 and §12**, adding the connected account to enrolment and to sync settings); and
 [ADR-0021](../../../docs/adr/0021-note-ordering-saving-and-the-note-list.md), which adds the **note
 list** and the app's navigation shell and **amends ADR-0012 §2, §7 and §9 and ADR-0006 §3 and §5** —
-read those before touching the editor or the review screen's actions.
+read those before touching the editor or the review screen's actions; and
+[ADR-0014](../../../docs/adr/0014-when-parameter-optimisation-runs.md) (the **Optimise** action, its
+worker thread and two-phase progress, the fact-only nudge and the no-quality-claim completion) — read
+it before touching the settings screen's optimisation control.
 
 ## Language
 
@@ -195,6 +198,26 @@ What is protected is **consistency across enrolments**.
 The persistent, non-modal line for the **only two things permitted to speak about sync**: a dead
 grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks — offline is normal
 (ADR-0015 §5).
+
+**Optimise**:
+The parameter-optimisation experience (ADR-0014), living in `optimise` and wired into the settings
+screen. **The action is always present** — a button that is sometimes absent teaches the feature does
+not exist (ADR-0014 §2) — with the **nudge** beneath it: a fact stating *"Fitted over N reviews.
+You've reviewed M times since."* or *"Using the standard parameters. You've reviewed M times."*,
+carrying no threshold, no colour and no verb, and appearing **only in settings, never at session
+end** (that slot is the end-of-session pointer's, ADR-0010 §9). The distinction between the two
+sentences is the **absence** of a parameter row, not a default-valued one (`replay::optimisation_nudge`,
+ADR-0004 §6). Pressing it runs a **worker thread the frame loop polls** (`OptimiseJob`) with a
+**two-phase display** — an indeterminate `Preparing` lead-in over the uncancellable corpus build, then
+a determinate bar — and a **Cancel** that sets the crate's abort flag. **Nothing is persisted until it
+completes** (client-stack rule 10): a frozen or killed run holds no partial state and the recovery
+action is to press it again — never a claim that a started job is still progressing. On completion the
+fitted vector is written (skipped if unchanged, ADR-0014 §5) and one factual sentence shown —
+*"Parameters updated. Due dates have been recalculated."* — which states the whole-collection due-date
+move and makes **no quality claim**, because the application has no instrument for one (ADR-0014 §4).
+ADR-0014 §7's *sync, then train* is a leading sequence, never a gate; it is a no-op where no transport
+is enrolled, and an offline device optimising on local history is a fine outcome.
+_Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge or a quality verb.
 
 ## Rules that are easy to break silently
 

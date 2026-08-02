@@ -14,6 +14,7 @@ pub mod deck;
 pub mod editor;
 pub mod fonts;
 pub mod notes;
+pub mod optimise;
 pub mod session;
 pub mod sync;
 
@@ -226,6 +227,15 @@ pub struct LeitnerApp {
     /// through clears it. Never a nag: a card ignored here is not raised again, only kept on the leech
     /// screen.
     session_pointer: Option<usize>,
+    /// The optimisation run in progress, or `None` when none is (ADR-0014 §3). A worker thread the
+    /// frame loop polls: while it is `Some`, settings shows the two-phase progress and a Cancel; on
+    /// completion the fitted vector is written (or skipped, if unchanged) and this returns to `None`.
+    /// Nothing is persisted until it completes, so a frozen or killed run leaves it holding nothing to
+    /// resume (client-stack rule 10).
+    optimise_job: Option<optimise::OptimiseJob>,
+    /// True from the moment a run completes until another is started — the settings screen's cue to
+    /// show the completion message (ADR-0014 §4). Frame-local, never persisted.
+    optimise_done: bool,
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
@@ -250,6 +260,8 @@ impl LeitnerApp {
             new_card_rate: None,
             showing_leeches: false,
             session_pointer: None,
+            optimise_job: None,
+            optimise_done: false,
             fonts_installed: false,
         }
     }
@@ -331,9 +343,15 @@ impl eframe::App for LeitnerApp {
                     &mut self.new_deck,
                 );
             }
-            Destination::Settings => {
-                settings_screen(ui, coll, &mut self.setting_up_sync, &mut self.new_card_rate)
-            }
+            Destination::Settings => settings_screen(
+                ui,
+                coll,
+                &mut self.setting_up_sync,
+                &mut self.new_card_rate,
+                &mut self.optimise_job,
+                &mut self.optimise_done,
+                now_ms,
+            ),
         }
     }
 }
@@ -1256,11 +1274,15 @@ fn multiline_field_output(
 /// history cutoff) is modelled and proven in `sync`, but it needs a live grant, and the device flow
 /// that obtains one carries the network this environment lacks (ADR-0013 §11) — so it is wired when
 /// that mechanism lands, not faked here. What is fixed now is what each surface *says*.
+#[allow(clippy::too_many_arguments)]
 fn settings_screen(
     ui: &mut egui::Ui,
     coll: &mut Collection,
     setting_up: &mut bool,
     rate_buffer: &mut Option<String>,
+    optimise_job: &mut Option<optimise::OptimiseJob>,
+    optimise_done: &mut bool,
+    now_ms: i64,
 ) {
     heading(ui, "Settings");
     ui.add_space(8.0);
@@ -1271,6 +1293,11 @@ fn settings_screen(
     }
 
     new_card_rate_control(ui, coll, rate_buffer);
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    optimise_control(ui, coll, optimise_job, optimise_done, now_ms);
     ui.add_space(12.0);
     ui.separator();
     ui.add_space(8.0);
@@ -1331,6 +1358,93 @@ fn new_card_rate_control(
         ui,
         "The only limit in the app. Set it to zero to clear a backlog, then turn it back on.",
     );
+}
+
+/// The parameter-optimisation control (ADR-0014 §2, §3, §4). **The action is always present** — a
+/// button that is sometimes absent teaches the feature does not exist — with the fact-only nudge
+/// beneath it. Pressing it starts a worker thread the frame loop polls; while it runs, the button is
+/// replaced in place by the two-phase progress and a Cancel (§4), and **nothing is written until it
+/// completes**. On completion the fitted vector is written — skipped if unchanged (§5) — and the
+/// factual completion message shown, which makes no quality claim (§4).
+///
+/// The words and the run's shape are proven in `optimise`; this is the egui wiring the visual pass
+/// refines. ADR-0014 §7's *sync, then train* is a no-op here: no transport is enrolled in this build,
+/// and an offline device optimising on local history is a fine outcome — the leading sync is a
+/// sequence, never a gate.
+fn optimise_control(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    job: &mut Option<optimise::OptimiseJob>,
+    done: &mut bool,
+    now_ms: i64,
+) {
+    field_label(ui, "Scheduler");
+
+    if let Some(running) = job.as_mut() {
+        // A run is in flight: keep the frame loop turning so `poll` is reached, then render the phase.
+        ui.ctx().request_repaint();
+        match running.phase() {
+            optimise::Phase::Preparing => {
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new());
+                    body(ui, "Preparing…");
+                });
+            }
+            optimise::Phase::Training { current, total } => {
+                let fraction = if total == 0 {
+                    0.0
+                } else {
+                    current as f32 / total as f32
+                };
+                ui.add(egui::ProgressBar::new(fraction).show_percentage());
+            }
+        }
+        if full_width_button(ui, "Cancel").clicked() {
+            running.cancel();
+        }
+        // Poll once this frame. On completion, write the vector (unchanged ones write nothing, §5) and
+        // drop the job. A cancelled or failed run yields `None`: nothing to write, recover by pressing
+        // the button again.
+        if let Some(result) = running.poll() {
+            if let Some(outcome) = result {
+                // A failed write is dropped rather than surfaced, matching the review-grade site; the
+                // nudge simply re-reads the unchanged row next frame.
+                let _ = coll.set_scheduler_parameters(
+                    outcome.parameters.weights(),
+                    outcome.fitted_over,
+                    now_ms,
+                    DayScale::default(),
+                );
+                *done = true;
+            }
+            *job = None;
+        }
+        return;
+    }
+
+    // At rest: the always-present action, the fact-only nudge, and the completion message if a run
+    // just finished (ADR-0014 §2, §4).
+    if full_width_button(ui, "Optimise").clicked() {
+        *done = false;
+        let lines = coll.log_lines().unwrap_or_default();
+        *job = Some(optimise::OptimiseJob::start(lines));
+        ui.ctx().request_repaint();
+    }
+    ui.add_space(4.0);
+
+    let nudge = coll
+        .log_lines()
+        .map(|lines| {
+            let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+            optimise::nudge_text(&leitner_core::replay::optimisation_nudge(&refs))
+        })
+        .unwrap_or_default();
+    body(ui, &nudge);
+
+    if *done {
+        ui.add_space(4.0);
+        body(ui, optimise::COMPLETION_MESSAGE);
+    }
 }
 
 /// The enrolment screen's surface (ADR-0015 §7, ADR-0019 §4): what it states *before* the grant. The
