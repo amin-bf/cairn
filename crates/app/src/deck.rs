@@ -7,11 +7,16 @@
 //! a note generates is a `leitner-core` kind rule (ADR-0002 §4, ADR-0017 §1), and the store owns no
 //! kind definitions. A note carrying a kind this build does not ship is skipped — a note can never
 //! be switched *into* an acquired kind (ADR-0017 §6), so the only kinds that reach a review are the
-//! shipped ones, which in this build is `basic` alone.
+//! four shipped ones. The fixed-arity three declare their cards; `cloze`'s are **content-derived**,
+//! one per numbered blank in its `Text` (ADR-0002 §5), so it is the one kind whose card set needs the
+//! note's content and not just its definition.
 
 use std::collections::HashSet;
 
-use leitner_core::content::{CardRef, KindDefinition, NoteId, SHIPPED_KINDS};
+use leitner_core::content::{
+    CLOZE, CLOZE_SLOT_BIT, CardRef, KindDefinition, NoteId, SHIPPED_KINDS, cloze_blank,
+    cloze_cards, render_cloze,
+};
 use leitner_store::{Collection, StoreError};
 
 /// One card ready to show: the joined prompt and the joined answer, each the note's field values in
@@ -52,11 +57,27 @@ pub fn current_cards(coll: &Collection) -> Result<HashSet<CardRef>, StoreError> 
         let Some(def) = shipped_kind(&kind) else {
             continue;
         };
-        for card in def.generated_cards(NoteId(id)) {
+        for card in generated_cards(coll, &id, def)? {
             set.insert(card);
         }
     }
     Ok(set)
+}
+
+/// The cards one note of shipped kind `def` generates. Fixed-arity kinds declare their cards in the
+/// definition; `cloze`'s are **content-derived** — one per numbered blank in its `Text` (ADR-0002 §5,
+/// ADR-0017 §3) — so it is the one kind whose card set the definition alone cannot give.
+fn generated_cards(
+    coll: &Collection,
+    id: &[u8; 16],
+    def: &KindDefinition,
+) -> Result<Vec<CardRef>, StoreError> {
+    if def.id == CLOZE.id {
+        let text = coll.mutable_get("note", id, "Text")?.unwrap_or_default();
+        Ok(cloze_cards(NoteId(*id), &text))
+    } else {
+        Ok(def.generated_cards(NoteId(*id)))
+    }
 }
 
 /// Render one card's prompt and answer from its note's stored fields, or `None` if the note has no
@@ -68,6 +89,25 @@ pub fn render(coll: &Collection, card: CardRef) -> Result<Option<RenderedCard>, 
     let Some(def) = shipped_kind(&kind) else {
         return Ok(None);
     };
+
+    // A cloze card is drawn from the note's `Text`, not a declared template — its blank hidden on the
+    // prompt and revealed on the answer (ADR-0002 §5). A blank the text no longer holds is dormant and
+    // renders nothing, the same `None` a missing fixed-arity template returns.
+    if card.ordinal & CLOZE_SLOT_BIT != 0 {
+        if def.id != CLOZE.id {
+            return Ok(None);
+        }
+        let text = coll
+            .mutable_get("note", &card.note.0, "Text")?
+            .unwrap_or_default();
+        let blank = cloze_blank(card.ordinal);
+        if !leitner_core::content::cloze_blanks(&text).contains(&blank) {
+            return Ok(None);
+        }
+        let (prompt, answer) = render_cloze(&text, blank);
+        return Ok(Some(RenderedCard { prompt, answer }));
+    }
+
     // The slot is the identity, never the list index (ADR-0017 §1): find the template *by slot*.
     let Some(template) = def.cards.iter().find(|t| t.slot == card.ordinal) else {
         return Ok(None);
@@ -156,6 +196,63 @@ mod tests {
             current_cards(&coll).unwrap(),
             HashSet::from([CardRef::new(loose, 0)]),
             "only the unfiled note's card survives the deck deletion"
+        );
+    }
+
+    #[test]
+    fn a_cloze_note_generates_one_card_per_blank_and_renders_each() {
+        // ADR-0002 §5, ADR-0017 §3: cloze cards are content-derived, one per numbered blank at a slot
+        // above the high bit. Each renders with its own blank masked and the others revealed.
+        let (mut coll, _d, _s) = open();
+        let id = coll
+            .create_note("cloze", &[("Text", "{{1::Le}} chat {{2::mange}}")])
+            .unwrap();
+
+        let cards = current_cards(&coll).unwrap();
+        assert_eq!(
+            cards,
+            HashSet::from([
+                CardRef::new(id, leitner_core::content::cloze_slot(1)),
+                CardRef::new(id, leitner_core::content::cloze_slot(2)),
+            ]),
+            "one card per distinct blank, above the high bit"
+        );
+
+        let first = render(
+            &coll,
+            CardRef::new(id, leitner_core::content::cloze_slot(1)),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(first.prompt, "[…] chat mange");
+        assert_eq!(first.answer, "Le chat mange");
+    }
+
+    #[test]
+    fn a_deleted_blank_no_longer_renders_its_card() {
+        // The blank a note's text no longer holds is dormant: it generates no card and renders nothing
+        // (ADR-0018 §2). Editing the text to drop blank 2 removes it from the current set.
+        let (mut coll, _d, _s) = open();
+        let id = coll
+            .create_note("cloze", &[("Text", "{{1::a}} {{2::b}}")])
+            .unwrap();
+        coll.mutable_set("note", &id.0, "Text", Some("{{1::a}} b"))
+            .unwrap();
+
+        let cards = current_cards(&coll).unwrap();
+        assert_eq!(
+            cards,
+            HashSet::from([CardRef::new(id, leitner_core::content::cloze_slot(1))]),
+            "only the surviving blank generates a card"
+        );
+        assert!(
+            render(
+                &coll,
+                CardRef::new(id, leitner_core::content::cloze_slot(2))
+            )
+            .unwrap()
+            .is_none(),
+            "the deleted blank's card no longer renders"
         );
     }
 

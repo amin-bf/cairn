@@ -173,6 +173,151 @@ pub const fn cloze_blank(slot: u16) -> u16 {
     slot & !CLOZE_SLOT_BIT
 }
 
+/// The highest blank number a note may hold, `0x7FFF` (ADR-0017 §3): the cloze partition reserves
+/// one bit, so an authored blank must stay in `1..=0x7FFF` for [`cloze_slot`] to be a bijection.
+pub const MAX_BLANK: u16 = 0x7FFF;
+
+/// The placeholder the masked blank leaves on a cloze card's prompt — what stands where the hidden
+/// text is (ADR-0002 §5). What it *looks* like is the visual design pass's; that it is a gap and not
+/// the answer is the behaviour.
+pub const CLOZE_GAP: &str = "[…]";
+
+/// One piece of a parsed cloze `Text`: literal run, or a closed `{{n::hidden}}` blank.
+enum ClozeToken<'a> {
+    Text(&'a str),
+    Blank { number: u16, hidden: &'a str },
+}
+
+/// Split a cloze note's `Text` into literal runs and closed blanks, left to right (ADR-0002 §5). A
+/// **half-typed `{{1::` stays literal** (ADR-0012 §3): an unclosed region is not a blank, because
+/// live preview sees every keystroke and an inferred number is an invented identity. A `{{` that is
+/// not a well-formed `{{<digits>::…}}` open — no digits, no `::`, or a number outside `1..=MAX_BLANK`
+/// — is passed over as ordinary text.
+fn cloze_tokens(text: &str) -> Vec<ClozeToken<'_>> {
+    let bytes = text.as_bytes();
+    let mut tokens = Vec::new();
+    let mut literal_start = 0;
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'{'
+            && bytes[i + 1] == b'{'
+            && let Some((number, hidden, end)) = parse_blank(text, i)
+        {
+            if literal_start < i {
+                tokens.push(ClozeToken::Text(&text[literal_start..i]));
+            }
+            tokens.push(ClozeToken::Blank { number, hidden });
+            i = end;
+            literal_start = end;
+            continue;
+        }
+        i += 1;
+    }
+    if literal_start < bytes.len() {
+        tokens.push(ClozeToken::Text(&text[literal_start..]));
+    }
+    tokens
+}
+
+/// Parse one `{{<digits>::hidden}}` blank starting at `at` (where `text[at..]` begins `{{`), returning
+/// its `(number, hidden text, byte index past the closing }})`, or `None` when it is not a
+/// well-formed, in-range, **closed** blank — in which case the caller treats the `{{` as literal.
+fn parse_blank(text: &str, at: usize) -> Option<(u16, &str, usize)> {
+    let bytes = text.as_bytes();
+    let num_start = at + 2;
+    let mut j = num_start;
+    while j < bytes.len() && bytes[j].is_ascii_digit() {
+        j += 1;
+    }
+    if j == num_start || j + 1 >= bytes.len() || bytes[j] != b':' || bytes[j + 1] != b':' {
+        return None; // no digits, or no `::` separator
+    }
+    let hidden_start = j + 2;
+    let mut k = hidden_start;
+    let close = loop {
+        if k + 1 >= bytes.len() {
+            return None; // unclosed — a half-typed blank stays literal (ADR-0012 §3)
+        }
+        if bytes[k] == b'}' && bytes[k + 1] == b'}' {
+            break k;
+        }
+        k += 1;
+    };
+    let number: u32 = text[num_start..j].parse().ok()?;
+    if number == 0 || number > u32::from(MAX_BLANK) {
+        return None; // 0 and over-cap numbers are not authorable blanks (ADR-0002 §5, ADR-0017 §3)
+    }
+    Some((number as u16, &text[hidden_start..close], close + 2))
+}
+
+/// The distinct blank numbers a `cloze` note's `Text` currently holds, ascending (ADR-0002 §5). A
+/// number repeated in the text is **one** blank that hides in several places, so it appears once. A
+/// half-typed `{{1::` contributes nothing ([`cloze_tokens`]). This is the current-content half of
+/// dormancy: a blank in the log but not in this list is a **dormant** card (replay `CONTEXT.md`).
+pub fn cloze_blanks(text: &str) -> Vec<u16> {
+    let mut nums: Vec<u16> = cloze_tokens(text)
+        .into_iter()
+        .filter_map(|t| match t {
+            ClozeToken::Blank { number, .. } => Some(number),
+            ClozeToken::Text(_) => None,
+        })
+        .collect();
+    nums.sort_unstable();
+    nums.dedup();
+    nums
+}
+
+/// The `CardRef`s a `cloze` note generates from its `Text` — one per distinct blank, at
+/// [`cloze_slot`]`(n)` (ADR-0002 §5, ADR-0017 §3). This is the cloze arm of "current content" replay
+/// projects onto, the counterpart to [`KindDefinition::generated_cards`] for the fixed-arity kinds
+/// whose `cards` list this build declares; cloze's cards are content-derived, so its list is empty
+/// and its slots are computed here instead.
+pub fn cloze_cards(note: NoteId, text: &str) -> Vec<CardRef> {
+    cloze_blanks(text)
+        .into_iter()
+        .map(|n| CardRef::new(note, cloze_slot(n)))
+        .collect()
+}
+
+/// The number a new blank takes: **one above the highest currently in `text`, never the lowest free
+/// one** (ADR-0012 §3). Filling a gap would hand the new blank a deleted card's identity and reattach
+/// its reviews to different content — the exact damage auto-renumbering does, one edit later — so
+/// gaps are left as gaps. The first blank is 1 (ADR-0002 §5).
+///
+/// This reads only the current text; the editor widens "ever used" to include a note's **dormant**
+/// blanks — deleted blanks still carrying history — which are not in the text but must not be reused
+/// either (see `leitner-app::cards`).
+pub fn next_blank_number(text: &str) -> u16 {
+    cloze_blanks(text).into_iter().max().map_or(1, |n| n + 1)
+}
+
+/// Render one cloze card — the blank numbered `blank` hidden on the prompt and revealed on the answer,
+/// every *other* blank shown revealed on both sides (ADR-0002 §5). The masked blank leaves
+/// [`CLOZE_GAP`]; a blank repeated in the text is hidden in every place it occurs. Literal text is
+/// carried through untouched. Returns `(prompt, answer)`; both are untrusted content and must reach a
+/// screen through the `bidi` helper.
+pub fn render_cloze(text: &str, blank: u16) -> (String, String) {
+    let mut prompt = String::new();
+    let mut answer = String::new();
+    for token in cloze_tokens(text) {
+        match token {
+            ClozeToken::Text(t) => {
+                prompt.push_str(t);
+                answer.push_str(t);
+            }
+            ClozeToken::Blank { number, hidden } => {
+                answer.push_str(hidden);
+                if number == blank {
+                    prompt.push_str(CLOZE_GAP);
+                } else {
+                    prompt.push_str(hidden);
+                }
+            }
+        }
+    }
+    (prompt, answer)
+}
+
 /// A field's role on a note (ADR-0002 §3): `Asked` fields may be a card's prompt or answer;
 /// `ShownWith` fields render beside the anchor field named, on whichever side it lands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -334,9 +479,9 @@ pub const VOCAB: KindDefinition = KindDefinition {
 /// `cloze`: one asked `Text` field. Its cards are **not fixed** — one per numbered blank in the
 /// note's text, at slot [`cloze_slot`]`(n)` (ADR-0002 §5, ADR-0017 §3) — so its `cards` list is
 /// empty and its slots are computed rather than declared. Generating them needs the note's content,
-/// which the fixed-arity [`KindDefinition::generated_cards`] path never sees; that projection lands
-/// with the card pane ([#83](https://github.com/amin-bf/leitner/issues/83)). Shipped here is the
-/// definition and the numbering rule that keeps its slots disjoint from the registry.
+/// which the fixed-arity [`KindDefinition::generated_cards`] path never sees; [`cloze_cards`] is that
+/// content-driven projection, with [`render_cloze`] and [`next_blank_number`] the rest of the cloze
+/// vocabulary the card pane draws on.
 pub const CLOZE: KindDefinition = KindDefinition {
     id: "cloze",
     fields: &[FieldDef {
@@ -505,6 +650,90 @@ mod tests {
         let (prompt, answer) = BASIC.render_sides(card_at(&BASIC, 0));
         assert_eq!(prompt, vec!["Front"]);
         assert_eq!(answer, vec!["Back"]);
+    }
+
+    #[test]
+    fn cloze_blanks_are_the_distinct_closed_numbers_in_reading_order() {
+        // ADR-0002 §5: each distinct number is one card; a number repeated in the text hides in two
+        // places but is still one blank. The result is ascending and deduplicated.
+        assert_eq!(cloze_blanks("{{1::le}} chat {{2::mange}}"), vec![1, 2]);
+        assert_eq!(
+            cloze_blanks("{{2::a}} then {{2::b}} then {{1::c}}"),
+            vec![1, 2],
+            "a repeated number is one blank"
+        );
+        assert!(cloze_blanks("no blanks here").is_empty());
+    }
+
+    #[test]
+    fn a_half_typed_blank_stays_literal() {
+        // ADR-0012 §3: an unclosed `{{1::` is not a blank — an inferred number is an invented
+        // identity, so live preview must see nothing until the region closes.
+        assert!(cloze_blanks("the {{1:: cat sat").is_empty());
+        assert!(
+            cloze_blanks("{{1::").is_empty(),
+            "the exact keystroke the ADR names"
+        );
+        // A closed blank followed by a half-typed one keeps only the closed one.
+        assert_eq!(cloze_blanks("{{1::a}} and {{2::"), vec![1]);
+        // Not-a-blank opens are passed over as text: no digits, or no `::`.
+        assert!(cloze_blanks("{{::x}} {{cat}}").is_empty());
+    }
+
+    #[test]
+    fn an_out_of_range_blank_number_is_not_a_blank() {
+        // ADR-0017 §3: a blank must fit `1..=0x7FFF` for the slot map to be a bijection; 0 and any
+        // over-cap number are treated as literal rather than corrupting the partition.
+        assert!(cloze_blanks("{{0::x}}").is_empty());
+        assert_eq!(cloze_blanks("{{32767::x}}"), vec![MAX_BLANK]);
+        assert!(
+            cloze_blanks("{{32768::x}}").is_empty(),
+            "one past the cap is not authorable"
+        );
+    }
+
+    #[test]
+    fn cloze_generates_one_card_per_distinct_blank_above_the_high_bit() {
+        let note = NoteId([5; 16]);
+        assert_eq!(
+            cloze_cards(note, "{{1::a}} {{3::b}}"),
+            vec![
+                CardRef::new(note, cloze_slot(1)),
+                CardRef::new(note, cloze_slot(3)),
+            ]
+        );
+        assert!(cloze_cards(note, "nothing").is_empty());
+    }
+
+    #[test]
+    fn a_new_blank_is_one_above_the_highest_never_the_lowest_free() {
+        // ADR-0012 §3: gaps are shown as normal and never filled. Blanks 1, 2, 4 present → the next
+        // is 5, not the free 3, so a new blank can never reclaim a deleted card's identity.
+        assert_eq!(next_blank_number(""), 1, "the first blank is 1");
+        assert_eq!(next_blank_number("{{1::a}}"), 2);
+        assert_eq!(
+            next_blank_number("{{1::a}} {{2::b}} {{4::d}}"),
+            5,
+            "the gap at 3 is left as a gap"
+        );
+    }
+
+    #[test]
+    fn render_cloze_masks_the_card_blank_and_reveals_the_rest() {
+        // ADR-0002 §5: the card's blank is hidden on the prompt and shown on the answer; other blanks
+        // stay revealed on both sides. Literal text is carried through untouched.
+        let text = "{{1::Le}} chat {{2::mange}} la souris";
+        let (prompt, answer) = render_cloze(text, 1);
+        assert_eq!(prompt, "[…] chat mange la souris");
+        assert_eq!(answer, "Le chat mange la souris");
+
+        let (prompt, answer) = render_cloze(text, 2);
+        assert_eq!(prompt, "Le chat […] la souris");
+        assert_eq!(answer, "Le chat mange la souris");
+
+        // A number repeated in the text is masked in every place it occurs.
+        let (prompt, _) = render_cloze("{{1::a}} x {{1::a}}", 1);
+        assert_eq!(prompt, "[…] x […]");
     }
 
     #[test]
