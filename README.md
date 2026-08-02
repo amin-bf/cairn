@@ -31,6 +31,13 @@ The web target was ruled out of scope in [ADR-0007 §1](./docs/adr/0007-the-loca
 app whose only copy of the data is local, the browser is the one platform where "local" is not
 reliably durable.
 
+**One crate of that stack is not taken as published.** `vendor/egui-winit` is a verbatim copy of
+`egui-winit` 0.35.0 with one block guarded off Android, wired in by `[patch.crates-io]`: as shipped,
+every tap into a text field there dismisses and reopens the soft keyboard, for a composition that
+platform cannot produce. So **a version bump of the stack is no longer only a version change** — see
+[`vendor/PATCH.md`](./vendor/PATCH.md) and `scripts/verify-vendor.sh`
+([ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)).
+
 ## Prerequisites
 
 ```sh
@@ -57,6 +64,7 @@ Skipping it produces `Failed to get android tools`, which does not say what is m
 cargo run -p leitner-desktop          # desktop
 cargo test --workspace                # everything verifiable without hardware
 cargo test -p leitner-core            # the domain alone: no database, no window, no handset
+scripts/verify-vendor.sh              # the vendored adapter: verbatim plus exactly one change
 
 source scripts/android-env.sh
 cd crates/app && cargo apk build      # APK: a manifest and one .so, no classes.dex

@@ -8,6 +8,28 @@ members = [
   "crates/app",
   "crates/desktop",
 ]
+# The vendored adapter is third-party source we carry, not a crate of ours (ADR-0026 §3). It is
+# reached only through `[patch.crates-io]` below, so it is never built as a member and never
+# inherits `[workspace.package]`.
+exclude = ["vendor/egui-winit"]
+
+# ADR-0026 §3: `egui-winit` is carried as a **verbatim copy of the published 0.35.0**, with one
+# block — the per-tap IME-composition interrupt — behind `#[cfg(not(target_os = "android"))]`. On
+# Android that block dismisses and reopens the soft keyboard on every tap into a text field, for a
+# composition that platform can never produce, and the inset collapse it causes throws away the
+# scroll position ADR-0025 §1 exists to make meaningful. There is no fix above the dependency: the
+# interrupt flag is private, its setter public and its clearer not, and nothing hooks the platform
+# output before this crate reads it.
+#
+# A *fork* was rejected rather than merely not chosen: the crate as published depends on `egui` from
+# the registry, but inside its own repository on a workspace path — so a fork pulls a second copy of
+# `egui` into the graph beside the one `eframe` and our crates use, whose types would not unify.
+#
+# **Bumping this is not just a version change.** See `vendor/PATCH.md` and
+# `scripts/verify-vendor.sh`: recursive diff against a pristine copy, then the block-shape check —
+# and if a release restructures the block, re-judge rather than re-apply.
+[patch.crates-io]
+egui-winit = { path = "vendor/egui-winit" }
 
 [workspace.package]
 version = "0.1.0"
@@ -29,7 +51,11 @@ leitner-app = { path = "crates/app" }
 # so the crates cannot drift apart — even though only `leitner-core` depends on it.
 fsrs = "=6.6.1"
 
-egui = "0.35"
+# Pinned exactly, adapter and toolkit together (ADR-0026 §3, on ADR-0001 §2's precedent). The
+# vendored `egui-winit` above is one published version with one block guarded, and it declares an
+# ordinary `egui = 0.35.0` dependency — so a floating requirement here could resolve the family onto
+# a release the vendored copy was never diffed against, silently.
+egui = "=0.35.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
 getrandom = "0.3"
 tempfile = "3"
