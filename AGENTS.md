@@ -22,6 +22,22 @@ This applies to every agent working in this repo, on every artifact that persist
 Tickets here are worked in **parallel worktree sessions**, each branching from `origin/main` and
 never seeing what merged afterwards. Two things break silently because of it.
 
+### Branch names
+
+**`Domain/PascalCaseDescription`** — one slash, no spaces, no kebab-case, and **no ticket number**.
+It is the pull-request title with the spaces taken out: the PR convention is
+`Domain / Title Case Description`, so `Client Stack / Read the IME Insets and Stop the Per-Tap
+Keyboard Re-Pop` branches as `ClientStack/ReadImeInsetsAndStopKeyboardRePop`.
+
+Derive it from the title you intend to give the PR, never from the issue you are resolving. A
+ticket-numbered branch — `sandcastle/issue-84`, `worktree-wayfinder-75-…` — names **the tracker
+rather than the work**, and the tracker is the one thing a PR already links. Nothing fails when a
+branch is misnamed, which is why it needs saying: the cost is paid later and by someone else, when
+the branch list has stopped being a map of the system and become a list of who happened to open what.
+
+`ClientStack/…`, `NoteAuthoring/…`, `DeckExport/…`, `Sync/…`, `AgentStandards/…` — the same domains
+the PR titles already use. Branch and PR then agree on which part of the system the work belongs to.
+
 ### Rules that are easy to break silently
 
 1. **If commit signing fails, stop and ask. Never fall back to `--no-gpg-sign`.** Every commit on
