@@ -16,3 +16,20 @@ license.workspace = true
 # builds from nine transitive crates with no `-sys` crate, so deflate needs no C toolchain.
 [dependencies]
 leitner-core.workspace = true
+# ADR-0008 §2, verified there and again in the workspace `cargo add --dry-run`: the umbrella
+# `deflate` feature drags in zopfli and `deflate-flate2` selects no zlib backend and fails to
+# compile, so the deck container takes the one working combination — no default features, the
+# `zlib-rs` deflate backend — which pulls no `-sys` crate and needs no C toolchain (`Android` links
+# with the deflate backend already on the desktop). Pinned in the workspace so the five crates
+# cannot drift.
+zip.workspace = true
+
+# The Android arm of the user-files seam reaches `MediaStore` and the share sheet by hand-written
+# JNI, exactly as `leitner-store::platform::android` reaches the data directories (ADR-0007 §6,
+# ADR-0023 §3). Desktop and tests never link these.
+[target.'cfg(target_os = "android")'.dependencies]
+jni.workspace = true
+ndk-context.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

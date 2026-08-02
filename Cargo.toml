@@ -47,6 +47,13 @@ zstd = "0.13"
 # re-export rather than by dependency, which is what keeps that crate a shim.
 unicode-bidi = "0.3.18"
 
+# ADR-0008 §2 fixes the deck container as a zip archive, and the feature flags there are the working
+# ones: `--no-default-features --features deflate-flate2-zlib-rs`. The umbrella `deflate` feature
+# builds but drags in zopfli, and `deflate-flate2` alone selects no zlib backend and fails to
+# compile. Only `leitner-export` builds the container, so only it depends on this; declared here so
+# the version cannot drift.
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
 android-activity = "0.6"
 jni = "0.21"
 ndk-context = "0.1"
