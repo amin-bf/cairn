@@ -5,6 +5,11 @@
 //! out correct but the exit code does not, and CI breaks. The desktop binary is `leitner-desktop`,
 //! which is a shim with no logic (ADR-0003 §5, ADR-0009 §3).
 //!
+//! **The Android entry point is `platform::android`**, not this file. The activity handle the inset
+//! seam needs originates in `android_main` and nothing else can hand it over — `ndk_context` holds
+//! the `Application` — so keeping the two together is what leaves `platform` one function wide and
+//! this file free of `#[cfg(target_os)]` (ADR-0025 §2, client-stack rule 3).
+//!
 //! See `CONTEXT.md` beside this file, [ADR-0003](../../../docs/adr/0003-client-stack.md) and
 //! [ADR-0006](../../../docs/adr/0006-the-review-session-experience.md).
 
@@ -13,8 +18,10 @@ pub mod cards;
 pub mod deck;
 pub mod editor;
 pub mod fonts;
+pub mod keyboard;
 pub mod notes;
 pub mod optimise;
+pub mod platform;
 pub mod session;
 pub mod sync;
 
@@ -239,6 +246,10 @@ pub struct LeitnerApp {
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
+    /// The band the platform's chrome and soft keyboard are sitting on, and the state its guards
+    /// need across frames (ADR-0025 §1, §3). Held here because two of the guards are differential:
+    /// they read the previous frame's geometry and must act before this frame lays anything out.
+    band: keyboard::Band,
 }
 
 impl LeitnerApp {
@@ -263,6 +274,7 @@ impl LeitnerApp {
             optimise_job: None,
             optimise_done: false,
             fonts_installed: false,
+            band: keyboard::Band::default(),
         }
     }
 
@@ -307,52 +319,94 @@ impl eframe::App for LeitnerApp {
             Ok(coll) => coll,
         };
 
-        // The persistent affordance that makes all three destinations reachable (ADR-0021 §1): a
-        // destination reachable only by completing a session is not reachable, so the nav row is drawn
-        // every frame, above whatever the current destination shows.
-        nav_bar(ui, &mut self.dest);
-        ui.separator();
-        ui.add_space(4.0);
-
-        match self.dest {
-            Destination::Review => {
-                // Opening the editor from the review screen counts as a reveal (ADR-0021 §6): the
-                // request carries the note, and `review` has already flipped the card face over. The
-                // edit entrance is shared by the leech screen, which also hangs off Review (ADR-0010
-                // §7).
-                if let Some(note) = review(
-                    ui,
-                    coll,
-                    &mut self.sitting,
-                    &mut self.showing_leeches,
-                    &mut self.session_pointer,
-                    now_ms,
-                    today,
-                ) {
-                    self.editing = Some(Editing::for_note(coll, note));
-                    self.dest = Destination::Notes;
-                }
-            }
-            Destination::Notes => {
-                notes_screen(
-                    ui,
-                    coll,
-                    &mut self.editing,
-                    &mut self.search,
-                    &mut self.deck_filter,
-                    &mut self.new_deck,
-                );
-            }
-            Destination::Settings => settings_screen(
-                ui,
-                coll,
-                &mut self.setting_up_sync,
-                &mut self.new_card_rate,
-                &mut self.optimise_job,
-                &mut self.optimise_done,
-                now_ms,
-            ),
+        // ---- The band the platform's chrome and keyboard are sitting on (ADR-0025 §1) -----------
+        //
+        // Nothing below this application reports the soft keyboard, so it asks — and un-asked the
+        // failure is *unreachability*, not occlusion: egui is handed a viewport taller than the
+        // visible one, the content fits inside it, and there is no scroll range over the covered
+        // band at all. Reserving it is what gives the scroll area a real range, and reserving the
+        // top is what stops the first line of text being drawn under the status bar.
+        let bands = self.band.read(ui.ctx());
+        if keyboard::Bands::is_worth_reserving(bands.top) {
+            egui::Panel::top("inset-top")
+                .exact_size(bands.top)
+                .frame(egui::Frame::NONE)
+                .show(ui, |_| {});
         }
+
+        // **Before the band is reserved, not after.** The focused field has to be inside the
+        // viewport on the *same* frame it shrinks, or its IME output lapses for one frame and the
+        // keyboard is gone before the next one — see `keyboard` for the loop this breaks.
+        let viewport_bottom = ui.available_rect_before_wrap().bottom() - bands.bottom;
+        self.band
+            .keep_focus_visible(ui.ctx(), bands, viewport_bottom);
+        self.band.settle_focus_scrolled_away(ui.ctx());
+
+        if keyboard::Bands::is_worth_reserving(bands.bottom) {
+            egui::Panel::bottom("inset-bottom")
+                .exact_size(bands.bottom)
+                .frame(egui::Frame::NONE)
+                .show(ui, |_| {});
+        }
+
+        // Everything the destination draws scrolls, which is what makes the covered band reachable
+        // rather than merely clipped. The nav row scrolls with it deliberately: pinning it would
+        // spend the form pane's first screen, which is the resource ADR-0025's consequences name —
+        // under a keyboard that screen is all the user has, and the destructive-edit warning was
+        // moved into it because nowhere else works.
+        //
+        // The area is taken *before* the closure so it carries guard 1's forced offset without
+        // holding a borrow of `band` across the frame the destinations are drawn in.
+        let area = self.band.scroll_area();
+        let out = area.show(ui, |ui| {
+            // The persistent affordance that makes all three destinations reachable (ADR-0021 §1):
+            // a destination reachable only by completing a session is not reachable, so the nav row
+            // is drawn every frame, above whatever the current destination shows.
+            nav_bar(ui, &mut self.dest);
+            ui.separator();
+            ui.add_space(4.0);
+
+            match self.dest {
+                Destination::Review => {
+                    // Opening the editor from the review screen counts as a reveal (ADR-0021 §6):
+                    // the request carries the note, and `review` has already flipped the card face
+                    // over. The edit entrance is shared by the leech screen, which also hangs off
+                    // Review (ADR-0010 §7).
+                    if let Some(note) = review(
+                        ui,
+                        coll,
+                        &mut self.sitting,
+                        &mut self.showing_leeches,
+                        &mut self.session_pointer,
+                        now_ms,
+                        today,
+                    ) {
+                        self.editing = Some(Editing::for_note(coll, note));
+                        self.dest = Destination::Notes;
+                    }
+                }
+                Destination::Notes => {
+                    notes_screen(
+                        ui,
+                        coll,
+                        &mut self.editing,
+                        &mut self.search,
+                        &mut self.deck_filter,
+                        &mut self.new_deck,
+                    );
+                }
+                Destination::Settings => settings_screen(
+                    ui,
+                    coll,
+                    &mut self.setting_up_sync,
+                    &mut self.new_card_rate,
+                    &mut self.optimise_job,
+                    &mut self.optimise_done,
+                    now_ms,
+                ),
+            }
+        });
+        self.band.record(&out);
     }
 }
 
@@ -1618,29 +1672,4 @@ mod tests {
         assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
     }
-}
-
-/// Android entry point. `NativeActivity` hosts the app directly: the APK is this `.so` plus a
-/// manifest, with no Java, no Kotlin and no Gradle project in the repository.
-///
-/// GameActivity was built and tested in #8 and reverted — it implements IME correctly, but winit's
-/// Android backend never reads it, so non-Latin text input stays unavailable at any packaging cost.
-/// Never design a feature that requires typing non-Latin text on Android (`AGENTS.md` rule 8).
-#[cfg(target_os = "android")]
-#[unsafe(no_mangle)]
-fn android_main(app: android_activity::AndroidApp) {
-    use winit::platform::android::EventLoopBuilderExtAndroid as _;
-
-    let options = eframe::NativeOptions {
-        android_app: Some(app.clone()),
-        event_loop_builder: Some(Box::new(move |b| {
-            b.with_android_app(app.clone());
-        })),
-        ..Default::default()
-    };
-    let _ = eframe::run_native(
-        "Leitner",
-        options,
-        Box::new(|cc| Ok(Box::new(LeitnerApp::new(cc)))),
-    );
 }
