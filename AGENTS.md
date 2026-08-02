@@ -54,7 +54,7 @@ Read this file first, then the context map, then the `CONTEXT.md` for the area y
 
 Six crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
 [ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
-`leitner-core` (the domain, pure), `leitner-store` (SQLite and the platform seam), `leitner-export`
+`leitner-core` (the domain, pure), `leitner-store` (SQLite and the two directory lookups), `leitner-export`
 (the `.ldeck` container), `leitner-sync` (publishing to the remote; holds the network dependencies),
 `leitner-app` (egui, lib + cdylib), `leitner-desktop` (a shim, forced by `cargo-apk`).
 
@@ -260,7 +260,10 @@ because they are validated findings, not because a web build ships.
     pristine copy. **The patch is bound to the block's shape, not its line number: if a release
     restructures it, re-judge rather than re-apply** — a guard applied to a block that no longer means
     the same thing looks healthy in a diff. Routine bumps need the diff and the shape check; the handset
-    measurement only when either is unhappy.
+    measurement only when either is unhappy. **Both checks are one command — `scripts/verify-vendor.sh`**
+    — and the handset one is `scripts/measure-ime-requests.sh`, so neither is a procedure to reconstruct.
+    The reasoning, the rejected alternatives and the exit condition live in
+    [`vendor/PATCH.md`](./vendor/PATCH.md); read it before bumping the egui family.
     [ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md).
 
 ## The local store
@@ -429,9 +432,13 @@ archiving against it.
 6. **The platform seam rule is per crate.** `leitner-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm
    discipline. `leitner-export` has one — put, get, list, **hand_off**
-   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)). The count is **not** the invariant:
-   ADR-0016 §5's *"three operations, not four"* was an argument about **delete**, which is still
-   absent. *Opaque, minimal, enumerable* is what binds.
+   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)) — and `leitner-app` has the **third**,
+   a single function returning the window's insets ([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md),
+   client-stack rule 11). The count is **not** the invariant: ADR-0016 §5's *"three operations, not
+   four"* was an argument about **delete**, which is still absent. *Opaque, minimal, enumerable* is
+   what binds. **Three modules is not itself the erosion signal** — a *fourth function* inside any one
+   of them is; a crate answering a question that is genuinely its own is the rule working, and reading
+   the module count as the limit is what would push the next such question back into the store.
 7. **`hand_off` is named for what it does on both platforms, and the two arms differ on purpose.**
    Android launches the system share sheet; the desktop reveals the file **selected** in the file
    manager, because no `org.freedesktop.portal.Share` exists. Calling it `send` invites an

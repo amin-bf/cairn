@@ -15,10 +15,10 @@ A six-crate workspace, laid out in
 | Crate | What it is |
 |---|---|
 | `leitner-core` | The domain, entire and pure. One dependency, `fsrs` ([ADR-0027](./docs/adr/0027-the-scheduler-dependency.md)) — testable with no database, window or handset. |
-| `leitner-store` | SQLite persistence and the whole platform seam (two functions wide). |
+| `leitner-store` | SQLite persistence and the two directory lookups (its platform seam is two functions wide). |
 | `leitner-export` | The `.ldeck` deck-file container and import policy. Holds the zip dependency. |
 | `leitner-sync` | Publishing the log to the remote and reading it back. Holds the network dependencies. |
-| `leitner-app` | The egui application. `lib` + `cdylib`; the Android entry point lives here. |
+| `leitner-app` | The egui application. `lib` + `cdylib`; the Android entry point and the window's inset seam live here. |
 | `leitner-desktop` | A twenty-line shim, forced by `cargo-apk`. Keep it empty. |
 
 ## Stack
@@ -84,7 +84,15 @@ arm64-v8a only.
 
 ## Where data lives
 
-Resolved by `leitner_store::platform`, which is the entire platform surface of the application.
+Resolved by `leitner_store::platform`, which is two functions wide and stays that way.
+
+**The platform surface is per crate, not per workspace** ([ADR-0016 §5](./docs/adr/0016-backup-and-restore.md)).
+There are three modules under the same three-arm `#[cfg]` discipline, each answering a question its own
+crate owns: `leitner_store::platform` the two directories below, `leitner_export::platform` the
+user-visible files, and `leitner_app::platform` the window's insets — an inset being a fact about the
+window the UI draws into, which the store has no business answering
+([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)). A **fourth function
+appearing in any one of them** is the erosion signal, not a fourth module.
 
 | Target | Collection (`collection.db`, `derived.db`) | Writer marker |
 |---|---|---|

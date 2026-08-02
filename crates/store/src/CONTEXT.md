@@ -164,9 +164,9 @@ disown every earlier `reviewed` row.
 
 ## The platform seam
 
-`platform/` is the entire platform surface of the whole application, and it is two functions wide:
-`data_dir()` and `state_dir()`. Three `#[cfg]` arms, the third a `compile_error!` so an unrecognised
-target fails the build rather than silently taking the desktop path.
+`platform/` is this crate's whole platform surface, and it is two functions wide: `data_dir()` and
+`state_dir()`. Three `#[cfg]` arms, the third a `compile_error!` so an unrecognised target fails the
+build rather than silently taking the desktop path.
 
 **A third function appearing here means the seam is eroding.** Everything else in this crate is
 portable — `rusqlite` with `bundled` compiles unchanged for desktop and Android, proven on the
@@ -176,6 +176,10 @@ handset in #7.
 recorded a contradiction — ADR-0009's handoff sends every platform capability *here*, while the rule
 above forbids a third arriving — and [ADR-0016 §5](../../../docs/adr/0016-backup-and-restore.md)
 resolved it: a crate that must touch the platform for an unrelated reason gets **its own** `platform`
-module under the same three-arm discipline. `leitner-export` has one (put/get/list for user-visible
-files). **This module still stays at two functions**, and that limit is now load-bearing rather than
-merely tidy — it is the reason the erosion signal still means anything.
+module under the same three-arm discipline. `leitner-export` has one (put/get/list/hand_off for
+user-visible files), and `leitner-app` has the third — one function returning the window's insets,
+since an inset is a fact about the window the UI draws into and routing it here would make this crate
+answer a question about layout ([ADR-0025 §2](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)).
+**This module still stays at two functions**, and that limit is now load-bearing rather than merely
+tidy — it is the reason the erosion signal still means anything. The signal is a **fourth function
+here**, never a fourth module elsewhere.
