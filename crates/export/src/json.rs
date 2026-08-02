@@ -49,3 +49,86 @@ pub fn string_value(s: &str) -> String {
     string(&mut out, s);
     out
 }
+
+/// A JSON object assembled member by member. Members are written in the exact order they are added,
+/// so a caller fixes a canonical order by adding keys sorted — the whole determinism story for an
+/// object (ADR-0008 §12). Chain the builders and [`Object::finish`] to close the brace.
+pub struct Object {
+    out: String,
+    first: bool,
+}
+
+impl Default for Object {
+    fn default() -> Object {
+        Object::new()
+    }
+}
+
+impl Object {
+    pub fn new() -> Object {
+        Object {
+            out: "{".to_owned(),
+            first: true,
+        }
+    }
+
+    /// Add `"key":value`, where `value` is an already-rendered JSON fragment (nested object, array,
+    /// number or bool).
+    pub fn raw(mut self, key: &str, value: &str) -> Object {
+        member(&mut self.out, &mut self.first, key, value);
+        self
+    }
+
+    /// Add `"key":"value"`, escaping `value` as a JSON string.
+    pub fn string(self, key: &str, value: &str) -> Object {
+        self.raw(key, &string_value(value))
+    }
+
+    pub fn finish(mut self) -> String {
+        self.out.push('}');
+        self.out
+    }
+}
+
+/// A JSON array assembled element by element, in the order they are added — the caller arranges a
+/// canonical order the same way [`Object`] does. Chain the pushers and [`Array::finish`].
+pub struct Array {
+    out: String,
+    first: bool,
+}
+
+impl Default for Array {
+    fn default() -> Array {
+        Array::new()
+    }
+}
+
+impl Array {
+    pub fn new() -> Array {
+        Array {
+            out: "[".to_owned(),
+            first: true,
+        }
+    }
+
+    /// Push an already-rendered JSON fragment.
+    pub fn raw(mut self, value: &str) -> Array {
+        if self.first {
+            self.first = false;
+        } else {
+            self.out.push(',');
+        }
+        self.out.push_str(value);
+        self
+    }
+
+    /// Push a JSON string element, escaping `value`.
+    pub fn string(self, value: &str) -> Array {
+        self.raw(&string_value(value))
+    }
+
+    pub fn finish(mut self) -> String {
+        self.out.push(']');
+        self.out
+    }
+}

@@ -122,7 +122,8 @@ mod tests {
 
     #[test]
     fn hashes_across_a_block_boundary() {
-        // 56 bytes forces a second padding block — the length spills past the 56-mod-64 mark.
+        // An exact multiple of the 64-byte block, so the 0x80 pad and length spill into a whole
+        // extra final block — and long enough to exercise many block iterations.
         let vector: String = std::iter::repeat_n('a', 1_000_000).collect();
         assert_eq!(
             sha256_hex(vector.as_bytes()),

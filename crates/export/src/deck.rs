@@ -9,7 +9,7 @@
 
 use crate::container::{self, Member};
 use crate::digest::sha256_hex;
-use crate::json::{member, string, string_value};
+use crate::json::{Array, Object};
 use leitner_core::content::{DeckId, FieldRole, KindDefinition, NoteId, SHIPPED_KINDS};
 
 /// A live note's content, as the file carries it. `position` fixes the note's place in
@@ -93,117 +93,89 @@ fn resolve_kind(id: &str) -> Option<&'static KindDefinition> {
 fn note_line(deck: &DeckId, note: &NoteContent) -> String {
     let mut fields: Vec<&(String, String)> = note.fields.iter().collect();
     fields.sort_by(|a, b| a.0.cmp(&b.0));
-    let mut fields_obj = String::from("{");
-    let mut first = true;
-    for (name, value) in fields {
-        member(&mut fields_obj, &mut first, name, &string_value(value));
-    }
-    fields_obj.push('}');
+    let fields_obj = fields
+        .into_iter()
+        .fold(Object::new(), |obj, (name, value)| obj.string(name, value))
+        .finish();
 
-    let mut out = String::from("{");
-    let mut first = true;
-    member(
-        &mut out,
-        &mut first,
-        "deck",
-        &string_value(&deck.to_canonical()),
-    );
-    member(&mut out, &mut first, "fields", &fields_obj);
-    member(&mut out, &mut first, "kind", &string_value(&note.kind));
-    member(
-        &mut out,
-        &mut first,
-        "n",
-        &string_value(&note.id.to_canonical()),
-    );
-    out.push('}');
-    out
+    Object::new()
+        .string("deck", &deck.to_canonical())
+        .raw("fields", &fields_obj)
+        .string("kind", &note.kind)
+        .string("n", &note.id.to_canonical())
+        .finish()
 }
 
 /// One tombstone as a JSON object, keys sorted: `deck`, `deleted`, `n`. A deleted marker with an id
 /// and its deck reference and no fields (ADR-0008 §5).
 fn tombstone_line(deck: &DeckId, t: &Tombstone) -> String {
-    let mut out = String::from("{");
-    let mut first = true;
-    member(
-        &mut out,
-        &mut first,
-        "deck",
-        &string_value(&deck.to_canonical()),
-    );
-    member(&mut out, &mut first, "deleted", "true");
-    member(
-        &mut out,
-        &mut first,
-        "n",
-        &string_value(&t.id.to_canonical()),
-    );
-    out.push('}');
-    out
+    Object::new()
+        .string("deck", &deck.to_canonical())
+        .raw("deleted", "true")
+        .string("n", &t.id.to_canonical())
+        .finish()
 }
 
 /// One kind definition as JSON, so the file explains itself (ADR-0002 §4, ADR-0008 §7): its id, its
 /// fields **in definition order** (order carries rendering meaning), and its cards sorted by slot.
 fn kind_member(kind: &KindDefinition) -> String {
-    let mut fields = String::from("[");
-    for (i, field) in kind.fields.iter().enumerate() {
-        if i > 0 {
-            fields.push(',');
-        }
-        let role = match field.role {
-            FieldRole::Asked => "asked".to_owned(),
-            FieldRole::ShownWith(anchor) => format!("shown-with:{anchor}"),
-        };
-        let mut obj = String::from("{");
-        let mut first = true;
-        member(&mut obj, &mut first, "name", &string_value(field.name));
-        member(&mut obj, &mut first, "role", &string_value(&role));
-        obj.push('}');
-        fields.push_str(&obj);
-    }
-    fields.push(']');
+    let fields = kind
+        .fields
+        .iter()
+        .fold(Array::new(), |arr, field| {
+            let role = match field.role {
+                FieldRole::Asked => "asked".to_owned(),
+                FieldRole::ShownWith(anchor) => format!("shown-with:{anchor}"),
+            };
+            arr.raw(
+                &Object::new()
+                    .string("name", field.name)
+                    .string("role", &role)
+                    .finish(),
+            )
+        })
+        .finish();
 
+    let strings = |xs: &[&str]| {
+        xs.iter()
+            .fold(Array::new(), |arr, s| arr.string(s))
+            .finish()
+    };
     let mut cards: Vec<&leitner_core::content::CardTemplate> = kind.cards.iter().collect();
     cards.sort_by_key(|c| c.slot);
-    let mut cards_json = String::from("[");
-    for (i, card) in cards.iter().enumerate() {
-        if i > 0 {
-            cards_json.push(',');
-        }
-        let strings = |xs: &[&str]| {
-            let mut a = String::from("[");
-            for (j, s) in xs.iter().enumerate() {
-                if j > 0 {
-                    a.push(',');
-                }
-                string(&mut a, s);
-            }
-            a.push(']');
-            a
-        };
-        let mut obj = String::from("{");
-        let mut first = true;
-        member(&mut obj, &mut first, "answer", &strings(card.answer));
-        member(&mut obj, &mut first, "prompt", &strings(card.prompt));
-        member(&mut obj, &mut first, "slot", &card.slot.to_string());
-        obj.push('}');
-        cards_json.push_str(&obj);
-    }
-    cards_json.push(']');
+    let cards_json = cards
+        .iter()
+        .fold(Array::new(), |arr, card| {
+            arr.raw(
+                &Object::new()
+                    .raw("answer", &strings(card.answer))
+                    .raw("prompt", &strings(card.prompt))
+                    .raw("slot", &card.slot.to_string())
+                    .finish(),
+            )
+        })
+        .finish();
 
-    let mut out = String::from("{");
-    let mut first = true;
-    member(&mut out, &mut first, "cards", &cards_json);
-    member(&mut out, &mut first, "fields", &fields);
-    member(&mut out, &mut first, "id", &string_value(kind.id));
-    out.push('}');
-    out
+    Object::new()
+        .raw("cards", &cards_json)
+        .raw("fields", &fields)
+        .string("id", kind.id)
+        .finish()
 }
 
 /// The distinct kind ids a deck's live notes use, sorted — the kinds the file must carry a
 /// definition for.
 fn kinds_used(deck: &DeckContent) -> Vec<String> {
     let mut ids: Vec<String> = deck.notes.iter().map(|n| n.kind.clone()).collect();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+/// The distinct kind ids used across every deck in an export, sorted — the definitions the manifest
+/// lists and the container carries one `kinds/<id>.json` member for.
+fn kinds_across(decks: &[DeckExport]) -> Vec<String> {
+    let mut ids: Vec<String> = decks.iter().flat_map(|d| kinds_used(&d.content)).collect();
     ids.sort();
     ids.dedup();
     ids
@@ -269,82 +241,36 @@ pub fn next_revision(prev: Option<&DeckRevision>, new_digest: &str) -> DeckRevis
 fn manifest(meta: &Metadata, decks: &[DeckExport], notes: usize, tombstones: usize) -> String {
     let mut deck_entries: Vec<&DeckExport> = decks.iter().collect();
     deck_entries.sort_by_key(|d| d.content.id.0);
-    let mut decks_json = String::from("[");
-    for (i, deck) in deck_entries.iter().enumerate() {
-        if i > 0 {
-            decks_json.push(',');
-        }
-        let mut obj = String::from("{");
-        let mut first = true;
-        member(
-            &mut obj,
-            &mut first,
-            "digest",
-            &string_value(&deck.revision.digest),
-        );
-        member(
-            &mut obj,
-            &mut first,
-            "id",
-            &string_value(&deck.content.id.to_canonical()),
-        );
-        member(
-            &mut obj,
-            &mut first,
-            "name",
-            &string_value(&deck.content.name),
-        );
-        member(
-            &mut obj,
-            &mut first,
-            "revision",
-            &deck.revision.revision.to_string(),
-        );
-        obj.push('}');
-        decks_json.push_str(&obj);
-    }
-    decks_json.push(']');
+    let decks_json = deck_entries
+        .iter()
+        .fold(Array::new(), |arr, deck| {
+            arr.raw(
+                &Object::new()
+                    .string("digest", &deck.revision.digest)
+                    .string("id", &deck.content.id.to_canonical())
+                    .string("name", &deck.content.name)
+                    .raw("revision", &deck.revision.revision.to_string())
+                    .finish(),
+            )
+        })
+        .finish();
 
-    let mut kinds: Vec<String> = decks.iter().flat_map(|d| kinds_used(&d.content)).collect();
-    kinds.sort();
-    kinds.dedup();
-    let mut kinds_json = String::from("[");
-    for (i, id) in kinds.iter().enumerate() {
-        if i > 0 {
-            kinds_json.push(',');
-        }
-        string(&mut kinds_json, id);
-    }
-    kinds_json.push(']');
+    let kinds_json = kinds_across(decks)
+        .iter()
+        .fold(Array::new(), |arr, id| arr.string(id))
+        .finish();
 
-    let mut out = String::from("{");
-    let mut first = true;
-    member(&mut out, &mut first, "author", &string_value(&meta.author));
-    member(&mut out, &mut first, "decks", &decks_json);
-    member(
-        &mut out,
-        &mut first,
-        "description",
-        &string_value(&meta.description),
-    );
-    member(
-        &mut out,
-        &mut first,
-        "format",
-        &container::FORMAT.to_string(),
-    );
-    member(&mut out, &mut first, "kinds", &kinds_json);
-    member(
-        &mut out,
-        &mut first,
-        "licence",
-        &string_value(&meta.licence),
-    );
-    member(&mut out, &mut first, "notes", &notes.to_string());
-    member(&mut out, &mut first, "profile", &string_value("deck"));
-    member(&mut out, &mut first, "tombstones", &tombstones.to_string());
-    out.push('}');
-    out
+    Object::new()
+        .string("author", &meta.author)
+        .raw("decks", &decks_json)
+        .string("description", &meta.description)
+        .raw("format", &container::FORMAT.to_string())
+        .raw("kinds", &kinds_json)
+        .string("licence", &meta.licence)
+        .raw("notes", &notes.to_string())
+        .string("profile", "deck")
+        .raw("tombstones", &tombstones.to_string())
+        .finish()
 }
 
 /// Assemble the whole `.ldeck` archive for `decks` under `metadata`, byte-for-byte deterministically
@@ -379,10 +305,7 @@ pub fn build_deck(metadata: &Metadata, decks: &[DeckExport]) -> Result<Vec<u8>, 
         Member::deflated(container::NOTES_MEMBER, notes_jsonl.into_bytes()),
     ];
 
-    let mut kinds: Vec<String> = decks.iter().flat_map(|d| kinds_used(&d.content)).collect();
-    kinds.sort();
-    kinds.dedup();
-    for id in kinds {
+    for id in kinds_across(decks) {
         let kind = resolve_kind(&id).ok_or_else(|| ExportError::UnknownKind(id.clone()))?;
         members.push(Member::deflated(
             format!("{}{id}.json", container::KINDS_PREFIX),
