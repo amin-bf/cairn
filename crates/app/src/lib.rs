@@ -1274,6 +1274,8 @@ fn multiline_field_output(
 /// history cutoff) is modelled and proven in `sync`, but it needs a live grant, and the device flow
 /// that obtains one carries the network this environment lacks (ADR-0013 §11) — so it is wired when
 /// that mechanism lands, not faked here. What is fixed now is what each surface *says*.
+// Each screen threads its own `&mut` slice of `LeitnerApp` state plus the frame's `now_ms`; grouping
+// them behind a struct would only relocate the same fields, not reduce them.
 #[allow(clippy::too_many_arguments)]
 fn settings_screen(
     ui: &mut egui::Ui,

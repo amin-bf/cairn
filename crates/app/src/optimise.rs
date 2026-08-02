@@ -257,7 +257,6 @@ mod tests {
     fn a_job_runs_on_a_worker_thread_and_hands_back_a_complete_outcome() {
         // ADR-0014 §3: the run is off the frame thread; nothing is read until it finishes, and what
         // comes back is a whole vector — never a partial one.
-        let n = "11111111-1111-4111-8111-111111111111";
         let mut lines: Vec<String> = Vec::new();
         // A handful of cards with multi-day histories, enough to fit a real (non-default) vector.
         for card in 0..8u64 {
@@ -276,11 +275,13 @@ mod tests {
                 ));
             }
         }
-        let _ = n;
 
         let mut job = OptimiseJob::start(lines);
         // Before it finishes, the phase is a valid two-phase reading.
-        matches!(job.phase(), Phase::Preparing | Phase::Training { .. });
+        assert!(matches!(
+            job.phase(),
+            Phase::Preparing | Phase::Training { .. }
+        ));
 
         let outcome = loop {
             if let Some(result) = job.poll() {
