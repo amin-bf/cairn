@@ -152,6 +152,18 @@ impl CardRef {
         out[16..].copy_from_slice(&self.ordinal.to_be_bytes());
         out
     }
+
+    /// The inverse of [`CardRef::encode`]: rebuild a `CardRef` from its canonical 18 bytes, or `None`
+    /// for any other length. The store keys suspension by this encoding (ADR-0010 §5), and reading the
+    /// suspended set back needs to decode the blob it stored; anything not exactly eighteen bytes is
+    /// not one of ours and is refused rather than guessed.
+    pub fn decode(bytes: &[u8]) -> Option<CardRef> {
+        let bytes: &[u8; 18] = bytes.try_into().ok()?;
+        let mut note = [0u8; 16];
+        note.copy_from_slice(&bytes[..16]);
+        let ordinal = u16::from_be_bytes([bytes[16], bytes[17]]);
+        Some(CardRef::new(NoteId(note), ordinal))
+    }
 }
 
 /// The high bit partitions cloze blanks (`0x8000 | n`) from fixed-arity slots (`0x0000–0x7FFF`),
@@ -511,6 +523,23 @@ mod tests {
         let encoded = card.encode();
         assert_eq!(&encoded[..16], &note.0);
         assert_eq!(&encoded[16..], &[0x01, 0x02]);
+    }
+
+    #[test]
+    fn cardref_decode_is_the_inverse_of_encode_and_refuses_bad_lengths() {
+        // ADR-0010 §5: the store keys suspension by the 18-byte encoding and decodes it back to
+        // enumerate the suspended set. Round-trips exactly; a blob of any other length is not ours.
+        for ordinal in [0u16, 1, 0x0102, 0x7FFF, cloze_slot(3)] {
+            let card = CardRef::new(NoteId([0xab; 16]), ordinal);
+            assert_eq!(CardRef::decode(&card.encode()), Some(card));
+        }
+        assert_eq!(
+            CardRef::decode(&[0u8; 16]),
+            None,
+            "sixteen bytes is a note id, not a card"
+        );
+        assert_eq!(CardRef::decode(&[0u8; 19]), None);
+        assert_eq!(CardRef::decode(&[]), None);
     }
 
     #[test]

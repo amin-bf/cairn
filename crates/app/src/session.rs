@@ -12,7 +12,9 @@
 use std::collections::{HashMap, HashSet};
 
 use leitner_core::content::{CardRef, NoteId};
-use leitner_core::replay::{NewCard, Replayed, introduction_candidates, notes_introduced_today};
+use leitner_core::replay::{
+    Leech, NewCard, Replayed, introduction_candidates, notes_introduced_today,
+};
 use leitner_core::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, day_gap};
 
 /// More cards due than a sitting will clear: past this, the count picker **frames** the backlog
@@ -83,8 +85,9 @@ impl Queue {
 /// **New** is the introduction candidates (ADR-0011 §7, §8): the never-introduced cards, taken in
 /// `(position, ordinal)` order up to `rate`, at most one per note, excluding suspended cards and
 /// notes already introduced today. The rate is the only enforced limit in the app (ADR-0011 §1, §2);
-/// `positions` carries each note's order key, and `suspended` is the mutable-surface flag (empty
-/// until #87). Ordering is deterministic so two runs, or a force-quit and relaunch, agree.
+/// `positions` carries each note's order key, and `suspended` is the mutable-surface flag (ADR-0010
+/// §8) — a suspended card leaves **every** due count and is never introduced. Ordering is
+/// deterministic so two runs, or a force-quit and relaunch, agree.
 pub fn compose(
     current: &HashSet<CardRef>,
     positions: &HashMap<NoteId, String>,
@@ -97,6 +100,12 @@ pub fn compose(
     let mut new_cards: Vec<NewCard> = Vec::new();
 
     for &card in current {
+        // A suspended card leaves **every** due count and is never introduced (ADR-0010 §8): it is
+        // still replayed — its box goes on meaning durability — but it is not *offered*, which is the
+        // one thing suspension changes. Skipped here before the due/new split so it enters neither.
+        if suspended.contains(&card) {
+            continue;
+        }
         match replayed.cards.get(&card) {
             Some(state) if state.due_day <= today || state.last_grade.is_failure() => due.push((
                 state.due_day,
@@ -149,6 +158,23 @@ pub fn interval_preview(offered: &Offered, grade: Grade, today: i64) -> u32 {
     let elapsed = day_gap(offered.last_day, today);
     let next = scheduler.advance(offered.memory, grade, elapsed);
     scheduler.next_interval_unfuzzed(next).round().max(1.0) as u32
+}
+
+/// The leeches that **crossed the floor during the sitting just finished** — the end-of-session
+/// pointer's contents (ADR-0010 §6). `before` is the set of leech cards captured when the sitting
+/// began; `now` is [`leeches`](leitner_core::replay::leeches) recomputed at its end. A leech in `now`
+/// but not in `before` crossed *this* session, caused by a failure the running app just logged — and
+/// this needs **zero stored state**: no dismissal flag, no last-seen marker (ADR-0010 §6), only the
+/// in-memory snapshot a sitting already is. The order of `now` (worst first) is preserved.
+///
+/// A card the user saw and ignored does not reappear here next session — it is not in a *later*
+/// sitting's `now \ before` unless it crosses again — but it keeps its place on the dedicated screen,
+/// which is the durable recourse.
+pub fn crossed_this_session(before: &HashSet<CardRef>, now: &[Leech]) -> Vec<Leech> {
+    now.iter()
+        .filter(|leech| !before.contains(&leech.card))
+        .cloned()
+        .collect()
 }
 
 /// The state the review destination is in, chosen so the empty, new-deck and backlog cases are
@@ -455,6 +481,100 @@ mod tests {
     }
 
     #[test]
+    fn a_suspended_card_leaves_the_due_queue_entirely() {
+        // ADR-0010 §8: a suspended card is excluded from every due count — otherwise the number could
+        // never reach zero. A due card, suspended, must vanish from the queue and leave it caught up.
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let n = note(1);
+        let card = CardRef::new(n, 0);
+        let cards = current(&[n]);
+        const TODAY: i64 = 20_514;
+        let day0_ms = TODAY * 86_400_000 + 4 * 3_600_000;
+
+        coll.append_review(card, Grade::Good, day0_ms, DayScale::default(), 1000)
+            .unwrap();
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&cards, &refs);
+
+        // Far in the future so the card is genuinely due; then suspend it and it is not offered.
+        let due_far = TODAY + 3650;
+        let offered = compose(
+            &cards,
+            &HashMap::new(),
+            &replayed,
+            due_far,
+            RATE,
+            &HashSet::new(),
+        );
+        assert_eq!(offered.due.len(), 1, "the card is due when not suspended");
+
+        let suspended = HashSet::from([card]);
+        let queue = compose(
+            &cards,
+            &HashMap::new(),
+            &replayed,
+            due_far,
+            RATE,
+            &suspended,
+        );
+        assert!(
+            queue.due.is_empty(),
+            "a suspended card leaves the due queue"
+        );
+        assert_eq!(ReviewState::of(&queue, cards.len()), ReviewState::CaughtUp);
+    }
+
+    #[test]
+    fn a_suspended_new_card_is_not_introduced() {
+        // ADR-0010 §8, ADR-0011 §8: a suspended card is not introduced either. A fresh note whose only
+        // card is suspended offers nothing.
+        let n = note(1);
+        let cards = current(&[n]);
+        let suspended = HashSet::from([CardRef::new(n, 0)]);
+        let queue = compose(
+            &cards,
+            &positions(&[n]),
+            &Replayed::default(),
+            0,
+            RATE,
+            &suspended,
+        );
+        assert!(
+            queue.new.is_empty(),
+            "a suspended new card is not introduced"
+        );
+        assert_eq!(ReviewState::of(&queue, cards.len()), ReviewState::CaughtUp);
+    }
+
+    #[test]
+    fn the_end_of_session_pointer_covers_only_leeches_that_crossed_this_session() {
+        // ADR-0010 §6: the pointer is leeches now minus leeches at the sitting's start — the cards
+        // whose crossing this session caused, with zero stored state.
+        let already = Leech {
+            card: CardRef::new(note(1), 0),
+            failure_days: 5,
+            last_failure_day: 40,
+        };
+        let fresh = Leech {
+            card: CardRef::new(note(2), 0),
+            failure_days: 4,
+            last_failure_day: 41,
+        };
+        let before = HashSet::from([already.card]);
+        let now = vec![already.clone(), fresh.clone()];
+        assert_eq!(
+            crossed_this_session(&before, &now),
+            vec![fresh.clone()],
+            "a leech already crossed before the session does not appear in the pointer"
+        );
+        // Nothing new crossed: the pointer is empty and the session says nothing.
+        assert!(crossed_this_session(&HashSet::from([already.card, fresh.card]), &now).is_empty());
+    }
+
+    #[test]
     fn a_large_due_pile_is_flagged_as_backlog() {
         // Build enough due cards to cross the comfortable-sitting threshold; the state frames it.
         let notes: Vec<NoteId> = (0..(COMFORTABLE_SITTING as u8 + 5)).map(note).collect();
@@ -475,6 +595,7 @@ mod tests {
                     last_grade: Grade::Good,
                     last_day: 0,
                     due_day: 1,
+                    failure_days: Vec::new(),
                 },
             );
         }

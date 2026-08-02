@@ -64,6 +64,19 @@ content: it **syncs between a user's own devices but never exports** — the sep
 of any export that enumerates content by kind — and it **never enters the log** (ADR-0011 §5). Zero is
 legal, the backlog escape hatch. The per-deck slot ADR-0005 §5 reserved stays empty (ADR-0011 §6).
 
+**Suspension**:
+"Stop showing me this card" (ADR-0010 §5), stored on the mutable surface under a distinct
+`entity = "suspension"` keyed by the `CardRef`'s canonical 18-byte encoding (attr `suspended`, `"true"`
+while suspended, cleared to NULL to unsuspend). `suspend`/`unsuspend`/`is_suspended`/`suspended` are
+the four operations; the last returns the set the review queue excludes from **every** due count and
+introduction (ADR-0010 §8). **Per card, not per note** — one cloze blank or one direction of a pair may
+be agony while its sibling is solid. Like the new-card rate it is **personal**: it settles by stamp,
+**syncs between a user's own devices but never exports** (the separate entity keeps it out of any
+content export), and it is **not a log row** — a toggle in the log would be settled by wall clock, the
+one thing the stamp exists to prevent. A suspension whose card stops being generated goes dormant and
+reattaches by itself, exactly as review history does; cleaning it up would be a bug.
+_Avoid_: Suspend event, leech flag, buried, archived — the row kind ADR-0010 §5 ruled out.
+
 **Reorder**:
 Moving a note in authored order is `move_note_between`, which writes **exactly one** `position` value
 between two neighbours (`leitner_core::content::order::between`) and **never renumbers** (ADR-0021 §3,

@@ -22,7 +22,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use leitner_core::content::{CardRef, DeckId, NoteId};
 use leitner_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
-use leitner_core::replay::replay;
+use leitner_core::replay::{Leech, Replayed, leeches, replay};
 use leitner_core::scheduling::Grade;
 use leitner_store::Collection;
 
@@ -59,10 +59,15 @@ struct Sitting {
     card_shown: Instant,
     /// Set once the user answers the 10-minute checkpoint's "keep going", so it does not nag again.
     checkpoint_dismissed: bool,
+    /// The set of cards that were already leeches when this sitting began — the `before` half of the
+    /// end-of-session pointer (ADR-0010 §6). Held **in memory only**, like everything else about a
+    /// sitting: the pointer covers cards that crossed *this* session, which is exactly `leeches now`
+    /// minus this snapshot, and it needs no stored dismissal or last-seen state.
+    leeches_at_start: HashSet<CardRef>,
 }
 
 impl Sitting {
-    fn new(chosen: usize) -> Self {
+    fn new(chosen: usize, leeches_at_start: HashSet<CardRef>) -> Self {
         let now = Instant::now();
         Sitting {
             chosen,
@@ -72,6 +77,7 @@ impl Sitting {
             started: now,
             card_shown: now,
             checkpoint_dismissed: false,
+            leeches_at_start,
         }
     }
 
@@ -211,6 +217,15 @@ pub struct LeitnerApp {
     /// screen first reads the stored rate into it; committed back to the mutable surface on change
     /// (ADR-0011 §3, §5). Kept as text so a mid-edit empty field does not read as zero.
     new_card_rate: Option<String>,
+    /// True while the **leech screen** is showing (ADR-0010 §4, §6). It hangs off the Review
+    /// destination rather than being one of its own — reached from the end-of-session pointer and from
+    /// a durable entry on the picker — so it is a sub-state of Review, not a fourth `Destination`.
+    showing_leeches: bool,
+    /// The count of leeches that **crossed the floor during the sitting just finished** — the
+    /// end-of-session pointer (ADR-0010 §6). `Some(n)` shows the pointer once; dismissing it or tapping
+    /// through clears it. Never a nag: a card ignored here is not raised again, only kept on the leech
+    /// screen.
+    session_pointer: Option<usize>,
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
@@ -233,6 +248,8 @@ impl LeitnerApp {
             deck_filter: None,
             new_deck: String::new(),
             new_card_rate: None,
+            showing_leeches: false,
+            session_pointer: None,
             fonts_installed: false,
         }
     }
@@ -288,8 +305,18 @@ impl eframe::App for LeitnerApp {
         match self.dest {
             Destination::Review => {
                 // Opening the editor from the review screen counts as a reveal (ADR-0021 §6): the
-                // request carries the note, and `review` has already flipped the card face over.
-                if let Some(note) = review(ui, coll, &mut self.sitting, now_ms, today) {
+                // request carries the note, and `review` has already flipped the card face over. The
+                // edit entrance is shared by the leech screen, which also hangs off Review (ADR-0010
+                // §7).
+                if let Some(note) = review(
+                    ui,
+                    coll,
+                    &mut self.sitting,
+                    &mut self.showing_leeches,
+                    &mut self.session_pointer,
+                    now_ms,
+                    today,
+                ) {
                     self.editing = Some(Editing::for_note(coll, note));
                     self.dest = Destination::Notes;
                 }
@@ -339,38 +366,84 @@ fn review(
     ui: &mut egui::Ui,
     coll: &mut Collection,
     sitting: &mut Option<Sitting>,
+    showing_leeches: &mut bool,
+    session_pointer: &mut Option<usize>,
     now_ms: i64,
     today: i64,
 ) -> Option<NoteId> {
     // Everything on screen is derived from the log this frame — there is no cached session state to
     // fall out of step with it. The new-card rate and the notes' authored positions ride the mutable
-    // surface (ADR-0011 §5, §7), read fresh alongside the log. Suspension (ADR-0010 §8) is #87's, so
-    // its exclusion set is empty for now — the queue already refuses a suspended card once it lands.
+    // surface (ADR-0011 §5, §7), read fresh alongside the log; suspension is the per-card flag beside
+    // them (ADR-0010 §8), so the queue now refuses a suspended card wherever it would appear.
     let current = deck::current_cards(coll).unwrap_or_default();
     let positions = deck::note_positions(coll).unwrap_or_default();
     let rate = coll.new_card_rate().unwrap_or(DEFAULT_NEW_CARD_RATE) as usize;
+    let suspended = coll.suspended().unwrap_or_default();
     let lines = coll.log_lines().unwrap_or_default();
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let replayed = replay(&current, &refs);
-    let queue = session::compose(
-        &current,
-        &positions,
-        &replayed,
-        today,
-        rate,
-        &HashSet::new(),
-    );
+    let queue = session::compose(&current, &positions, &replayed, today, rate, &suspended);
+    // The leech list is a query over replayed history (ADR-0010 §1, §4), derived fresh every frame —
+    // never stored, always current, self-clearing. Suspension does not touch detection: a suspended
+    // card is still a leech if its record says so, and has its permanent home below.
+    let ranked = leeches(&replayed, today);
     let total = current.len();
 
-    heading(ui, "Review");
-    ui.add_space(8.0);
-
+    // The leech screen and the end-of-session pointer both hang off Review (ADR-0010 §6), and only
+    // when no sitting is running: mid-sitting the card is the sole speaker (ADR-0006). The picker sits
+    // last, so a durable entry to the leech screen can precede it.
     if sitting.is_none() {
+        if *showing_leeches {
+            heading(ui, "Leeches");
+            ui.add_space(8.0);
+            let edit = leech_screen(ui, coll, &ranked, &suspended, &replayed);
+            ui.add_space(8.0);
+            if full_width_button(ui, "Back to review").clicked() {
+                *showing_leeches = false;
+            }
+            return edit;
+        }
+
+        heading(ui, "Review");
+        ui.add_space(8.0);
+
+        // The end-of-session pointer: a plain statement that N cards are costing a lot, with a way
+        // through to the list where the decision is made — never a decision point itself (ADR-0010
+        // §6). Dismissing it or tapping through clears it; it is shown once and never nags.
+        if let Some(count) = *session_pointer {
+            body(ui, &pointer_wording(count));
+            ui.add_space(8.0);
+            if full_width_button(ui, "Show me").clicked() {
+                *showing_leeches = true;
+                *session_pointer = None;
+            }
+            if full_width_button(ui, "Not now").clicked() {
+                *session_pointer = None;
+            }
+            return None;
+        }
+
         if let Some(count) = picker(ui, &queue, total) {
-            *sitting = Some(Sitting::new(count));
+            // Snapshot the cards that are already leeches, so the pointer at this sitting's end covers
+            // only what crosses during it (ADR-0010 §6).
+            let before = ranked.iter().map(|l| l.card).collect();
+            *sitting = Some(Sitting::new(count, before));
+        }
+        // The durable way back to the leech screen (ADR-0010 §6): the notice is the discovery path,
+        // this is the place to return to. Offered whenever any card is a leech or is suspended (whose
+        // permanent home this is, ADR-0010 §8), below the picker so it never competes with it.
+        if !ranked.is_empty() || !suspended.is_empty() {
+            ui.add_space(12.0);
+            if full_width_button(ui, &leech_entry_wording(ranked.len(), suspended.len())).clicked()
+            {
+                *showing_leeches = true;
+            }
         }
         return None;
     }
+
+    heading(ui, "Review");
+    ui.add_space(8.0);
 
     // A running sitting: keep the frame ticking so the 10-minute checkpoint can surface without an
     // input event (immediate mode has nowhere to wait — client-stack rule 4).
@@ -473,9 +546,155 @@ fn review(
     }
 
     if end_sitting {
+        // The end-of-session pointer covers only leeches that crossed **this** sitting (ADR-0010 §6):
+        // the leeches now, minus those already crossed when it began. The `before` snapshot lived in
+        // the sitting, which is in-memory, so this needs no stored dismissal or last-seen marker.
+        if let Some(s) = sitting.as_ref() {
+            let crossed = session::crossed_this_session(&s.leeches_at_start, &ranked);
+            *session_pointer = (!crossed.is_empty()).then_some(crossed.len());
+        }
         *sitting = None;
     }
     edit_request
+}
+
+/// The end-of-session pointer's wording (ADR-0010 §6): a plain statement of cost and an offer to look,
+/// never a decision made in the moment. Kept pure so the sentence is testable without a window.
+fn pointer_wording(count: usize) -> String {
+    if count == 1 {
+        "1 card is costing you a lot. Take a look?".to_owned()
+    } else {
+        format!("{count} cards are costing you a lot. Take a look?")
+    }
+}
+
+/// The durable leech-screen entry's label (ADR-0010 §6, §8): names how many cards are leeches and how
+/// many are suspended, so the button that leads to their permanent home says what it holds.
+fn leech_entry_wording(leeches: usize, suspended: usize) -> String {
+    match (leeches, suspended) {
+        (l, 0) => format!("Leeches ({l})"),
+        (0, s) => format!("Suspended ({s})"),
+        (l, s) => format!("Leeches ({l}) · suspended ({s})"),
+    }
+}
+
+/// The leech screen (ADR-0010 §4, §6, §7, §8): the ranked list of cards costing the user, worst first,
+/// each offering **edit** (primary), **suspend** and **delete** — and never a tag, which would publish
+/// a private struggle into a deck (ADR-0010 §7); plus the **permanent** section of suspended cards,
+/// each with **unsuspend** (ADR-0010 §8). Returns the note to edit, if any — the shared editor
+/// entrance (ADR-0021 §5). The exact visual design is the pass's; what is fixed is the ranking, the
+/// three actions, the never-a-tag, and the suspended section's permanence.
+///
+/// A suspended card is not listed among the active leeches even when its history still qualifies — it
+/// lives in the suspended section instead, so it is named once, not twice. Actions are collected while
+/// drawing and applied after, so the immutable reads that render each card's preview do not fight the
+/// mutable writes.
+fn leech_screen(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    ranked: &[Leech],
+    suspended: &HashSet<CardRef>,
+    replayed: &Replayed,
+) -> Option<NoteId> {
+    // Render each card's preview text up front, while the collection is only read; the owned strings
+    // then outlive the immutable borrow so the action writes below are free to take `&mut coll`.
+    let active: Vec<(CardRef, String, u32, u32)> = ranked
+        .iter()
+        .filter(|leech| !suspended.contains(&leech.card))
+        .map(|leech| {
+            let reviews = replayed
+                .cards
+                .get(&leech.card)
+                .map_or(0, |state| state.review_count);
+            (
+                leech.card,
+                card_preview(coll, leech.card),
+                leech.failure_days,
+                reviews,
+            )
+        })
+        .collect();
+    // The suspended section is ordered by card identity so two devices show it the same way.
+    let mut suspended_sorted: Vec<CardRef> = suspended.iter().copied().collect();
+    suspended_sorted.sort_by_key(|card| card.encode());
+    let suspended_rows: Vec<(CardRef, String)> = suspended_sorted
+        .iter()
+        .map(|&card| (card, card_preview(coll, card)))
+        .collect();
+
+    let mut edit: Option<NoteId> = None;
+    let mut suspend: Option<CardRef> = None;
+    let mut unsuspend: Option<CardRef> = None;
+    let mut delete: Option<NoteId> = None;
+
+    // The floor is what lets the empty state speak plainly (ADR-0010 §4): nothing is hurting.
+    if active.is_empty() && suspended_rows.is_empty() {
+        body(ui, "Nothing is costing you a lot right now.");
+        return None;
+    }
+
+    if !active.is_empty() {
+        body(ui, "These keep catching you out — worst first.");
+        ui.add_space(4.0);
+        for (card, preview, days, reviews) in &active {
+            // The cost, made concrete (ADR-0010 §6): failure days and how many reviews they took.
+            badge(ui, &format!("{days} bad days · {reviews} reviews"));
+            ui.horizontal(|ui| {
+                if ui.button(text(ui, preview)).clicked() {
+                    edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
+                }
+                if ui.button(text(ui, "Suspend")).clicked() {
+                    suspend = Some(*card);
+                }
+                if ui.button(text(ui, "Delete")).clicked() {
+                    delete = Some(card.note);
+                }
+            });
+        }
+    }
+
+    if !suspended_rows.is_empty() {
+        ui.add_space(12.0);
+        // Suspended cards have a permanent home here (ADR-0010 §8) — their own section, always, with
+        // unsuspend available. Never a one-way door.
+        body(ui, "Suspended — not shown in review.");
+        ui.add_space(4.0);
+        for (card, preview) in &suspended_rows {
+            ui.horizontal(|ui| {
+                if ui.button(text(ui, preview)).clicked() {
+                    edit = Some(card.note);
+                }
+                if ui.button(text(ui, "Unsuspend")).clicked() {
+                    unsuspend = Some(*card);
+                }
+            });
+        }
+    }
+
+    // Apply the one action taken this frame. Each is a mutable-surface write (suspend/unsuspend) or the
+    // note delete (ADR-0004 §7); a failed write is dropped and the next frame re-derives, as elsewhere.
+    if let Some(card) = suspend {
+        let _ = coll.suspend(card);
+    }
+    if let Some(card) = unsuspend {
+        let _ = coll.unsuspend(card);
+    }
+    if let Some(note) = delete {
+        let _ = coll.mutable_set("note", &note.0, "deleted", Some("true"));
+    }
+    edit
+}
+
+/// One card's prompt, for a leech row — the card the user will recognise. A dormant card (its content
+/// no longer generated, ADR-0002 §7) renders nothing, so it falls back to a plain marker rather than a
+/// blank row: a suspended card whose note was edited away still needs a line to carry its unsuspend.
+fn card_preview(coll: &Collection, card: CardRef) -> String {
+    deck::render(coll, card)
+        .ok()
+        .flatten()
+        .map(|rendered| rendered.prompt)
+        .filter(|prompt| !prompt.trim().is_empty())
+        .unwrap_or_else(|| "(card no longer generated)".to_owned())
 }
 
 /// The count picker and the explicit worded states (issue #94). Returns the chosen sitting size when
@@ -1256,6 +1475,33 @@ fn bidi_layouter(
     job.halign = egui::Align::LEFT;
     job.wrap.max_width = wrap_width;
     ui.fonts_mut(|f| f.layout_job(job))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_pointer_states_a_cost_and_is_singular_or_plural() {
+        // ADR-0010 §6: the pointer is a plain statement of cost, not a bare count and not a decision.
+        assert_eq!(
+            pointer_wording(1),
+            "1 card is costing you a lot. Take a look?"
+        );
+        assert_eq!(
+            pointer_wording(3),
+            "3 cards are costing you a lot. Take a look?"
+        );
+    }
+
+    #[test]
+    fn the_leech_entry_names_leeches_suspended_or_both() {
+        // ADR-0010 §6, §8: the durable entry to the leech screen says what it holds — the active
+        // leeches, the suspended cards whose permanent home it is, or both.
+        assert_eq!(leech_entry_wording(2, 0), "Leeches (2)");
+        assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
+        assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
+    }
 }
 
 /// Android entry point. `NativeActivity` hosts the app directly: the APK is this `.so` plus a
