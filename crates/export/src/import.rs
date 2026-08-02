@@ -363,7 +363,9 @@ fn manifest_decks(manifest: &Json) -> Option<Vec<ManifestDeck>> {
     for entry in entries {
         let id = DeckId::parse_canonical(entry.get("id")?.as_str()?)?;
         let name = plain(entry.get("name")?.as_str()?, MAX_NAME_CHARS);
-        let revision = entry.get("revision")?.as_u64()? as u32;
+        // A revision that does not fit `u32` is a structure the gate refuses rather than truncates:
+        // a silent wrap could make a newer file read as older and slip the revision gate.
+        let revision = u32::try_from(entry.get("revision")?.as_u64()?).ok()?;
         let digest = entry.get("digest")?.as_str()?.to_owned();
         out.push(ManifestDeck {
             id,
