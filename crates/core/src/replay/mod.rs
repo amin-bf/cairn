@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::content::CardRef;
+use crate::content::{CardRef, NoteId};
 use crate::log::{ParsedLine, Row, Setting, parse_line};
 use crate::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, box_of};
 
@@ -216,7 +216,7 @@ pub struct NewCard {
 /// "today" is the **device-local** day, the edge value replay itself refuses to read (replay
 /// `CONTEXT.md`) and the caller passes in. Derived, never stored (ADR-0011 §5): losing the cache
 /// loses nothing. A lapse re-show is not an earliest row, so it never enters this set.
-pub fn notes_introduced_today(replayed: &Replayed, today: i64) -> HashSet<crate::content::NoteId> {
+pub fn notes_introduced_today(replayed: &Replayed, today: i64) -> HashSet<NoteId> {
     let mut notes = HashSet::new();
     for (card, state) in &replayed.cards {
         if state.first_day == today {
@@ -248,7 +248,7 @@ pub fn notes_introduced_today(replayed: &Replayed, today: i64) -> HashSet<crate:
 /// nothing more, and one part-way through offers only the rest — never the full rate a second time.
 pub fn introduction_candidates(
     new_cards: &[NewCard],
-    introduced_today: &HashSet<crate::content::NoteId>,
+    introduced_today: &HashSet<NoteId>,
     suspended: &HashSet<CardRef>,
     rate: usize,
 ) -> Vec<CardRef> {

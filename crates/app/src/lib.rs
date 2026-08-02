@@ -20,7 +20,7 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use leitner_core::content::{CardRef, DeckId, NoteId};
-use leitner_core::log::{DayScale, day_number};
+use leitner_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
 use leitner_core::replay::replay;
 use leitner_core::scheduling::Grade;
 use leitner_store::Collection;
@@ -341,9 +341,7 @@ fn review(
     // its exclusion set is empty for now — the queue already refuses a suspended card once it lands.
     let current = deck::current_cards(coll).unwrap_or_default();
     let positions = deck::note_positions(coll).unwrap_or_default();
-    let rate = coll
-        .new_card_rate()
-        .unwrap_or(leitner_core::log::DEFAULT_NEW_CARD_RATE) as usize;
+    let rate = coll.new_card_rate().unwrap_or(DEFAULT_NEW_CARD_RATE) as usize;
     let lines = coll.log_lines().unwrap_or_default();
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let replayed = replay(&current, &refs);
@@ -895,7 +893,7 @@ fn new_card_rate_control(
     // Seed the buffer from the stored rate the first time this screen is shown.
     let buffer = rate_buffer.get_or_insert_with(|| {
         coll.new_card_rate()
-            .unwrap_or(leitner_core::log::DEFAULT_NEW_CARD_RATE)
+            .unwrap_or(DEFAULT_NEW_CARD_RATE)
             .to_string()
     });
 
@@ -905,11 +903,14 @@ fn new_card_rate_control(
     if resp.lost_focus()
         && let Ok(rate) = buffer.trim().parse::<u32>()
     {
+        // A failed write is dropped rather than surfaced: the re-read below then reflects the
+        // unchanged stored value, so the field simply shows the edit did not take. Surfacing write
+        // errors is a later ticket, as at the review grade site.
         let _ = coll.set_new_card_rate(rate);
         // Reflect the clamp back into the buffer so an out-of-range entry shows what was stored.
         *buffer = coll
             .new_card_rate()
-            .unwrap_or(leitner_core::log::DEFAULT_NEW_CARD_RATE)
+            .unwrap_or(DEFAULT_NEW_CARD_RATE)
             .to_string();
     }
     ui.add_space(4.0);
