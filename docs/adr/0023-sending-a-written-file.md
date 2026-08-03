@@ -284,6 +284,32 @@ that knowable at all, and it is vindicated. What the mangled name costs is
 | Item | Owner |
 |---|---|
 | **What identifies a written file when Android keeps neither our media type nor our extension** — measured here, decided there | [#72 — how a written file is identified again](https://github.com/amin-bf/leitner/issues/72) |
-| **Whether a recipient can read the bytes.** The grant is set correctly and metadata resolves, but completing a share into a real application would have sent a file to a real contact from the owner's own accounts, so it was deliberately not done | Implementation, under `AGENTS.md` rule 9 |
-| **The API 24–28 path.** `MediaStore.Downloads` and the permission-free insert are API 29+; `min_sdk_version` is 24. Unmeasured, and inherited from [ADR-0016 §5](0016-backup-and-restore.md) rather than created here | Implementation |
+| ~~**Whether a recipient can read the bytes.**~~ The grant is set correctly and metadata resolves, but completing a share into a real application would have sent a file to a real contact from the owner's own accounts, so it was deliberately not done | **Discharged** — see below |
+| **The API 24–28 path**, narrowed from *"below API 29"*. `MediaStore.Downloads` and the permission-free insert are API 29+; `min_sdk_version` is 24. **29 itself is now measured** and behaves as §7 and [ADR-0024 §4](0024-identifying-a-written-file.md) describe, so the gap is 24–28 exactly. Inherited from [ADR-0016 §5](0016-backup-and-restore.md) rather than created here | Implementation |
 | Visual treatment of the affordance — where the action sits and what it is labelled | **Out of scope** — *the visual design pass*, ruled out by [the map](https://github.com/amin-bf/leitner/issues/1) on 2026-07-31 |
+
+### The recipient read, discharged
+
+> **The bytes arrive.** A `.ldeck` handed off from the handset reached a **second device that has
+> never held this application**, byte for byte — same SHA-256, same four members, `mimetype` still
+> first and uncompressed
+> ([#98](https://github.com/amin-bf/leitner/issues/98)).
+
+**What blocked it was the recipient, not the measurement.** This ADR did not decline to look; it
+declined to *send a file to a person* from the owner's own accounts to find out. A second handset the
+owner controls removes that reason entirely, and nothing else about the item changed.
+
+**It is a different claim from the one already recorded, which is why it was worth the trip.** §7's
+metadata resolution proves a recipient can *read the URI*; it does not prove the stream behind it
+opens. The receiving device stated the exact byte count in its accept prompt **before** the transfer
+— the sender having read the stream through `FLAG_GRANT_READ_URI_PERMISSION` — and the file that
+landed hashed identically. So the grant is not merely accepted, it is honoured.
+
+**And §7's fourth fact stops being an inference.** It reasoned that the chooser previewing a bare
+`MediaStore` row id is cosmetic *because* "a recipient querying the URI resolves the real name
+correctly". The display name travelled with the file, dedupe suffix and all. That was the one step in
+the argument nobody had watched happen.
+
+This is also what turns [ADR-0008 §2](0008-the-deck-export-format.md)'s *"the one artifact that leaves
+the machine and arrives with someone who does not have our application"* from the premise this crate
+was built on into something the shipped path has done.
