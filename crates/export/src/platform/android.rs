@@ -1,20 +1,25 @@
 //! Android user files: `MediaStore` for put/get/list, the system share sheet for hand-off — reached
 //! by hand-written JNI, the same shim `leitner-store::platform::android` established (ADR-0007 §6).
 //!
-//! **Unverified on the handset**, and that is deliberate: the runtime behaviour splits out as
-//! [Verify on the handset: hand-off and the written filename](https://github.com/amin-bf/leitner/issues/98),
-//! a `ready-for-human` ticket blocked by this one, exactly as ADR-0023 §7 leaves the recipient read
-//! to implementation under `AGENTS.md` rule 9. What is settled here is the **shape**, and two
-//! decisions the shape encodes:
+//! **Verified on the handset** — a Pixel 8 Pro, through this code rather than through a probe
+//! ([#98](https://github.com/amin-bf/leitner/issues/98)). Both decisions the shape encodes held:
 //!
 //! - **The write declares no `mime_type`** ([ADR-0024 §4](../../../docs/adr/0024-identifying-a-written-file.md)).
 //!   A declared type that disagrees with the name is the *only* reason a collision produces
 //!   `French A1.ldeck (1)` instead of `French A1 (1).ldeck`; `MediaStore` stores
 //!   `application/octet-stream` either way, so declaring one costs the extension and buys nothing.
+//!   **Measured**: the same name written twice stored as `Specimen.ldeck` then
+//!   `Specimen (1).ldeck`, both `application/octet-stream`.
 //! - **`hand_off`'s flags go on the chooser, not the inner intent** (ADR-0023 §7).
 //!   `Intent.createChooser` returns a fresh intent inheriting neither `FLAG_ACTIVITY_NEW_TASK` —
 //!   mandatory because the context is an `Application`, not an Activity — nor
 //!   `FLAG_GRANT_READ_URI_PERMISSION`, whose absence fails only *after* the user has picked a target.
+//!   **Measured**: the launch carries `flg=0x10000001`, which is exactly those two bits, and the
+//!   chooser drew a populated sheet.
+//!
+//! What is still open is the one thing ADR-0023 declined to do rather than could not: **whether a
+//! recipient can read the bytes**. Completing a share sends a real file from the owner's own
+//! accounts, so it stays a human's to run under `AGENTS.md` rule 9.
 
 use super::{PlatformError, Written};
 use crate::files::is_recognised;
@@ -295,7 +300,12 @@ pub fn list() -> Result<Vec<String>, PlatformError> {
 }
 
 /// The `content://` URI of the row whose display name is `name`, resolved by scanning the Downloads
-/// collection and appending the matched row id. Unverified on the handset (#98).
+/// collection and appending the matched row id.
+///
+/// **It scans by the *written* name, which is why the dedupe cannot make it ambiguous.** The caller
+/// holds what [`put`] read back, never what it asked for (ADR-0022 §10) — and the scan sees only rows
+/// this application owns, since `MediaProvider` filters the query by `owner_package_name`
+/// (ADR-0024 §3). Verified on the handset resolving a deduped `Specimen (1).ldeck` (#98).
 fn uri_for<'a>(
     env: &mut JNIEnv<'a>,
     resolver: &JObject,

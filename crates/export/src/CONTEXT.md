@@ -174,7 +174,12 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   plain text, never Markdown, length-bounded — the preview is the one screen showing a stranger's
   strings before the user has agreed to anything. Deck names are also sanitised **outbound**, since a
   filename is derived from one.
-- **Read back what the platform wrote.** Never echo the requested filename: `MediaStore` may
-  overwrite, dedupe or fail on a collision, and which it does is unverified on the handset.
+- **Read back what the platform wrote.** Never echo the requested filename: on a collision
+  `MediaStore` **dedupes** — it does not overwrite and does not fail — so the name the user needs is
+  one only the platform knows. Measured through this crate's own seam on the handset
+  ([#98](https://github.com/amin-bf/leitner/issues/98)): the same name written twice, with identical
+  bytes, yields `Specimen (1).ldeck`. **The extension survives**, which is what declaring no media
+  type buys (ADR-0024 §4) — and the stored type is `application/octet-stream` either way, so the
+  read-back is the only thing that distinguishes the second write from the first.
 - **The application never deletes a file it wrote or imported.** The seam has no delete; the list
   grows and tidying it is the file manager's job.
