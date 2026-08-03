@@ -513,7 +513,11 @@ fn review(
             return None;
         }
 
-        if let Some(count) = picker(ui, &queue, total) {
+        // Whether the collection has *any* history — the one fact the queue cannot carry, and what
+        // separates a first look from a finished day (`ReviewState::of`). A card appears in
+        // `replayed.cards` exactly when it has been reviewed.
+        let reviewed_ever = !replayed.cards.is_empty();
+        if let Some(count) = picker(ui, &queue, total, reviewed_ever) {
             // Snapshot the cards that are already leeches, so the pointer at this sitting's end covers
             // only what crosses during it (ADR-0010 §6).
             let before = ranked.iter().map(|l| l.card).collect();
@@ -791,9 +795,14 @@ fn card_preview(coll: &Collection, card: CardRef) -> String {
 
 /// The count picker and the explicit worded states (issue #94). Returns the chosen sitting size when
 /// the user starts one.
-fn picker(ui: &mut egui::Ui, queue: &session::Queue, total: usize) -> Option<usize> {
+fn picker(
+    ui: &mut egui::Ui,
+    queue: &session::Queue,
+    total: usize,
+    reviewed_ever: bool,
+) -> Option<usize> {
     let available = queue.available();
-    match ReviewState::of(queue, total) {
+    match ReviewState::of(queue, total, reviewed_ever) {
         ReviewState::Empty => {
             body(ui, "No cards yet. Add a note to start reviewing.");
             None
@@ -807,6 +816,13 @@ fn picker(ui: &mut egui::Ui, queue: &session::Queue, total: usize) -> Option<usi
                 ui,
                 "A fresh deck. These cards are new — start whenever you like.",
             );
+            count_buttons(ui, new)
+        }
+        // Nothing due in a collection that *has* been reviewed: the day's repeats are done and the
+        // new-card rate still has room. Never "a fresh deck", which is a false statement about a
+        // collection with history behind it (ADR-0006 §8, whose two states predate ADR-0011's rate).
+        ReviewState::NewOnly { new } => {
+            body(ui, &new_only_wording(new));
             count_buttons(ui, new)
         }
         ReviewState::Due { due, new, backlog } => {
@@ -1599,6 +1615,19 @@ fn body(ui: &mut egui::Ui, s: &str) {
 
 /// The box badge: a small, non-interactive indicator, weaker than body text so it never reads as a
 /// call to action.
+/// The picker's statement when nothing is due but cards have never been seen: the fact, then the
+/// invitation, and **no claim that the deck is fresh** — the collection has history behind it.
+///
+/// It states nothing about being behind, because the reviewer is not: reaching this state means the
+/// day's repeats are finished and only ADR-0011 §2's rate stands between them and the rest.
+fn new_only_wording(new: usize) -> String {
+    if new == 1 {
+        "Nothing due right now. One new card, whenever you like.".to_string()
+    } else {
+        format!("Nothing due right now. {new} new cards, whenever you like.")
+    }
+}
+
 /// What the **box badge** reads: the durability box, or `new` for a card with **no review history**
 /// (ADR-0006 §6).
 ///
@@ -1753,6 +1782,20 @@ mod tests {
         assert_eq!(leech_entry_wording(2, 0), "Leeches (2)");
         assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
+    }
+
+    #[test]
+    fn nothing_due_with_new_cards_left_never_calls_the_deck_fresh() {
+        // The sentence a reviewer with history gets when the day's repeats are done. It states the
+        // fact and invites, and it must not claim freshness (ADR-0006 §8) or imply falling behind.
+        assert_eq!(
+            new_only_wording(1),
+            "Nothing due right now. One new card, whenever you like."
+        );
+        assert_eq!(
+            new_only_wording(4),
+            "Nothing due right now. 4 new cards, whenever you like."
+        );
     }
 
     #[test]
