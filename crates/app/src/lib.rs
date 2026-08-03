@@ -279,14 +279,32 @@ impl LeitnerApp {
     }
 
     /// Open the collection under the platform's two directories (ADR-0007 §6) and, on a first launch,
-    /// seed one `basic` note so the walking skeleton has a card to review — issue #94's opening line.
+    /// seed a few `basic` notes so the walking skeleton has cards to review — issue #94's opening line.
+    ///
+    /// **More than one note, deliberately.** A single card cannot exercise the session at all: the count
+    /// picker collapses to one `All 1` button with none of ADR-0006 §1's choices reachable, and a sitting
+    /// ends on the first grading — so §2's *position is derived, never stored* cannot be demonstrated,
+    /// because there is no mid-session to be force-quit out of (issue #96). One note past
+    /// [`DEFAULT_NEW_CARD_RATE`] keeps the rate itself visible as the binding limit rather than the
+    /// seed's size.
     fn open_store() -> Result<Collection, String> {
+        const SEED: [(&str, &str); DEFAULT_NEW_CARD_RATE as usize + 1] = [
+            ("chien", "dog"),
+            ("chat", "cat"),
+            ("livre", "book"),
+            ("eau", "water"),
+            ("pain", "bread"),
+            ("maison", "house"),
+        ];
+
         let data = leitner_store::platform::data_dir().map_err(|e| e.to_string())?;
         let state = leitner_store::platform::state_dir().map_err(|e| e.to_string())?;
         let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
         if coll.is_empty().map_err(|e| e.to_string())? {
-            coll.create_note("basic", &[("Front", "chien"), ("Back", "dog")])
-                .map_err(|e| e.to_string())?;
+            for (front, back) in SEED {
+                coll.create_note("basic", &[("Front", front), ("Back", back)])
+                    .map_err(|e| e.to_string())?;
+            }
         }
         Ok(coll)
     }
