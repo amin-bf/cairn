@@ -120,7 +120,7 @@ filter is the only door.
 
 ### 4. The Android write declares no media type
 
-> **The `MediaStore` insert sets `_display_name` and `relative_path` and **no** `mime_type`.**
+> **The `MediaStore` insert sets `_display_name`, and **no** `mime_type`.**
 
 [ADR-0023](0023-sending-a-written-file.md) recorded the collision dedupe as *"it dedupes, and the
 suffix lands after the extension"* — `French A1.ldeck (1)`. **That behaviour is conditional on our
@@ -141,6 +141,17 @@ and correct it — **it needs to stop making a claim the platform was never goin
 identical, so this is a question of which instruction is honest. `application/octet-stream` states a
 claim we do not mean, and it would override a future platform that learned to map `.ldeck` to our
 real type; declaring nothing lets that improvement through for free.
+
+> **Correction: this section originally also had the insert set `relative_path`, and it never should
+> have.** The clause was incidental — nothing above or below argues for it, every measurement here is
+> about `mime_type`, and the implementation has never set it. The **collection already decides the
+> folder**: inserting into `MediaStore.Downloads.EXTERNAL_CONTENT_URI` lands in `Download/`, verified
+> on the handset at API 29 and API 37 ([#98](https://github.com/amin-bf/leitner/issues/98)). So the
+> clause bought nothing it was not already getting, and it asked for **one thing more than it looked
+> like**: a `relative_path` is how a subfolder gets chosen, and no ADR has ever chosen one. Declaring
+> `Download/` explicitly would have been this section's own mistake in miniature — stating a claim we
+> do not mean, on a value the platform was going to supply correctly anyway. Anyone wanting exports
+> under a subfolder is making a new decision, not implementing this one.
 
 **[ADR-0022 §10](0022-the-import-preview-and-export-report.md)'s "state the name the platform
 actually wrote" survives untouched and stays load-bearing.** The dedupe still happens — it simply no
