@@ -41,6 +41,32 @@ const COLLECTION_DB: &str = "collection.db";
 const DERIVED_DB: &str = "derived.db";
 const WRITER_MARKER: &str = "writer.id";
 
+/// **Temporary — a development affordance, not part of the specified design.** Remove both databases
+/// and the writer marker from the two directories, so the next [`Collection::open`] behaves as a first
+/// launch. Nothing in this design deletes user data
+/// ([ADR-0016 §1](../../../docs/adr/0016-backup-and-restore.md): restore is a merge and a replace is not
+/// implementable, because every peer still holds the whole log) — this exists so a device under test can
+/// be returned to a known state without a cable.
+///
+/// **It lives here because this module names those files**, and the sibling `-wal` and `-shm` files are
+/// SQLite's business rather than a caller's. A copy of these literals in the application would keep
+/// working after a rename here while deleting nothing at all.
+///
+/// Missing files are not an error: the point is the state afterwards, and a partial collection — one
+/// database present, the other already gone — is exactly when this is most wanted. The **caller must
+/// have dropped its [`Collection`] first**; unlinking these underneath a live connection leaves a
+/// checkpoint writing into unreachable inodes.
+pub fn remove_files(data_dir: &Path, state_dir: &Path) {
+    for name in [COLLECTION_DB, DERIVED_DB] {
+        for dir in [data_dir, state_dir] {
+            for suffix in ["", "-wal", "-shm"] {
+                let _ = fs::remove_file(dir.join(format!("{name}{suffix}")));
+            }
+        }
+    }
+    let _ = fs::remove_file(state_dir.join(WRITER_MARKER));
+}
+
 /// The attribute-name prefix that makes a note's tags **settle by set union** (ADR-0002 §10,
 /// ADR-0005 §7). Each tag is its own mutable row — `tag:<name>` set to `"true"` — rather than a
 /// single multi-valued `tags` attribute, so two devices adding different tags offline each write a

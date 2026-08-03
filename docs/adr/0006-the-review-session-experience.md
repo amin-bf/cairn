@@ -146,6 +146,20 @@ Round 1's open-queue variant put this exact badge in front of the repo owner spe
 whether an inert, post-reveal badge starts to read as a claim about the queue. It didn't — the
 badge survived into the final design unchanged.
 
+> **Corrected in #96: `monospace` and the lower-case `"box 3"` were never decided, and this section
+> should not have stated them.** They are the prototype's scaffolding, which **§10 of this same
+> document** disclaims outright — the typography throughout both rounds was "carried over for
+> convenience, never a considered decision". Reading them as specification puts §6 in conflict with §10
+> and hands the visual design pass a face and a letter-case it was promised were open.
+>
+> **What binds here is the badge's *content and conditions*, not its rendering**: small,
+> non-interactive, after reveal and never before, never part of the queue, and **`new` whenever the card
+> has no review history**. That last clause is the one with teeth, and it was the defect actually found
+> on the handset — the box is a total function of memory state, so it answers *1* for a card never seen,
+> and printing that number claims a durability nothing measured while reading as *the bottom box*: the
+> queue-position reading ADR-0001 §3 exists to prevent. The badge renders `Box 3` in the small text
+> style today, which is **conformant** — the case and the face are the design pass's to settle.
+
 ### 7. The header is a persistent dashboard, and backlog is framed, not just reported
 
 Progress (`done / total` against the chosen count, with a progress bar) and the timer sit together
@@ -165,6 +179,19 @@ bare number that reads as falling behind.
 
 "Nothing due right now" and "fresh deck, first look" (zero review history) are both rendered
 states with their own copy, not blank screens or a session that silently has zero cards in it.
+
+> **Amended by [ADR-0011 §2](0011-new-card-rate-and-daily-limits.md): there is a fourth worded state,
+> and this section's two cannot cover it.** A daily new-card rate means *nothing due, but cards you have
+> never seen remain* is the ordinary shape of an afternoon — and from the queue alone it is
+> **indistinguishable** from this section's fresh deck: same empty due list, same new cards on offer.
+> The only difference is whether the collection has any review history at all, which is not a property
+> of the queue, so a picker that reads only the queue must either ask for that fact or state the wrong
+> one. Left implicit, it greets a reviewer of four years with *"a fresh deck, these cards are new"* —
+> observed on the handset in #96 against a collection holding ten reviews.
+>
+> The parenthesis above — *zero review history* — was therefore load-bearing rather than clarifying, and
+> it is the whole of what separates the two. The fourth state states the fact and invites, and says
+> nothing about being behind: reaching it means the day's repeats are **done**.
 
 ### 9. Offline affordances: confirmed structurally
 

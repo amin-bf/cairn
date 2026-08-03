@@ -184,8 +184,17 @@ pub fn crossed_this_session(before: &HashSet<CardRef>, now: &[Leech]) -> Vec<Lee
 pub enum ReviewState {
     /// No cards exist at all — an empty collection.
     Empty,
-    /// Cards exist but none has ever been reviewed: a brand-new deck. Carries how many are waiting.
+    /// Cards exist and **nothing in the collection has ever been reviewed**: a genuinely first look
+    /// (ADR-0006 §8's *"fresh deck, first look"*, whose parenthesis is *zero review history*). Carries
+    /// how many are waiting.
     NewDeck { new: usize },
+    /// Nothing is due, and what is left to offer is cards never yet seen. **Distinct from
+    /// [`NewDeck`](ReviewState::NewDeck), which it looks identical to from the queue alone** — the two
+    /// differ only in whether the collection has any history, and telling a reviewer of four years that
+    /// their deck is fresh is the failure. This state is *routine*, not exceptional: ADR-0011 §2's rate
+    /// caps introductions per day, so "the day's reviews are done and the rate still has room" is the
+    /// ordinary shape of an afternoon. ADR-0006 §8 predates the rate and named only two worded states.
+    NewOnly { new: usize },
     /// Everything reviewed is scheduled ahead; nothing is due. The reassuring resting state.
     CaughtUp,
     /// Cards are due. `backlog` is set when there are more than a comfortable sitting, so the picker
@@ -198,21 +207,29 @@ pub enum ReviewState {
 }
 
 impl ReviewState {
-    /// Classify the queue against the total card count.
-    pub fn of(queue: &Queue, total: usize) -> ReviewState {
+    /// Classify the queue against the total card count and whether the collection has **any** review
+    /// history.
+    ///
+    /// The history flag cannot be recovered from the queue, which is why it is a parameter: a queue of
+    /// new cards with nothing due looks the same whether this is the collection's first minute or its
+    /// fourth year, and only one of those is a fresh deck.
+    pub fn of(queue: &Queue, total: usize, reviewed_ever: bool) -> ReviewState {
         if total == 0 {
             return ReviewState::Empty;
         }
         if queue.due.is_empty() {
-            // Nothing due: a resting state if there is nothing to introduce either, otherwise a
-            // deck of fresh cards waiting — whether *all* the cards are new or only some makes no
-            // difference to how the picker frames them.
-            return if queue.new.is_empty() {
-                ReviewState::CaughtUp
-            } else {
-                ReviewState::NewDeck {
+            // Nothing due. Three different situations, and the copy each gets is a different sentence:
+            // nothing left to introduce either (the resting state), cards waiting in a collection with
+            // no history at all (a first look), or cards waiting in one that has plenty (the day's
+            // reviews are done and ADR-0011 §2's rate still has room).
+            return match (queue.new.is_empty(), reviewed_ever) {
+                (true, _) => ReviewState::CaughtUp,
+                (false, false) => ReviewState::NewDeck {
                     new: queue.new.len(),
-                }
+                },
+                (false, true) => ReviewState::NewOnly {
+                    new: queue.new.len(),
+                },
             };
         }
         ReviewState::Due {
@@ -278,8 +295,36 @@ mod tests {
         assert_eq!(queue.due.len(), 0);
         assert_eq!(queue.new.len(), 2);
         assert_eq!(
-            ReviewState::of(&queue, cards.len()),
+            ReviewState::of(&queue, cards.len(), false),
             ReviewState::NewDeck { new: 2 }
+        );
+    }
+
+    #[test]
+    fn a_queue_of_new_cards_is_a_fresh_deck_only_when_nothing_was_ever_reviewed() {
+        // The two states are **indistinguishable from the queue** — same empty due list, same new
+        // cards — so the history flag is the whole difference, and dropping it tells a reviewer with
+        // years of history that their deck is fresh (ADR-0006 §8's parenthesis is *zero review
+        // history*; ADR-0011 §2's rate makes the other case an everyday one).
+        let notes = [note(1), note(2)];
+        let cards = current(&notes);
+        let queue = compose(
+            &cards,
+            &positions(&notes),
+            &Replayed::default(),
+            0,
+            RATE,
+            &HashSet::new(),
+        );
+        assert_eq!(
+            ReviewState::of(&queue, cards.len(), false),
+            ReviewState::NewDeck { new: 2 },
+            "no history anywhere: a genuine first look"
+        );
+        assert_eq!(
+            ReviewState::of(&queue, cards.len(), true),
+            ReviewState::NewOnly { new: 2 },
+            "history behind it: the day's repeats are done, the rate still has room"
         );
     }
 
@@ -293,7 +338,7 @@ mod tests {
             RATE,
             &HashSet::new(),
         );
-        assert_eq!(ReviewState::of(&queue, 0), ReviewState::Empty);
+        assert_eq!(ReviewState::of(&queue, 0, false), ReviewState::Empty);
     }
 
     #[test]
@@ -421,7 +466,10 @@ mod tests {
             0,
             "a card graded today is excluded on re-derivation"
         );
-        assert_eq!(ReviewState::of(&queue, cards.len()), ReviewState::CaughtUp);
+        assert_eq!(
+            ReviewState::of(&queue, cards.len(), true),
+            ReviewState::CaughtUp
+        );
     }
 
     #[test]
@@ -524,7 +572,10 @@ mod tests {
             queue.due.is_empty(),
             "a suspended card leaves the due queue"
         );
-        assert_eq!(ReviewState::of(&queue, cards.len()), ReviewState::CaughtUp);
+        assert_eq!(
+            ReviewState::of(&queue, cards.len(), true),
+            ReviewState::CaughtUp
+        );
     }
 
     #[test]
@@ -546,7 +597,10 @@ mod tests {
             queue.new.is_empty(),
             "a suspended new card is not introduced"
         );
-        assert_eq!(ReviewState::of(&queue, cards.len()), ReviewState::CaughtUp);
+        assert_eq!(
+            ReviewState::of(&queue, cards.len(), true),
+            ReviewState::CaughtUp
+        );
     }
 
     #[test]
@@ -607,7 +661,7 @@ mod tests {
             RATE,
             &HashSet::new(),
         );
-        match ReviewState::of(&queue, cards.len()) {
+        match ReviewState::of(&queue, cards.len(), true) {
             ReviewState::Due { backlog, due, .. } => {
                 assert!(
                     backlog,

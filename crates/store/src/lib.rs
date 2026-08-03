@@ -11,4 +11,6 @@ mod collection;
 mod interchange;
 pub mod platform;
 
-pub use collection::{Collection, MergeReport, SkewWarning, StoreError, TAG_ATTR_PREFIX};
+pub use collection::{
+    Collection, MergeReport, SkewWarning, StoreError, TAG_ATTR_PREFIX, remove_files,
+};

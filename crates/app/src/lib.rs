@@ -279,16 +279,75 @@ impl LeitnerApp {
     }
 
     /// Open the collection under the platform's two directories (ADR-0007 §6) and, on a first launch,
-    /// seed one `basic` note so the walking skeleton has a card to review — issue #94's opening line.
+    /// seed a few `basic` notes so the walking skeleton has cards to review — issue #94's opening line.
+    ///
+    /// **More than one note, deliberately.** A single card cannot exercise the session at all: the count
+    /// picker collapses to one `All 1` button with none of ADR-0006 §1's choices reachable, and a sitting
+    /// ends on the first grading — so §2's *position is derived, never stored* cannot be demonstrated,
+    /// because there is no mid-session to be force-quit out of (issue #96). One note past
+    /// [`DEFAULT_NEW_CARD_RATE`] keeps the rate itself visible as the binding limit rather than the
+    /// seed's size.
     fn open_store() -> Result<Collection, String> {
+        const SEED: [(&str, &str); DEFAULT_NEW_CARD_RATE as usize + 1] = [
+            ("chien", "dog"),
+            ("chat", "cat"),
+            ("livre", "book"),
+            ("eau", "water"),
+            ("pain", "bread"),
+            ("maison", "house"),
+        ];
+
         let data = leitner_store::platform::data_dir().map_err(|e| e.to_string())?;
         let state = leitner_store::platform::state_dir().map_err(|e| e.to_string())?;
         let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
         if coll.is_empty().map_err(|e| e.to_string())? {
-            coll.create_note("basic", &[("Front", "chien"), ("Back", "dog")])
-                .map_err(|e| e.to_string())?;
+            for (front, back) in SEED {
+                coll.create_note("basic", &[("Front", front), ("Back", back)])
+                    .map_err(|e| e.to_string())?;
+            }
         }
         Ok(coll)
+    }
+
+    /// **Temporary** — the other half of [`reset_control`]. Return this device to a first launch: the
+    /// store removes both databases and the writer marker, then reopening reseeds, because the
+    /// collection comes back empty. Every in-memory screen state goes with them, since all of it
+    /// describes rows that no longer exist.
+    ///
+    /// **This takes the fitted scheduler parameters and the new-card rate with it, and that is a
+    /// first-launch reset rather than a side effect.** Neither is a setting kept off to one side: an
+    /// optimisation run records its vector as a `config-set` **log row** (ADR-0014 §5, ADR-0004 §6), and
+    /// the rate is a value on ADR-0004 §7's mutable surface — both live inside `collection.db`, so
+    /// deleting the log is what deletes them. Afterwards the scheduler is back on the published defaults
+    /// and the settings nudge reads *"Using the standard parameters"* again, which is true. Anyone
+    /// wanting a reset that spares them is asking to keep a projection of a log that no longer exists.
+    ///
+    /// **The open connection is dropped first, and that ordering is the whole of the correctness here.**
+    /// SQLite holds the database plus its `-wal` and `-shm` siblings open; unlinking them underneath a
+    /// live connection leaves a checkpoint writing into inodes nothing can reach, and the reopened
+    /// collection then races the old one's flush. Assigning `store` is what closes it.
+    ///
+    /// The marker goes too, so the device **mints a fresh writer id** — correct here and the opposite of
+    /// what a *restore* may do (store rule 5, [ADR-0016 §2](../../../docs/adr/0016-backup-and-restore.md):
+    /// a writer id is never adopted). A reset device is a new writer, not a returning one.
+    fn reset_collection(&mut self) {
+        self.store = Err("Resetting…".to_owned());
+
+        let dirs = leitner_store::platform::data_dir()
+            .and_then(|data| leitner_store::platform::state_dir().map(|state| (data, state)));
+        if let Ok((data, state)) = dirs {
+            leitner_store::remove_files(&data, &state);
+        }
+
+        self.store = Self::open_store();
+        self.sitting = None;
+        self.editing = None;
+        self.showing_leeches = false;
+        self.session_pointer = None;
+        self.new_card_rate = None;
+        self.deck_filter = None;
+        self.search.clear();
+        self.dest = Destination::Review;
     }
 }
 
@@ -358,6 +417,7 @@ impl eframe::App for LeitnerApp {
         // The area is taken *before* the closure so it carries guard 1's forced offset without
         // holding a borrow of `band` across the frame the destinations are drawn in.
         let area = self.band.scroll_area();
+        let mut reset_requested = false;
         let out = area.show(ui, |ui| {
             // The persistent affordance that makes all three destinations reachable (ADR-0021 §1):
             // a destination reachable only by completing a session is not reachable, so the nav row
@@ -395,18 +455,27 @@ impl eframe::App for LeitnerApp {
                         &mut self.new_deck,
                     );
                 }
-                Destination::Settings => settings_screen(
-                    ui,
-                    coll,
-                    &mut self.setting_up_sync,
-                    &mut self.new_card_rate,
-                    &mut self.optimise_job,
-                    &mut self.optimise_done,
-                    now_ms,
-                ),
+                Destination::Settings => {
+                    // The wipe cannot happen here: `coll` is borrowed for the whole frame, and the
+                    // reset closes that connection. So the control only *asks*, and the app acts once
+                    // the borrow has ended, below.
+                    reset_requested = settings_screen(
+                        ui,
+                        coll,
+                        &mut self.setting_up_sync,
+                        &mut self.new_card_rate,
+                        &mut self.optimise_job,
+                        &mut self.optimise_done,
+                        now_ms,
+                    );
+                }
             }
         });
         self.band.record(&out);
+
+        if reset_requested {
+            self.reset_collection();
+        }
     }
 }
 
@@ -495,7 +564,11 @@ fn review(
             return None;
         }
 
-        if let Some(count) = picker(ui, &queue, total) {
+        // Whether the collection has *any* history — the one fact the queue cannot carry, and what
+        // separates a first look from a finished day (`ReviewState::of`). A card appears in
+        // `replayed.cards` exactly when it has been reviewed.
+        let reviewed_ever = !replayed.cards.is_empty();
+        if let Some(count) = picker(ui, &queue, total, reviewed_ever) {
             // Snapshot the cards that are already leeches, so the pointer at this sitting's end covers
             // only what crosses during it (ADR-0010 §6).
             let before = ranked.iter().map(|l| l.card).collect();
@@ -586,9 +659,11 @@ fn review(
                 card_face(ui, &rendered.answer);
 
                 // The box badge appears only after reveal, is non-interactive, and reports
-                // durability — never a queue (scheduling `CONTEXT.md`).
+                // durability — never a queue (scheduling `CONTEXT.md`). A card with no review history
+                // reads `new`, never `Box 1`, which would state a durability nothing has measured
+                // (ADR-0006 §6).
                 ui.add_space(4.0);
-                badge(ui, &format!("Box {}", offered.box_));
+                badge(ui, &box_badge_wording(!offered.is_new, offered.box_));
 
                 ui.add_space(12.0);
                 if let Some(grade) = grade_buttons(ui, &offered, today) {
@@ -771,9 +846,14 @@ fn card_preview(coll: &Collection, card: CardRef) -> String {
 
 /// The count picker and the explicit worded states (issue #94). Returns the chosen sitting size when
 /// the user starts one.
-fn picker(ui: &mut egui::Ui, queue: &session::Queue, total: usize) -> Option<usize> {
+fn picker(
+    ui: &mut egui::Ui,
+    queue: &session::Queue,
+    total: usize,
+    reviewed_ever: bool,
+) -> Option<usize> {
     let available = queue.available();
-    match ReviewState::of(queue, total) {
+    match ReviewState::of(queue, total, reviewed_ever) {
         ReviewState::Empty => {
             body(ui, "No cards yet. Add a note to start reviewing.");
             None
@@ -787,6 +867,13 @@ fn picker(ui: &mut egui::Ui, queue: &session::Queue, total: usize) -> Option<usi
                 ui,
                 "A fresh deck. These cards are new — start whenever you like.",
             );
+            count_buttons(ui, new)
+        }
+        // Nothing due in a collection that *has* been reviewed: the day's repeats are done and the
+        // new-card rate still has room. Never "a fresh deck", which is a false statement about a
+        // collection with history behind it (ADR-0006 §8, whose two states predate ADR-0011's rate).
+        ReviewState::NewOnly { new } => {
+            body(ui, &new_only_wording(new));
             count_buttons(ui, new)
         }
         ReviewState::Due { due, new, backlog } => {
@@ -1287,7 +1374,7 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
                 if !card.answer.is_empty() {
                     card_face(ui, &card.answer);
                 }
-                badge(ui, &format!("Box {}", card.box_));
+                badge(ui, &box_badge_wording(card.reviews > 0, card.box_));
                 ui.add_space(8.0);
             }
             // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
@@ -1344,13 +1431,13 @@ fn settings_screen(
     optimise_job: &mut Option<optimise::OptimiseJob>,
     optimise_done: &mut bool,
     now_ms: i64,
-) {
+) -> bool {
     heading(ui, "Settings");
     ui.add_space(8.0);
 
     if *setting_up {
         enrolment_screen(ui, setting_up);
-        return;
+        return false;
     }
 
     new_card_rate_control(ui, coll, rate_buffer);
@@ -1377,6 +1464,33 @@ fn settings_screen(
     // The removal route and the app name, kept permanently because the folder is hidden and cannot be
     // navigated to (ADR-0015 §10, ADR-0020 §4). Disconnect is the only control this app owns.
     body(ui, &sync::revocation_and_removal());
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+    reset_control(ui)
+}
+
+/// **Temporary, and not a specified feature.** A development control that returns this device to a
+/// **first launch** — the collection deleted and reseeded exactly as [`LeitnerApp::open_store`] does it
+/// on a fresh install — so an on-handset verification run does not need a cable and `run-as` to get back
+/// to a known state. Returns whether it was pressed.
+///
+/// **It is a reset, not a delete, and it is not a step towards a user-facing one.** Nothing in this design
+/// removes data: [ADR-0016 §1](../../../docs/adr/0016-backup-and-restore.md) establishes that restore is
+/// a merge and a replace is *not implementable*, because every device holds the whole log and merge is
+/// set union — so a wipe here is undone by the next sync from any peer that still holds those rows. It
+/// is honest only as what it says it is: a local reset on a device being tested against.
+/// [ADR-0015 §10](../../../docs/adr/0015-the-sync-experience.md) separately forbids a control that
+/// deletes *published* data, which this does not touch.
+fn reset_control(ui: &mut egui::Ui) -> bool {
+    body(
+        ui,
+        "Development control — returns this device to a first launch, seed and all. Rows other \
+         devices hold come back on the next sync.",
+    );
+    ui.add_space(4.0);
+    full_width_button(ui, "Reset the collection (temporary)").clicked()
 }
 
 /// The new-card-rate control (ADR-0011 §3): a plain integer field, with the consequence explained
@@ -1579,6 +1693,43 @@ fn body(ui: &mut egui::Ui, s: &str) {
 
 /// The box badge: a small, non-interactive indicator, weaker than body text so it never reads as a
 /// call to action.
+/// The picker's statement when nothing is due but cards have never been seen: the fact, then the
+/// invitation, and **no claim that the deck is fresh** — the collection has history behind it.
+///
+/// It states nothing about being behind, because the reviewer is not: reaching this state means the
+/// day's repeats are finished and only ADR-0011 §2's rate stands between them and the rest.
+fn new_only_wording(new: usize) -> String {
+    if new == 1 {
+        "Nothing due right now. One new card, whenever you like.".to_string()
+    } else {
+        format!("Nothing due right now. {new} new cards, whenever you like.")
+    }
+}
+
+/// What the **box badge** reads: the durability box, or `new` for a card with **no review history**
+/// (ADR-0006 §6).
+///
+/// The `new` case is not a nicety, and it is the one every call site is liable to drop, because
+/// [`box_of`](leitner_core::scheduling::box_of) is total and answers `1` for a card it has never seen.
+/// `1` is *also* the honest answer for a card reviewed thirty times and never retained — so rendering
+/// the number regardless makes the badge state a durability nothing has measured, on the one card where
+/// the user can tell it is wrong. A first introduction then reads as *bottom box*, a position in a queue
+/// of boxes, which is precisely the reading [ADR-0001 §3] forbids the badge from acquiring; `new` states
+/// the absence of history instead, which is what is true.
+///
+/// It is one function because the badge means one thing wherever it is drawn — the review screen and the
+/// card pane both come through here, and a second `format!("Box {}")` anywhere is this defect returning.
+///
+/// [ADR-0001 §3]: ../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md
+fn box_badge_wording(reviewed: bool, box_: u8) -> String {
+    if reviewed {
+        format!("Box {box_}")
+    } else {
+        "new".to_string()
+    }
+}
+
+/// A small, non-interactive, weak-coloured footnote carrying bidi-laid text.
 fn badge(ui: &mut egui::Ui, s: &str) {
     ui.label(bidi::job(
         s,
@@ -1709,5 +1860,29 @@ mod tests {
         assert_eq!(leech_entry_wording(2, 0), "Leeches (2)");
         assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
+    }
+
+    #[test]
+    fn nothing_due_with_new_cards_left_never_calls_the_deck_fresh() {
+        // The sentence a reviewer with history gets when the day's repeats are done. It states the
+        // fact and invites, and it must not claim freshness (ADR-0006 §8) or imply falling behind.
+        assert_eq!(
+            new_only_wording(1),
+            "Nothing due right now. One new card, whenever you like."
+        );
+        assert_eq!(
+            new_only_wording(4),
+            "Nothing due right now. 4 new cards, whenever you like."
+        );
+    }
+
+    #[test]
+    fn a_card_with_no_review_history_badges_new_not_box_one() {
+        // ADR-0006 §6. `box_of` is total and answers 1 for a never-reviewed card, so the badge has to
+        // ask whether there is any history at all — otherwise a first introduction claims a durability
+        // nothing measured, and reads as the bottom of a queue of boxes (ADR-0001 §3).
+        assert_eq!(box_badge_wording(false, 1), "new");
+        assert_eq!(box_badge_wording(true, 1), "Box 1");
+        assert_eq!(box_badge_wording(true, 4), "Box 4");
     }
 }
