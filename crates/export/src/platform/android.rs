@@ -17,9 +17,16 @@
 //!   **Measured**: the launch carries `flg=0x10000001`, which is exactly those two bits, and the
 //!   chooser drew a populated sheet.
 //!
-//! What is still open is the one thing ADR-0023 declined to do rather than could not: **whether a
-//! recipient can read the bytes**. Completing a share sends a real file from the owner's own
-//! accounts, so it stays a human's to run under `AGENTS.md` rule 9.
+//! **And the bytes arrive.** ADR-0023 left *"whether a recipient can read the bytes"* open because
+//! completing a share meant sending a file to a real contact; a second handset the owner controls
+//! removes that, and the transfer was run. A device that has never held this application received
+//! the file **byte for byte** — same SHA-256, same four members, `mimetype` still first and
+//! uncompressed. So the grant is not merely accepted, it is honoured, and ADR-0008 §2's *"arrives
+//! with someone who does not have our application"* is a measured claim rather than a design intent.
+//!
+//! **The display name survives the hand-off too**, dedupe suffix included, which upgrades ADR-0023
+//! §7's fourth fact from an argument to an observation: the chooser previewing a bare row id is
+//! cosmetic *because* a recipient resolves the real name, and now something has.
 
 use super::{PlatformError, Written};
 use crate::files::is_recognised;

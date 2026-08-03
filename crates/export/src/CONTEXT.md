@@ -160,6 +160,13 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   file manager opening unasked takes the screen. Android sends and the desktop reveals because there
   is no share portal on the desktop and nothing to drag on Android; making them symmetric means
   picking a mail client for the user.
+- **The hand-off delivers the bytes, not just a reference, and this is measured.** A `.ldeck` sent
+  from the handset arrived on a second device that has never held this application **byte for
+  byte** — same digest, same four members, `mimetype` still first and uncompressed
+  ([#98](https://github.com/amin-bf/leitner/issues/98)). The **display name travels with it**,
+  dedupe suffix and all, so the chooser's own preview showing a bare row id is cosmetic exactly as
+  ADR-0023 §7 argued. This is what makes ADR-0008 §2's *"arrives with someone who does not have our
+  application"* a fact about the shipped path rather than a statement of intent.
 - **The import plan is derived on every read, never cached.** A stored plan is a stored projection of
   the log — the thing ADR-0004 exists to prevent — and a sync landing while the preview is on screen
   can falsify it. Derived, promise and effect cannot diverge, which is why nothing is reported after
