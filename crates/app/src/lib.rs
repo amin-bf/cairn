@@ -308,6 +308,47 @@ impl LeitnerApp {
         }
         Ok(coll)
     }
+
+    /// **Temporary** — the other half of [`reset_control`]. Return this device to a first launch: the
+    /// store removes both databases and the writer marker, then reopening reseeds, because the
+    /// collection comes back empty. Every in-memory screen state goes with them, since all of it
+    /// describes rows that no longer exist.
+    ///
+    /// **This takes the fitted scheduler parameters and the new-card rate with it, and that is a
+    /// first-launch reset rather than a side effect.** Neither is a setting kept off to one side: an
+    /// optimisation run records its vector as a `config-set` **log row** (ADR-0014 §5, ADR-0004 §6), and
+    /// the rate is a value on ADR-0004 §7's mutable surface — both live inside `collection.db`, so
+    /// deleting the log is what deletes them. Afterwards the scheduler is back on the published defaults
+    /// and the settings nudge reads *"Using the standard parameters"* again, which is true. Anyone
+    /// wanting a reset that spares them is asking to keep a projection of a log that no longer exists.
+    ///
+    /// **The open connection is dropped first, and that ordering is the whole of the correctness here.**
+    /// SQLite holds the database plus its `-wal` and `-shm` siblings open; unlinking them underneath a
+    /// live connection leaves a checkpoint writing into inodes nothing can reach, and the reopened
+    /// collection then races the old one's flush. Assigning `store` is what closes it.
+    ///
+    /// The marker goes too, so the device **mints a fresh writer id** — correct here and the opposite of
+    /// what a *restore* may do (store rule 5, [ADR-0016 §2](../../../docs/adr/0016-backup-and-restore.md):
+    /// a writer id is never adopted). A reset device is a new writer, not a returning one.
+    fn reset_collection(&mut self) {
+        self.store = Err("Resetting…".to_owned());
+
+        let dirs = leitner_store::platform::data_dir()
+            .and_then(|data| leitner_store::platform::state_dir().map(|state| (data, state)));
+        if let Ok((data, state)) = dirs {
+            leitner_store::remove_files(&data, &state);
+        }
+
+        self.store = Self::open_store();
+        self.sitting = None;
+        self.editing = None;
+        self.showing_leeches = false;
+        self.session_pointer = None;
+        self.new_card_rate = None;
+        self.deck_filter = None;
+        self.search.clear();
+        self.dest = Destination::Review;
+    }
 }
 
 impl eframe::App for LeitnerApp {
@@ -376,6 +417,7 @@ impl eframe::App for LeitnerApp {
         // The area is taken *before* the closure so it carries guard 1's forced offset without
         // holding a borrow of `band` across the frame the destinations are drawn in.
         let area = self.band.scroll_area();
+        let mut reset_requested = false;
         let out = area.show(ui, |ui| {
             // The persistent affordance that makes all three destinations reachable (ADR-0021 §1):
             // a destination reachable only by completing a session is not reachable, so the nav row
@@ -413,18 +455,27 @@ impl eframe::App for LeitnerApp {
                         &mut self.new_deck,
                     );
                 }
-                Destination::Settings => settings_screen(
-                    ui,
-                    coll,
-                    &mut self.setting_up_sync,
-                    &mut self.new_card_rate,
-                    &mut self.optimise_job,
-                    &mut self.optimise_done,
-                    now_ms,
-                ),
+                Destination::Settings => {
+                    // The wipe cannot happen here: `coll` is borrowed for the whole frame, and the
+                    // reset closes that connection. So the control only *asks*, and the app acts once
+                    // the borrow has ended, below.
+                    reset_requested = settings_screen(
+                        ui,
+                        coll,
+                        &mut self.setting_up_sync,
+                        &mut self.new_card_rate,
+                        &mut self.optimise_job,
+                        &mut self.optimise_done,
+                        now_ms,
+                    );
+                }
             }
         });
         self.band.record(&out);
+
+        if reset_requested {
+            self.reset_collection();
+        }
     }
 }
 
@@ -1380,13 +1431,13 @@ fn settings_screen(
     optimise_job: &mut Option<optimise::OptimiseJob>,
     optimise_done: &mut bool,
     now_ms: i64,
-) {
+) -> bool {
     heading(ui, "Settings");
     ui.add_space(8.0);
 
     if *setting_up {
         enrolment_screen(ui, setting_up);
-        return;
+        return false;
     }
 
     new_card_rate_control(ui, coll, rate_buffer);
@@ -1413,6 +1464,33 @@ fn settings_screen(
     // The removal route and the app name, kept permanently because the folder is hidden and cannot be
     // navigated to (ADR-0015 §10, ADR-0020 §4). Disconnect is the only control this app owns.
     body(ui, &sync::revocation_and_removal());
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+    reset_control(ui)
+}
+
+/// **Temporary, and not a specified feature.** A development control that returns this device to a
+/// **first launch** — the collection deleted and reseeded exactly as [`LeitnerApp::open_store`] does it
+/// on a fresh install — so an on-handset verification run does not need a cable and `run-as` to get back
+/// to a known state. Returns whether it was pressed.
+///
+/// **It is a reset, not a delete, and it is not a step towards a user-facing one.** Nothing in this design
+/// removes data: [ADR-0016 §1](../../../docs/adr/0016-backup-and-restore.md) establishes that restore is
+/// a merge and a replace is *not implementable*, because every device holds the whole log and merge is
+/// set union — so a wipe here is undone by the next sync from any peer that still holds those rows. It
+/// is honest only as what it says it is: a local reset on a device being tested against.
+/// [ADR-0015 §10](../../../docs/adr/0015-the-sync-experience.md) separately forbids a control that
+/// deletes *published* data, which this does not touch.
+fn reset_control(ui: &mut egui::Ui) -> bool {
+    body(
+        ui,
+        "Development control — returns this device to a first launch, seed and all. Rows other \
+         devices hold come back on the next sync.",
+    );
+    ui.add_space(4.0);
+    full_width_button(ui, "Reset the collection (temporary)").clicked()
 }
 
 /// The new-card-rate control (ADR-0011 §3): a plain integer field, with the consequence explained
