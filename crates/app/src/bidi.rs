@@ -16,10 +16,25 @@
 //! order the runs: it places them left-to-right in logical order, which is why a Persian sentence
 //! comes out with its words backwards while each word looks right.
 //!
-//! epaint's own docs say "each section is an independent shaping run", and sections are laid out in
-//! the order given. So we run the Unicode bidi algorithm ourselves and hand egui a `LayoutJob`
-//! whose **sections are already in visual order**, each still holding its text in logical order so
-//! shaping is untouched.
+//! A section is an independent shaping run, and sections are laid out in the order given. So we run
+//! the Unicode bidi algorithm ourselves and hand egui a `LayoutJob` whose **sections are already in
+//! visual order**, each still holding its text in logical order so shaping is untouched.
+//!
+//! # Sections are built by hand, because `LayoutJob::append` would merge them away
+//!
+//! `append` merges into the previous section whenever the format matches and the leading space is
+//! zero — a sensible optimisation for text whose sections carry only colour, and fatal here, where
+//! **the section boundaries are the reordering**. Merged, the whole paragraph becomes one shaping
+//! run, harfrust infers RTL for it, and it reverses the very order this module put the words in:
+//! the sentence comes out backwards, which is precisely the defect being fixed.
+//!
+//! What made that survive for so long is that the merge is only *visible* when one face covers the
+//! whole run. Runs are re-split by **font face** below the merge, so in `Proportional` and
+//! `Monospace` the spaces between the words come from egui's Latin face while the words come from
+//! Noto Sans Arabic — the split falls at every space and the word order happens to hold. The bold
+//! family is one face throughout, so nothing split it and Persian rendered backwards there and only
+//! there (measured on the handset, issue #97). **Do not restore `append`**: it would leave this
+//! module's correctness resting on which face happens to own U+0020.
 //!
 //! **Every user-visible string goes through here.** A plain `ui.label("…")` on card content is a
 //! bug, not a style choice — see `AGENTS.md` rule 1. `TextEdit` needs the same treatment via
@@ -29,8 +44,24 @@
 //! If epaint ever implements bidi upstream, **delete this module** rather than keeping it
 //! alongside — two bidi passes would double-reverse (ADR-0003 Consequences).
 
-use egui::text::{LayoutJob, TextFormat};
+use egui::text::{ByteIndex, LayoutJob, LayoutSection, TextFormat};
 use egui::{Color32, FontId};
+
+/// Append `text` to `job` as a section of its **own**, never merged into the one before it.
+///
+/// This is `LayoutJob::append` with the merge left out — see the module header for why that merge
+/// destroys the ordering below. Everything else is identical: the text is concatenated, the section
+/// spans what was just added, and the leading space stays zero (a non-zero one would also defeat
+/// the merge, at the cost of a visible gap).
+fn push(job: &mut LayoutJob, text: &str, fmt: &TextFormat) {
+    let start = ByteIndex(job.text.len());
+    job.text.push_str(text);
+    job.sections.push(LayoutSection {
+        leading_space: 0.0,
+        byte_range: start..ByteIndex(job.text.len()),
+        format: fmt.clone(),
+    });
+}
 
 /// Arabic-Indic digits carry the Arabic script property, so `guess_segment_properties()` infers
 /// RTL for them and epaint emits them right-to-left — `۱۲۳۴۵` comes out as `۵۴۳۲۱`. Numbers are
@@ -97,7 +128,7 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
 
     let info = BidiInfo::new(text, None);
     if info.paragraphs.is_empty() {
-        job.append(text, 0.0, fmt);
+        push(&mut job, text, &fmt);
         return job;
     }
 
@@ -134,7 +165,7 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                     let words: Vec<&str> = slice.split(' ').collect();
                     for (i, w) in words.iter().rev().enumerate() {
                         if i > 0 {
-                            job.append(" ", 0.0, fmt.clone());
+                            push(&mut job, " ", &fmt);
                         }
                         append_rtl_word(&mut job, w, &fmt);
                     }
@@ -144,20 +175,16 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                     // lands here.
                     for (i, w) in slice.split(' ').enumerate() {
                         if i > 0 {
-                            job.append(" ", 0.0, fmt.clone());
+                            push(&mut job, " ", &fmt);
                         }
-                        job.append(&fix_digits(w), 0.0, fmt.clone());
+                        push(&mut job, &fix_digits(w), &fmt);
                     }
                 }
             }
         }
 
         if sep > 0 {
-            job.append(
-                &text[para.range.end - sep..para.range.end],
-                0.0,
-                fmt.clone(),
-            );
+            push(&mut job, &text[para.range.end - sep..para.range.end], &fmt);
         }
     }
     job
@@ -210,7 +237,7 @@ fn append_rtl_word(job: &mut LayoutJob, word: &str, fmt: &TextFormat) {
     let flip = |s: &str| -> String { s.chars().rev().map(mirror).collect() };
     let Some(start) = word.find(is_core) else {
         // All punctuation: still mirrored, but there is no core for it to sit beside.
-        job.append(&flip(word), 0.0, fmt.clone());
+        push(job, &flip(word), fmt);
         return;
     };
     let end = word
@@ -221,11 +248,11 @@ fn append_rtl_word(job: &mut LayoutJob, word: &str, fmt: &TextFormat) {
     // Visual order inside an RTL run: what trailed the word now leads it, and vice versa.
     let (leading, core, trailing) = (&word[..start], &word[start..end], &word[end..]);
     if !trailing.is_empty() {
-        job.append(&flip(trailing), 0.0, fmt.clone());
+        push(job, &flip(trailing), fmt);
     }
-    job.append(&fix_digits(core), 0.0, fmt.clone());
+    push(job, &fix_digits(core), fmt);
     if !leading.is_empty() {
-        job.append(&flip(leading), 0.0, fmt.clone());
+        push(job, &flip(leading), fmt);
     }
 }
 
@@ -425,6 +452,67 @@ mod tests {
             assert_eq!(drawn.rect.min.x, 0.0);
             assert!(drawn.rect.max.x > 0.0);
         });
+    }
+
+    /// The ordering above is a claim about **sections**; this is the claim about **pixels**, and
+    /// nothing else in the suite connects the two.
+    ///
+    /// Every test up to here asserts on `job.text` — the string the sections spell out — which is
+    /// right and was not enough: a merged `LayoutJob` spells out exactly the same string and then
+    /// draws it backwards, because harfrust reverses a run it infers as RTL. So this lays the
+    /// sentence out through real faces, in **every family**, and reads the order back off the
+    /// glyphs' x coordinates. It caught the bold family drawing Persian right-to-left while the
+    /// other two were correct — the same string, the same sections, three renderings, one wrong
+    /// (issue #97).
+    ///
+    /// Two assertions, because either alone passes the broken build. The families must **agree**,
+    /// which is what a face-dependent mechanism breaks; and the full stop must sit at the **visual
+    /// left**, which is the absolute anchor a unanimous regression would otherwise sail past.
+    ///
+    /// It installs the shipped faces rather than using the stock ones, since the whole question is
+    /// which face owns which character.
+    #[test]
+    fn every_family_draws_the_sections_in_the_order_they_were_given() {
+        let ctx = egui::Context::default();
+        crate::fonts::install(&ctx);
+        // `set_fonts` applies at the start of the *next* pass (ADR-0012 §8).
+        let _ = ctx.run_ui(Default::default(), |_| {});
+
+        let mut rendered: Vec<(egui::FontFamily, String)> = Vec::new();
+        for family in crate::fonts::families() {
+            let mut job = job(
+                "سگ در خانه است.",
+                FontId::new(20.0, family.clone()),
+                Color32::WHITE,
+            );
+            job.wrap.max_width = 1000.0;
+            let galley = ctx.fonts_mut(|f| f.layout_job(job));
+
+            // Zero-advance glyphs are the continuation entries epaint emits for the rest of a
+            // cluster; they all sit at the cluster's own x and say nothing about order.
+            let mut glyphs: Vec<_> = galley.rows[0]
+                .glyphs
+                .iter()
+                .filter(|g| 0.0 < g.advance_width)
+                .collect();
+            glyphs.sort_by(|a, b| a.pos.x.total_cmp(&b.pos.x));
+            let order: String = glyphs.iter().map(|g| g.chr).collect();
+
+            assert!(
+                order.starts_with('.'),
+                "{family:?} drew {order:?} — the full stop must be at the visual left"
+            );
+            rendered.push((family, order));
+        }
+
+        let (first_family, first_order) = &rendered[0];
+        for (family, order) in &rendered[1..] {
+            assert_eq!(
+                order, first_order,
+                "{family:?} drew {order:?} but {first_family:?} drew {first_order:?} — a family \
+                 must not change the order of the words"
+            );
+        }
     }
 
     #[test]
