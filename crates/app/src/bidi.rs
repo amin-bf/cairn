@@ -117,18 +117,35 @@ pub fn is_rtl(text: &str) -> bool {
 /// `an_rtl_job_spans_negative_x_which_is_why_a_text_edit_must_reset_halign` pins the trap itself,
 /// so this note cannot go quietly out of date.
 pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
-    use unicode_bidi::BidiInfo;
-
-    let mut job = LayoutJob::default();
     let fmt = TextFormat {
         font_id,
         color,
         ..Default::default()
     };
+    // One format for every byte — this is the plain-text chokepoint. Card content that carries the
+    // restricted Markdown subset goes through [`markdown_job`] instead.
+    job_styled(text, &|_| fmt.clone())
+}
+
+/// Build a bidi-ordered `LayoutJob` whose format is chosen **per word** by `fmt_at`, called with the
+/// starting byte of each word in `text`. [`job`] passes a constant; [`markdown_job`] passes a lookup
+/// into the field's styled spans.
+///
+/// Per **word**, not per byte, because reordering is a word operation — an RTL run emits its words in
+/// reverse, and a word is the smallest thing that keeps its shaping. Whole-word and whole-phrase
+/// emphasis, which is all a deck writes, therefore lands exactly (`markdown` explains the mid-word
+/// approximation this trades for).
+fn job_styled(text: &str, fmt_at: &dyn Fn(usize) -> TextFormat) -> LayoutJob {
+    use unicode_bidi::BidiInfo;
+
+    let mut job = LayoutJob::default();
+    // The byte offset of subslice `w` within `text` — `split(' ')` yields borrows into `text`, so the
+    // pointer difference is `w`'s logical position, which is what `fmt_at` keys on.
+    let offset = |w: &str| w.as_ptr() as usize - text.as_ptr() as usize;
 
     let info = BidiInfo::new(text, None);
     if info.paragraphs.is_empty() {
-        push(&mut job, text, &fmt);
+        push(&mut job, text, &fmt_at(0));
         return job;
     }
 
@@ -164,6 +181,7 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                 if levels[run.start].is_rtl() {
                     let words: Vec<&str> = slice.split(' ').collect();
                     for (i, w) in words.iter().rev().enumerate() {
+                        let fmt = fmt_at(offset(w));
                         if i > 0 {
                             push(&mut job, " ", &fmt);
                         }
@@ -174,6 +192,7 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
                     // still emits right-to-left. A pure-digit string is classified LTR, so it
                     // lands here.
                     for (i, w) in slice.split(' ').enumerate() {
+                        let fmt = fmt_at(offset(w));
                         if i > 0 {
                             push(&mut job, " ", &fmt);
                         }
@@ -184,10 +203,40 @@ pub fn job(text: &str, font_id: FontId, color: Color32) -> LayoutJob {
         }
 
         if sep > 0 {
-            push(&mut job, &text[para.range.end - sep..para.range.end], &fmt);
+            let start = para.range.end - sep;
+            push(&mut job, &text[start..para.range.end], &fmt_at(start));
         }
     }
     job
+}
+
+/// Build a `LayoutJob` for **card content**, rendering the restricted Markdown subset (ADR-0002 §8,
+/// ADR-0012 §8): `**bold**` in the shipped bold face, `` `code` `` in `Monospace`, `*italic*` as
+/// epaint's synthetic shear. `base` is the body face and size; bold and code take the same size in
+/// their own family, so a bold word sits on the line at body height.
+///
+/// This is the one path that interprets Markdown. Chrome — labels, badges, headings, the import
+/// preview (ADR-0022 §7) — stays on [`job`], which renders every marker as itself.
+pub fn markdown_job(text: &str, base: FontId, color: Color32) -> LayoutJob {
+    let marked = crate::markdown::parse(text);
+    let bold = FontId::new(base.size, crate::fonts::bold_family());
+    let mono = FontId::new(base.size, egui::FontFamily::Monospace);
+    let format = move |style: crate::markdown::Style| {
+        let mut fmt = TextFormat {
+            font_id: base.clone(),
+            color,
+            ..Default::default()
+        };
+        // Code and bold both change the face; code wins, since inside it nothing else is a marker.
+        if style.code {
+            fmt.font_id = mono.clone();
+        } else if style.bold {
+            fmt.font_id = bold.clone();
+        }
+        fmt.italics = style.italic;
+        fmt
+    };
+    job_styled(&marked.plain, &|byte| format(marked.style_at(byte)))
 }
 
 /// Bidi mirroring: a bracket keeps its *meaning* across directions, so its glyph flips. An opening
@@ -513,6 +562,76 @@ mod tests {
                  must not change the order of the words"
             );
         }
+    }
+
+    /// The card path renders the Markdown subset (ADR-0002 §8): the markers vanish from the laid-out
+    /// text, and the emphasised word lands in the shipped **bold** face — never the body family with
+    /// a literal `**` beside it, which is what issue #104 reported. The failing build here is the one
+    /// with no Markdown parse at all: `job.text` still holds the stars and every section is the body
+    /// family.
+    #[test]
+    fn markdown_draws_bold_in_the_bold_face_and_drops_the_markers() {
+        let base = FontId::new(20.0, egui::FontFamily::Proportional);
+        let job = markdown_job("the **loud** end", base, Color32::WHITE);
+
+        assert_eq!(
+            job.text, "the loud end",
+            "the markers must not survive layout"
+        );
+
+        let family_of = |needle: &str| -> egui::FontFamily {
+            job.sections
+                .iter()
+                .find(|s| {
+                    let (a, b): (usize, usize) =
+                        (s.byte_range.start.into(), s.byte_range.end.into());
+                    &job.text[a..b] == needle
+                })
+                .map(|s| s.format.font_id.family.clone())
+                .unwrap_or_else(|| panic!("no section spelled {needle:?}"))
+        };
+        assert_eq!(
+            family_of("loud"),
+            crate::fonts::bold_family(),
+            "the bold word must select the bold face"
+        );
+        assert_eq!(
+            family_of("the"),
+            egui::FontFamily::Proportional,
+            "body words stay on the body family"
+        );
+    }
+
+    /// Italic is epaint's synthetic shear (there is no italic face), and inline code is the
+    /// `Monospace` family — the other two members of the subset that a face can carry.
+    #[test]
+    fn markdown_slants_italic_and_sets_code_monospace() {
+        let base = FontId::new(20.0, egui::FontFamily::Proportional);
+
+        let italic = markdown_job("say *now*", base.clone(), Color32::WHITE);
+        assert_eq!(italic.text, "say now");
+        let now = italic
+            .sections
+            .iter()
+            .find(|s| {
+                let (a, b): (usize, usize) = (s.byte_range.start.into(), s.byte_range.end.into());
+                &italic.text[a..b] == "now"
+            })
+            .unwrap();
+        assert!(now.format.italics, "the italic word must be slanted");
+        assert_eq!(now.format.font_id.family, egui::FontFamily::Proportional);
+
+        let code = markdown_job("run `ls`", base, Color32::WHITE);
+        assert_eq!(code.text, "run ls");
+        let ls = code
+            .sections
+            .iter()
+            .find(|s| {
+                let (a, b): (usize, usize) = (s.byte_range.start.into(), s.byte_range.end.into());
+                &code.text[a..b] == "ls"
+            })
+            .unwrap();
+        assert_eq!(ls.format.font_id.family, egui::FontFamily::Monospace);
     }
 
     #[test]

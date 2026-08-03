@@ -19,6 +19,7 @@ pub mod deck;
 pub mod editor;
 pub mod fonts;
 pub mod keyboard;
+pub mod markdown;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
@@ -250,6 +251,20 @@ pub struct LeitnerApp {
     /// need across frames (ADR-0025 §1, §3). Held here because two of the guards are differential:
     /// they read the previous frame's geometry and must act before this frame lays anything out.
     band: keyboard::Band,
+    /// **Temporary** — the hand-off specimen's state (see [`handoff_specimen`]).
+    handoff: HandOff,
+}
+
+/// **Temporary, and not a specified feature.** What the hand-off specimen carries between frames.
+#[derive(Default)]
+struct HandOff {
+    /// The name the platform reported for the last successful [`leitner_export::platform::put`] —
+    /// **the written one, never the requested one** (ADR-0022 §10). This is what `hand_off` is then
+    /// asked for, so the specimen exercises the read-back rather than asserting it.
+    written: Option<String>,
+    /// The last thing either button had to say, verbatim: a read-back name or a refusal. Held rather
+    /// than logged because a handset run has no console the person holding it can read.
+    said: String,
 }
 
 impl LeitnerApp {
@@ -275,6 +290,7 @@ impl LeitnerApp {
             optimise_done: false,
             fonts_installed: false,
             band: keyboard::Band::default(),
+            handoff: HandOff::default(),
         }
     }
 
@@ -466,6 +482,7 @@ impl eframe::App for LeitnerApp {
                         &mut self.new_card_rate,
                         &mut self.optimise_job,
                         &mut self.optimise_done,
+                        &mut self.handoff,
                         now_ms,
                     );
                 }
@@ -1430,6 +1447,7 @@ fn settings_screen(
     rate_buffer: &mut Option<String>,
     optimise_job: &mut Option<optimise::OptimiseJob>,
     optimise_done: &mut bool,
+    handoff: &mut HandOff,
     now_ms: i64,
 ) -> bool {
     heading(ui, "Settings");
@@ -1474,6 +1492,11 @@ fn settings_screen(
     ui.separator();
     ui.add_space(8.0);
     rendering_specimen(ui);
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+    handoff_specimen(ui, handoff);
 
     reset
 }
@@ -1524,6 +1547,113 @@ fn rendering_specimen(ui: &mut egui::Ui) {
         }
         ui.add_space(10.0);
     }
+}
+
+/// **Temporary, and not a specified feature.** The hand-off specimen: the two user-files calls issue
+/// #98 asks to be verified on the handset, behind **two separate buttons**.
+///
+/// **It is here because nothing else reaches them.** [#88](https://github.com/amin-bf/leitner/issues/88)
+/// landed `leitner-export` and its four-operation seam but deferred the export *screen* to the visual
+/// pass, so `put` and `hand_off` have no call site in this crate — and every one of #98's criteria is
+/// about what those two calls do at runtime on a real `MediaStore`. A seam with no caller cannot be
+/// verified by holding the phone.
+///
+/// **Two buttons rather than one, and that is the point rather than a convenience.**
+/// [ADR-0023 §5](../../../docs/adr/0023-sending-a-written-file.md) says the affordance *never fires by
+/// itself*: nothing opens when an export finishes. A specimen that wrote and then shared in one press
+/// would satisfy every other criterion while making that one unobservable — the sheet would appear
+/// either way, and no one watching could tell which rule was in force.
+///
+/// **It reports the name it was given back, never the one it asked for**
+/// ([ADR-0022 §10](../../../docs/adr/0022-the-import-preview-and-export-report.md)), and it shows both
+/// so the difference is legible: press it twice and the second write collides, which is the whole of
+/// [ADR-0024 §4](../../../docs/adr/0024-identifying-a-written-file.md)'s claim that declaring no media
+/// type is what keeps the extension. The bytes are identical across presses on purpose — same name,
+/// same content — so the collision is the one that ADR's probe measured and not a different event.
+fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
+    body(
+        ui,
+        "Development control — the two user-files calls, one per button. Write puts a real .ldeck \
+         through the seam and states the name the platform wrote back. Hand off opens the system \
+         share sheet for it, and only when pressed: writing never opens anything.",
+    );
+    ui.add_space(4.0);
+
+    if full_width_button(ui, "Write a deck file (temporary)").clicked() {
+        state.said = match specimen_deck() {
+            Err(e) => format!("Could not build the file: {e}"),
+            Ok(bytes) => {
+                let requested = leitner_export::export_filename(&[SPECIMEN_DECK_NAME]);
+                match leitner_export::platform::put(&requested, &bytes) {
+                    Err(e) => format!("Could not write it: {e}"),
+                    Ok(written) => {
+                        let said = format!(
+                            "Asked for \"{requested}\" — written as \"{}\".",
+                            written.name
+                        );
+                        state.written = Some(written.name);
+                        said
+                    }
+                }
+            }
+        };
+    }
+
+    ui.add_space(4.0);
+
+    if full_width_button(ui, "Hand it off (temporary)").clicked() {
+        state.said = match &state.written {
+            None => "Nothing written yet — write a deck file first.".to_owned(),
+            Some(name) => match leitner_export::platform::hand_off(name) {
+                Ok(()) => format!("Handed \"{name}\" onward. Nothing is reported after this."),
+                Err(e) => format!("Could not hand it off: {e}"),
+            },
+        };
+    }
+
+    if !state.said.is_empty() {
+        ui.add_space(8.0);
+        body(ui, &state.said);
+    }
+}
+
+/// The specimen deck's display name — the filename derives from it, sanitised outbound.
+const SPECIMEN_DECK_NAME: &str = "Specimen";
+
+/// Fixed ids, so every press builds **byte-identical** content and a second write is a true
+/// same-name collision rather than a new file. `leitner-core` never mints an id (ADR-0009 §8), and a
+/// specimen has no collection to take one from.
+const SPECIMEN_DECK_ID: DeckId = DeckId([
+    0x98, 0x0d, 0xec, 0x00, 0x40, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+]);
+const SPECIMEN_NOTE_ID: NoteId = NoteId([
+    0x98, 0x0d, 0xec, 0x00, 0x40, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+]);
+
+/// A real `.ldeck` — the actual container, not a stand-in. What is being verified is what the
+/// platform does with the bytes and the name, so a placeholder payload would still exercise the
+/// seam; a real one additionally lets whoever receives the share open it.
+fn specimen_deck() -> Result<Vec<u8>, leitner_export::ExportError> {
+    let content = leitner_export::DeckContent {
+        id: SPECIMEN_DECK_ID,
+        name: SPECIMEN_DECK_NAME.to_owned(),
+        notes: vec![leitner_export::NoteContent {
+            id: SPECIMEN_NOTE_ID,
+            position: "n".to_owned(),
+            kind: "basic".to_owned(),
+            fields: vec![
+                ("Front".to_owned(), "specimen front".to_owned()),
+                ("Back".to_owned(), "specimen back".to_owned()),
+            ],
+        }],
+        tombstones: Vec::new(),
+    };
+    let digest = leitner_export::deck_digest(&content)?;
+    let revision = leitner_export::next_revision(None, &digest);
+    leitner_export::build_deck(
+        &leitner_export::Metadata::default(),
+        &[leitner_export::DeckExport { content, revision }],
+    )
 }
 
 /// The short name of a family, for the specimen's row tag.
@@ -1811,7 +1941,13 @@ fn full_width_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
 /// The card face — a wide, tall clickable surface. Tapping the prompt reveals; the answer face is
 /// drawn the same way for visual consistency, its click ignored.
 fn card_face(ui: &mut egui::Ui, s: &str) -> egui::Response {
-    let job = text(ui, s);
+    // Card content is the one surface that renders the restricted Markdown subset (ADR-0002 §8):
+    // `**bold**` in the shipped face, never a literal `**` (issue #104).
+    let job = bidi::markdown_job(
+        s,
+        egui::TextStyle::Button.resolve(ui.style()),
+        ui.visuals().text_color(),
+    );
     ui.add_sized([ui.available_width(), 96.0], egui::Button::new(job))
 }
 

@@ -160,6 +160,13 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   file manager opening unasked takes the screen. Android sends and the desktop reveals because there
   is no share portal on the desktop and nothing to drag on Android; making them symmetric means
   picking a mail client for the user.
+- **The hand-off delivers the bytes, not just a reference, and this is measured.** A `.ldeck` sent
+  from the handset arrived on a second device that has never held this application **byte for
+  byte** — same digest, same four members, `mimetype` still first and uncompressed
+  ([#98](https://github.com/amin-bf/leitner/issues/98)). The **display name travels with it**,
+  dedupe suffix and all, so the chooser's own preview showing a bare row id is cosmetic exactly as
+  ADR-0023 §7 argued. This is what makes ADR-0008 §2's *"arrives with someone who does not have our
+  application"* a fact about the shipped path rather than a statement of intent.
 - **The import plan is derived on every read, never cached.** A stored plan is a stored projection of
   the log — the thing ADR-0004 exists to prevent — and a sync landing while the preview is on screen
   can falsify it. Derived, promise and effect cannot diverge, which is why nothing is reported after
@@ -174,7 +181,16 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   plain text, never Markdown, length-bounded — the preview is the one screen showing a stranger's
   strings before the user has agreed to anything. Deck names are also sanitised **outbound**, since a
   filename is derived from one.
-- **Read back what the platform wrote.** Never echo the requested filename: `MediaStore` may
-  overwrite, dedupe or fail on a collision, and which it does is unverified on the handset.
+- **Read back what the platform wrote.** Never echo the requested filename: on a collision
+  `MediaStore` **dedupes** — it does not overwrite and does not fail — so the name the user needs is
+  one only the platform knows. Measured through this crate's own seam on the handset
+  ([#98](https://github.com/amin-bf/leitner/issues/98)): the same name written twice, with identical
+  bytes, yields `Specimen (1).ldeck`. **The extension survives**, which is what declaring no media
+  type buys (ADR-0024 §4) — and the stored type is `application/octet-stream` either way, so the
+  read-back is the only thing that distinguishes the second write from the first.
+  **Measured identically at API 29 and API 37**, so it is a property of the collection rather than of
+  a recent platform: API 29 is where `MediaStore.Downloads` and the permission-free insert begin, and
+  the window ADR-0023 left unmeasured is therefore **24–28** specifically. Nothing is claimed below
+  29, and the read-back is what makes an unexpected answer there visible rather than silent.
 - **The application never deletes a file it wrote or imported.** The seam has no delete; the list
   grows and tidying it is the file manager's job.
