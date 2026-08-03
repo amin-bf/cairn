@@ -202,6 +202,14 @@ because they are validated findings, not because a web build ships.
    did in `Proportional` and `Monospace`, and did not in `bold`, where one face owns both — Persian
    rendered backwards there and only there. Every test asserting on the job's *text* passes either
    way; only laying it out through real faces tells them apart.
+   **Card content and chrome take two different builders, and mixing them fails silently.** A field
+   is restricted Markdown (ADR-0002 §8): `**bold**` in the shipped face, `` `code` `` in `Monospace`,
+   `*italic*` as a shear. So **card content — anything a note holds — goes through `bidi::markdown_job`,
+   and app chrome (labels, badges, headings, the import preview) through `bidi::job`**, which renders
+   every marker as itself. Route card content through `job` and `**bold**` shows literally (issue
+   #104); route a stranger's string — an import preview — through `markdown_job` and you have handed a
+   file the power to style the screen it is being previewed on, which ADR-0022 §7 forbids. Both build
+   the same bidi-ordered sections; the only difference is whether the markers are interpreted.
 2. **`TextEdit` needs the same treatment, via `.layouter()`** — it lays out its own text and
    otherwise bypasses the helper. Note that caret and selection are then in visual order while the
    buffer is logical, so RTL editing is imprecise; design around it rather than fighting it.

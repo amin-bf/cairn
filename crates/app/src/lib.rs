@@ -19,6 +19,7 @@ pub mod deck;
 pub mod editor;
 pub mod fonts;
 pub mod keyboard;
+pub mod markdown;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
@@ -1940,7 +1941,13 @@ fn full_width_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
 /// The card face — a wide, tall clickable surface. Tapping the prompt reveals; the answer face is
 /// drawn the same way for visual consistency, its click ignored.
 fn card_face(ui: &mut egui::Ui, s: &str) -> egui::Response {
-    let job = text(ui, s);
+    // Card content is the one surface that renders the restricted Markdown subset (ADR-0002 §8):
+    // `**bold**` in the shipped face, never a literal `**` (issue #104).
+    let job = bidi::markdown_job(
+        s,
+        egui::TextStyle::Button.resolve(ui.style()),
+        ui.visuals().text_color(),
+    );
     ui.add_sized([ui.available_width(), 96.0], egui::Button::new(job))
 }
 
