@@ -193,6 +193,15 @@ because they are validated findings, not because a web build ships.
    logical order, so a plain `ui.label("…")` renders Persian and Arabic with the words backwards, and
    Arabic-Indic digits reversed. Build a `LayoutJob` with sections in visual order instead. A
    `ui.label` on card content is a bug, not a style choice.
+   **That job's sections are pushed by hand, and `LayoutJob::append` may never come back.** It merges
+   into the previous section whenever the format matches — sensible for sections carrying only a
+   colour, fatal where **the section boundaries are the reordering**. Merged, the paragraph becomes
+   one shaping run, harfrust infers RTL for it, and it reverses the order the helper just put the
+   words in. What hid that is rule 7's other half: runs are re-split by **face** below the merge, so
+   wherever the spaces come from a different face than the words the order survives by accident. It
+   did in `Proportional` and `Monospace`, and did not in `bold`, where one face owns both — Persian
+   rendered backwards there and only there. Every test asserting on the job's *text* passes either
+   way; only laying it out through real faces tells them apart.
 2. **`TextEdit` needs the same treatment, via `.layouter()`** — it lays out its own text and
    otherwise bypasses the helper. Note that caret and selection are then in visual order while the
    buffer is logical, so RTL editing is imprecise; design around it rather than fighting it.
@@ -215,7 +224,15 @@ because they are validated findings, not because a web build ships.
    alongside `android-native-activity`.
 7. **Fonts are ours to ship — and must be installed on the first frame, not in `CreationContext`.**
    egui bundles only Hack, Ubuntu-Light and Noto Emoji. Register any added face in **every** family
-   you use, including `Monospace`, or text silently renders as boxes. Registering during creation
+   you use, or text silently renders as boxes. **That is three families, not the two this rule used
+   to name** — `Proportional`, `Monospace` and ADR-0012 §8's `bold`, enumerated once in
+   `fonts::families()`, which install, the coverage test and the specimen all read so a fourth cannot
+   be added to only one of them. Bold is the one to watch: it is built from scratch rather than
+   appended to, so nothing of egui's sits behind it. **And within a family, order decides which face
+   is reached** — first match wins, and more than one shipped face carries the Arabic script, so
+   DejaVu listed ahead of Noto meant Noto was never reached and Persian was drawn by DejaVu's
+   afterthought Arabic. A glyph existing is not the same as the right face drawing it, and the
+   difference is invisible to anyone who does not read the script. Registering during creation
    breaks the web build: wgpu panics with "Tried to update a texture that has not been allocated
    yet", glow renders everything near-black. Defer it one frame.
 8. **Android text input is ASCII-only, and cannot be fixed here.** winit's Android backend handles
