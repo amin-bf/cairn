@@ -114,9 +114,9 @@ fn parse_into(raw: &str, out: &mut String, marks: &mut Vec<(usize, usize, Style)
         if literal_start.is_none() {
             literal_start = Some(out.len());
         }
-        let len = raw[i..].chars().next().unwrap().len_utf8();
-        out.push_str(&raw[i..i + len]);
-        i += len;
+        let c = raw[i..].chars().next().unwrap();
+        out.push(c);
+        i += c.len_utf8();
     }
     flush_literal(&mut literal_start, out.len(), base, marks);
 }
