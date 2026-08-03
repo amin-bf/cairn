@@ -13,8 +13,11 @@
 //!   Cyrillic still come from egui's own Hack / Ubuntu-Light wherever they have the glyph, because
 //!   the added faces are appended as **fallbacks**.
 //!
-//! Both are registered into **every family in use** — `Proportional` *and* `Monospace` — because a
-//! face missing from one family renders as boxes there silently (ADR-0003 §4, client-stack rule 7).
+//! Both are registered into **every family in use**, because a face missing from one renders as
+//! boxes there silently (ADR-0003 §4, client-stack rule 7). That is now **three** families, not the
+//! two rule 7 was written against — [`families`] is the enumeration, and [`bold_family`] is the
+//! third — and the one most easily missed, because it is built from scratch rather than appended
+//! to, so nothing of egui's own sits behind it.
 //!
 //! Installation is deferred to the first frame ([`crate::LeitnerApp`] guards it), never done in
 //! `CreationContext`: registering a face during creation was measured to break rendering on some
@@ -46,14 +49,68 @@ pub fn bold_family() -> FontFamily {
     FontFamily::Name("bold".into())
 }
 
+/// Every family this crate draws with, and therefore every family a face must be registered into.
+///
+/// **The count is not two.** Client-stack rule 7 says "every family you use, including `Monospace`",
+/// which was written when there were two; ADR-0012 §8's [`bold_family`] is a third, and it is the one
+/// most likely to be missed, because it is *built from scratch* rather than appended to — nothing of
+/// egui's own sits behind it, so a script absent from the two bold cuts has no fallback at all. Both
+/// readers of this list — the coverage test below and the on-screen specimen (issue #97) — take it
+/// from here, so a fourth family cannot be added without both of them following.
+pub(crate) fn families() -> [FontFamily; 3] {
+    [
+        FontFamily::Proportional,
+        FontFamily::Monospace,
+        bold_family(),
+    ]
+}
+
+/// The rendering specimen: each script the shipped faces exist for, paired with **what it must read**.
+///
+/// One list, two readers: [`every_added_face_covers_its_script_in_every_family`] checks coverage
+/// headlessly, and the temporary settings block draws exactly these strings on the handset so a reader
+/// of the script can confirm the ordering the test cannot see (issue #97). Two lists would let the
+/// screen show a script the test never checks — and a missing glyph is silent in both directions.
+///
+/// The captions carry no Persian or Arabic themselves. A caption is the statement being checked
+/// *against*, so it has to be readable even on the run where the rendering is what is broken.
+pub(crate) const SPECIMENS: [(&str, &str); 7] = [
+    (
+        "Persian — the dog is in the house; the full stop belongs at the far left",
+        "سگ در خانه است.",
+    ),
+    ("Arabic — the book is on the table", "الكتاب على الطاولة"),
+    (
+        "Persian-only letters (the four Arabic lacks), then mi-ravam with its zero-width non-joiner",
+        "گچپژ می\u{200C}روم",
+    ),
+    (
+        "Mixed scripts and digits — the Persian digits read one-two-three, and the brackets enclose \
+         the Latin rather than sitting beside it",
+        "تمرین ۱۲۳ (page 45)",
+    ),
+    (
+        "Arabic-Indic digits, then Persian digits — each reads left to right, one to five and six \
+         to zero",
+        "١٢٣٤٥ ۶۷۸۹۰",
+    ),
+    (
+        "IPA — ADR-0002 §9's own pronunciation example, and the reason DejaVu is shipped",
+        "deːɐ̯ hʊnt",
+    ),
+    (
+        "IPA, wider — every symbol a glyph, none of them a box",
+        "ɸθðʃʒŋɲʎɫæœøɜɾʔ ˈˌː",
+    ),
+];
+
 /// Install the shipped faces into `ctx`. Call **once, on the first frame** — see the module header
 /// and [`crate::LeitnerApp`].
 pub fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 
     // Regular faces, appended to the existing families so egui's own faces still win where they
-    // have the glyph, and into *both* families in use — a face absent from `Monospace` renders as
-    // boxes there silently.
+    // have the glyph — a face absent from a family renders as boxes there silently.
     let regular = [
         (
             "ar",
@@ -80,14 +137,20 @@ pub fn install(ctx: &egui::Context) {
             .font_data
             .insert(name.into(), Arc::new(FontData::from_static(bytes)));
     }
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        let list = fonts.families.entry(family).or_default();
-        list.extend(regular.iter().map(|&(name, _)| name.into()));
+    // Driven by `families()` so the enumeration the test and the specimen read is the same one that
+    // installs — a family added there is registered here without a second edit.
+    for family in families() {
+        if family == bold_family() {
+            // Bold is built *from scratch*, not appended to: it must hold the bold cuts and nothing
+            // else, or the regular faces sit in front of them and bold silently stops being bold.
+            fonts
+                .families
+                .insert(family, bold.iter().map(|&(name, _)| name.into()).collect());
+        } else {
+            let list = fonts.families.entry(family).or_default();
+            list.extend(regular.iter().map(|&(name, _)| name.into()));
+        }
     }
-    fonts.families.insert(
-        bold_family(),
-        bold.iter().map(|&(name, _)| name.into()).collect(),
-    );
 
     ctx.set_fonts(fonts);
 }
