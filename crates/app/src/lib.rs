@@ -604,9 +604,11 @@ fn review(
                 card_face(ui, &rendered.answer);
 
                 // The box badge appears only after reveal, is non-interactive, and reports
-                // durability — never a queue (scheduling `CONTEXT.md`).
+                // durability — never a queue (scheduling `CONTEXT.md`). A card with no review history
+                // reads `new`, never `Box 1`, which would state a durability nothing has measured
+                // (ADR-0006 §6).
                 ui.add_space(4.0);
-                badge(ui, &format!("Box {}", offered.box_));
+                badge(ui, &box_badge_wording(!offered.is_new, offered.box_));
 
                 ui.add_space(12.0);
                 if let Some(grade) = grade_buttons(ui, &offered, today) {
@@ -1305,7 +1307,7 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
                 if !card.answer.is_empty() {
                     card_face(ui, &card.answer);
                 }
-                badge(ui, &format!("Box {}", card.box_));
+                badge(ui, &box_badge_wording(card.reviews > 0, card.box_));
                 ui.add_space(8.0);
             }
             // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
@@ -1597,6 +1599,30 @@ fn body(ui: &mut egui::Ui, s: &str) {
 
 /// The box badge: a small, non-interactive indicator, weaker than body text so it never reads as a
 /// call to action.
+/// What the **box badge** reads: the durability box, or `new` for a card with **no review history**
+/// (ADR-0006 §6).
+///
+/// The `new` case is not a nicety, and it is the one every call site is liable to drop, because
+/// [`box_of`](leitner_core::scheduling::box_of) is total and answers `1` for a card it has never seen.
+/// `1` is *also* the honest answer for a card reviewed thirty times and never retained — so rendering
+/// the number regardless makes the badge state a durability nothing has measured, on the one card where
+/// the user can tell it is wrong. A first introduction then reads as *bottom box*, a position in a queue
+/// of boxes, which is precisely the reading [ADR-0001 §3] forbids the badge from acquiring; `new` states
+/// the absence of history instead, which is what is true.
+///
+/// It is one function because the badge means one thing wherever it is drawn — the review screen and the
+/// card pane both come through here, and a second `format!("Box {}")` anywhere is this defect returning.
+///
+/// [ADR-0001 §3]: ../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md
+fn box_badge_wording(reviewed: bool, box_: u8) -> String {
+    if reviewed {
+        format!("Box {box_}")
+    } else {
+        "new".to_string()
+    }
+}
+
+/// A small, non-interactive, weak-coloured footnote carrying bidi-laid text.
 fn badge(ui: &mut egui::Ui, s: &str) {
     ui.label(bidi::job(
         s,
@@ -1727,5 +1753,15 @@ mod tests {
         assert_eq!(leech_entry_wording(2, 0), "Leeches (2)");
         assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
+    }
+
+    #[test]
+    fn a_card_with_no_review_history_badges_new_not_box_one() {
+        // ADR-0006 §6. `box_of` is total and answers 1 for a never-reviewed card, so the badge has to
+        // ask whether there is any history at all — otherwise a first introduction claims a durability
+        // nothing measured, and reads as the bottom of a queue of boxes (ADR-0001 §3).
+        assert_eq!(box_badge_wording(false, 1), "new");
+        assert_eq!(box_badge_wording(true, 1), "Box 1");
+        assert_eq!(box_badge_wording(true, 4), "Box 4");
     }
 }
