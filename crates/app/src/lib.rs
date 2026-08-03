@@ -1468,7 +1468,71 @@ fn settings_screen(
     ui.add_space(12.0);
     ui.separator();
     ui.add_space(8.0);
-    reset_control(ui)
+    let reset = reset_control(ui);
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+    rendering_specimen(ui);
+
+    reset
+}
+
+/// **Temporary, and not a specified feature.** The rendering specimen: every script the shipped faces
+/// exist for, drawn in every family they are registered into, so issue #97's criteria can be read off
+/// one screen by someone who reads the script.
+///
+/// **It is here because the handset cannot be asked any other way.** Client-stack rule 8 makes Android
+/// text input ASCII-only — there is no IME path, so a Persian sentence can never be *typed* on the
+/// device — and a screenshot compared against a reference image only tells a non-reader that something
+/// shaped like Persian appeared. So the strings ship in the binary, each above what it must read, and
+/// the judgement handed over is the one only a reader can make.
+///
+/// **Three families, drawn one under the other on purpose.** A face is resolved per family and per
+/// character, so the same string can be right in `Proportional` and wrong in `Monospace` or in
+/// [`fonts::bold_family`] with nothing failing anywhere (client-stack rule 7). Stacking them puts the
+/// three renderings of one string side by side, which is the only way a wrong *face* — as opposed to a
+/// missing glyph — shows up at all: it draws, it just draws in the wrong hand.
+///
+/// It goes through [`bidi::job`] like every other string in the app, because half of what is being
+/// checked is the ordering that helper produces (client-stack rule 1) rather than the glyphs alone.
+fn rendering_specimen(ui: &mut egui::Ui) {
+    body(
+        ui,
+        "Development control — every script the shipped faces exist for, in every family. Each line \
+         below is the same text drawn by a different family; check it against the caption above it.",
+    );
+    ui.add_space(8.0);
+
+    for (caption, specimen) in fonts::SPECIMENS {
+        field_label(ui, caption);
+        for family in fonts::families() {
+            ui.horizontal(|ui| {
+                // The family's own name, in the family itself: a tag drawn in some *other* face
+                // would be naming a rendering it is not part of.
+                ui.label(bidi::job(
+                    &family_tag(&family),
+                    egui::FontId::new(11.0, family.clone()),
+                    ui.visuals().weak_text_color(),
+                ));
+                ui.label(bidi::job(
+                    specimen,
+                    egui::FontId::new(20.0, family.clone()),
+                    ui.visuals().text_color(),
+                ));
+            });
+        }
+        ui.add_space(10.0);
+    }
+}
+
+/// The short name of a family, for the specimen's row tag.
+fn family_tag(family: &egui::FontFamily) -> String {
+    match family {
+        egui::FontFamily::Proportional => "prop".to_owned(),
+        egui::FontFamily::Monospace => "mono".to_owned(),
+        egui::FontFamily::Name(name) => name.to_string(),
+    }
 }
 
 /// **Temporary, and not a specified feature.** A development control that returns this device to a

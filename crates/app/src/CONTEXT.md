@@ -196,6 +196,25 @@ third of *carrying the patch*. All three live where every screen with a text fie
 _Avoid_: Keyboard fix, IME workaround; and never key any of them on a per-frame "something is focused
 and the pointer went down", which is what issued 72 show requests from one scroll gesture.
 
+**Family** / **Face**:
+Two words this crate had been using as one, which is how two silent defects hid at once. A **family**
+is what a caller *asks for* — `Proportional`, `Monospace`, `bold` — and there are exactly three,
+enumerated in `fonts::families()`. A **face** is the font file that actually *draws* a given
+character, resolved per character by **first match** down the family's list. So "register a face in
+every family" and "which face is reached" are different claims, and only the first was ever written
+down: DejaVu Sans Bold carries a partial Arabic block, so listing it ahead of Noto Sans Arabic Bold
+meant Noto was never reached and every bold Persian word was drawn by a face that carries the script
+as an afterthought. It rendered, so nothing complained. **A glyph existing is not the same as the
+right face drawing it.**
+_Avoid_: Font for either one — it is the word that lets the two collapse.
+
+**Shaping run**:
+The unit epaint hands to the shaper, and the unit whose *internal* order the shaper is free to
+reverse. It is **not** the section: sections with a matching format are merged, and the merged text
+is then re-split by **face**. This is why the bidi helper pushes its sections by hand — see the rules
+below. The distinction is only visible in a rendering, never in the job's text.
+_Avoid_: Section and run as synonyms; "epaint lays out sections in order" as a complete statement.
+
 **Last caught up**:
 The only resting statement the app makes about sync — *when* it last completed one, a fact.
 **Never "in sync"**: after a sync the app knows every writer's highest *published* sequence, and
@@ -271,6 +290,14 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
 - **All user-visible text goes through `bidi`.** egui places text runs left-to-right in logical
   order, so a plain `ui.label("…")` renders Persian with the words backwards and Arabic-Indic digits
   reversed. This is the single most likely way to break the app without any test failing.
+- **`bidi` pushes its sections by hand, and `LayoutJob::append` must never return.** `append` merges
+  into the previous section when the format matches, and in this module **the section boundaries are
+  the reordering** — merged, the paragraph is one shaping run, the shaper infers RTL and reverses the
+  order the module just produced. It survived because runs are re-split by *face*, so the order held
+  wherever the spaces came from a different face than the words: right in `Proportional` and
+  `Monospace`, backwards in `bold`. The seventeen tests asserting on `job.text` pass either way;
+  `every_family_draws_the_sections_in_the_order_they_were_given` lays it out through real faces in
+  every family and is the only one that can tell.
 - **`TextEdit` needs the same treatment, via `.layouter()`** — it lays out its own text and
   otherwise bypasses the helper. Caret and selection are then in visual order while the buffer is
   logical, so RTL editing is imprecise; design around it rather than fighting it.
@@ -282,10 +309,12 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
   partial state to repair. Never schedule it, and never tell the user a started job is still
   progressing (ADR-0014 §3).
 - **Fonts are installed on the first frame, never in `CreationContext`**, and every added face must
-  be registered in **every** family including `Monospace`, or text silently renders as boxes. The
-  shipped set lives in `fonts` — Noto Sans Arabic (Persian) and DejaVu Sans (the IPA extensions the
-  bundled Latin faces lack) as fallbacks, plus a bold cut of each in its own family. The install
-  frame draws nothing: a newly-named family is not referenceable until the next pass (ADR-0012 §8).
+  be registered in **every** family, of which there are **three** — `fonts::families()` is the
+  enumeration, read by install, by the coverage test and by the specimen alike. The shipped set lives
+  in `fonts` — Noto Sans Arabic (Persian) and DejaVu Sans (the IPA extensions the bundled Latin faces
+  lack) as fallbacks, plus a bold cut of each in its own family, **Arabic first in both lists**,
+  because both faces carry the Arabic script and first match wins. The install frame draws nothing: a
+  newly-named family is not referenceable until the next pass (ADR-0012 §8).
 - **Bold is a face, never a colour — this is the note the editor meets.** There is no synthetic
   emboldening: epaint has none, and `RichText::strong` only *brightens*, which is invisible against
   this near-white body (measured as "I can't see bold"). To draw the `**bold**` Markdown subset

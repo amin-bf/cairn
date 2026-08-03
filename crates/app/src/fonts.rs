@@ -13,8 +13,12 @@
 //!   Cyrillic still come from egui's own Hack / Ubuntu-Light wherever they have the glyph, because
 //!   the added faces are appended as **fallbacks**.
 //!
-//! Both are registered into **every family in use** — `Proportional` *and* `Monospace` — because a
-//! face missing from one family renders as boxes there silently (ADR-0003 §4, client-stack rule 7).
+//! Both are registered into **every family in use**, because a face missing from one renders as
+//! boxes there silently (ADR-0003 §4, client-stack rule 7). That is now **three** families, not the
+//! two rule 7 was written against — [`families`] is the enumeration, and [`bold_family`] is the
+//! third. Two things follow that the two-family version never had to say: the bold family is built
+//! from scratch, so nothing of egui's own sits behind it, and **within a family, order decides which
+//! face is reached** — first match wins, and more than one of these faces carries the Arabic script.
 //!
 //! Installation is deferred to the first frame ([`crate::LeitnerApp`] guards it), never done in
 //! `CreationContext`: registering a face during creation was measured to break rendering on some
@@ -46,14 +50,69 @@ pub fn bold_family() -> FontFamily {
     FontFamily::Name("bold".into())
 }
 
+/// Every family this crate draws with, and therefore every family a face must be registered into.
+///
+/// **The count is not two.** Client-stack rule 7 says "every family you use, including `Monospace`",
+/// which was written when there were two; ADR-0012 §8's [`bold_family`] is a third, and it is the one
+/// most likely to be missed, because it is *built from scratch* rather than appended to — nothing of
+/// egui's own sits behind it, so a script absent from the two bold cuts has no fallback at all. Both
+/// readers of this list — the coverage test below and the on-screen specimen (issue #97) — take it
+/// from here, so a fourth family cannot be added without both of them following.
+pub(crate) fn families() -> [FontFamily; 3] {
+    [
+        FontFamily::Proportional,
+        FontFamily::Monospace,
+        bold_family(),
+    ]
+}
+
+/// The rendering specimen: each script the shipped faces exist for, paired with **what it must read**.
+///
+/// One list, two readers: [`every_added_face_covers_its_script_in_every_family`] checks coverage
+/// headlessly, and the temporary settings block draws exactly these strings on the handset so a reader
+/// of the script can confirm the ordering the test cannot see (issue #97). Two lists would let the
+/// screen show a script the test never checks — and a missing glyph is silent in both directions.
+///
+/// The captions carry no Persian or Arabic themselves. A caption is the statement being checked
+/// *against*, so it has to be readable even on the run where the rendering is what is broken.
+pub(crate) const SPECIMENS: [(&str, &str); 7] = [
+    (
+        "Persian — the dog is in the house; the full stop belongs at the far left",
+        "سگ در خانه است.",
+    ),
+    ("Arabic — the book is on the table", "الكتاب على الطاولة"),
+    (
+        "Persian-only letters (the four Arabic lacks), then mi-ravam with its zero-width non-joiner",
+        "گچپژ می\u{200C}روم",
+    ),
+    (
+        "Mixed scripts and digits — the Persian digits read one-two-three, and the brackets enclose \
+         the Latin rather than sitting beside it",
+        "تمرین ۱۲۳ (page 45)",
+    ),
+    (
+        "Arabic-Indic digits, then Persian digits — each reads left to right, one to five and six \
+         to zero",
+        "١٢٣٤٥ ۶۷۸۹۰",
+    ),
+    (
+        "IPA — ADR-0002 §9's own pronunciation example, and the reason DejaVu is shipped",
+        "deːɐ̯ hʊnt",
+    ),
+    (
+        "IPA, wider — every symbol a glyph, none of them a box",
+        "ɸθðʃʒŋɲʎɫæœøɜɾʔ ˈˌː",
+    ),
+];
+
 /// Install the shipped faces into `ctx`. Call **once, on the first frame** — see the module header
 /// and [`crate::LeitnerApp`].
 pub fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 
     // Regular faces, appended to the existing families so egui's own faces still win where they
-    // have the glyph, and into *both* families in use — a face absent from `Monospace` renders as
-    // boxes there silently.
+    // have the glyph — and `ar` before `dejavu`, because both carry the Arabic script and the first
+    // match is the one reached (see the bold list below, where that ordering was wrong).
     let regular = [
         (
             "ar",
@@ -62,16 +121,22 @@ pub fn install(ctx: &egui::Context) {
         ("dejavu", &include_bytes!("../assets/DejaVuSans.ttf")[..]),
     ];
     // The bold cut of each writing system, gathered into its own family (see `bold_family`).
-    // DejaVu-bold is first so the Latin/IPA body it usually wraps stays in the same face;
-    // Arabic-bold follows so Persian rendered bold is *bold*, not a fall back to tofu.
+    //
+    // **Arabic-bold goes first, for the same reason `ar` precedes `dejavu` above.** Face resolution
+    // is first match wins, and DejaVu Sans Bold carries a partial Arabic block — 165 code points to
+    // Noto's 256, including `گ چ پ ژ` — so listing it first meant Noto Sans Arabic Bold was never
+    // reached for *any* Arabic-script character and every bold Persian word was drawn by DejaVu's
+    // afterthought Arabic. It rendered, which is why nothing complained. Noto takes the Arabic
+    // script; Latin and the IPA extensions fall through to DejaVu-bold, which Noto does not carry
+    // (16 of 95 printable ASCII, none of them a letter), so nothing else moves.
     let bold = [
-        (
-            "dejavu-bold",
-            &include_bytes!("../assets/DejaVuSans-Bold.ttf")[..],
-        ),
         (
             "ar-bold",
             &include_bytes!("../assets/NotoSansArabic-Bold.ttf")[..],
+        ),
+        (
+            "dejavu-bold",
+            &include_bytes!("../assets/DejaVuSans-Bold.ttf")[..],
         ),
     ];
 
@@ -80,14 +145,20 @@ pub fn install(ctx: &egui::Context) {
             .font_data
             .insert(name.into(), Arc::new(FontData::from_static(bytes)));
     }
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        let list = fonts.families.entry(family).or_default();
-        list.extend(regular.iter().map(|&(name, _)| name.into()));
+    // Driven by `families()` so the enumeration the test and the specimen read is the same one that
+    // installs — a family added there is registered here without a second edit.
+    for family in families() {
+        if family == bold_family() {
+            // Bold is built *from scratch*, not appended to: it must hold the bold cuts and nothing
+            // else, or the regular faces sit in front of them and bold silently stops being bold.
+            fonts
+                .families
+                .insert(family, bold.iter().map(|&(name, _)| name.into()).collect());
+        } else {
+            let list = fonts.families.entry(family).or_default();
+            list.extend(regular.iter().map(|&(name, _)| name.into()));
+        }
     }
-    fonts.families.insert(
-        bold_family(),
-        bold.iter().map(|&(name, _)| name.into()).collect(),
-    );
 
     ctx.set_fonts(fonts);
 }
@@ -95,7 +166,7 @@ pub fn install(ctx: &egui::Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egui::FontId;
+    use egui::{Color32, FontId};
 
     /// Run one full pass so `set_fonts` takes effect, then hand back the context. `set_fonts`
     /// applies at the *start* of the next pass, so a caller that queries coverage in the same frame
@@ -109,38 +180,103 @@ mod tests {
 
     /// Every added face must cover its script in **every family the app draws with** — a face
     /// registered only in `Proportional` renders as boxes in `Monospace` with no test failing
-    /// anywhere (ADR-0003 §4, client-stack rule 7). So the scripts the shipped faces exist to
-    /// provide — Persian (the four letters Arabic lacks, plus Persian ی/ک), Arabic, the IPA
-    /// extension symbols of `deːɐ̯ hʊnt`, and Arabic-Indic digits — are each checked against both
-    /// families.
+    /// anywhere (ADR-0003 §4, client-stack rule 7). The families come from [`families`], so a fourth
+    /// is checked the day it is added rather than the day someone notices boxes.
     ///
-    /// The strings hold **no ASCII Latin**, and deliberately: egui's own Hack sits first in
-    /// `Monospace` and carries the replacement glyph, so `has_glyph` reports a false negative for
-    /// every character Hack itself covers (its own documented `TODO`). ASCII is egui's to draw and
-    /// is not what this ticket ships; the `deːɐ̯ hʊnt` example renders because its Latin base is
-    /// Hack/Ubuntu-Light and the symbols below are ours.
+    /// The characters come from [`SPECIMENS`], which is also what the handset specimen draws: this
+    /// test then answers *is the glyph there*, and the screen answers *is it in the right place* —
+    /// the half no headless check can reach (issue #97). Two lists would let each half cover a script
+    /// the other does not.
+    ///
+    /// Whitespace and format controls are skipped: a space has no glyph and the zero-width
+    /// non-joiner has none *by definition*, which makes neither less load-bearing — `می‌روم` needs
+    /// the ZWNJ — so the join it produces is checked by eye on the specimen, where its absence is
+    /// what would show.
     #[test]
     fn every_added_face_covers_its_script_in_every_family() {
         let ctx = installed();
-        let scripts = [
-            ("Persian", "گچپژکی"),
-            ("Arabic", "مرحبا"),
-            ("IPA extensions", "ːɐ̯ʊ"),
-            ("Arabic-Indic digits", "۱۲۳٤٥"),
-        ];
-        for family in [FontFamily::Proportional, FontFamily::Monospace] {
+        for family in families() {
             let font_id = FontId::new(14.0, family.clone());
-            for (label, s) in scripts {
-                for c in s.chars() {
+            for (caption, specimen) in SPECIMENS {
+                for c in specimen
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || is_symbol(*c))
+                {
                     assert!(
-                        ctx.fonts_mut(|f| f.has_glyph(&font_id, c)),
-                        "family {family:?} is missing {label} glyph {c:?} \
-                         (U+{:04X}) — it would render as a box",
+                        draws(&ctx, &font_id, c),
+                        "family {family:?} draws {c:?} (U+{:04X}) as a box — from the specimen \
+                         {caption:?}",
                         u32::from(c)
                     );
                 }
             }
         }
+    }
+
+    /// **A glyph existing is not the same as the right face drawing it**, and the difference is
+    /// invisible in a screenshot to anyone who does not read the script.
+    ///
+    /// Face resolution is *first match wins* over the family's list, and DejaVu Sans carries a
+    /// partial Arabic block — 165 code points against Noto Sans Arabic's 256, the Persian-specific
+    /// `گ چ پ ژ` among them. So a family that lists DejaVu ahead of Noto never reaches Noto for
+    /// **any** Arabic-script character: the text draws, the coverage test above passes, and Persian
+    /// is rendered by a face that carries it as an afterthought. That is what the bold family did.
+    ///
+    /// The check is that the face drawing Persian is **not** the face drawing Latin, which is what
+    /// distinguishes *the Arabic face was reached* from *the Latin face happened to have it*. Faces
+    /// are told apart by their own ascent and line height, which epaint records per glyph.
+    #[test]
+    fn the_arabic_face_draws_the_arabic_script_in_every_family() {
+        let ctx = installed();
+        for family in families() {
+            let font_id = FontId::new(14.0, family.clone());
+            let face = |c: char| {
+                let g = ctx.fonts_mut(|f| {
+                    f.layout_no_wrap(c.to_string(), font_id.clone(), Color32::WHITE)
+                });
+                let g = g.rows[0].glyphs[0];
+                (g.font_face_ascent.to_bits(), g.font_face_height.to_bits())
+            };
+            for c in "گچپژکیسلام".chars() {
+                assert_ne!(
+                    face(c),
+                    face('a'),
+                    "family {family:?} draws {c:?} with the same face as Latin — the Arabic face is \
+                     behind a face that also carries {c:?}, so it is never reached"
+                );
+            }
+        }
+    }
+
+    fn is_symbol(c: char) -> bool {
+        // The IPA length mark and the stress marks are modifier letters and punctuation, not
+        // alphanumerics, and they are exactly what `deːɐ̯ hʊnt` is shipped to draw.
+        matches!(c, 'ː' | 'ˈ' | 'ˌ' | '\u{032F}')
+    }
+
+    /// True when `c` really draws in `font_id`'s family — that is, when the glyph it lays out to is
+    /// **not the replacement box**.
+    ///
+    /// # Why not `Fonts::has_glyph`
+    ///
+    /// `has_glyph` is `resolve_face(c) != replacement_face_key`: it asks whether the face that owns
+    /// `c` is the same face that owns `U+FFFD`. That is a false negative for **every character
+    /// covered by whichever face owns the replacement glyph**, which is not a corner case here —
+    /// it is most of two families. In `Monospace` egui's own Hack owns `U+FFFD`, so `has_glyph`
+    /// answers *no* for `θ ð ŋ æ œ ø`, all of which Hack draws perfectly well. In
+    /// [`bold_family`] DejaVu-Bold owns it and DejaVu-Bold covers nearly everything, so `has_glyph`
+    /// answers *no* for the entire specimen — a test built on it would have reported the bold family
+    /// as totally broken while it renders fine.
+    ///
+    /// Laying the character out and comparing its texture rectangle against `U+FFFD`'s answers the
+    /// question actually being asked — *does a box appear* — for every family the same way.
+    fn draws(ctx: &egui::Context, font_id: &FontId, c: char) -> bool {
+        let uv = |c: char| {
+            let galley =
+                ctx.fonts_mut(|f| f.layout_no_wrap(c.to_string(), font_id.clone(), Color32::WHITE));
+            galley.rows.first()?.glyphs.first().map(|g| g.uv_rect)
+        };
+        uv(c).is_some() && uv(c) != uv('\u{FFFD}')
     }
 
     /// Bold is a heavier **face**, not a brighter colour: measuring the laid-out width proves a
