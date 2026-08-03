@@ -89,7 +89,13 @@ not diverge here.
 **Box badge**:
 The small, non-interactive indicator shown **only after reveal**. Reports durability. Never sorted,
 never counted, never presented as a queue — see `scheduling`'s rules, which bind everything in this
-file.
+file. It reads **`new` for a card with no review history**, never a box number (ADR-0006 §6): the box
+is a total function of memory state and so answers *1* for a card it has never seen — the same answer
+it gives a card reviewed thirty times and never retained — so printing the number claims a durability
+nothing has measured, and on a first introduction it reads as *the bottom box*, a position in a queue
+of boxes. That is the one reading ADR-0001 §3 exists to keep the badge from acquiring, and it arrives
+by omission rather than by anyone deciding it.
+_Avoid_: Box 1 for an unseen card; "level", "stage".
 
 **Interval preview**:
 The illustrative next-interval shown on each grade button. Confirmed wanted rather than noise once
@@ -98,6 +104,24 @@ seen rather than described.
 **Backlog**:
 More cards due than the user will get through. Always *framed* ("pick a comfortable size, the rest
 will keep"), never reported as a bare number.
+
+**Fresh deck**:
+The picker's state for a collection **nothing has ever been reviewed in** — zero history anywhere, not
+merely nothing due today (ADR-0006 §8, whose parenthesis is *zero review history*). It is one of
+**three states that all have an empty due list**, and the other two are not it: *caught up* has nothing
+to introduce either, and **nothing due** below has history behind it.
+_Avoid_: New deck for anything but a first look.
+
+**Nothing due**:
+Nothing due in a collection that **has** been reviewed: the day's repeats are finished and the new-card
+rate still has room. **Indistinguishable from a fresh deck by looking at the queue** — same empty due
+list, same new cards — so the only thing separating them is whether any review exists at all, which is
+why the distinction is stated here rather than left to be noticed. Collapsing the two tells a reviewer
+of four years that their deck is fresh. It is the **ordinary** shape of an afternoon rather than an edge
+case, because ADR-0011 §2's rate caps introductions every day; ADR-0006 §8 named only two worded states
+because it predates that rate. Its sentence states the fact and invites — never that the user is behind,
+which they are not, and never a bare count.
+_Avoid_: Fresh deck, empty, done for the day.
 
 **Leech screen**:
 The card-level list that hangs off Review — the one place cards are listed, not notes (the note list
