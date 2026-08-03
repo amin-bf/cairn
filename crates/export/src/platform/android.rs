@@ -9,13 +9,19 @@
 //!   `French A1.ldeck (1)` instead of `French A1 (1).ldeck`; `MediaStore` stores
 //!   `application/octet-stream` either way, so declaring one costs the extension and buys nothing.
 //!   **Measured**: the same name written twice stored as `Specimen.ldeck` then
-//!   `Specimen (1).ldeck`, both `application/octet-stream`.
+//!   `Specimen (1).ldeck`, both `application/octet-stream`. **And measured twice, at both ends of
+//!   the supported range** — identically at API 37 and at API **29**, the level where
+//!   `MediaStore.Downloads` and the permission-free insert first exist. So this is a property of the
+//!   collection rather than of a recent platform, and the window ADR-0023 left unmeasured is
+//!   **24–28** specifically, not "below the handset we own".
 //! - **`hand_off`'s flags go on the chooser, not the inner intent** (ADR-0023 §7).
 //!   `Intent.createChooser` returns a fresh intent inheriting neither `FLAG_ACTIVITY_NEW_TASK` —
 //!   mandatory because the context is an `Application`, not an Activity — nor
 //!   `FLAG_GRANT_READ_URI_PERMISSION`, whose absence fails only *after* the user has picked a target.
 //!   **Measured**: the launch carries `flg=0x10000001`, which is exactly those two bits, and the
-//!   chooser drew a populated sheet.
+//!   chooser drew a populated sheet — under **two different choosers**, the framework's own
+//!   `com.android.internal.app.ChooserActivity` on API 29 and `com.android.intentresolver` on API
+//!   37. The `createChooser` route is not tied to one chooser generation.
 //!
 //! **And the bytes arrive.** ADR-0023 left *"whether a recipient can read the bytes"* open because
 //! completing a share meant sending a file to a real contact; a second handset the owner controls

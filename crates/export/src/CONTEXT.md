@@ -188,5 +188,9 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   bytes, yields `Specimen (1).ldeck`. **The extension survives**, which is what declaring no media
   type buys (ADR-0024 §4) — and the stored type is `application/octet-stream` either way, so the
   read-back is the only thing that distinguishes the second write from the first.
+  **Measured identically at API 29 and API 37**, so it is a property of the collection rather than of
+  a recent platform: API 29 is where `MediaStore.Downloads` and the permission-free insert begin, and
+  the window ADR-0023 left unmeasured is therefore **24–28** specifically. Nothing is claimed below
+  29, and the read-back is what makes an unexpected answer there visible rather than silent.
 - **The application never deletes a file it wrote or imported.** The seam has no delete; the list
   grows and tidying it is the file manager's job.
