@@ -20,6 +20,7 @@ pub mod editor;
 pub mod fonts;
 pub mod inbound;
 pub mod keyboard;
+pub mod listing;
 pub mod markdown;
 pub mod notes;
 pub mod optimise;
@@ -254,6 +255,8 @@ pub struct LeitnerApp {
     band: keyboard::Band,
     /// **Temporary** — the hand-off specimen's state (see [`handoff_specimen`]).
     handoff: HandOff,
+    /// **Temporary** — the file-list specimen's state (see [`file_list_specimen`]).
+    file_list: FileList,
     /// The file the platform handed us — a launch intent read once at startup, or the last file
     /// dropped on the window — held so the inbound specimen can **re-derive** its plan every frame
     /// (ADR-0022 §5). This is the *file*, never a cached plan: `inbound::read` runs the whole
@@ -273,6 +276,19 @@ struct HandOff {
     written: Option<String>,
     /// The last thing either button had to say, verbatim: a read-back name or a refusal. Held rather
     /// than logged because a handset run has no console the person holding it can read.
+    said: String,
+}
+
+/// **Temporary, and not a specified feature.** What the file-list specimen carries between frames.
+#[derive(Default)]
+struct FileList {
+    /// The rows from the last enumeration — `None` until the list button has been pressed once, so an
+    /// empty list reads as *"nothing here"* rather than *"not asked yet"*. Only names and sniffs are
+    /// held, never the bytes: the row description is the cheap sniff and inflates nothing (ADR-0022
+    /// §11); the bytes are re-read from the seam when a row is selected.
+    rows: Option<Vec<listing::Listed>>,
+    /// The last thing the enumeration had to say — a seam refusal, verbatim. Held rather than logged
+    /// because a handset run has no console (as [`HandOff`]).
     said: String,
 }
 
@@ -300,6 +316,7 @@ impl LeitnerApp {
             fonts_installed: false,
             band: keyboard::Band::default(),
             handoff: HandOff::default(),
+            file_list: FileList::default(),
             inbound: None,
             launch_checked: false,
         }
@@ -510,7 +527,8 @@ impl eframe::App for LeitnerApp {
                         &mut self.optimise_job,
                         &mut self.optimise_done,
                         &mut self.handoff,
-                        self.inbound.as_ref(),
+                        &mut self.inbound,
+                        &mut self.file_list,
                         now_ms,
                     );
                 }
@@ -1476,7 +1494,8 @@ fn settings_screen(
     optimise_job: &mut Option<optimise::OptimiseJob>,
     optimise_done: &mut bool,
     handoff: &mut HandOff,
-    inbound: Option<&inbound::Inbound>,
+    inbound: &mut Option<inbound::Inbound>,
+    file_list: &mut FileList,
     now_ms: i64,
 ) -> bool {
     heading(ui, "Settings");
@@ -1530,9 +1549,137 @@ fn settings_screen(
     ui.add_space(12.0);
     ui.separator();
     ui.add_space(8.0);
-    inbound_specimen(ui, coll, inbound);
+    // The list is the other half of the inbound path: it enumerates the files this application wrote
+    // and, on selection, funnels one into the very same `inbound` the specimen below reads (#108).
+    file_list_specimen(ui, file_list, inbound);
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+    inbound_specimen(ui, coll, inbound.as_ref());
 
     reset
+}
+
+/// **Temporary, and not a specified feature.** The file-list specimen: the first call site of
+/// [`leitner_export::platform::list`] (issue #108), which until now had none. It enumerates the files
+/// this application wrote, describes each **from its own bytes**, and on selection hands one to the
+/// same inbound read an arriving file takes.
+///
+/// **It says what the list *is*, never what is missing.** Scoped storage grants this application its
+/// own `MediaStore` rows and nothing else, so a `.ldeck` another application dropped in `Downloads` is
+/// invisible to the query — not unreadable, *absent* (ADR-0024 §3). That absence is the platform, not
+/// a defect to explain, so the wording is *"the files this application wrote"* and never invites a
+/// user to drop a file in a folder and expect it here. On the desktop the same list is a real folder
+/// scan, and the wording is true there too.
+///
+/// **Each row is described from its sniff, never its extension** (ADR-0024 §1, deck-export rule 13):
+/// enumeration is by `.ldeck`/`.lcoll`, but a `.ldeck` may carry a collection archive and only the
+/// `mimetype` member tells them apart — so both profiles appear, told apart by the bytes. A file we
+/// wrote but can no longer parse is **listed and marked unreadable**, never hidden (ADR-0022 §11):
+/// hiding it sends a user after a permissions problem that does not exist.
+///
+/// **Selecting a row is one mechanism, not two.** It re-reads the bytes through [`get`] and hands them
+/// to [`listing::select`], producing an [`inbound::Inbound`] the [`inbound_specimen`] below then plans
+/// against the live collection — the same gate-and-describe read a drop or a launch intent reaches
+/// (ADR-0022 §5). The row description stays the cheap sniff so enumerating the whole list inflates
+/// **zero payloads**; only the one selected file is inflated to a plan.
+fn file_list_specimen(
+    ui: &mut egui::Ui,
+    state: &mut FileList,
+    inbound: &mut Option<inbound::Inbound>,
+) {
+    use leitner_export::platform;
+
+    body(
+        ui,
+        "Development control — the files this application wrote, and only those. It is not a view of \
+         the downloads folder: a file another application put there cannot appear here, and that is \
+         the platform, not a fault. Each row is described from its own bytes; selecting one previews \
+         it below through the same read an arriving file takes.",
+    );
+    ui.add_space(4.0);
+
+    if full_width_button(ui, "List the files (temporary)").clicked() {
+        state.said.clear();
+        match platform::list() {
+            Err(e) => {
+                state.rows = None;
+                state.said = format!("Could not list the files: {e}");
+            }
+            Ok(names) => {
+                // Read each file back and sniff its profile — the seam hands whole bytes, but only
+                // the fixed-offset `mimetype` header is read; no payload is ever inflated (ADR-0022
+                // §11). A file we cannot even read back still earns a row, marked unreadable, rather
+                // than vanishing.
+                let rows = names
+                    .iter()
+                    .map(|name| match platform::get(name) {
+                        Ok(bytes) => listing::describe(name, &bytes),
+                        Err(_) => listing::Listed {
+                            name: name.clone(),
+                            sniffed: None,
+                        },
+                    })
+                    .collect();
+                state.rows = Some(rows);
+            }
+        }
+    }
+
+    ui.add_space(8.0);
+
+    if !state.said.is_empty() {
+        body(ui, &state.said);
+        return;
+    }
+
+    let Some(rows) = &state.rows else {
+        body(ui, "Not listed yet — press the button.");
+        return;
+    };
+
+    if rows.is_empty() {
+        body(
+            ui,
+            "No files this application has written yet. Writing one (above) puts it here.",
+        );
+        return;
+    }
+
+    // The row selected this frame, re-read below the borrow so `state.rows` is not held across the
+    // `get`. Only one row can be pressed per frame.
+    let mut selected: Option<String> = None;
+    for row in rows {
+        ui.horizontal(|ui| {
+            if ui.button("Preview").clicked() {
+                selected = Some(row.name.clone());
+            }
+            field_label(ui, &format!("{} — {}", row.name, listed_label(row)));
+        });
+    }
+
+    if let Some(name) = selected {
+        // Re-read the bytes at selection and route them through the arriving path — one mechanism,
+        // not two (ADR-0022 §5). A read that fails between listing and selecting says so plainly.
+        match platform::get(&name) {
+            Ok(bytes) => *inbound = Some(listing::select(&name, bytes)),
+            Err(e) => state.said = format!("Could not read \"{name}\": {e}"),
+        }
+    }
+}
+
+/// A listed file's row description, drawn **from its sniff** (ADR-0024 §1). Both profiles are named,
+/// and a file we wrote but can no longer parse is *unreadable* — the honest word for a row that stays
+/// on the list rather than disappearing from it (ADR-0022 §11).
+fn listed_label(listed: &listing::Listed) -> &'static str {
+    use leitner_export::Profile;
+    match &listed.sniffed {
+        Some(Profile::Deck) => "deck",
+        Some(Profile::Collection) => "collection archive",
+        Some(Profile::Other(_)) => "another kind of file",
+        None => "unreadable",
+    }
 }
 
 /// **Temporary, and not a specified feature.** The rendering specimen: every script the shipped faces

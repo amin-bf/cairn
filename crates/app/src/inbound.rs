@@ -39,6 +39,10 @@ pub enum Arrival {
     Shared,
     /// A file dropped onto the desktop window, surfaced by egui with no seam function (ADR-0016 §5).
     Dropped,
+    /// A file **this application wrote**, chosen from the file list — enumerated by
+    /// [`leitner_export::platform::list`] and re-read on selection (issue #108). It reaches this same
+    /// read so the list and an arriving file share one identification path, not two (ADR-0022 §5).
+    Listed,
 }
 
 impl Arrival {
@@ -48,6 +52,7 @@ impl Arrival {
             Arrival::Opened => "opened (ACTION_VIEW)",
             Arrival::Shared => "shared (ACTION_SEND)",
             Arrival::Dropped => "dropped on the window",
+            Arrival::Listed => "chosen from the file list",
         }
     }
 }
