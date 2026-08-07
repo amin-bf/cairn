@@ -204,9 +204,9 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   `MediaStore` **dedupes** — it does not overwrite and does not fail — so the name the user needs is
   one only the platform knows. Measured through this crate's own seam on the handset
   ([#98](https://github.com/amin-bf/cairn/issues/98)): the same name written twice, with identical
-  bytes, yields `Specimen (1).ldeck` — the run predates
-  [ADR-0028 §3](../../../docs/adr/0028-the-application-is-named-cairn.md)'s rename of the extension
-  and is left as measured; what it establishes is where the suffix lands, not the letters. **The extension survives**, which is what declaring no media
+  bytes, yields `Specimen (1).cdeck`, and a third write `Specimen (2).cdeck` — re-run through this
+  seam after [ADR-0028 §3](../../../docs/adr/0028-the-application-is-named-cairn.md)'s rename
+  ([evidence](../../../docs/research/extension-rename-reachability/README.md)). **The extension survives**, which is what declaring no media
   type buys (ADR-0024 §4) — and the stored type is `application/octet-stream` either way, so the
   read-back is the only thing that distinguishes the second write from the first.
   **Measured identically at API 29 and API 37**, so it is a property of the collection rather than of
