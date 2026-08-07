@@ -447,8 +447,6 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
     pressed
 }
 
-/// The box badge: a small, non-interactive indicator, weaker than body text so it never reads as a
-/// call to action.
 /// The picker's statement when nothing is due but cards have never been seen: the fact, then the
 /// invitation, and **no claim that the deck is fresh** — the collection has history behind it.
 ///
@@ -456,7 +454,7 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
 /// day's repeats are finished and only ADR-0011 §2's rate stands between them and the rest.
 fn new_only_wording(new: usize) -> String {
     if new == 1 {
-        "Nothing due right now. One new card, whenever you like.".to_string()
+        "Nothing due right now. One new card, whenever you like.".to_owned()
     } else {
         format!("Nothing due right now. {new} new cards, whenever you like.")
     }
