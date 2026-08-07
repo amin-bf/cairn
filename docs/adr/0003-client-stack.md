@@ -2,10 +2,10 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-28
-- **Resolves**: [Prototype: pick the client stack](https://github.com/amin-bf/leitner/issues/8)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Prototype: pick the client stack](https://github.com/amin-bf/cairn/issues/8)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/client-stacks/`](../research/client-stacks/README.md) and the four
-  prototypes measured in [`prototypes/COMPARISON.md`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/COMPARISON.md) (tag [`prototypes/issue-8`](https://github.com/amin-bf/leitner/tree/prototypes/issue-8))
+  prototypes measured in [`prototypes/COMPARISON.md`](https://github.com/amin-bf/cairn/blob/prototypes/issue-8/prototypes/COMPARISON.md) (tag [`prototypes/issue-8`](https://github.com/amin-bf/cairn/tree/prototypes/issue-8))
 - **Related**: [ADR-0001](0001-scheduling-algorithm-and-grade-scale.md),
   [ADR-0002](0002-the-card-model.md)
 
@@ -15,7 +15,7 @@ The map fixes Rust, three targets (desktop, web, Android), offline-by-default, n
 and — decisively for this choice — **that agents implement the app**, so the stack must be
 agent-legible rather than merely pleasant for a human who can intuit around gaps.
 
-Research ([#3](https://github.com/amin-bf/leitner/issues/3)) gathered facts and deliberately chose
+Research ([#3](https://github.com/amin-bf/cairn/issues/3)) gathered facts and deliberately chose
 nothing. It left the single biggest unknown as *"no measured build or iteration times exist for
 either stack, on any platform."*
 
@@ -97,7 +97,7 @@ run"*, and that sections are laid out in the order given:
   not.
 
 **~60 lines, no fork of epaint**, verified on Persian sentences, mixed Latin/Persian, and digits, and
-confirmed by a Persian reader. See [`prototypes/egui-slice/src/bidi.rs`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/src/bidi.rs).
+confirmed by a Persian reader. See [`prototypes/egui-slice/src/bidi.rs`](https://github.com/amin-bf/cairn/blob/prototypes/issue-8/prototypes/egui-slice/src/bidi.rs).
 
 **All card and UI text must be rendered through this helper.** Text rendered with a plain
 `RichText`/`&str` bypasses it and will be wrong for RTL content. This is the single most important
@@ -116,7 +116,7 @@ months.
   Persian input and stores it correctly. Its *display* bypasses the bidi helper unless you pass a
   custom `.layouter()` that routes through the same `LayoutJob` — do that everywhere. What remains
   is that the galley is then in **visual** order while the buffer is in **logical** order, so caret
-  movement, selection and click-to-position are wrong for RTL text. [#11](https://github.com/amin-bf/leitner/issues/11)
+  movement, selection and click-to-position are wrong for RTL text. [#11](https://github.com/amin-bf/cairn/issues/11)
   must be designed against that: prefer short single-line answers, avoid mid-string editing
   affordances, and do not assume a native text field's behaviour. IME composition (CJK) is separately
   weak, per egui's own docs — less relevant since Persian input is direct key mapping.
@@ -169,7 +169,7 @@ basic ascii input"*, which it calls adequate *"for prototyping"* but *"unlikely 
 production applications."* Persian is delivered via `InputConnection.commitText` and never reaches us.
 
 `GameActivity` looked like the answer — real IME through GameTextInput. **It was built and tested,
-and it does not help.** The Gradle project is kept at [`prototypes/egui-slice/android/`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/android) so nobody
+and it does not help.** The Gradle project is kept at [`prototypes/egui-slice/android/`](https://github.com/amin-bf/cairn/blob/prototypes/issue-8/prototypes/egui-slice/android) so nobody
 repeats the experiment.
 
 **winit is the break, not the activity backend.**
@@ -207,7 +207,7 @@ sentences into the desktop build. Cards get authored there and reach the phone b
 workable answer, but it **promotes sync from deferred to load-bearing**: it is no longer only a
 multi-device convenience, it is the only route by which non-Latin content reaches Android at all.
 
-**The consequence for [#11](https://github.com/amin-bf/leitner/issues/11) is concrete:** typed
+**The consequence for [#11](https://github.com/amin-bf/cairn/issues/11) is concrete:** typed
 answers on Android can only be entered in Latin. For German-answer decks that is survivable. For
 Persian-answer decks it is not, and no amount of work inside this repository changes it. **This is
 the strongest argument against this stack that the whole exercise produced**, and it is recorded
@@ -217,13 +217,13 @@ for free.
 ### 7. What is carried forward, and what is not
 
 The prototypes are throwaway and **do not land on `main`** — they live under the tag
-[`prototypes/issue-8`](https://github.com/amin-bf/leitner/tree/prototypes/issue-8), which is the
+[`prototypes/issue-8`](https://github.com/amin-bf/cairn/tree/prototypes/issue-8), which is the
 evidence asset for this decision. What lands is this ADR, `README.md` and the rules in
 `AGENTS.md`.
 
 One exception is worth naming: **the bidi helper is a validated decision, not a prototype artefact.**
 It must be carried into the real crate when the workspace is laid out
-([#14](https://github.com/amin-bf/leitner/issues/14)), together with its tests. Everything else in
+([#14](https://github.com/amin-bf/cairn/issues/14)), together with its tests. Everything else in
 `prototypes/` can be deleted once this ADR is merged.
 
 ## Consequences
@@ -237,7 +237,7 @@ It must be carried into the real crate when the workspace is laid out
   rather than kept alongside — two bidi passes would double-reverse.
 - CJK decks are effectively out until someone accepts a 19 MB font in the bundle. Latin, Cyrillic and
   Arabic-script decks are supported.
-- Typed-answer review ([#11](https://github.com/amin-bf/leitner/issues/11)) must be designed against
+- Typed-answer review ([#11](https://github.com/amin-bf/cairn/issues/11)) must be designed against
   weak IME support rather than assuming a native text field.
 - Accessibility is not available on web. If it becomes a requirement, this ADR must be reopened —
   it cannot be added to a canvas cheaply.

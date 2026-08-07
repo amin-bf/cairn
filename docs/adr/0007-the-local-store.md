@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-30
-- **Resolves**: [Decide: the local store](https://github.com/amin-bf/leitner/issues/12)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the local store](https://github.com/amin-bf/cairn/issues/12)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/client-stacks/storage-and-contenders.md`](../research/client-stacks/storage-and-contenders.md),
   plus the Android storage proof recorded in
   [`docs/environment/android-toolchain.md`](../environment/android-toolchain.md)
@@ -26,7 +26,7 @@ introducing a runtime platform branch would erode the thing the whole stack choi
 ADR-0002 split content from progress into two stores with different rules. ADR-0005 put deck
 membership on the note and left a slot for per-deck preferences on the mutable surface.
 
-Research ([#3](https://github.com/amin-bf/leitner/issues/3)) left one question open for this
+Research ([#3](https://github.com/amin-bf/cairn/issues/3)) left one question open for this
 ticket in as many words: *where the seam sits* — at bytes or at SQL.
 
 The answer turned out to depend on a scoping question nobody had asked, so this ADR settles that
@@ -79,7 +79,7 @@ ship a third platform whose data can vanish.
 **The store is SQLite, via `rusqlite` with the `bundled` feature, on both targets.** It is already
 proven rather than assumed: cross-compiled for arm64-v8a and run on the real handset with a
 persisted database, packaged into an APK whose `.so` loads in-process
-([#7](https://github.com/amin-bf/leitner/issues/7)).
+([#7](https://github.com/amin-bf/cairn/issues/7)).
 
 The log table stores **the interchange line verbatim**, and everything else is derived from it:
 
@@ -456,24 +456,24 @@ here forecloses it.
 
 ## Requirements this places on downstream tickets
 
-### [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13)
+### [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13)
 
 1. A progress export is **`SELECT line FROM log`** — the bytes as received, never re-encoded.
 2. Content export reads the `mutable` table; §4's stamps travel with it or are reset on import,
    which #13 still decides.
 3. **Export is not a file copy.** WAL means `collection.db` alone omits recent commits (§7).
 
-### [#14 — crate and workspace layout](https://github.com/amin-bf/leitner/issues/14)
+### [#14 — crate and workspace layout](https://github.com/amin-bf/cairn/issues/14)
 
 1. The platform surface is now small and concrete: two directory lookups (data and state) and the
    Android JNI shim. Everything else is portable.
 2. The seam stays a compile-time `#[cfg]` per ADR-0003; the web arm disappears entirely.
 
-### [#20 — FSRS optimisation in-client](https://github.com/amin-bf/leitner/issues/20)
+### [#20 — FSRS optimisation in-client](https://github.com/amin-bf/cairn/issues/20)
 
 1. **The wasm half is out of scope** (§1). Only the Android proof remains live.
 
-### [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
+### [#21 — new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
 
 1. Anything counted per day reads the cache, which is disposable — a daily counter must be derivable
    from the log, never stored only in `derived.db`.
@@ -482,7 +482,7 @@ here forecloses it.
    > replayed history, stored nowhere, so the cache may hold it freely and losing the cache loses
    > nothing. This warning has now been honoured twice, ADR-0010's leech rule being the other.
 
-### [#26 — leeches](https://github.com/amin-bf/leitner/issues/26)
+### [#26 — leeches](https://github.com/amin-bf/cairn/issues/26)
 
 1. ~~Suspension as a fourth row kind needs no schema change: `kind` is a column and unknown kinds are
    skipped (§9).~~
@@ -523,7 +523,7 @@ authoritative, and this ADR keeps the reasoning behind them.
 | Item | Owner |
 |---|---|
 | ~~Whether a collection has an identity of its own, so a device can tell a *different* collection from a divergent copy~~ — **settled by [ADR-0016 §4](0016-backup-and-restore.md)**: a UUIDv4 **adopted and never re-minted**, the exact opposite of the writer id's never-adopt rule, with one rule at both the restore and enrolment seams — an empty collection adopts, a non-empty one refuses | — |
-| ~~A real backup and restore story, given Auto Backup's 25 MB silent cutoff and WAL's `VACUUM INTO` caveat~~ — **closed by [ADR-0016](0016-backup-and-restore.md)**: a whole-collection `.lcoll` archive, written only on request, and restore is a **merge** that never removes anything. It also found two arithmetic errors in §6 below — this ADR reads the wrong row of its own table, so the cutoff arrives in about **nine months** of heavy use rather than two years (since confirmed by measurement), and `derived.db` is inside the backup set | [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) |
+| ~~A real backup and restore story, given Auto Backup's 25 MB silent cutoff and WAL's `VACUUM INTO` caveat~~ — **closed by [ADR-0016](0016-backup-and-restore.md)**: a whole-collection `.lcoll` archive, written only on request, and restore is a **merge** that never removes anything. It also found two arithmetic errors in §6 below — this ADR reads the wrong row of its own table, so the cutoff arrives in about **nine months** of heavy use rather than two years (since confirmed by measurement), and `derived.db` is inside the backup set | [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37) |
 | ~~Encryption of the store at rest~~ — **discharged** by [ADR-0020 §3 §4](0020-protection-at-rest.md): it is not encrypted, and no secret is asked for | — |
 | Whether the application permits a second window on one collection | UI work; the store is safe either way |
 | Building §10's optional discard below the cutoff | Deferred until someone needs the space |

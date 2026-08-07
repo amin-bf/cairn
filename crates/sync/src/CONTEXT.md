@@ -101,7 +101,7 @@ and never on ADR-0004 §7's mutable surface**, deleted with the grant on disconn
 of the *grant*, not of the collection, so another device derives its own and never needs telling
 (ADR-0019 §6). That placement is what keeps it out of both export profiles with no clause naming it:
 ADR-0016 §4 already excludes credentials. **Never publish it.** On the mutable surface it would ride
-into every `.lcoll` and onto the remote, and buy nothing — a device on the wrong account is looking at
+into every `.ccoll` and onto the remote, and buy nothing — a device on the wrong account is looking at
 a different folder and cannot read it. Cached and never refreshed, so a later address change shows
 stale; that is the right answer to *"what did I enrol as"*.
 

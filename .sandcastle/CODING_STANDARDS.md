@@ -63,13 +63,13 @@ and that index is what stops "read the ADRs" from meaning all of them.
 ## Architecture
 
 - The domain core — content, the event log, scheduling, replay — stays free of
-  I/O, of the clock, and of any UI or platform dependency. `leitner-core` is a
-  crate boundary rather than a convention: `cargo test -p leitner-core` needs no
+  I/O, of the clock, and of any UI or platform dependency. `cairn-core` is a
+  crate boundary rather than a convention: `cargo test -p cairn-core` needs no
   database, no window and no handset (ADR-0009 §2).
 - **The platform seam is a compile-time `#[cfg]`, never a trait and never a
   runtime check** (ADR-0003 §5, ADR-0009 §4). Three arms, the third a
   `compile_error!`, so an unrecognised target fails the build instead of
-  silently taking the desktop path. The rule is **per crate**: `leitner-store`
+  silently taking the desktop path. The rule is **per crate**: `cairn-store`
   stays at exactly two functions and a third appearing there means the seam is
   eroding; a crate needing the platform for an unrelated reason gets its own
   module under the same discipline (ADR-0016 §5).

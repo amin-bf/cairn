@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: whether `CardRef` carries a kind discriminator](https://github.com/amin-bf/leitner/issues/55)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: whether `CardRef` carries a kind discriminator](https://github.com/amin-bf/cairn/issues/55)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0001 §7](0001-scheduling-algorithm-and-grade-scale.md) (fuzz seeded from the
   18-byte `CardRef`), [ADR-0002 §4 §5 §6 §7](0002-the-card-model.md) (kind definitions, cloze
   numbering, card identity, replay and dormancy),

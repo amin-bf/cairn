@@ -2,15 +2,15 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-29
-- **Resolves**: [Decide: the deck model](https://github.com/amin-bf/leitner/issues/10)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the deck model](https://github.com/amin-bf/cairn/issues/10)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0002: The card model](0002-the-card-model.md),
   [ADR-0004: The review event log](0004-the-review-event-log.md)
 
 ## Context
 
-Two tickets wait on this one — [new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
-and [the deck export format](https://github.com/amin-bf/leitner/issues/13) — and ADR-0002 handed this
+Two tickets wait on this one — [new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
+and [the deck export format](https://github.com/amin-bf/cairn/issues/13) — and ADR-0002 handed this
 ticket three open items directly: whether notes belong to decks (yes, exclusively — ADR-0002 §10),
 whether a note may belong to more than one deck, and where deck fields sit relative to the mutable
 surface ADR-0004 built.
@@ -111,7 +111,7 @@ per §2's finding.
 **Publishing a modified copy of someone else's deck mints a new deck id but not new note ids** — it
 inherits §2's incomplete-import edge for whichever notes collide with the original.
 
-Handed to [#13](https://github.com/amin-bf/leitner/issues/13): a deck **content revision**, so an
+Handed to [#13](https://github.com/amin-bf/cairn/issues/13): a deck **content revision**, so an
 import can tell an older file from the one already held and refuse to go backwards. That is what the
 export *file* declares, not part of the deck object itself.
 
@@ -119,7 +119,7 @@ export *file* declares, not part of the deck object itself.
 
 No configuration lives on the deck. Scheduler parameters, algorithm identity, and desired retention
 are already collection-wide per ADR-0001 §6 ("Global, not per-deck") and are not reopened here.
-New-card rate and daily limits are [#21](https://github.com/amin-bf/leitner/issues/21)'s to decide, not
+New-card rate and daily limits are [#21](https://github.com/amin-bf/cairn/issues/21)'s to decide, not
 this ticket's — but this ADR fixes where any such setting may lawfully live, because getting this wrong
 would silently break constraint 2.
 
@@ -137,7 +137,7 @@ material — putting it there would ship your daily limit to whoever you send th
 
 **Not in the review log**, despite ADR-0001 §6 putting scheduler configuration there. That precedent
 doesn't transfer: the parameter vector is a *replay input* — devices disagreeing about it produce
-divergent memory state with no missing event to reveal it. [#2](https://github.com/amin-bf/leitner/issues/2)
+divergent memory state with no missing event to reveal it. [#2](https://github.com/amin-bf/cairn/issues/2)
 found queue composition orthogonal to per-card replay, so a daily limit is not a replay input, and
 logging it would write a permanent fact for every nudge from 20 to 25 — the same cost ADR-0002 §7
 refused for content edits, and worse, since preference churn has no natural end.
@@ -159,7 +159,7 @@ desk-sized one on a laptop is a real counter-case, and #21 is where it should be
 > #21's to decide.
 
 Also handed onward: **author, description, licence** and similar deck metadata are things an export
-*file* declares about itself — [#13](https://github.com/amin-bf/leitner/issues/13)'s concern, not the
+*file* declares about itself — [#13](https://github.com/amin-bf/cairn/issues/13)'s concern, not the
 deck object's.
 
 > **Widened by [ADR-0022 §8](0022-the-import-preview-and-export-report.md): those three land back
@@ -187,7 +187,7 @@ review row; giving a session an id would be the same mistake under a different n
 UI state.
 
 Per-deck due counts are **display, not authority** — following where a card lives *now*, per
-ADR-0004 §5 — while the number that governs a day is the collection-wide one. [#2](https://github.com/amin-bf/leitner/issues/2)
+ADR-0004 §5 — while the number that governs a day is the collection-wide one. [#2](https://github.com/amin-bf/cairn/issues/2)
 and ADR-0001 §7 already established that queue composition cannot corrupt per-card replay, so
 narrowing a session is safe by construction.
 
@@ -276,7 +276,7 @@ The policy:
 
 ## Requirements this places on downstream tickets
 
-### [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13)
+### [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13)
 
 1. A deck **content revision** (§4), so import can tell an older file from a newer one and refuse to
    go backwards.
@@ -289,7 +289,7 @@ The policy:
    notes stay put; missing decks are created; emptied decks are surfaced, not deleted; progress is
    structurally untouched.
 
-### [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
+### [#21 — new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
 
 1. A per-deck limit, if wanted, is a **personal preference keyed by deck id** on the mutable surface
    (§5) — never a deck field, never a config-set row in the review log.
@@ -326,7 +326,7 @@ Decks did not earn a context of their own — see ADR-0009 §6. Deck *files* did
 
 | Item | Owner |
 |---|---|
-| Deck content revision; author/description/licence metadata; export policy for §9 | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
-| ~~Whether a per-deck limit exists, and how it composes with one queue~~ — **answered `no` by [ADR-0011 §6](0011-new-card-rate-and-daily-limits.md)**: the rate is **global**, because with one collection-wide queue per-deck rates make the real daily obligation a **sum shown on no screen**. §5's deck-id slot stays deliberately empty | [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21) |
-| **Whether a deck-id-keyed *personal* preference syncs between a user's own devices or stays device-local.** The one part of the row above that survives it, since ADR-0011 never needed such a preference to exist | **Out of scope** — inherited by whatever effort builds *per-deck new-card on/off*, which [the map](https://github.com/amin-bf/leitner/issues/1) ruled out on 2026-07-31 and which names this as its one live sub-question |
-| A personal display-name override for an imported deck | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. Nothing left to decide: §11 records the shape (a personal setting keyed by deck id on §5's slot, never exported and therefore never overwritten), so what remains is a build |
+| Deck content revision; author/description/licence metadata; export policy for §9 | [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13) |
+| ~~Whether a per-deck limit exists, and how it composes with one queue~~ — **answered `no` by [ADR-0011 §6](0011-new-card-rate-and-daily-limits.md)**: the rate is **global**, because with one collection-wide queue per-deck rates make the real daily obligation a **sum shown on no screen**. §5's deck-id slot stays deliberately empty | [#21 — new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21) |
+| **Whether a deck-id-keyed *personal* preference syncs between a user's own devices or stays device-local.** The one part of the row above that survives it, since ADR-0011 never needed such a preference to exist | **Out of scope** — inherited by whatever effort builds *per-deck new-card on/off*, which [the map](https://github.com/amin-bf/cairn/issues/1) ruled out on 2026-07-31 and which names this as its one live sub-question |
+| A personal display-name override for an imported deck | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1), 2026-07-31. Nothing left to decide: §11 records the shape (a personal setting keyed by deck id on §5's slot, never exported and therefore never overwritten), so what remains is a build |

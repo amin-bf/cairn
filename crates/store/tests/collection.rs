@@ -2,15 +2,15 @@
 //! store, because the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and `INSERT OR IGNORE` (store
 //! `CONTEXT.md`, ADR-0009 §3). Each test opens a fresh pair of directories and drives the collection
 //! through the operations issue #94 asks for, reading state back the only way the acceptance
-//! criteria allow: through `leitner_core::replay`, which consumes `log.line` and nothing else.
+//! criteria allow: through `cairn_core::replay`, which consumes `log.line` and nothing else.
 
 use std::collections::HashSet;
 
-use leitner_core::content::{BASIC, CardRef, DeckId, NoteId};
-use leitner_core::log::DayScale;
-use leitner_core::replay::replay;
-use leitner_core::scheduling::Grade;
-use leitner_store::Collection;
+use cairn_core::content::{BASIC, CardRef, DeckId, NoteId};
+use cairn_core::log::DayScale;
+use cairn_core::replay::replay;
+use cairn_core::scheduling::Grade;
+use cairn_store::Collection;
 use tempfile::TempDir;
 
 /// A collection under two fresh directories, returned alongside them so they outlive it.
@@ -395,7 +395,7 @@ fn a_history_cutoff_written_here_makes_replay_disown_earlier_rows() {
 }
 
 /// The `(sequence, instant, day)` of one reviewed line, pulled out by hand — the tests read the log
-/// back the way replay's tie-break does, without pulling `leitner-core`'s parser into a test.
+/// back the way replay's tie-break does, without pulling `cairn-core`'s parser into a test.
 fn json_fields(line: &str) -> (u64, String, i64) {
     let field = |key: &str| -> String {
         let needle = format!("\"{key}\":");
@@ -414,7 +414,7 @@ fn json_fields(line: &str) -> (u64, String, i64) {
 /// The default-scale day number for a fixed instant, so the cutoff test names a day without reaching
 /// for the store's private helpers.
 fn day_number_default(ms: i64) -> i64 {
-    leitner_core::log::day_number(ms, DayScale::default())
+    cairn_core::log::day_number(ms, DayScale::default())
 }
 
 #[test]
@@ -721,7 +721,7 @@ fn tags_are_independent_rows_so_two_offline_additions_both_survive() {
             .unwrap()
             .into_iter()
             .filter_map(|(a, _)| {
-                a.strip_prefix(leitner_store::TAG_ATTR_PREFIX)
+                a.strip_prefix(cairn_store::TAG_ATTR_PREFIX)
                     .map(str::to_owned)
             })
             .collect();
@@ -739,8 +739,8 @@ fn tags_are_independent_rows_so_two_offline_additions_both_survive() {
 fn an_optimisation_run_writes_a_parameter_row_only_when_the_vector_changes() {
     // ADR-0014 §5, §6: a changed vector is written with its frozen fitted-over count; an unchanged one
     // writes nothing, so a value-less row never enters the stamp contest.
-    use leitner_core::replay::{OptimisationNudge, optimisation_nudge};
-    use leitner_core::scheduling::SchedulerParameters;
+    use cairn_core::replay::{OptimisationNudge, optimisation_nudge};
+    use cairn_core::scheduling::SchedulerParameters;
 
     let (mut coll, _d, _s) = open();
 

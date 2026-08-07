@@ -13,9 +13,9 @@ supersedes; also by [ADR-0002 §7](../../../../docs/adr/0002-the-card-model.md) 
 > **Naming hazard.** This module is called `log` and would shadow the `log` crate. It still cannot
 > collide — but the guarantee **narrowed** when ADR-0027 admitted `fsrs`, which itself depends on
 > `log`. What prevents the shadowing now is that `log` is not a **direct** dependency of
-> `leitner-core`: only direct dependencies enter a crate's extern prelude, so a transitive one is
+> `cairn-core`: only direct dependencies enter a crate's extern prelude, so a transitive one is
 > invisible to our source (ADR-0009 §6, as amended by ADR-0027 §4). Adding `log` here for tracing
-> would break it immediately — logging belongs at the edges, in `leitner-store` and `leitner-app`.
+> would break it immediately — logging belongs at the edges, in `cairn-store` and `cairn-app`.
 
 ## Language
 
@@ -78,7 +78,7 @@ _Avoid_: Timestamp, version, mtime.
 **Suspension**:
 "Stop showing me this card" — a per-`CardRef` boolean on the mutable surface, settling by stamp like
 any other value (ADR-0010 §5). **Syncs between the user's own devices; never exported**, because it
-is personal progress and a `.ldeck` file carries only content. It is **not** a row kind and not an
+is personal progress and a `.cdeck` file carries only content. It is **not** a row kind and not an
 input to replay: memory state is exactly what the reviews say it is, and suspension changes only
 what is *offered*.
 _Avoid_: Buried, archived, disabled, leech flag — and never "suspend event", which is the row kind

@@ -1,18 +1,18 @@
-//! The file list — the files [`leitner_export::platform::list`] can see, each row **described from
+//! The file list — the files [`cairn_export::platform::list`] can see, each row **described from
 //! its own bytes** rather than its filename, and worded so it never claims to be a view of a folder
 //! it is not (issue #108, ADR-0022 §11, ADR-0024 §1 §3).
 //!
 //! **What the list is, and what it is not.** Enumeration is by extension — `list` runs a `LIKE`
-//! clause over `.ldeck` and `.lcoll` on Android and the same recognition on the desktop — but the
+//! clause over `.cdeck` and `.ccoll` on Android and the same recognition on the desktop — but the
 //! extension is where its authority ends (deck-export rule 13). What each row *says it is* comes from
 //! sniffing the bytes' `mimetype` member, never the name: on Android both profiles store as
-//! `application/octet-stream` and a `.ldeck` may in fact carry a collection archive, so the sniff is
+//! `application/octet-stream` and a `.cdeck` may in fact carry a collection archive, so the sniff is
 //! the only thing that can tell them apart ([`describe`], ADR-0024 §1). A file this application wrote
 //! but can no longer parse sniffs to `None` and is **still listed, marked unreadable** — hiding it
 //! would send a user after a permissions problem that does not exist (ADR-0022 §11).
 //!
 //! **What the list cannot show, and must not imply it can.** Scoped storage grants this application
-//! its own `MediaStore` rows and nothing else, so a `.ldeck` another application dropped in
+//! its own `MediaStore` rows and nothing else, so a `.cdeck` another application dropped in
 //! `Downloads` is **invisible to the query, not merely unreadable** (ADR-0024 §3). The list is
 //! therefore *"the files this application wrote"*, never *"the downloads folder"* — the wording must
 //! not invite a user to put a file there and expect it to appear, because it never can.
@@ -24,7 +24,7 @@
 //! folder must inflate **zero payloads** (ADR-0022 §11), and the plan — which does inflate — is
 //! derived only for the one file the user selects.
 
-use leitner_export::Profile;
+use cairn_export::Profile;
 
 use crate::inbound::{Arrival, Inbound};
 
@@ -41,13 +41,13 @@ pub struct Listed {
 }
 
 /// Describe one listed file **from its bytes**, never its extension. The profile is the sniff's, so a
-/// `.ldeck` whose bytes are in fact a collection archive is described as a collection, and a file we
+/// `.cdeck` whose bytes are in fact a collection archive is described as a collection, and a file we
 /// wrote that no longer parses is described as unreadable rather than dropped from the list
 /// (ADR-0024 §1, ADR-0022 §11).
 pub fn describe(name: &str, bytes: &[u8]) -> Listed {
     Listed {
         name: name.to_owned(),
-        sniffed: leitner_export::sniff(bytes),
+        sniffed: cairn_export::sniff(bytes),
     }
 }
 
@@ -67,13 +67,13 @@ pub fn select(name: &str, bytes: Vec<u8>) -> Inbound {
 mod tests {
     use super::*;
     use crate::inbound::{self, Arrival};
-    use leitner_core::content::DeckId;
-    use leitner_core::identity::CollectionId;
-    use leitner_export::{
+    use cairn_core::content::DeckId;
+    use cairn_core::identity::CollectionId;
+    use cairn_export::{
         CollectionArchive, DeckContent, DeckExport, Metadata, build_collection, build_deck,
         deck_digest, next_revision,
     };
-    use leitner_store::Collection;
+    use cairn_store::Collection;
     use tempfile::TempDir;
 
     fn deck_bytes(id: DeckId, name: &str) -> Vec<u8> {
@@ -104,21 +104,21 @@ mod tests {
     /// (ADR-0022 §11).
     #[test]
     fn an_unparseable_file_we_wrote_is_still_listed_marked_unreadable() {
-        let listed = describe("French A1.ldeck", b"was a deck once, now truncated");
-        assert_eq!(listed.name, "French A1.ldeck");
+        let listed = describe("French A1.cdeck", b"was a deck once, now truncated");
+        assert_eq!(listed.name, "French A1.cdeck");
         assert_eq!(listed.sniffed, None);
     }
 
-    /// Identity is the sniff, never the extension: a `.ldeck` whose **bytes** are a collection archive
+    /// Identity is the sniff, never the extension: a `.cdeck` whose **bytes** are a collection archive
     /// is described as a collection, because on Android the two are indistinguishable by name and type
     /// and only the `mimetype` member tells them apart (ADR-0024 §1).
     #[test]
     fn the_profile_is_the_sniff_not_the_extension() {
         // A collection archive that a collision or a rename left carrying a deck extension.
-        let listed = describe("backup.ldeck", &collection_bytes());
+        let listed = describe("backup.cdeck", &collection_bytes());
         assert_eq!(listed.sniffed, Some(Profile::Collection));
 
-        let listed = describe("shared.lcoll", &deck_bytes(DeckId([0xaa; 16]), "Deck"));
+        let listed = describe("shared.ccoll", &deck_bytes(DeckId([0xaa; 16]), "Deck"));
         assert_eq!(listed.sniffed, Some(Profile::Deck));
     }
 
@@ -132,14 +132,14 @@ mod tests {
         let coll = Collection::open(data.path(), state.path()).unwrap();
 
         let bytes = deck_bytes(DeckId([0xbb; 16]), "French A1");
-        let inbound = select("French A1.ldeck", bytes);
+        let inbound = select("French A1.cdeck", bytes);
         assert_eq!(inbound.arrival, Arrival::Listed);
-        assert_eq!(inbound.name.as_deref(), Some("French A1.ldeck"));
+        assert_eq!(inbound.name.as_deref(), Some("French A1.cdeck"));
 
         let report = inbound::read(&inbound, &coll).unwrap();
         assert_eq!(report.sniffed, Some(Profile::Deck));
         let plan = report.outcome.expect("a deck previews rather than refuses");
         assert_eq!(plan.decks[0].name, "French A1");
-        assert_eq!(plan.decks[0].path, leitner_export::Path::Create);
+        assert_eq!(plan.decks[0].path, cairn_export::Path::Create);
     }
 }

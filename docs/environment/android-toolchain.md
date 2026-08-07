@@ -1,7 +1,7 @@
 # Android toolchain
 
 Record of the Android build environment set up for this repo, per
-[#7 "Set up the Android toolchain and prove it works"](https://github.com/amin-bf/leitner/issues/7).
+[#7 "Set up the Android toolchain and prove it works"](https://github.com/amin-bf/cairn/issues/7).
 
 **Host**: CachyOS (Arch-based), x86_64, 16 cores. **Set up 2026-07-27.**
 
@@ -76,7 +76,7 @@ targets are installed anyway — they cost nothing and Tauri may still want them
 ## Why these versions
 
 The two candidate stacks in
-[#8 "Prototype: pick the client stack"](https://github.com/amin-bf/leitner/issues/8)
+[#8 "Prototype: pick the client stack"](https://github.com/amin-bf/cairn/issues/8)
 have different requirements, and this toolchain must satisfy **both**, since #8 has to
 build each one on the same machine.
 
@@ -222,16 +222,24 @@ than `device`.
 
 ### Emulator
 
-An AVD named **`leitner-test`** is also set up and working — useful for CI-ish runs and
+An AVD named **`cairn-test`** is also set up and working — useful for CI-ish runs and
 for the `x86_64` triple, which the handset cannot exercise:
 
 - `system-images;android-36;google_apis;x86_64`, Android 16 / API 36, at
-  `~/.android/avd/leitner-test.avd`
-- Boots headless in **~15 s**:
+  `~/.android/avd/cairn-test.avd`
+- Boots headless in **~15 s** (re-verified at **19 s** after the rename below):
   ```sh
-  emulator -avd leitner-test -no-window -no-audio -no-boot-anim -no-snapshot \
+  emulator -avd cairn-test -no-window -no-audio -no-boot-anim -no-snapshot \
            -gpu swiftshader_indirect -accel on
   ```
+
+> **Renamed from `leitner-test`** under [ADR-0028](../adr/0028-the-application-is-named-cairn.md),
+> with `avdmanager move avd --name leitner-test --rename cairn-test`. One thing to know if you ever
+> repeat this: that command updates `<name>.ini` and `config.ini` but leaves **`hardware-qemu.ini`
+> pointing at the old directory**, which no longer exists. It is a generated file and the emulator
+> rewrites it on the next launch, so the stale paths clear themselves — but they look alarming in a
+> grep, and the way to tell a self-healing artifact from a broken AVD is to boot it, which is why the
+> figure above was re-measured rather than assumed.
 - **KVM works without a group change** — `/dev/kvm` is `crw-rw-rw-` on this host, so
   hardware acceleration is available even though the user is not in the `kvm` group.
 
@@ -288,7 +296,7 @@ cargo install cargo-ndk --locked
 curl -L -o gradle.zip "https://services.gradle.org/distributions/gradle-8.14.3-bin.zip"
 unzip -q gradle.zip -d ~/.local/share/
 
-avdmanager create avd -n leitner-test -k "system-images;android-36;google_apis;x86_64"
+avdmanager create avd -n cairn-test -k "system-images;android-36;google_apis;x86_64"
 ```
 
 `cargo-ndk` is only usable as `cargo ndk`; invoking the `cargo-ndk` binary directly

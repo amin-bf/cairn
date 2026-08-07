@@ -1,7 +1,7 @@
 # The platform's automatic app-data backup: what the provider holds, and when
 
-**Research ticket:** [#60](https://github.com/amin-bf/leitner/issues/60) (under wayfinder map #1) · **Date of research:** 2026-07-31
-**Question:** [ADR-0016 §7](../../adr/0016-backup-and-restore.md) leaves Android's automatic app-data backup switched on, so a user who never enables sync still has `collection.db` uploaded to the same company that [ADR-0013 §3](../../adr/0013-the-sync-transport.md) publishes the log to. [#58](https://github.com/amin-bf/leitner/issues/58) treats that path as *covered by the platform*, on the belief that the payload is encrypted on the device under a key the receiving company cannot obtain. **Is that belief true, for whom, and where does it fail?**
+**Research ticket:** [#60](https://github.com/amin-bf/cairn/issues/60) (under wayfinder map #1) · **Date of research:** 2026-07-31
+**Question:** [ADR-0016 §7](../../adr/0016-backup-and-restore.md) leaves Android's automatic app-data backup switched on, so a user who never enables sync still has `collection.db` uploaded to the same company that [ADR-0013 §3](../../adr/0013-the-sync-transport.md) publishes the log to. [#58](https://github.com/amin-bf/cairn/issues/58) treats that path as *covered by the platform*, on the belief that the payload is encrypted on the device under a key the receiving company cannot obtain. **Is that belief true, for whom, and where does it fail?**
 
 This is a **research** note. It gathers facts and sharpens trade-offs; it decides nothing. Every non-obvious claim carries an inline primary source — platform documentation, the platform's own published source, or a first-party security paper — and where the wording matters the source is quoted rather than paraphrased. Claims I reasoned rather than sourced are marked **[inference]**. Places where the documentation says nothing are marked **SILENT** and are not filled in by guessing; §8 collects them.
 
@@ -217,7 +217,7 @@ The stated reason is *consent*, not capability: the platform will not silently b
 
 ### 4.3 The interaction the ticket asks about: none is documented
 
-> **Later note — this section's open question was settled by measurement on 2026-08-01, and one claim in §4.2 was corrected.** The quota is measured **before** compression, against uncompressed tar-stream bytes: the transport is handed an uncompressed total at pre-flight, before any app data is streamed. And the two log lines §4.2 quotes as equivalent quota indicators are **not** equivalent — *"Transport rejected backup of … , skipping"* fires for a generic package rejection and was observed on a 1 KB payload. This section is left as written, being the point-in-time record of what the documentation alone establishes; the resolution and its evidence are in [`../auto-backup-quota/README.md`](../auto-backup-quota/README.md) ([#64](https://github.com/amin-bf/leitner/issues/64)).
+> **Later note — this section's open question was settled by measurement on 2026-08-01, and one claim in §4.2 was corrected.** The quota is measured **before** compression, against uncompressed tar-stream bytes: the transport is handed an uncompressed total at pre-flight, before any app data is streamed. And the two log lines §4.2 quotes as equivalent quota indicators are **not** equivalent — *"Transport rejected backup of … , skipping"* fires for a generic package rejection and was observed on a 1 KB payload. This section is left as written, being the point-in-time record of what the documentation alone establishes; the resolution and its evidence are in [`../auto-backup-quota/README.md`](../auto-backup-quota/README.md) ([#64](https://github.com/amin-bf/cairn/issues/64)).
 
 The quota and the encryption state are both properties of the same transport — it is the transport that rejects an over-quota package (§4.2) and the transport whose flags report client-side encryption (§1.3). But:
 
@@ -259,7 +259,7 @@ The same first-party page carries both instructions, one line apart, which makes
 | Expires by itself | not documented | **yes** — 57 days of device inactivity |
 | Entered by | an explicit enrolment the user performed | nothing; it is on by default |
 
-**The asymmetry is the finding.** The surface the user chose is individually removable and self-cleaning on uninstall; the surface they never chose is removable only in a unit that includes every other app on the phone, and outlives the app itself. For [#58](https://github.com/amin-bf/leitner/issues/58) this means the disclosure sentence written for sync cannot be reused: it would point at a control that, for this path, does not exist at the same granularity.
+**The asymmetry is the finding.** The surface the user chose is individually removable and self-cleaning on uninstall; the surface they never chose is removable only in a unit that includes every other app on the phone, and outlives the app itself. For [#58](https://github.com/amin-bf/cairn/issues/58) this means the disclosure sentence written for sync cannot be reused: it would point at a control that, for this path, does not exist at the same granularity.
 
 ### 5.3 Where the documentation is SILENT
 

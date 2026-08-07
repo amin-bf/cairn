@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Resolves**: [Decide: note ordering, saving, and where authoring is entered from](https://github.com/amin-bf/leitner/issues/66)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: note ordering, saving, and where authoring is entered from](https://github.com/amin-bf/cairn/issues/66)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0012](0012-the-note-authoring-experience.md) (the editor this ADR gives
   entrances, a save rule and a keyboard rule — this ADR **amends it**),
   [ADR-0011](0011-new-card-rate-and-daily-limits.md) (which minted `position` and handed its
@@ -335,7 +335,7 @@ says *"create a deck"*, but no ADR says where. ADR-0012 specifies a **kind** dro
   for the bottom of the screen, and *New note* is the only control there that a phone cannot reach by
   accelerator.
 - **Import preview and export reporting** — owned by
-  [Decide: what an import preview states, and what export reports back](https://github.com/amin-bf/leitner/issues/68).
+  [Decide: what an import preview states, and what export reports back](https://github.com/amin-bf/cairn/issues/68).
   This ADR puts a surface behind ADR-0015 §7's *"import one"* verb; what that import *says* is not
   its call.
 

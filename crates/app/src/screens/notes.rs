@@ -1,8 +1,8 @@
 //! The **Notes** destination: the note list and deck controls, and the editor pane — its form and
 //! card bodies, the pane toggle, the cloze field and blank selection, and the warning banner.
 
-use leitner_core::content::{DeckId, NoteId};
-use leitner_store::Collection;
+use cairn_core::content::{DeckId, NoteId};
+use cairn_store::Collection;
 
 use crate::notes::{self, Filter};
 use crate::{
@@ -409,7 +409,7 @@ fn blank_selection(
     let end = byte_index(buffer, chars.end.0);
     let number = match pane {
         Some(p) => cards::next_blank_number(p, buffer),
-        None => leitner_core::content::next_blank_number(buffer),
+        None => cairn_core::content::next_blank_number(buffer),
     };
     let selected = buffer[start..end].to_owned();
     buffer.replace_range(start..end, &format!("{{{{{number}::{selected}}}}}"));

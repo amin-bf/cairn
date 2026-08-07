@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: when parameter optimisation runs](https://github.com/amin-bf/leitner/issues/42)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: when parameter optimisation runs](https://github.com/amin-bf/cairn/issues/42)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0001](0001-scheduling-algorithm-and-grade-scale.md) (the parameter vector is
   collection state), [ADR-0003](0003-client-stack.md) (the Gradle-free APK, immediate mode),
   [ADR-0004](0004-the-review-event-log.md) (`config-set` rows, the settling rule),
@@ -19,7 +19,7 @@
 [ADR-0001 §6](0001-scheduling-algorithm-and-grade-scale.md) settled **where the parameter vector
 lives** — collection state, published to the log as a `config-set` row, replayed by every device —
 and deliberately said nothing about **when it is computed**. Nothing owned that question until
-[Prove FSRS parameter optimisation runs in-client on Android](https://github.com/amin-bf/leitner/issues/20)
+[Prove FSRS parameter optimisation runs in-client on Android](https://github.com/amin-bf/cairn/issues/20)
 made it sharp rather than theoretical.
 
 That ticket's measurements are the ground this ADR stands on, and two of them matter more than the
@@ -192,7 +192,7 @@ point the destination does not contain. **That argument is wrong, and
 *itself* the version summary, so "am I behind?" costs one round trip. The finding that looked
 decisive — that a transport family **cannot answer "am I behind?" even in principle**, a listing
 reporting what arrived and never what exists elsewhere — belongs to
-[Research: sync transport](https://github.com/amin-bf/leitner/issues/33) and applies to the
+[Research: sync transport](https://github.com/amin-bf/cairn/issues/33) and applies to the
 *folder-sync* family, which was rejected. Applying it to the transport that won was an
 over-generalisation, and it is recorded here rather than quietly deleted because the corrected
 version changes what we build: §7 below.
@@ -249,7 +249,7 @@ corpus build. The user sees one action with one progress treatment, because from
 one action.
 
 **What this does not decide**: when sync runs *otherwise* — on open, on a timer, on a gesture —
-which is [#40](https://github.com/amin-bf/leitner/issues/40)'s, untouched. This settles only what
+which is [#40](https://github.com/amin-bf/cairn/issues/40)'s, untouched. This settles only what
 happens inside the one action this ADR owns.
 
 ### 8. Desktop and Android do not diverge
@@ -270,7 +270,7 @@ function. Divergence is not merely unnecessary here; it costs something the spec
 on the theory that a laptop is the more comfortable place for a 4.3 s job. The measurements refute
 the premise — 1.6× slower, and not penalised at all inside a foreground app process — and a
 desktop-only nudge would quietly reintroduce the desktop-only feature
-[#20](https://github.com/amin-bf/leitner/issues/20) spent a whole ticket killing.
+[#20](https://github.com/amin-bf/cairn/issues/20) spent a whole ticket killing.
 
 ADR-0001 §6's publish-84-bytes mechanism is untouched and still does real work. It is simply what
 happens on **every device that is not the one where the button was pressed** — which is the normal
@@ -293,7 +293,7 @@ deliberately left to it (§2). ADR-0003's Gradle-free APK is preserved by §3 ra
 
 ## Requirements this places on downstream tickets
 
-### [#40 — the sync experience](https://github.com/amin-bf/leitner/issues/40)
+### [#40 — the sync experience](https://github.com/amin-bf/cairn/issues/40)
 
 1. **A parameter vector changing mid-session shifts the queue under the user, and no local
    mechanism can prevent it.** [ADR-0006 §2](0006-the-review-session-experience.md) derives session
@@ -312,7 +312,7 @@ deliberately left to it (§2). ADR-0003's Gradle-free APK is preserved by §3 ra
    §7's leading sync is free to be skipped: it is there to make the training input current, not to
    be a ritual.
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37)
 
 1. **The fitted-over count is part of a `config-set` row**, so it travels wherever the log travels
    and needs no separate handling. Stated only so it is not mistaken for a derived column that a

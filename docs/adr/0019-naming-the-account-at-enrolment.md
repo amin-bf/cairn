@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: whether the enrolment screen names the account](https://github.com/amin-bf/leitner/issues/59)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: whether the enrolment screen names the account](https://github.com/amin-bf/cairn/issues/59)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0013 §3 §8 §9 §10](0013-the-sync-transport.md) (the non-sensitive scope, the
   device flow's scope allowlist, the credential file, the per-(account, application) folder),
   [ADR-0015 §1 §4 §7 §12](0015-the-sync-experience.md) (what may speak about sync, the resting

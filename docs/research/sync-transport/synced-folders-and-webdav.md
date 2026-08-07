@@ -1,11 +1,11 @@
 # Sync transport, part 1: a folder someone else syncs, and WebDAV
 
-**Research ticket:** [#33](https://github.com/amin-bf/leitner/issues/33) (under wayfinder map [#1](https://github.com/amin-bf/leitner/issues/1)) · **Date of research:** 2026-07-30
+**Research ticket:** [#33](https://github.com/amin-bf/cairn/issues/33) (under wayfinder map [#1](https://github.com/amin-bf/cairn/issues/1)) · **Date of research:** 2026-07-30
 **Question:** Can the review log ride on a directory that a sync application the user already runs keeps in step, or on WebDAV against rented storage — on **desktop and Android**, unattended, with no server of ours?
 
 This is a **research** note. It gathers facts and sharpens trade-offs; it decides nothing. Every non-obvious claim carries an inline source. Claims I reasoned rather than sourced are marked **[inference]**. Claims I tested are marked **[tested]** and the command and output are in §5.
 
-Context assumed throughout, from [ADR-0004](../../adr/0004-the-review-event-log.md): an append-only log of JSON Lines rows, each carrying `(writer id, sequence number)`; **every device appends only to its own rows**, so one file or one run of segments per writer, no two devices ever writing the same file, and merge is set union. Rows are relayed byte for byte and never re-encoded (§11). Clients are desktop and Android only — the web target was ruled out while resolving [#12](https://github.com/amin-bf/leitner/issues/12), so browser constraints are out of scope. ~200 reviews/day worst case ≈ 73,000 rows/year; the log is never compacted (ADR-0004 §10). One user, two to five devices.
+Context assumed throughout, from [ADR-0004](../../adr/0004-the-review-event-log.md): an append-only log of JSON Lines rows, each carrying `(writer id, sequence number)`; **every device appends only to its own rows**, so one file or one run of segments per writer, no two devices ever writing the same file, and merge is set union. Rows are relayed byte for byte and never re-encoded (§11). Clients are desktop and Android only — the web target was ruled out while resolving [#12](https://github.com/amin-bf/cairn/issues/12), so browser constraints are out of scope. ~200 reviews/day worst case ≈ 73,000 rows/year; the log is never compacted (ADR-0004 §10). One user, two to five devices.
 
 ---
 

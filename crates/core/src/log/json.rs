@@ -3,7 +3,7 @@
 //! Hand-written on purpose. `serde` is in the lockfile transitively through `fsrs` but is **not
 //! ours to reach for** (ADR-0027 §3), and the guarantee ADR-0004 §11 actually wants is stronger than
 //! any derive gives: a row is relayed **byte for byte and never re-encoded**. So this reads the form
-//! and there is deliberately **no writer here** — nothing in `leitner-core` re-encodes a row.
+//! and there is deliberately **no writer here** — nothing in `cairn-core` re-encodes a row.
 //!
 //! It parses the whole grammar (so an unknown field of any shape is skipped rather than breaking a
 //! known row) but exposes only the scalar and number-array accessors the row builders need.

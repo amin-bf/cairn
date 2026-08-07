@@ -4,7 +4,7 @@
 //! and the **rendered prompt and answer** for one card.
 //!
 //! Kept here rather than in the store because it is domain projection, not persistence: which cards
-//! a note generates is a `leitner-core` kind rule (ADR-0002 §4, ADR-0017 §1), and the store owns no
+//! a note generates is a `cairn-core` kind rule (ADR-0002 §4, ADR-0017 §1), and the store owns no
 //! kind definitions. A note carrying a kind this build does not ship is skipped — a note can never
 //! be switched *into* an acquired kind (ADR-0017 §6), so the only kinds that reach a review are the
 //! four shipped ones. The fixed-arity three declare their cards; `cloze`'s are **content-derived**,
@@ -13,11 +13,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use leitner_core::content::{
+use cairn_core::content::{
     CLOZE, CLOZE_SLOT_BIT, CardRef, KindDefinition, NoteId, SHIPPED_KINDS, cloze_blank,
     cloze_cards, render_cloze,
 };
-use leitner_store::{Collection, StoreError};
+use cairn_store::{Collection, StoreError};
 
 /// One card ready to show: the joined prompt and the joined answer, each the note's field values in
 /// the kind template's order (ADR-0002 §4). Every string here is untrusted content and must reach
@@ -115,7 +115,7 @@ pub fn render(coll: &Collection, card: CardRef) -> Result<Option<RenderedCard>, 
             .mutable_get("note", &card.note.0, "Text")?
             .unwrap_or_default();
         let blank = cloze_blank(card.ordinal);
-        if !leitner_core::content::cloze_blanks(&text).contains(&blank) {
+        if !cairn_core::content::cloze_blanks(&text).contains(&blank) {
             return Ok(None);
         }
         let (prompt, answer) = render_cloze(&text, blank);
@@ -200,7 +200,7 @@ mod tests {
             "note",
             &loose.0,
             "deck",
-            Some(&leitner_core::content::DeckId([0x11; 16]).to_canonical()),
+            Some(&cairn_core::content::DeckId([0x11; 16]).to_canonical()),
         )
         .unwrap();
 
@@ -226,18 +226,15 @@ mod tests {
         assert_eq!(
             cards,
             HashSet::from([
-                CardRef::new(id, leitner_core::content::cloze_slot(1)),
-                CardRef::new(id, leitner_core::content::cloze_slot(2)),
+                CardRef::new(id, cairn_core::content::cloze_slot(1)),
+                CardRef::new(id, cairn_core::content::cloze_slot(2)),
             ]),
             "one card per distinct blank, above the high bit"
         );
 
-        let first = render(
-            &coll,
-            CardRef::new(id, leitner_core::content::cloze_slot(1)),
-        )
-        .unwrap()
-        .unwrap();
+        let first = render(&coll, CardRef::new(id, cairn_core::content::cloze_slot(1)))
+            .unwrap()
+            .unwrap();
         assert_eq!(first.prompt, "[…] chat mange");
         assert_eq!(first.answer, "Le chat mange");
     }
@@ -256,16 +253,13 @@ mod tests {
         let cards = current_cards(&coll).unwrap();
         assert_eq!(
             cards,
-            HashSet::from([CardRef::new(id, leitner_core::content::cloze_slot(1))]),
+            HashSet::from([CardRef::new(id, cairn_core::content::cloze_slot(1))]),
             "only the surviving blank generates a card"
         );
         assert!(
-            render(
-                &coll,
-                CardRef::new(id, leitner_core::content::cloze_slot(2))
-            )
-            .unwrap()
-            .is_none(),
+            render(&coll, CardRef::new(id, cairn_core::content::cloze_slot(2)))
+                .unwrap()
+                .is_none(),
             "the deleted blank's card no longer renders"
         );
     }

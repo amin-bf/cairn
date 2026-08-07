@@ -1,7 +1,7 @@
 # Identifying a written file on Android — measured on the handset
 
 Evidence for [#72 "Decide: how a written file is identified again, when Android keeps neither our
-media type nor our extension"](https://github.com/amin-bf/leitner/issues/72).
+media type nor our extension"](https://github.com/amin-bf/cairn/issues/72).
 
 [ADR-0008 §10](../../adr/0008-the-deck-export-format.md) rests a distinct extension per profile on
 its being *"how the operating system and the user tell a deck file from a whole-collection artifact
@@ -11,18 +11,18 @@ the Android **launch intent** as an entry point on the strength of such a filter
 in-app **list** as *"query `MediaStore` for our extensions"*.
 
 [`../android-outbound-share/`](../android-outbound-share/README.md) established, while resolving
-[#70](https://github.com/amin-bf/leitner/issues/70), that `MediaStore` derives the media type from
+[#70](https://github.com/amin-bf/cairn/issues/70), that `MediaStore` derives the media type from
 the extension and discards ours. It could not establish what that costs the intent filter, because
 the filter did not exist: *"this is reasoned from the two measurements above and has not been
 observed — nobody has watched a file manager fail to find us."*
 
 **This note is the watching.**
 
-**Measured 2026-08-01** on the handset from [#7](https://github.com/amin-bf/leitner/issues/7):
+**Measured 2026-08-01** on the handset from [#7](https://github.com/amin-bf/cairn/issues/7):
 Google Pixel 8 Pro (`husky`), Android 17 / API 37, `arm64-v8a` only. Harness kept off `main`:
 `crates/app/src/probe_identify.rs` and the candidate filters in `crates/app/Cargo.toml`, on the
 archival branch
-[`prototypes/issue-72`](https://github.com/amin-bf/leitner/tree/prototypes/issue-72), built with the
+[`prototypes/issue-72`](https://github.com/amin-bf/cairn/tree/prototypes/issue-72), built with the
 project's own `cargo apk build` and installed with `adb install -r`. Every APK below contained
 exactly `AndroidManifest.xml`, `lib/arm64-v8a/libleitner_app.so` and the signature — **no
 `classes.dex`, no `res/`** — so nothing here is bought with the property
@@ -71,7 +71,7 @@ With the extension-matched filter installed — `scheme=content`, `mimeType=appl
 
 > **Open with** — Google · Google Wallet · KeePassDX · Sparkasse
 
-**Leitner is not in the list.** This is the observation [#72](https://github.com/amin-bf/leitner/issues/72)
+**Leitner is not in the list.** This is the observation [#72](https://github.com/amin-bf/cairn/issues/72)
 said nobody had made. The four applications offered are ones declaring broad
 `application/octet-stream` filters; none of them can open a deck either.
 
@@ -210,7 +210,7 @@ run, verified empty by query and by `ls`.
 ## Addendum: the extension gates reachability, not only enumeration
 
 **Measured 2026-08-07** on the same handset — Google Pixel 8 Pro (`husky`), Android 17 / API 37 —
-while working [#99](https://github.com/amin-bf/leitner/issues/99). It settles a claim the
+while working [#99](https://github.com/amin-bf/cairn/issues/99). It settles a claim the
 2026-08-01 note left implicit and that [ADR-0024 §1](../../adr/0024-identifying-a-written-file.md)
 overstated: §1 said the extension *"keeps exactly one job: it is the `LIKE` clause the list queries
 `MediaStore` with."* That undersells it. The extension has a **second job** — it decides the type

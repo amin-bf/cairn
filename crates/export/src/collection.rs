@@ -1,4 +1,4 @@
-//! The **collection profile**: the `.lcoll` archive a user keeps for themselves, and the read that
+//! The **collection profile**: the `.ccoll` archive a user keeps for themselves, and the read that
 //! previews a restore before it merges.
 //!
 //! This is the third profile in the *same* container as [`crate::deck`]
@@ -28,15 +28,15 @@
 //! **Restore is a merge that only ever adds** (ADR-0016 §4), so a restore preview has no destructive
 //! effect to enumerate and stays **one line** describing the file (ADR-0022 §12). The one refusal it
 //! needs is [ADR-0016 §10](../../../docs/adr/0016-backup-and-restore.md)'s identity gate, run through
-//! the same [`leitner_core::identity::adopt_or_refuse`] the enrolment seam runs.
+//! the same [`cairn_core::identity::adopt_or_refuse`] the enrolment seam runs.
 
 use crate::container::{
     self, COLLECTION_MEDIA_TYPE, FORMAT, LOG_MEMBER, MANIFEST_MEMBER, MUTABLE_MEMBER, Member,
 };
 use crate::files::COLLECTION_EXTENSION;
 use crate::import::{Profile, plain, sniff};
-use leitner_core::identity::{Adoption, CollectionId, adopt_or_refuse};
-use leitner_core::log::Json;
+use cairn_core::identity::{Adoption, CollectionId, adopt_or_refuse};
+use cairn_core::log::Json;
 use std::io::Cursor;
 
 /// The longest a date string read from an archive is shown — the one manifest field that is free
@@ -55,7 +55,7 @@ pub const RESTORE_IS_A_MERGE: &str =
 pub const RESTORE_MISMATCH_WAY_OUT: &str = "This archive is from a different collection. \
      To use it on this device: back up what is here, clear the app's data, restore, then enrol.";
 
-/// Everything a `.lcoll` archive carries, handed in by the caller (the store, which owns the log,
+/// Everything a `.ccoll` archive carries, handed in by the caller (the store, which owns the log,
 /// the mutable surface and the minted [`CollectionId`]). Both payloads are **verbatim lines** — this
 /// crate assembles the container and never parses their schema, which is what keeps stamps byte for
 /// byte and the log un-re-encoded.
@@ -77,7 +77,7 @@ pub struct CollectionArchive<'a> {
     pub mutable: &'a [String],
 }
 
-/// The manifest gating and describing a `.lcoll` file. Keys sorted for a tidy, diffable document —
+/// The manifest gating and describing a `.ccoll` file. Keys sorted for a tidy, diffable document —
 /// **not** for determinism, which this profile does not inherit (ADR-0016 §11). No author, no
 /// device label, no ambient identity: minimal disclosure binds this profile too.
 fn manifest(a: &CollectionArchive) -> String {
@@ -102,7 +102,7 @@ fn jsonl(lines: &[String]) -> Vec<u8> {
     out.into_bytes()
 }
 
-/// Assemble the whole `.lcoll` archive. Members in fixed order: `mimetype` (stored, first, so the
+/// Assemble the whole `.ccoll` archive. Members in fixed order: `mimetype` (stored, first, so the
 /// profile sits at a fixed byte offset — ADR-0016 §9), `manifest.json`, `log.jsonl`, `mutable.jsonl`.
 /// The order and the container are fixed; the bytes are **not** byte-for-byte reproducible across
 /// runs, because the creation date differs (ADR-0016 §11).
@@ -115,9 +115,9 @@ pub fn build_collection(a: &CollectionArchive) -> Vec<u8> {
     ])
 }
 
-/// The `.lcoll` filename a write requests — a plain `collection.lcoll`. The user chose neither the
+/// The `.ccoll` filename a write requests — a plain `collection.ccoll`. The user chose neither the
 /// name nor the location (there is no picker, ADR-0016 §5), and a collision **dedupes** to
-/// `collection (1).lcoll` at the seam (ADR-0024 §4), so archives made on different days are told
+/// `collection (1).ccoll` at the seam (ADR-0024 §4), so archives made on different days are told
 /// apart by the manifest date the list reads, not by the filename (ADR-0022 §11).
 pub fn collection_filename() -> String {
     format!("collection.{COLLECTION_EXTENSION}")
@@ -131,7 +131,7 @@ pub struct RestoreTarget {
     pub own_id: CollectionId,
 }
 
-/// A `.lcoll` a restore must not act on, refused **in place of the preview** and without inflating
+/// A `.ccoll` a restore must not act on, refused **in place of the preview** and without inflating
 /// the log (ADR-0022 §2). Like an import refusal it carries no detail for whoever built the file,
 /// with the one exception the specification requires: a mismatch **names the collection** so the
 /// user can act (ADR-0016 §10).
@@ -189,7 +189,7 @@ fn noun(n: usize, singular: &str) -> String {
     }
 }
 
-/// Read a received `.lcoll` and derive the one-line [`RestorePlan`], or the [`RestoreRefusal`] shown
+/// Read a received `.ccoll` and derive the one-line [`RestorePlan`], or the [`RestoreRefusal`] shown
 /// in its place. Reads the `mimetype` member, the member-name list and the small `manifest.json`
 /// **only** — the log and the mutable surface are never inflated here (ADR-0022 §2), because a
 /// restore preview has nothing to say about a merge's effects and the identity gate fires from the
@@ -431,7 +431,7 @@ mod tests {
             &Default::default(),
             &[crate::deck::DeckExport {
                 content: crate::deck::DeckContent {
-                    id: leitner_core::content::DeckId([1; 16]),
+                    id: cairn_core::content::DeckId([1; 16]),
                     name: "French".to_owned(),
                     notes: vec![],
                     tombstones: vec![],

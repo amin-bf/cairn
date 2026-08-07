@@ -1,12 +1,12 @@
 [package]
-name = "leitner-store"
+name = "cairn-store"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
 [dependencies]
-leitner-core.workspace = true
+cairn-core.workspace = true
 # ADR-0007 §2: two SQLite files via rusqlite, `bundled` so no system SQLite is required and the
 # cross-compile proven in #7 keeps working.
 rusqlite.workspace = true

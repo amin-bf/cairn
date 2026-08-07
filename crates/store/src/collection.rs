@@ -11,15 +11,15 @@
 //!
 //! Only `log.line` is authoritative. Every other column here, and everything in `derived.db`, is
 //! derived from it and may be dropped and rebuilt (§2) — the tests lean on that by reading state
-//! back through `leitner_core::replay`, which consumes lines and nothing else.
+//! back through `cairn_core::replay`, which consumes lines and nothing else.
 
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use leitner_core::content::{CardRef, DeckId, NoteId};
-use leitner_core::log::{DayScale, ParsedLine, Row, Setting, day_number, parse_line};
-use leitner_core::scheduling::{Grade, PARAMETER_COUNT, SchedulerParameters};
+use cairn_core::content::{CardRef, DeckId, NoteId};
+use cairn_core::log::{DayScale, ParsedLine, Row, Setting, day_number, parse_line};
+use cairn_core::scheduling::{Grade, PARAMETER_COUNT, SchedulerParameters};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::interchange;
@@ -83,7 +83,7 @@ const DECK_ENTITY: &str = "deck";
 
 /// The mutable-surface entity holding this device's **personal settings** — the singleton row a
 /// global preference lives on. A distinct entity from `note` and `deck` on purpose: those are
-/// content and export, this **syncs between a user's own devices but never enters a `.ldeck`**
+/// content and export, this **syncs between a user's own devices but never enters a `.cdeck`**
 /// (ADR-0011 §5), so an export that enumerates content by entity kind never emits it. There is one
 /// row, at a fixed all-zero id, per setting attribute.
 const SETTING_ENTITY: &str = "setting";
@@ -531,13 +531,13 @@ impl Collection {
     /// fresh id.
     ///
     /// A note id is a UUIDv4 minted once at creation (ADR-0002 §6), and minting is an **edge** act —
-    /// `leitner-core` takes identity as a value and never mints one (ADR-0009 §8). The store already
+    /// `cairn-core` takes identity as a value and never mints one (ADR-0009 §8). The store already
     /// draws entropy for its own ids, so it is the natural single home for this one too; keeping it
     /// here means the app never reaches for `getrandom`.
     ///
     /// The new note is placed **at the end of the collection's authored order** (ADR-0021 §3): its
     /// `position` is a fractional-index key after the current largest, computed by
-    /// [`leitner_core::content::order::between`]. Byte order over that alphabet is lexicographic, so
+    /// [`cairn_core::content::order::between`]. Byte order over that alphabet is lexicographic, so
     /// `MAX(value)` names the current last without decoding anything. Creation always writes exactly
     /// one `position` value, never a renumber.
     pub fn create_note(
@@ -546,7 +546,7 @@ impl Collection {
         fields: &[(&str, &str)],
     ) -> Result<NoteId, StoreError> {
         let last = self.max_position()?;
-        let position = leitner_core::content::order::between(last.as_deref(), None);
+        let position = cairn_core::content::order::between(last.as_deref(), None);
 
         let id = NoteId(interchange::uuid_v4(interchange::random_bytes()?));
         self.mutable_set("note", &id.0, "kind", Some(kind))?;
@@ -563,7 +563,7 @@ impl Collection {
     /// `low` and `high` are the notes it lands between — `None` for an open end, so
     /// `move_note_between(n, None, Some(first))` sends `n` to the front and
     /// `move_note_between(n, Some(last), None)` to the end. Their `position` keys are read and one
-    /// key strictly between them is minted by [`leitner_core::content::order::between`]. Because it
+    /// key strictly between them is minted by [`cairn_core::content::order::between`]. Because it
     /// touches only the moved note, **reordering inside a filtered list is well-defined**: hidden
     /// notes that sat between the two neighbours keep their keys and stay between them (ADR-0021 §4).
     /// A neighbour that carries no position yet reads as an open end, which the infill handles.
@@ -581,18 +581,17 @@ impl Collection {
         };
         let low_pos = position_of(low)?;
         let high_pos = position_of(high)?;
-        let position =
-            leitner_core::content::order::between(low_pos.as_deref(), high_pos.as_deref());
+        let position = cairn_core::content::order::between(low_pos.as_deref(), high_pos.as_deref());
         self.mutable_set("note", &note.0, "position", Some(&position))
     }
 
     /// The global new-card rate (ADR-0011 §3): how many cards may be introduced per day. Reads the
-    /// settings singleton, defaulting to [`leitner_core::log::DEFAULT_NEW_CARD_RATE`] when unset and
-    /// clamping to the accepted range — the interpretation lives in `leitner-core` so the store keeps
+    /// settings singleton, defaulting to [`cairn_core::log::DEFAULT_NEW_CARD_RATE`] when unset and
+    /// clamping to the accepted range — the interpretation lives in `cairn-core` so the store keeps
     /// no domain rule of its own.
     pub fn new_card_rate(&self) -> Result<u32, StoreError> {
         let stored = self.mutable_get(SETTING_ENTITY, &SETTING_ID, NEW_CARD_RATE_ATTR)?;
-        Ok(leitner_core::log::new_card_rate(stored.as_deref()))
+        Ok(cairn_core::log::new_card_rate(stored.as_deref()))
     }
 
     /// Set the global new-card rate (ADR-0011 §3, §5), clamped to the accepted range and stored as a
@@ -600,7 +599,7 @@ impl Collection {
     /// settles by stamp like any mutable value, so a rate change on a phone is not silently reverted
     /// by an unrelated write on a laptop; it **never enters the log and never exports**.
     pub fn set_new_card_rate(&mut self, rate: u32) -> Result<(), StoreError> {
-        let clamped = rate.min(leitner_core::log::MAX_NEW_CARD_RATE);
+        let clamped = rate.min(cairn_core::log::MAX_NEW_CARD_RATE);
         self.mutable_set(
             SETTING_ENTITY,
             &SETTING_ID,
@@ -613,7 +612,7 @@ impl Collection {
     /// `config-set` parameter row in the canonical total order, or the published defaults when no run
     /// has ever written one. This is what an optimisation run's result is compared against to decide
     /// whether it changed anything (ADR-0014 §5). The fitted-over count is not returned — it is the
-    /// nudge's concern and is read from the log by `leitner_core::replay::optimisation_nudge`, never
+    /// nudge's concern and is read from the log by `cairn_core::replay::optimisation_nudge`, never
     /// re-derived here (ADR-0014 §6).
     pub fn current_scheduler_parameters(&self) -> Result<[f32; PARAMETER_COUNT], StoreError> {
         // Order by the derived columns, which match replay's `(day, instant, writer, seq)` total order
@@ -1041,7 +1040,7 @@ fn install_schema(conn: &Connection) -> Result<(), StoreError> {
 
 /// Discard the cache unless it can prove it was built by this exact derivation (replay `CONTEXT.md`,
 /// ADR-0004 §9). The derivation is versioned and the projection is not, so there is no migration: a
-/// cache whose stamp is missing or does not match [`leitner_core::replay::DERIVATION_VERSION`] — a
+/// cache whose stamp is missing or does not match [`cairn_core::replay::DERIVATION_VERSION`] — a
 /// cache that cannot prove how far it got, or that a crate upgrade made stale — is cleared and
 /// restamped rather than trusted. Losing it costs a replay; trusting a stale one costs wrong state
 /// that looks right. (Population of the cache is a later perf ticket; this is the guard it needs
@@ -1054,7 +1053,7 @@ fn validate_cache(conn: &Connection) -> Result<(), StoreError> {
             |r| r.get(0),
         )
         .optional()?;
-    if stamped.as_deref() == Some(leitner_core::replay::DERIVATION_VERSION) {
+    if stamped.as_deref() == Some(cairn_core::replay::DERIVATION_VERSION) {
         return Ok(());
     }
     // Clear every table in the cache schema, then restamp. Table names come from `sqlite_master`,
@@ -1069,7 +1068,7 @@ fn validate_cache(conn: &Connection) -> Result<(), StoreError> {
     }
     conn.execute(
         "INSERT INTO cache.cache_meta (key, value) VALUES ('derivation_version', ?1)",
-        params![leitner_core::replay::DERIVATION_VERSION],
+        params![cairn_core::replay::DERIVATION_VERSION],
     )?;
     Ok(())
 }
@@ -1249,7 +1248,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             version,
-            leitner_core::replay::DERIVATION_VERSION,
+            cairn_core::replay::DERIVATION_VERSION,
             "the discarded cache is restamped with the current derivation"
         );
     }

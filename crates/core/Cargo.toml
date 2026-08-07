@@ -1,5 +1,5 @@
 [package]
-name = "leitner-core"
+name = "cairn-core"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -8,11 +8,11 @@ license.workspace = true
 # ONE ENTRY, AND ONLY ONE. ADR-0009 §2 said this section was empty "deliberately and permanently";
 # ADR-0027 §1 amended that, because ADR-0001 §1 requires FSRS-6 *via the `fsrs` crate* and §3 puts
 # `scheduling` in this crate. The property is unchanged and is what matters: `cargo test -p
-# leitner-core` needs no database, no window and no handset.
+# cairn-core` needs no database, no window and no handset.
 #
 # ADR-0027 §2 is the test a second entry must pass — the spec must name it, it must be computation
 # and nothing else, it must build for every target, it must be pinned exactly, and it needs its own
-# ADR. `rusqlite`, `eframe` and `egui` fail it and belong in `leitner-store` and `leitner-app`.
+# ADR. `rusqlite`, `eframe` and `egui` fail it and belong in `cairn-store` and `cairn-app`.
 #
 # `rand`, `serde`, `rayon` and `ndarray` arrive transitively through `fsrs`. None of them is thereby
 # available to our code (ADR-0027 §3): fuzz is seeded from `CardRef`, never an RNG (ADR-0001 §7), and

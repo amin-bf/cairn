@@ -20,7 +20,7 @@
 //! from scratch, so nothing of egui's own sits behind it, and **within a family, order decides which
 //! face is reached** — first match wins, and more than one of these faces carries the Arabic script.
 //!
-//! Installation is deferred to the first frame ([`crate::LeitnerApp`] guards it), never done in
+//! Installation is deferred to the first frame ([`crate::CairnApp`] guards it), never done in
 //! `CreationContext`: registering a face during creation was measured to break rendering on some
 //! backends (wgpu panics "Tried to update a texture that has not been allocated yet", glow renders
 //! near-black), and a newly-named family is not referenceable on the frame it is registered anyway —
@@ -106,7 +106,7 @@ pub(crate) const SPECIMENS: [(&str, &str); 7] = [
 ];
 
 /// Install the shipped faces into `ctx`. Call **once, on the first frame** — see the module header
-/// and [`crate::LeitnerApp`].
+/// and [`crate::CairnApp`].
 pub fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 

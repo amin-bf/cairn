@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: backup and restore](https://github.com/amin-bf/leitner/issues/37)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: backup and restore](https://github.com/amin-bf/cairn/issues/37)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0004 §7](0004-the-review-event-log.md) (the mutable surface, deletion, the stamp
   rule), [ADR-0007 §6](0007-the-local-store.md) (the writer marker, Auto Backup),
   [ADR-0008](0008-the-deck-export-format.md) (the container, the reserved profile, determinism),
@@ -16,8 +16,8 @@
 ## Context
 
 The ticket asked how a user gets their collection back after losing, replacing or wiping a device,
-and it was blocked deliberately: [#33](https://github.com/amin-bf/leitner/issues/33) and
-[#39](https://github.com/amin-bf/leitner/issues/39) had to land first, because a transport that keeps
+and it was blocked deliberately: [#33](https://github.com/amin-bf/cairn/issues/33) and
+[#39](https://github.com/amin-bf/cairn/issues/39) had to land first, because a transport that keeps
 a full copy somewhere the user controls would make backup a side effect and dissolve the question.
 
 That transport landed. [ADR-0013 §7](0013-the-sync-transport.md) publishes not only the log but the
@@ -201,7 +201,7 @@ property that [ADR-0009](0009-crate-and-workspace-layout.md) and
 > disqualifying property above is delivery through an activity **result** — and a *send* intent has
 > no result, exactly like the launch intent this section admits two paragraphs down. Whether the
 > application helps a user send an exported deck was never asked; it is
-> [#70](https://github.com/amin-bf/leitner/issues/70)'s.
+> [#70](https://github.com/amin-bf/cairn/issues/70)'s.
 
 This is deliberately [ADR-0013 §1](0013-the-sync-transport.md)'s shape — *"put an object, get an
 object, list a prefix, delete an object. Nothing else"* — reused rather than reinvented. This
@@ -252,7 +252,7 @@ items*, and `AGENTS.md` rule 9.
 > media type from the extension and discards ours, and a colliding name is deduped to
 > `archive.lcoll (1)` — a name that no longer ends in `.lcoll`, and which the *"intent filter on the
 > extension"* above will therefore not match. That is
-> [#72](https://github.com/amin-bf/leitner/issues/72)'s, not ADR-0023's.
+> [#72](https://github.com/amin-bf/cairn/issues/72)'s, not ADR-0023's.
 
 **Three additional entry points, each costing nothing:**
 
@@ -588,7 +588,7 @@ revisited. [ADR-0009 §4](0009-crate-and-workspace-layout.md)'s two-function lim
 
 ## Requirements this places on downstream tickets
 
-### [#40 — the sync experience](https://github.com/amin-bf/leitner/issues/40)
+### [#40 — the sync experience](https://github.com/amin-bf/cairn/issues/40)
 
 1. **Enrolment carries §10's identity check**, and both outcomes are UI moments: an empty collection
    adopting silently, and a non-empty one refusing. A refusal must name the mismatch and state the way
@@ -645,4 +645,4 @@ marker it is minted with.
 | ~~Whether the archive should ever be encrypted — must be answered together with the local store, never alone~~ — **discharged** by [ADR-0020 §3 §4](0020-protection-at-rest.md), which answered it together with three others rather than two | — |
 | ~~**Whether the 25 MB Auto Backup quota is measured before or after compression.** The platform documentation is silent, and §7's nine-month estimate moves by an order of magnitude on the answer. Surfaced by [ADR-0020](0020-protection-at-rest.md)'s evidence~~ — **measured: BEFORE compression.** §7 stands as written and §6's nine-month estimate is confirmed. A 40 MiB payload compressing 158× (`gzip -9`) and 11,022× (`zstd -19`) was rejected, and the transport named the uncompressed figure in its own pre-flight log line; the framework hands the transport an uncompressed total *before* any data is streamed, so compression cannot participate. **The unit is tar-stream bytes** — on-disk size plus a 512-byte header per file, each file padded to 512 — so §7's *"we know our own file sizes"* arithmetic should carry that small overhead. [Evidence](../research/auto-backup-quota/README.md) | — |
 | ~~**Quota failure is silent** — the whole package is rejected, signalled only by a callback needing a dex ADR-0003 does not ship and by two log lines, with no documented user notification. So §7's *"states the size fact"* cannot be driven by the platform telling us~~ — **confirmed by measurement**: no notification was posted by any backup component across the over-quota runs, though the provider owns channels capable of it. §7's decision to state the size fact in the application therefore stands on an observation rather than an absence in the documentation. **One correction rides with it**: the two published log lines are *not* equivalent — *"Transport quota exceeded for package"* is the quota signal, while *"Transport rejected backup of … , skipping"* fires for a generic package rejection and was observed on a **1 KB** payload during the transport's post-failure backoff. Anything greping the log must match the first. [Evidence](../research/auto-backup-quota/README.md) | — |
-| Media, if audio on cards is ever built: the archive inherits the size, and §6's manual write becomes a much larger ask | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1) ruled audio out on 2026-07-31; this row is one of the two reasons it recorded for leaving it *de-risked* rather than free |
+| Media, if audio on cards is ever built: the archive inherits the size, and §6's manual write becomes a much larger ask | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1) ruled audio out on 2026-07-31; this row is one of the two reasons it recorded for leaving it *de-risked* rather than free |

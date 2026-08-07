@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Resolves**: [Decide: whether we carry a patched `egui-winit` so Android text entry stops re-popping the keyboard](https://github.com/amin-bf/leitner/issues/75)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: whether we carry a patched `egui-winit` so Android text entry stops re-popping the keyboard](https://github.com/amin-bf/cairn/issues/75)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0003 §3 §5 §6](0003-client-stack.md) (the client stack; the precedent that a
   rendering defect is patched in our own code rather than upstream; what winit's Android backend does
   not do), [ADR-0025 §1 §2 §3 §6](0025-the-authoring-screen-under-a-soft-keyboard.md)
@@ -36,7 +36,7 @@ for composed text — so there is never a composition to interrupt.
 Measured on the Pixel 8 Pro with the platform's own IME request tracker, tapping the already-focused
 field three times: **6 hide and 17 show requests** as shipped, **0 and 0** with the block dropped on
 Android. Evidence and two rejected fixes are on branch
-[`prototypes/issue-67`](https://github.com/amin-bf/leitner/tree/prototypes/issue-67).
+[`prototypes/issue-67`](https://github.com/amin-bf/cairn/tree/prototypes/issue-67).
 
 **There is no fix available in our own code, and this was established before any option was weighed.**
 The interrupt flag is a private field on the toolkit's `Memory`; `interrupt_ime()` is a public

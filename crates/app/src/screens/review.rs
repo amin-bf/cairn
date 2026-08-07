@@ -4,11 +4,11 @@
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
-use leitner_core::content::{CardRef, NoteId};
-use leitner_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
-use leitner_core::replay::{Leech, Replayed, leeches, replay};
-use leitner_core::scheduling::Grade;
-use leitner_store::Collection;
+use cairn_core::content::{CardRef, NoteId};
+use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
+use cairn_core::replay::{Leech, Replayed, leeches, replay};
+use cairn_core::scheduling::Grade;
+use cairn_store::Collection;
 
 use crate::session::{self, Offered, ReviewState};
 use crate::{

@@ -1,7 +1,7 @@
-//! A minimal JSON *writer* — the counterpart the interchange reader in `leitner-core::log::json`
+//! A minimal JSON *writer* — the counterpart the interchange reader in `cairn-core::log::json`
 //! deliberately does not have.
 //!
-//! `leitner-core` never re-encodes a log row, so it ships only a reader (ADR-0004 §11). The deck
+//! `cairn-core` never re-encodes a log row, so it ships only a reader (ADR-0004 §11). The deck
 //! container is the opposite job: it *emits* JSON, and it must emit **byte-for-byte deterministic**
 //! bytes (ADR-0008 §12), so keys are written in the exact order the caller passes and strings are
 //! escaped by one rule. Hand-written for the same reason as the reader — `serde` is not this

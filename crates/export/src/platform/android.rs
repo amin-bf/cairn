@@ -1,19 +1,23 @@
 //! Android user files: `MediaStore` for put/get/list, the system share sheet for hand-off — reached
-//! by hand-written JNI, the same shim `leitner-store::platform::android` established (ADR-0007 §6).
+//! by hand-written JNI, the same shim `cairn-store::platform::android` established (ADR-0007 §6).
 //!
 //! **Verified on the handset** — a Pixel 8 Pro, through this code rather than through a probe
-//! ([#98](https://github.com/amin-bf/leitner/issues/98)). Both decisions the shape encodes held:
+//! ([#98](https://github.com/amin-bf/cairn/issues/98)). Both decisions the shape encodes held:
 //!
 //! - **The write declares no `mime_type`** ([ADR-0024 §4](../../../docs/adr/0024-identifying-a-written-file.md)).
 //!   A declared type that disagrees with the name is the *only* reason a collision produces
-//!   `French A1.ldeck (1)` instead of `French A1 (1).ldeck`; `MediaStore` stores
+//!   `French A1.cdeck (1)` instead of `French A1 (1).cdeck`; `MediaStore` stores
 //!   `application/octet-stream` either way, so declaring one costs the extension and buys nothing.
-//!   **Measured**: the same name written twice stored as `Specimen.ldeck` then
-//!   `Specimen (1).ldeck`, both `application/octet-stream`. **And measured twice, at both ends of
-//!   the supported range** — identically at API 37 and at API **29**, the level where
-//!   `MediaStore.Downloads` and the permission-free insert first exist. So this is a property of the
-//!   collection rather than of a recent platform, and the window ADR-0023 left unmeasured is
-//!   **24–28** specifically, not "below the handset we own".
+//!   **Measured, re-run through this seam after the rename** (API 37): the same name written three
+//!   times stored as `Specimen.cdeck`, `Specimen (1).cdeck`, `Specimen (2).cdeck` — every one
+//!   `application/octet-stream`, the suffix always **before** the extension, and the reported name
+//!   always the written one rather than the requested one
+//!   ([evidence](../../../docs/research/extension-rename-reachability/README.md)).
+//!   **The API 29 half of this figure was taken with `.ldeck` and has not been re-run**, because no
+//!   API 29 device was to hand — it is retained as originally measured. That is not a gap worth
+//!   closing: the dedupe rule is `MediaStore`'s, and the extension is the part the API 37 re-run
+//!   varied. API 29 remains the level where `MediaStore.Downloads` and the permission-free insert
+//!   first exist, so the window ADR-0023 left unmeasured is still **24–28** specifically.
 //! - **`hand_off`'s flags go on the chooser, not the inner intent** (ADR-0023 §7).
 //!   `Intent.createChooser` returns a fresh intent inheriting neither `FLAG_ACTIVITY_NEW_TASK` —
 //!   mandatory because the context is an `Application`, not an Activity — nor
@@ -318,7 +322,7 @@ pub fn list() -> Result<Vec<String>, PlatformError> {
 /// **It scans by the *written* name, which is why the dedupe cannot make it ambiguous.** The caller
 /// holds what [`put`] read back, never what it asked for (ADR-0022 §10) — and the scan sees only rows
 /// this application owns, since `MediaProvider` filters the query by `owner_package_name`
-/// (ADR-0024 §3). Verified on the handset resolving a deduped `Specimen (1).ldeck` (#98).
+/// (ADR-0024 §3). Verified on the handset resolving a deduped `Specimen (1).cdeck`.
 fn uri_for<'a>(
     env: &mut JNIEnv<'a>,
     resolver: &JObject,

@@ -1,17 +1,17 @@
 //! Writing the canonical interchange line (ADR-0004 §11), and the two edge values that feed it: a
 //! wall-clock instant and freshly-minted identity.
 //!
-//! `leitner-core` **reads** the interchange form and never writes it (`log/mod.rs`): a relayed row
+//! `cairn-core` **reads** the interchange form and never writes it (`log/mod.rs`): a relayed row
 //! is passed byte for byte and never re-encoded (ADR-0004 §11). But a review *authored on this
 //! device* has to be encoded exactly once, and this is the one place it happens — the store is the
 //! edge, so it is where a `CardRef`, a grade and a clock reading become a line. Everything this
-//! module emits round-trips back through `leitner_core::log::parse_line`, which the tests assert.
+//! module emits round-trips back through `cairn_core::log::parse_line`, which the tests assert.
 //!
 //! Time and identity are **values** the domain never reads for itself (ADR-0009 §8); reading the
-//! clock and drawing entropy are edge acts, so they live here rather than in `leitner-core`.
+//! clock and drawing entropy are edge acts, so they live here rather than in `cairn-core`.
 
-use leitner_core::content::{CardRef, NoteId};
-use leitner_core::scheduling::Grade;
+use cairn_core::content::{CardRef, NoteId};
+use cairn_core::scheduling::Grade;
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
@@ -131,7 +131,7 @@ pub fn history_cutoff_line(
 /// number of reviews the run trained on, recorded at write time and never re-derived (ADR-0014 §6).
 ///
 /// Each weight is written with `f32`'s shortest round-trip representation, which
-/// [`leitner_core::log::Json::as_f32_array`] recovers exactly by parsing as `f64` and narrowing. The
+/// [`cairn_core::log::Json::as_f32_array`] recovers exactly by parsing as `f64` and narrowing. The
 /// `d` token is the frozen write-time day, the `t` token the write instant for ordering — like every
 /// other row (ADR-0004 §4).
 pub fn config_set_params_line(
@@ -262,7 +262,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use leitner_core::log::{ParsedLine, Row, parse_line};
+    use cairn_core::log::{ParsedLine, Row, parse_line};
 
     #[test]
     fn hex16_round_trips_and_sorts_like_the_bytes() {
@@ -376,8 +376,8 @@ mod tests {
     fn a_config_set_params_line_parses_back_through_core_with_its_count() {
         // ADR-0014 §6: what the store writes for an optimisation run, core reads — weights exact and
         // the fitted-over count intact.
-        use leitner_core::log::Setting;
-        use leitner_core::scheduling::{PARAMETER_COUNT, SchedulerParameters};
+        use cairn_core::log::Setting;
+        use cairn_core::scheduling::{PARAMETER_COUNT, SchedulerParameters};
 
         let mut weights = *SchedulerParameters::default().weights();
         weights[0] = 0.123_456_79;

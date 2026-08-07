@@ -33,7 +33,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use leitner_core::log::Json;
+use cairn_core::log::Json;
 
 use crate::backend::{Backend, TransportError};
 use crate::codec;

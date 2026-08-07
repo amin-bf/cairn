@@ -4,8 +4,8 @@
 
 use std::collections::BTreeSet;
 
-use leitner_sync::key::{Key, Stream};
-use leitner_sync::{
+use cairn_sync::key::{Key, Stream};
+use cairn_sync::{
     Backend, MemoryBackend, TransportError, is_behind, publish, read_object, roll_up,
     version_summary,
 };

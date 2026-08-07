@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-27
-- **Resolves**: [Decide: scheduling algorithm and grade scale](https://github.com/amin-bf/leitner/issues/5)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: scheduling algorithm and grade scale](https://github.com/amin-bf/cairn/issues/5)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/scheduling-algorithms/`](../research/scheduling-algorithms/README.md)
 
 ## Context
@@ -130,7 +130,7 @@ reviewed 24 days ago are both in box 3 and both genuinely have week-to-month dur
 due now and one is not. The box never spoke about that.
 
 This holds **only** if the UI never implies otherwise. The following are binding constraints on
-[Prototype: the review session experience](https://github.com/amin-bf/leitner/issues/11):
+[Prototype: the review session experience](https://github.com/amin-bf/cairn/issues/11):
 
 - Boxes are never sorted, counted, or presented as a review queue.
 - "Due today" is a separate number and is never expressed as a box.
@@ -246,7 +246,7 @@ optimises on a laptop while offline will not see their phone's schedule change u
 merges. The alternative is a phone that silently disagrees with the laptop about what the user
 knows, which is worse and far harder to notice.
 
-**Consequence for [Prove FSRS parameter optimisation runs in-client](https://github.com/amin-bf/leitner/issues/20)**:
+**Consequence for [Prove FSRS parameter optimisation runs in-client](https://github.com/amin-bf/cairn/issues/20)**:
 that ticket's worst case was personalised parameters becoming desktop-only, with no server to
 compute them on. Under this decision that is no longer a divergence risk — **any one device that
 can run the optimiser publishes the result and the others consume it**. A client that cannot run
@@ -275,7 +275,7 @@ branch in every case.
 
 ## Requirements this places on the event log
 
-[Decide: the review event log format](https://github.com/amin-bf/leitner/issues/9) owns the field
+[Decide: the review event log format](https://github.com/amin-bf/cairn/issues/9) owns the field
 list. This ADR constrains it:
 
 1. **Grade 1–4, raw**, exactly as the user gave it.
@@ -329,9 +329,9 @@ authoritative, and this ADR keeps the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| Event field list, encoding, clock skew, compaction | [Decide: the review event log format](https://github.com/amin-bf/leitner/issues/9) |
-| What a "day" is — rollover hour and timezone | [Decide: the review event log format](https://github.com/amin-bf/leitner/issues/9) |
-| New-card rate, daily limits, backlog pacing | [Decide: new-card introduction rate and daily limits](https://github.com/amin-bf/leitner/issues/21) |
-| Whether the optimiser runs on web and Android, and at what cost | [Prove FSRS parameter optimisation runs in-client](https://github.com/amin-bf/leitner/issues/20) |
-| Grade button presentation, where boxes appear, backlog feel | [Prototype: the review session experience](https://github.com/amin-bf/leitner/issues/11) |
-| ~~Leech handling for repeatedly failed cards~~ — **closed by [ADR-0010](0010-leeches.md)**: detect and surface, never intervene. **The scheduler is untouched** — a leech is four failure *days* in a trailing ninety, and FSRS difficulty was rejected as the signal precisely because binding a user-facing surface to a scheduler parameter re-couples what constraint 4 decoupled | [#26 — leeches](https://github.com/amin-bf/leitner/issues/26) |
+| Event field list, encoding, clock skew, compaction | [Decide: the review event log format](https://github.com/amin-bf/cairn/issues/9) |
+| What a "day" is — rollover hour and timezone | [Decide: the review event log format](https://github.com/amin-bf/cairn/issues/9) |
+| New-card rate, daily limits, backlog pacing | [Decide: new-card introduction rate and daily limits](https://github.com/amin-bf/cairn/issues/21) |
+| Whether the optimiser runs on web and Android, and at what cost | [Prove FSRS parameter optimisation runs in-client](https://github.com/amin-bf/cairn/issues/20) |
+| Grade button presentation, where boxes appear, backlog feel | [Prototype: the review session experience](https://github.com/amin-bf/cairn/issues/11) |
+| ~~Leech handling for repeatedly failed cards~~ — **closed by [ADR-0010](0010-leeches.md)**: detect and surface, never intervene. **The scheduler is untouched** — a leech is four failure *days* in a trailing ninety, and FSRS difficulty was rejected as the signal precisely because binding a user-facing surface to a scheduler parameter re-couples what constraint 4 decoupled | [#26 — leeches](https://github.com/amin-bf/cairn/issues/26) |

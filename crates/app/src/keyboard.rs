@@ -277,7 +277,7 @@ mod tests {
     /// guarantee and is tested there (ADR-0026 §5).
     ///
     /// The `cfg` is **not** client-stack rule 3's defect signal: it gates a *test* to the arm whose
-    /// behaviour it asserts, exactly as `leitner-export`'s desktop-seam test does. Nothing here
+    /// behaviour it asserts, exactly as `cairn-export`'s desktop-seam test does. Nothing here
     /// varies at run time.
     #[cfg(not(target_os = "android"))]
     #[test]

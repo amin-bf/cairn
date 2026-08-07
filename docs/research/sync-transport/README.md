@@ -1,7 +1,7 @@
 # Sync transport over storage we do not own
 
-**Research ticket:** [#33](https://github.com/amin-bf/leitner/issues/33) (under wayfinder map
-[#1](https://github.com/amin-bf/leitner/issues/1)) · **Date of research:** 2026-07-30
+**Research ticket:** [#33](https://github.com/amin-bf/cairn/issues/33) (under wayfinder map
+[#1](https://github.com/amin-bf/cairn/issues/1)) · **Date of research:** 2026-07-30
 
 **Question:** with no server of our own, what can carry the review event log between a user's desktop
 and Android devices?
@@ -24,7 +24,7 @@ commands, and its confidence levels:
 would be that a browser cannot reach a git remote without a proxy, and a proxy is a server we do not
 have. That question was moot before the reading started: the map records the web target as **out of
 scope**, ruled out while resolving [Decide: the local
-store](https://github.com/amin-bf/leitner/issues/12). The budget went to Android depth instead, which
+store](https://github.com/amin-bf/cairn/issues/12). The budget went to Android depth instead, which
 is now half the client surface and the harder half.
 
 ---

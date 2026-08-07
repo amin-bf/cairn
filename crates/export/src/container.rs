@@ -18,11 +18,16 @@ pub const FORMAT: u32 = 1;
 
 /// The `mimetype` member's fixed name — first in the archive, `stored`.
 pub const MIMETYPE_MEMBER: &str = "mimetype";
-/// The media type a `.ldeck` archive declares from its first bytes (ADR-0008 §10).
-pub const DECK_MEDIA_TYPE: &str = "application/vnd.leitner.deck+zip";
-/// The media type a `.lcoll` archive declares from its first bytes (ADR-0016 §9) — the third profile
+/// The media type a `.cdeck` archive declares from its first bytes (ADR-0008 §10).
+///
+/// Renamed with the application (ADR-0028 §3a). This is the **profile authority** — the value at the
+/// `mimetype` member's fixed offset, and what the sniff compares against — so it is a format change
+/// rather than a string change, and **no shim recognises the old vendor tree**: a set of accepted
+/// values is exactly what ADR-0024 §1 established the authority must not be.
+pub const DECK_MEDIA_TYPE: &str = "application/vnd.cairn.deck+zip";
+/// The media type a `.ccoll` archive declares from its first bytes (ADR-0016 §9) — the third profile
 /// in this same container, selecting the restore stamp rule (ADR-0016 §2).
-pub const COLLECTION_MEDIA_TYPE: &str = "application/vnd.leitner.collection+zip";
+pub const COLLECTION_MEDIA_TYPE: &str = "application/vnd.cairn.collection+zip";
 /// The manifest member, readable alone from the central directory (ADR-0008 §6).
 pub const MANIFEST_MEMBER: &str = "manifest.json";
 /// One note or tombstone per line, in `(position, note id)` order (ADR-0008 §6, ADR-0011 §7).
@@ -118,7 +123,7 @@ pub fn read_member(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> 
 /// §6, the container's classic traversal defect): reject a symlink entry, an absolute path, a `..`
 /// segment, a backslash or colon, or a directory entry. The caller adds its own allow-list of member
 /// names — the safety check lives here so a fix reaches every reader at once, exactly as the identity
-/// gate does in `leitner-core`.
+/// gate does in `cairn-core`.
 pub fn member_path_is_safe(entry: &zip::read::ZipFile<'_, Cursor<&[u8]>>) -> bool {
     let name = entry.name();
     // A symlink entry is rejected outright — its target is a path we never follow.

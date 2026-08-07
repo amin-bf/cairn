@@ -2,18 +2,18 @@
 //!
 //! [ADR-0022 §10](../../../docs/adr/0022-the-import-preview-and-export-report.md): the filename is
 //! the deck's name for a single deck, or the first selected deck's name and a count for several —
-//! `French A1 and 2 more.ldeck`. A deck name is authored content that arrived from a stranger
+//! `French A1 and 2 more.cdeck`. A deck name is authored content that arrived from a stranger
 //! ([ADR-0008 §6](../../../docs/adr/0008-the-deck-export-format.md)), so the outbound path is exactly
 //! as hostile as the inbound one: **no path separators, no control characters, no `..`**. The
-//! extension is `.ldeck` and never carries the revision (ADR-0022 §10) — an unchanged re-export is
+//! extension is `.cdeck` and never carries the revision (ADR-0022 §10) — an unchanged re-export is
 //! byte-identical at the same revision (ADR-0008 §9), so a revision in the name would manufacture a
 //! second file where the correct outcome is the same one.
 
-/// The `.ldeck` extension — a **display string and the list's `LIKE` clause**, never the authority on
+/// The `.cdeck` extension — a **display string and the list's `LIKE` clause**, never the authority on
 /// what a file is (ADR-0008 §13, ADR-0024 §1). The `mimetype` member decides that.
-pub const DECK_EXTENSION: &str = "ldeck";
+pub const DECK_EXTENSION: &str = "cdeck";
 
-/// The filename for exporting `deck_names` (in selection order), with the `.ldeck` extension.
+/// The filename for exporting `deck_names` (in selection order), with the `.cdeck` extension.
 ///
 /// One deck takes its own sanitised name; several take the first's name plus `and N more`. An empty
 /// or fully-stripped name falls back to `deck`, so the file is always openable.
@@ -53,21 +53,21 @@ mod tests {
 
     #[test]
     fn single_deck_is_its_own_name() {
-        assert_eq!(export_filename(&["French A1"]), "French A1.ldeck");
+        assert_eq!(export_filename(&["French A1"]), "French A1.cdeck");
     }
 
     #[test]
     fn several_decks_name_the_first_and_count_the_rest() {
         assert_eq!(
             export_filename(&["French A1", "German", "Latin"]),
-            "French A1 and 2 more.ldeck"
+            "French A1 and 2 more.cdeck"
         );
     }
 
     #[test]
     fn path_separators_and_controls_are_stripped() {
         assert_eq!(sanitise("a/b\\c\td"), "abcd");
-        assert_eq!(export_filename(&["../../etc/passwd"]), "etcpasswd.ldeck");
+        assert_eq!(export_filename(&["../../etc/passwd"]), "etcpasswd.cdeck");
     }
 
     #[test]
@@ -78,8 +78,8 @@ mod tests {
 
     #[test]
     fn an_empty_or_stripped_name_falls_back() {
-        assert_eq!(export_filename(&[]), "deck.ldeck");
-        assert_eq!(export_filename(&["   "]), "deck.ldeck");
-        assert_eq!(export_filename(&["..."]), "deck.ldeck");
+        assert_eq!(export_filename(&[]), "deck.cdeck");
+        assert_eq!(export_filename(&["   "]), "deck.cdeck");
+        assert_eq!(export_filename(&["..."]), "deck.cdeck");
     }
 }

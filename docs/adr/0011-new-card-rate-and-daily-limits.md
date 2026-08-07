@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-30
-- **Resolves**: [Decide: new-card introduction rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: new-card introduction rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0001](0001-scheduling-algorithm-and-grade-scale.md) (FSRS-6, lapses, replay
   purity), [ADR-0002](0002-the-card-model.md) (notes, cards, siblings),
   [ADR-0004](0004-the-review-event-log.md) (the day scale, the mutable surface),
@@ -22,7 +22,7 @@ elsewhere:
   4am–4am scale exists only to stamp `delta_t` at write time, while *"due today" and daily limits
   use the device's local day*. That is binding here and is not reopened.
 - **Whether queue composition corrupts replay** was settled by
-  [Research: scheduling algorithms](https://github.com/amin-bf/leitner/issues/2): it does not.
+  [Research: scheduling algorithms](https://github.com/amin-bf/cairn/issues/2): it does not.
   Which cards are *offered* never changes what the log records or what any interval computes. That
   finding is what licenses most of this ADR, and it is also what stops one argument from being
   reused where it does not apply — see §8.
@@ -200,7 +200,7 @@ Two riders fall out of that definition rather than needing rules of their own:
 **Accepted cost, recorded rather than fixed: two devices that have not synced today can each
 introduce up to the full rate.** Enforcing a collection-wide daily count across devices that have
 not met requires a rendezvous point, which is a server, which this destination does not contain —
-and [Research: sync transport](https://github.com/amin-bf/leitner/issues/33) is unambiguous that a
+and [Research: sync transport](https://github.com/amin-bf/cairn/issues/33) is unambiguous that a
 device cannot learn what it has not received. The rate converges on the intended figure for anyone
 who syncs; a two-device user who never syncs should set two or three rather than five.
 
@@ -378,7 +378,7 @@ ADR-0010 (its requirement on this ticket is honoured in §8 unchanged).
 
 ## Requirements this places on downstream tickets
 
-### [#28 — the note authoring and editing experience](https://github.com/amin-bf/leitner/issues/28)
+### [#28 — the note authoring and editing experience](https://github.com/amin-bf/cairn/issues/28)
 
 1. **`position` is authored data, and whether the user can reorder notes is that ticket's call.**
    This ADR fixes only that the field exists, sorts, and travels. If reordering is offered, it is an
@@ -398,13 +398,13 @@ ADR-0010 (its requirement on this ticket is honoured in §8 unchanged).
 > because order is a property of the collection rather than of a note in isolation. *"How `position`
 > is surfaced while authoring"* therefore has the answer **not in the editor at all**.
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37)
 
 1. **The new-card rate is personal, not content**: it belongs to the progress profile, must survive
    a backup and restore, and must never appear in a `.ldeck` export (§5).
 2. **`position` is content** and travels in the export (§7) — the opposite side of the same line.
 
-### Sync transport ([#39](https://github.com/amin-bf/leitner/issues/39), [#40](https://github.com/amin-bf/leitner/issues/40))
+### Sync transport ([#39](https://github.com/amin-bf/cairn/issues/39), [#40](https://github.com/amin-bf/cairn/issues/40))
 
 1. The rate rides the **mutable surface**, so it inherits whatever answer sync gives it. Before sync
    exists the rate is per device, like every other mutable value.
@@ -447,7 +447,7 @@ in [`ui`](../../crates/app/src/CONTEXT.md), which owns the session.
 
 | Item | Owner |
 |---|---|
-| **Workload prediction as advice** — showing *"at this rate, expect roughly N reviews a day once it settles"* using `expected_workload`. Useful, and explicitly never allowed to *control* the rate (§3). | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. §3 already fixed the hard part, and the interim answer — this ADR's own estimate table — ships; what remains is a read-only figure beside the rate setting |
-| **Per-deck new-card on/off** — shape known (§6), not built. | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31, on **scope not sharpness**: the decision was taken (defer) and the mechanism is written down, so what remains is a build. It carries one live sub-question a fresh effort inherits — [ADR-0005](0005-the-deck-model.md)'s row on whether such a preference syncs or stays device-local |
-| ~~**Whether notes are user-reorderable**, and how `position` is surfaced while authoring~~ — **answered by [ADR-0021 §3 and §4](0021-note-ordering-saving-and-the-note-list.md)**: they are, `position` becomes an **order key with infill** so a move is one write rather than a renumber, and it is surfaced as the note list's own sequence — never as a number, and not in the editor at all | — *(was [#66](https://github.com/amin-bf/leitner/issues/66), **re-owned on 2026-08-01**: [#28](https://github.com/amin-bf/leitner/issues/28) was named here and closed without touching it, which the* Open items *sweep caught)* |
+| **Workload prediction as advice** — showing *"at this rate, expect roughly N reviews a day once it settles"* using `expected_workload`. Useful, and explicitly never allowed to *control* the rate (§3). | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1), 2026-07-31. §3 already fixed the hard part, and the interim answer — this ADR's own estimate table — ships; what remains is a read-only figure beside the rate setting |
+| **Per-deck new-card on/off** — shape known (§6), not built. | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1), 2026-07-31, on **scope not sharpness**: the decision was taken (defer) and the mechanism is written down, so what remains is a build. It carries one live sub-question a fresh effort inherits — [ADR-0005](0005-the-deck-model.md)'s row on whether such a preference syncs or stays device-local |
+| ~~**Whether notes are user-reorderable**, and how `position` is surfaced while authoring~~ — **answered by [ADR-0021 §3 and §4](0021-note-ordering-saving-and-the-note-list.md)**: they are, `position` becomes an **order key with infill** so a move is one write rather than a renumber, and it is surfaced as the note list's own sequence — never as a number, and not in the editor at all | — *(was [#66](https://github.com/amin-bf/cairn/issues/66), **re-owned on 2026-08-01**: [#28](https://github.com/amin-bf/cairn/issues/28) was named here and closed without touching it, which the* Open items *sweep caught)* |
 | **Revisiting 10/20/40 and five a day against real usage** — §4 records the relationship between them; neither number is measured. | Post-implementation |

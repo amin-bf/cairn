@@ -1,8 +1,8 @@
 //! Desktop user files: a real directory the user can open, and a reveal-in-file-manager hand-off.
 //!
-//! The write goes to the documents folder (ADR-0022 §10's `~/Documents/French A1.ldeck`), resolved
+//! The write goes to the documents folder (ADR-0022 §10's `~/Documents/French A1.cdeck`), resolved
 //! by the XDG user-directories convention with a `~/Documents` fallback. No crate dependency for the
-//! lookup — it is a few lines, matching `leitner-store::platform`'s reasoning for the data dirs.
+//! lookup — it is a few lines, matching `cairn-store::platform`'s reasoning for the data dirs.
 //!
 //! **`hand_off` reveals the file selected in the file manager** (ADR-0023 §4), because no
 //! `org.freedesktop.portal.Share` exists on the desktop. It prefers `FileManager1.ShowItems`, which

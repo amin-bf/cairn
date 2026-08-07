@@ -1,9 +1,9 @@
-//! The Leitner domain, entire and pure.
+//! The Cairn domain, entire and pure.
 //!
 //! This crate has **one** dependency — `fsrs`, admitted by ADR-0027 §1 because ADR-0001 §1 names it
 //! and `scheduling` lives here — and that short list is its interface. No SQLite, no egui, no clock;
 //! every value that cannot be derived is passed in by the caller. The consequence worth protecting
-//! is unchanged: `cargo test -p leitner-core` verifies most of the specification with no database,
+//! is unchanged: `cargo test -p cairn-core` verifies most of the specification with no database,
 //! no window and no handset.
 //!
 //! **A second entry has to pass ADR-0027 §2's test and needs its own ADR.** And what arrives

@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Resolves**: [Prototype: the authoring screen under a soft keyboard](https://github.com/amin-bf/leitner/issues/67)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Prototype: the authoring screen under a soft keyboard](https://github.com/amin-bf/cairn/issues/67)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0003 §6](0003-client-stack.md) (the client stack, and what winit's Android
   backend does not do), [ADR-0012 §1 §5 §9](0012-the-note-authoring-experience.md) (the two panes, the
   ambient destructive-edit warning, the handoff this ADR discharges),

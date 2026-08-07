@@ -40,15 +40,15 @@ license = "MIT"
 # Dependency versions live here so the five crates cannot drift apart. The Android set is pinned to
 # the versions proven on the handset in #7 and #8 — see docs/environment/android-toolchain.md.
 [workspace.dependencies]
-leitner-core = { path = "crates/core" }
-leitner-store = { path = "crates/store" }
-leitner-export = { path = "crates/export" }
-leitner-app = { path = "crates/app" }
+cairn-core = { path = "crates/core" }
+cairn-store = { path = "crates/store" }
+cairn-export = { path = "crates/export" }
+cairn-app = { path = "crates/app" }
 
-# `fsrs` is `leitner-core`'s one dependency (ADR-0027 §1), pinned exactly per ADR-0001 §1: the 6.x
+# `fsrs` is `cairn-core`'s one dependency (ADR-0027 §1), pinned exactly per ADR-0001 §1: the 6.x
 # line shipped nine releases in eleven days with breaking API changes inside the major version, so
 # the pin is a requirement, not caution. Declared here for the same reason every other version is —
-# so the crates cannot drift apart — even though only `leitner-core` depends on it.
+# so the crates cannot drift apart — even though only `cairn-core` depends on it.
 fsrs = "=6.6.1"
 
 # Pinned exactly, adapter and toolkit together (ADR-0026 §3, on ADR-0001 §2's precedent). The
@@ -62,7 +62,7 @@ tempfile = "3"
 
 # ADR-0013 §4 fixes `zstd` as the compressor for published objects, and ADR-0004 §11 (as amended by
 # ADR-0013 §12) pins level 19 as the ratio the decade projection assumes. It is a container, not a
-# re-encoding, so the exact interchange bytes come back out. Only `leitner-sync` publishes objects,
+# re-encoding, so the exact interchange bytes come back out. Only `cairn-sync` publishes objects,
 # so only it depends on this; declared here so the version cannot drift. Like `rusqlite bundled` it
 # compiles C, so an Android build needs the NDK's clang exported (`scripts/android-env.sh`).
 zstd = "0.13"
@@ -76,7 +76,7 @@ unicode-bidi = "0.3.18"
 # ADR-0008 §2 fixes the deck container as a zip archive, and the feature flags there are the working
 # ones: `--no-default-features --features deflate-flate2-zlib-rs`. The umbrella `deflate` feature
 # builds but drags in zopfli, and `deflate-flate2` alone selects no zlib backend and fails to
-# compile. Only `leitner-export` builds the container, so only it depends on this; declared here so
+# compile. Only `cairn-export` builds the container, so only it depends on this; declared here so
 # the version cannot drift.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 

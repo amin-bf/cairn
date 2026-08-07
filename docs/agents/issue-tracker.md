@@ -1,6 +1,12 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues on `amin-bf/leitner`. Use the `gh` CLI for all operations.
+Issues and PRDs for this repo live as GitHub issues on `amin-bf/cairn`. Use the `gh` CLI for all operations.
+
+**Issue links everywhere — including `docs/adr/` and `docs/research/` — say `amin-bf/cairn`.** A URL
+names a resource, and the issues moved with the repository, so re-pointing one falsifies nothing;
+[ADR-0028 §4](../adr/0028-the-application-is-named-cairn.md) freezes the **claims** those documents
+make (a measured filename, a decided extension), not the addresses they cite. No document depends on
+the rename redirect as a result. **Old-name prose does remain** in those files, and is not a defect.
 
 ## Conventions
 

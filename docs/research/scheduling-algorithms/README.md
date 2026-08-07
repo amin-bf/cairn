@@ -1,13 +1,13 @@
 # Scheduling algorithms: SM-2, FSRS, graded Leitner
 
-Research resolving [Research: scheduling algorithms — SM-2, FSRS, graded Leitner](https://github.com/amin-bf/leitner/issues/2),
-a ticket on [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1).
+Research resolving [Research: scheduling algorithms — SM-2, FSRS, graded Leitner](https://github.com/amin-bf/cairn/issues/2),
+a ticket on [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1).
 
 **Research date: 2026-07-26.** Every version and status claim was verified against a live primary
 source on that date, not from model memory.
 
 **This document gathers facts; it does not choose.** The choice belongs to
-[Decide: scheduling algorithm and grade scale](https://github.com/amin-bf/leitner/issues/5). Where
+[Decide: scheduling algorithm and grade scale](https://github.com/amin-bf/cairn/issues/5). Where
 this document says "note that", it is flagging a constraint the decision must account for, not
 recommending an outcome.
 

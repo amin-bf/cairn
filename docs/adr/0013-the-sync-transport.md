@@ -2,10 +2,10 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: the sync transport](https://github.com/amin-bf/leitner/issues/39)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the sync transport](https://github.com/amin-bf/cairn/issues/39)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/sync-transport/`](../research/sync-transport/README.md)
-  ([Research: sync transport over storage we do not own](https://github.com/amin-bf/leitner/issues/33))
+  ([Research: sync transport over storage we do not own](https://github.com/amin-bf/cairn/issues/33))
 - **Related**: [ADR-0004](0004-the-review-event-log.md) (row identity, the version summary, the
   mutable surface, the interchange form), [ADR-0007](0007-the-local-store.md) (the authoritative
   local copy, the writer marker outside the backup set),
@@ -20,7 +20,7 @@ sequence number)`, that pair *is* the row's identity, merging is set union with 
 and scanning reconstructs the `{writer → highest sequence}` summary that answers *"am I behind?"*.
 The ADR deliberately declined to say what carries any of that between devices.
 
-[#33](https://github.com/amin-bf/leitner/issues/33) gathered the facts and left four families live —
+[#33](https://github.com/amin-bf/cairn/issues/33) gathered the facts and left four families live —
 a git remote, a rented object store, rented WebDAV, and a personal cloud drive through its own API —
 after **structurally disqualifying** one: a folder another application keeps in step **cannot answer
 "am I behind?" even in principle**, because a device sees only its own local replica and a directory
@@ -141,7 +141,7 @@ backup hazard, not a backup"* because the user cannot copy the contents out. Tha
 the remote is an archive; §2 establishes it is not. Under the disposability principle, *visible* is
 the liability — a visible app folder invites a user to reorganise it mid-sync — and a hidden one
 cannot be casually disturbed. Backup proper is
-[#37](https://github.com/amin-bf/leitner/issues/37)'s, and it must not be quietly satisfied by a sync
+[#37](https://github.com/amin-bf/cairn/issues/37)'s, and it must not be quietly satisfied by a sync
 folder.
 
 **Two traps that live in a console, not in the repository**, so nothing here will ever catch them:
@@ -462,7 +462,7 @@ setup burden.
 The application data folder is scoped per (account, application), so **this transport cannot merge
 two collections even by accident**. That is a partial gift to the map's *Collection identity* fog,
 and the limits of it should be stated: it says nothing about telling an *import* from a *restore*,
-which is the form [#37](https://github.com/amin-bf/leitner/issues/37) actually meets — an import
+which is the form [#37](https://github.com/amin-bf/cairn/issues/37) actually meets — an import
 crosses a collection boundary so ADR-0004 §7 stamps reset, a restore re-enters the same collection so
 they must travel byte for byte. Nothing here settles that.
 
@@ -536,7 +536,7 @@ an unrelated reason gets its own module under the same three-arm discipline.
 
 ## Requirements this places on downstream tickets
 
-### [#40 — the sync experience](https://github.com/amin-bf/leitner/issues/40)
+### [#40 — the sync experience](https://github.com/amin-bf/cairn/issues/40)
 
 1. **The honest promise is bounded by the platform, not by this transport.** Android lists network as
    **Disabled** in the Rare and Restricted app-standby buckets — where a device left alone lands —
@@ -565,7 +565,7 @@ an unrelated reason gets its own module under the same three-arm discipline.
 4. **Roll-up is invisible and must stay that way.** It is not a user-facing operation, has no
    progress to report, and its failure mode is a retry.
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37)
 
 1. **The sync folder is not a backup and must not be presented as one** (§2, §3). It holds a
    published projection of the log, it is hidden from the user, and it is deleted if the user removes
@@ -581,11 +581,11 @@ an unrelated reason gets its own module under the same three-arm discipline.
 > confirmed and restated in §12: a restored device mints a fresh writer id and is a **clean fork
 > rather than a resurrection**, and the archive carries no credential at all.
 >
-> ADR-0016 also places two requirements back on **[#40](https://github.com/amin-bf/leitner/issues/40)**:
+> ADR-0016 also places two requirements back on **[#40](https://github.com/amin-bf/cairn/issues/40)**:
 > enrolment must run §10's identity check and both outcomes are UI moments, and the collection id is
 > published as one small immutable object per writer prefix under §4's never-rewritten rule.
 
-### [#42 — when parameter optimisation runs](https://github.com/amin-bf/leitner/issues/42)
+### [#42 — when parameter optimisation runs](https://github.com/amin-bf/cairn/issues/42)
 
 1. **Publishing and optimising compete for the same foreground window.** Android freezes a
    backgrounded app outright, so both want the moment the user has the app open. Sync is seconds and
@@ -621,5 +621,5 @@ that a glossary lives beside the code it describes.
 | Running an enrolment and a sync on the real handset, per `AGENTS.md` rule 9 | Implementation |
 | ~~How long a real handset left alone actually goes between successful background syncs~~ — **dissolved by [ADR-0015 §2](0015-the-sync-experience.md)**: there are none. §6 bounded the promise by Android's standby buckets, but the binding ceiling is one step earlier and it is **ours** — a scheduled job needs Java, a `classes.dex` and a Gradle project, which [ADR-0003](0003-client-stack.md) measured as a prize and [ADR-0014 §3](0014-when-parameter-optimisation-runs.md) already declined to spend | — |
 | Tuning `K` (§5) against real object counts | Implementation; not a compatibility constant |
-| Media, if audio on cards is ever built — media is where sync stops being cheap | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1) ruled audio out on 2026-07-31, left *de-risked* rather than free: [ADR-0008](0008-the-deck-export-format.md) already ships a binary-capable container and its importer accepts a `media/` prefix |
+| Media, if audio on cards is ever built — media is where sync stops being cheap | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1) ruled audio out on 2026-07-31, left *de-risked* rather than free: [ADR-0008](0008-the-deck-export-format.md) already ships a binary-capable container and its importer accepts a `media/` prefix |
 | A second backend, if the audience ever makes one worthwhile | Not scheduled |

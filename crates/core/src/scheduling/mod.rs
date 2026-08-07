@@ -4,14 +4,14 @@
 //! FSRS-6 arithmetic: given a card's ordered grades and day numbers, what is its memory state, when
 //! is it next due, and which box does it show. Pure — no clock, no randomness, no storage.
 //!
-//! This context owns `leitner-core`'s one dependency, the `fsrs` crate (ADR-0027). Two rules travel
+//! This context owns `cairn-core`'s one dependency, the `fsrs` crate (ADR-0027). Two rules travel
 //! with it and are load-bearing here:
 //!
 //! * **The fuzz is ours, not the crate's** (ADR-0027 §5, ADR-0001 §7). `fsrs` ships its own interval
 //!   fuzz over `rand`, but exposes the **un-fuzzed** interval through [`fsrs::FSRS::next_interval`]
 //!   (which routes to a pure `stability / factor * (retention^(1/decay) − 1)` with no RNG on the
 //!   path — `rand` is confined to the crate's training and simulation modules). This was
-//!   [#78](https://github.com/amin-bf/leitner/issues/78)'s open item and the answer is a fact read
+//!   [#78](https://github.com/amin-bf/cairn/issues/78)'s open item and the answer is a fact read
 //!   out of the pinned version: the un-fuzzed interval is available, so we take it and apply fuzz
 //!   seeded from the [`CardRef`] encoding. A fuzz the crate seeds is one two devices do not agree on.
 //! * **`rand`, `serde`, `rayon`, `ndarray` arrive transitively and are not ours to reach for**
@@ -255,7 +255,7 @@ pub struct OptimisationOutcome {
 /// A handle onto an optimisation run's progress and its cancellation flag (ADR-0014 §3, §4). It
 /// wraps the scheduler crate's own `current()`/`total()` progress and `want_abort` — determinate
 /// progress and cooperative cancellation are already supported and cost one `bool` — so the layers
-/// above `leitner-core` read progress and request cancellation without ever seeing a scheduler type.
+/// above `cairn-core` read progress and request cancellation without ever seeing a scheduler type.
 ///
 /// The two phases fall out of `total()` (ADR-0014 §4, and the corpus-build open item): it reads zero
 /// during the uncancellable corpus build and the pre-training set-up, then becomes positive once the

@@ -3,16 +3,16 @@
 //! crate's own window and activity* that nothing below it can answer.
 //!
 //! An inset is a fact about the window this crate is drawing into, so it is asked here rather than
-//! routed through `leitner-store`, which would then be answering a question about layout. ADR-0016
+//! routed through `cairn-store`, which would then be answering a question about layout. ADR-0016
 //! §5 settled that the platform-seam rule is **per crate** rather than per workspace:
-//! `leitner_store::platform` keeps exactly its two directory lookups, `leitner_export::platform` has
+//! `cairn_store::platform` keeps exactly its two directory lookups, `cairn_export::platform` has
 //! its four file operations, and this is the third such module
 //! ([ADR-0025 §2](../../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)). The
 //! count is not the invariant — *opaque, minimal, enumerable* is.
 //!
 //! **[`launch_file`] is the second function, and it is here for the same reason the first is: it
 //! needs the Activity.** `getIntent()` is an `Activity` method, and this crate is the sole holder of
-//! the activity handle — the user-files seam in `leitner-export` only ever holds the
+//! the activity handle — the user-files seam in `cairn-export` only ever holds the
 //! `android.app.Application` ([ADR-0023 §7](../../../../docs/adr/0023-sending-a-written-file.md),
 //! the reason [`android.rs`](android.rs)'s `ACTIVITY` is stashed separately), so an inbound read
 //! cannot live there and ADR-0016 §5 deliberately keeps that seam at put/get/list/hand_off. The
@@ -36,7 +36,7 @@
 //! **The third arm is the point.** A binary `android` / `not(android)` partition is tidier and can
 //! never fail to compile, which is exactly its defect: a new target would silently take the desktop
 //! arm and fail on a device instead of in CI. The `compile_error!` is what makes the rule real
-//! rather than stylistic. Same discipline as `leitner_store::platform`, deliberately.
+//! rather than stylistic. Same discipline as `cairn_store::platform`, deliberately.
 //!
 //! **A *third* function appearing here is the erosion signal** — that is where to stop and ask why,
 //! not to add it. The two that are here each answer a question only this crate's window or activity
@@ -62,7 +62,7 @@ mod imp;
     target_os = "windows"
 )))]
 compile_error!(
-    "unsupported target: add an arm to leitner_app::platform. \
+    "unsupported target: add an arm to cairn_app::platform. \
      Do not widen an existing arm to cover it — see ADR-0003 and ADR-0009 §4."
 );
 

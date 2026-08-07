@@ -527,7 +527,7 @@ mod tests {
         set
     }
 
-    /// Build a `reviewed` interchange line by hand — `leitner-core` writes no interchange form
+    /// Build a `reviewed` interchange line by hand — `cairn-core` writes no interchange form
     /// (ADR-0004 §11), so tests construct the bytes directly.
     fn rev(writer: &str, seq: u64, note: NoteId, ord: u16, grade: u8, day: i64) -> String {
         // The instant tie-break is derived from the day so ordering is well-defined in these tests.

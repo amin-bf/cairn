@@ -1,4 +1,4 @@
-//! Deck files: the `.ldeck` container, and the import policy that decides what a received file is
+//! Deck files: the `.cdeck` container, and the import policy that decides what a received file is
 //! allowed to change.
 //!
 //! The one artifact that leaves the machine and arrives with someone who does not have this
@@ -11,13 +11,13 @@
 //! gate and the describe stage that derive the declinable preview [`import::Plan`] on every read
 //! (ADR-0022).
 //!
-//! [`collection`] adds the **third profile** in the same container — the `.lcoll` archive a user
+//! [`collection`] adds the **third profile** in the same container — the `.ccoll` archive a user
 //! keeps for themselves (ADR-0016): the log verbatim plus everything that settles, its stamps carried
 //! byte for byte because a restore does not cross a collection boundary, and a restore preview that
 //! stays one line because a restore only ever merges. Every decision here is proven in a plain Rust
 //! environment; the on-device behaviour of the Android seam arm is
-//! [#98](https://github.com/amin-bf/leitner/issues/98)'s, the inbound intent filters are
-//! [#99](https://github.com/amin-bf/leitner/issues/99)'s, and the store-side write and merge-restore
+//! [#98](https://github.com/amin-bf/cairn/issues/98)'s, the inbound intent filters are
+//! [#99](https://github.com/amin-bf/cairn/issues/99)'s, and the store-side write and merge-restore
 //! are the store/app integration pass's.
 
 mod container;

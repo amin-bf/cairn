@@ -10,7 +10,7 @@
 //!
 //! The check below is the whole of the second rule, and it must be applied **identically at both
 //! seams** it guards — restoring a `collection` archive
-//! ([`crate::log`]-carrying, in `leitner-export`) and enrolling a transport (`leitner-sync`, #40).
+//! ([`crate::log`]-carrying, in `cairn-export`) and enrolling a transport (`cairn-sync`, #40).
 //! Writing it once, here in the crate both depend on, is what makes "identically" a property rather
 //! than a hope.
 
@@ -22,7 +22,7 @@ use crate::content::{uuid16_from_canonical, uuid16_to_canonical};
 /// a stranger's is worthless.
 ///
 /// Like [`crate::content::NoteId`] the bytes are stored in RFC 9562 order, so the canonical text form
-/// is a fixed cross-device string; `leitner-core` never mints one — minting is a write-time act at
+/// is a fixed cross-device string; `cairn-core` never mints one — minting is a write-time act at
 /// the edge (ADR-0009 §8, store `CONTEXT.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CollectionId(pub [u8; 16]);

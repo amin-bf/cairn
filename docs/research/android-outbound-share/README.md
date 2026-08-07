@@ -1,6 +1,6 @@
 # Sending a file out of the app on Android — measured on the handset
 
-Evidence for [#70 "Decide: whether the app helps send an exported deck file"](https://github.com/amin-bf/leitner/issues/70).
+Evidence for [#70 "Decide: whether the app helps send an exported deck file"](https://github.com/amin-bf/cairn/issues/70).
 
 [ADR-0016 §5](../../adr/0016-backup-and-restore.md) removed the file **picker** because
 `ACTION_CREATE_DOCUMENT` and `ACTION_OPEN_DOCUMENT` deliver through an activity **result**, which
@@ -14,10 +14,10 @@ launch intent is readable from the activity with no result callback and no dex."
 
 This note is the looking.
 
-**Measured 2026-08-01** on the handset from [#7](https://github.com/amin-bf/leitner/issues/7):
+**Measured 2026-08-01** on the handset from [#7](https://github.com/amin-bf/cairn/issues/7):
 Google Pixel 8 Pro (`husky`), Android 17 / API 37, `arm64-v8a` only. Harness kept off `main`:
 `crates/app/src/probe_share.rs` on the archival branch
-[`prototypes/issue-70`](https://github.com/amin-bf/leitner/tree/prototypes/issue-70), built with the
+[`prototypes/issue-70`](https://github.com/amin-bf/cairn/tree/prototypes/issue-70), built with the
 project's own `cargo apk build` and installed with `adb install -r`. The APK it produced contained
 exactly:
 
