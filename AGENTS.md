@@ -254,6 +254,15 @@ because they are validated findings, not because a web build ships.
    `cargo apk build` needs a **JDK on `PATH`** — `apksigner` is a `java` wrapper, and its absence
    surfaces only at the signing step, *after* a full NDK compile, as
    `apksigner: line 97: exec: java: not found`.
+   **And an intent fired from `am` is not the intent an application sends.**
+   `FLAG_GRANT_READ_URI_PERMISSION` reaches the intent's `data` URI and its `ClipData`, never a bare
+   Parcelable extra; real senders escape that only because `Activity.startActivity` migrates
+   `EXTRA_STREAM` into the clip on the way out, and **`am start --eu` does not**. So a shell-fired
+   `ACTION_SEND` measures the harness rather than the application — and where the receiving code
+   degrades to a refusal by design, it presents as the file simply never arriving, with nothing in
+   `logcat` either. **Send a file the application itself wrote**, which needs no grant at all, to tell
+   a broken reader from a harness that cannot hand one over
+   ([ADR-0024 §5.7](./docs/adr/0024-identifying-a-written-file.md)).
 10. **A backgrounded Android app is frozen, not slowed.** The process moves to the `/background`
     cpuset (~13× the CPU time) and is then frozen outright — `isFrozen=true`, `utime` stopped dead —
     so long work *stops* rather than running slowly: 303 s of wall clock for 4.3 s of work, measured

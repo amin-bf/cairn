@@ -208,6 +208,17 @@ cost this ADR a build cycle each.
 6. **`cargo apk build` needs a JDK on `PATH`.** `apksigner` is a `java` wrapper, and its absence
    surfaces only at the signing step — after a full NDK compile — as
    `apksigner: line 97: exec: java: not found`.
+7. **The read grant reaches the *data* URI, never a bare `EXTRA_STREAM` extra — so an `ACTION_SEND`
+   fired from a shell measures the harness, not the application.**
+   `FLAG_GRANT_READ_URI_PERMISSION` covers the intent's `data` URI and its `ClipData`; a URI sitting
+   only in a Parcelable extra is covered by neither. Real senders never meet this, because
+   `Activity.startActivity` calls `Intent.migrateExtraStreamToClipData()` and the extra is copied into
+   the clip on the way out — **`am start --eu` does not**. The failure is silent twice over: the
+   system logs nothing, and every JNI arm in the launch read degrades to `None` by design, so it
+   presents as the file simply never arriving. **Distinguish the two by sending a file this
+   application owns**, which needs no grant at all — if that arrives and a shell-owned one does not,
+   the reader is correct and the harness is the thing that cannot deliver a grant. Measured both ways
+   while working [#99](https://github.com/amin-bf/leitner/issues/99).
 
 ## Amendments to accepted ADRs
 
@@ -299,7 +310,30 @@ touch.
 
 | Item | Owner |
 |---|---|
-| **Whether an inbound `ACTION_SEND` delivers a readable URI.** The filter is decided here; that the grant arrives is not measured, because completing a share needed a real send from a real account | Implementation, under `AGENTS.md` rule 9 |
+| ~~**Whether an inbound `ACTION_SEND` delivers a readable URI.**~~ The filter is decided here; that the grant arrives is not measured, because completing a share needed a real send from a real account | **Discharged** — see below |
 | **The API 24–28 path.** Scoped storage and `MediaStore.Downloads` as measured are API 29+; `min_sdk_version` is 24. Inherited from [ADR-0016 §5](0016-backup-and-restore.md), not created here | Implementation |
 | **Whether a recipient can read the bytes** — carried forward unchanged from [ADR-0023](0023-sending-a-written-file.md) | Implementation, under `AGENTS.md` rule 9 |
 | Visual treatment of the refusal when an unrecognised file is opened | **Out of scope** — *the visual design pass*, ruled out by [the map](https://github.com/amin-bf/leitner/issues/1) on 2026-07-31 |
+
+### The inbound share, discharged
+
+> **The grant arrives.** A `.ldeck` shared to this application through `ACTION_SEND` was read,
+> sniffed and planned — `Arrived: shared (ACTION_SEND)`, `Sniffed: a deck`
+> ([#99](https://github.com/amin-bf/leitner/issues/99), Pixel 8 Pro, API 37).
+
+**What blocked it was the sender, not a real account.** This item assumed a share could only be
+completed from a messaging application signed into the owner's own accounts. That was too narrow: the
+grant is a property of *any* sender that goes through `Activity.startActivity`, because that is what
+migrates `EXTRA_STREAM` into the intent's `ClipData` (§5.7). A file manager's own share is therefore
+a sufficient sender, and needs no account, no contact and no network.
+
+**It nearly recorded the opposite.** The same share fired from `am start --eu` does *not* arrive, and
+with every JNI arm degrading to `None` that is indistinguishable from a broken reader. What separated
+them was sending a file this application **owns** — readable with no grant at all — which arrived
+through the identical code path. The reader was never in question; the harness simply could not hand
+over a grant. That asymmetry is now §5.7 so the next person does not spend the diagnosis again.
+
+**`ACTION_VIEW` and the Open-with sheet are discharged with it.** §2 accepted appearing in the sheet
+for unrecognised files as the price of having any inbound route, having watched the
+extension-matched filter *fail* to put us there. Under the broad filter we are in that sheet — first,
+above the same four applications §2 recorded us missing from.
