@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-30
-- **Resolves**: [Decide: the deck export format](https://github.com/amin-bf/leitner/issues/13)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the deck export format](https://github.com/amin-bf/cairn/issues/13)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0002: The card model](0002-the-card-model.md),
   [ADR-0004: The review event log](0004-the-review-event-log.md),
   [ADR-0005: The deck model](0005-the-deck-model.md),
@@ -30,7 +30,7 @@ have handed this one work by name:
 - **ADR-0007** — a progress export is `SELECT line FROM log`, never re-encoded, and **export is not a
   file copy**, because WAL leaves recent commits outside `collection.db`.
 
-Since those were written, [Decide: backup and restore](https://github.com/amin-bf/leitner/issues/37)
+Since those were written, [Decide: backup and restore](https://github.com/amin-bf/cairn/issues/37)
 was graduated from the map's fog and states in its own body that an explicit export's *container is
 this ticket's*. That draws the scope boundary this ADR opens with.
 
@@ -40,7 +40,7 @@ this ticket's*. That draws the scope boundary this ADR opens with.
 
 The container defined below carries a **declared profile**. This ADR specifies the **deck** profile in
 full. A **progress** profile — ADR-0004 §11 interchange lines — is *reserved*: the container admits it,
-and [#37](https://github.com/amin-bf/leitner/issues/37) decides whether and how a whole-collection
+and [#37](https://github.com/amin-bf/cairn/issues/37) decides whether and how a whole-collection
 artifact is offered.
 
 > **Amended by [ADR-0016 §2](0016-backup-and-restore.md): the reserved profile is specified as
@@ -110,7 +110,7 @@ Rejected alternatives:
 window as gzip, so log rows in a progress member would compress roughly **4×** rather than zstd's
 **11.76×** — about 27 MB per decade against 15 MB. This is recoverable without changing the container,
 by placing a zstd-compressed payload in a `stored` (uncompressed) zip entry. That choice belongs to
-[#37](https://github.com/amin-bf/leitner/issues/37) and is not made here.
+[#37](https://github.com/amin-bf/cairn/issues/37) and is not made here.
 
 ### 3. Stamps do not travel; import restamps only what changes
 
@@ -136,7 +136,7 @@ nothing to sync.
 boundary, so stamps must reset. A restore re-enters *the same* collection, so its stamps must travel
 **byte for byte** — otherwise a restored device's fresh counters could outrank genuinely later edits
 still held on another device. Same container, opposite rule, decided by whether a collection boundary
-is crossed. Handed to [#37](https://github.com/amin-bf/leitner/issues/37), and it is a live argument
+is crossed. Handed to [#37](https://github.com/amin-bf/cairn/issues/37), and it is a live argument
 that the map's **collection identity** fog is load-bearing: telling the two operations apart requires
 knowing which collection a payload came from.
 
@@ -344,7 +344,7 @@ for a deck.
 
 A distinct extension per profile, sharing one container format, is how the operating system and the
 user tell a deck file from a whole-collection artifact **before** opening it. Naming the progress
-profile's extension belongs to [#37](https://github.com/amin-bf/leitner/issues/37).
+profile's extension belongs to [#37](https://github.com/amin-bf/cairn/issues/37).
 
 > **Half amended by [ADR-0024 §1](0024-identifying-a-written-file.md).** True of the **user**, who
 > reads the name, and true of the **desktop**. False of the **operating system on Android**, which
@@ -479,7 +479,7 @@ rule ensures an acquired definition can never displace one the build already has
 ### [ADR-0005 §5](0005-the-deck-model.md) — the deck-id-keyed slot holds authoring values too
 
 §5 describes the mutable-surface slot keyed by deck id as holding **personal** preferences, and defers
-to [#21](https://github.com/amin-bf/leitner/issues/21) the question of whether such a preference syncs.
+to [#21](https://github.com/amin-bf/cairn/issues/21) the question of whether such a preference syncs.
 
 **Amendment**: the slot holds two kinds of value — **personal** ones (#21's, whose syncing remains
 open) and **authoring** ones such as §9's `{revision, digest}`, which **must** sync. Both are alike in
@@ -488,7 +488,7 @@ syncing is open at all.
 
 ## Requirements this places on downstream tickets
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37)
 
 1. The **progress profile** is reserved but unspecified (§1). Its payload is ADR-0004 §11 interchange
    lines; the container, versioning, path rules and determinism of this ADR apply unchanged.
@@ -499,13 +499,13 @@ syncing is open at all.
    roughly 12× where deflate gives roughly 4×, without changing the container.
 4. The **extension** for a whole-collection artifact (§10).
 
-### [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
+### [#21 — new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
 
 1. ADR-0005 §5's deck-id-keyed slot is **not uniformly personal** (see Amendments). A daily limit is a
    personal value and its syncing remains #21's to decide; §9's revision is an authoring value and
    already syncs.
 
-### The authoring/editing experience ([#28](https://github.com/amin-bf/leitner/issues/28))
+### The authoring/editing experience ([#28](https://github.com/amin-bf/cairn/issues/28))
 
 1. The export screen **states the count of unfiled notes** (§8), so a user cannot silently omit them.
 2. An import **reports** the tombstones it applied (§5) and the notes it skipped on a create path
@@ -514,7 +514,7 @@ syncing is open at all.
    auto-populated.
 
 > **All three discharged by [ADR-0022](0022-the-import-preview-and-export-report.md)**, which took
-> them over after [#28](https://github.com/amin-bf/leitner/issues/28) closed without reaching any of
+> them over after [#28](https://github.com/amin-bf/cairn/issues/28) closed without reaching any of
 > them — one of two dropped handoffs onto that ticket caught by the 2026-08-01 *Open items* sweep.
 > §9 there states the unfiled count, as a **collection-wide fact rather than a property of the deck
 > selection**, since an unfiled note is in no deck and no selection can reach it. §3 states both
@@ -550,7 +550,7 @@ authoritative, and this ADR keeps the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| Progress profile, restore-keeps-stamps, compression hatch, backup extension | [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) |
-| Whether a *personal* deck-id-keyed preference syncs | **Out of scope** — [#21](https://github.com/amin-bf/leitner/issues/21) never needed such a preference to exist (the new-card rate is global), so the question survives it unanswered and is now [ADR-0005](0005-the-deck-model.md)'s open row, inherited by whatever effort builds *per-deck new-card on/off* |
+| Progress profile, restore-keeps-stamps, compression hatch, backup extension | [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37) |
+| Whether a *personal* deck-id-keyed preference syncs | **Out of scope** — [#21](https://github.com/amin-bf/cairn/issues/21) never needed such a preference to exist (the new-card rate is global), so the question survives it unanswered and is now [ADR-0005](0005-the-deck-model.md)'s open row, inherited by whatever effort builds *per-deck new-card on/off* |
 | ~~Collection identity, needed to tell import from restore~~ — **settled by [ADR-0016 §4](0016-backup-and-restore.md)**: a UUIDv4 adopted and never re-minted, which also **upgrades [ADR-0013 §10](0013-the-sync-transport.md) from a structural accident to a checked invariant** | — |
 | ~~**Export/import reporting surfaces** — what the user is shown when a deck is exported, and what an import preview says~~ — **closed by [ADR-0022](0022-the-import-preview-and-export-report.md)**: an import is **gated**, previewed and declinable, on the ground that ADR-0016 §4 makes a regretted import the one destructive operation in this specification with no recovery path. The manifest **gates** (§7's format integer, §4's revision floor, §6's path rules, §1's profile) and the payload **describes** — the preview states effects on the collection, not the file's contents. Export reports **where the file went**, since ADR-0016 §5's no-picker rule means the user chose neither name nor location | — |

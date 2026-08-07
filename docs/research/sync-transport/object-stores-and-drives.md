@@ -1,11 +1,11 @@
 # Sync transport: key-value stores and personal cloud drives, reached directly from the client
 
-**Research ticket:** [#33](https://github.com/amin-bf/leitner/issues/33) (under wayfinder map #1) · **Date of research:** 2026-07-30
+**Research ticket:** [#33](https://github.com/amin-bf/cairn/issues/33) (under wayfinder map #1) · **Date of research:** 2026-07-30
 **Question:** Can a rented object store, or a consumer cloud drive reached through its own API, carry the review log between a user's devices with **no server of our own** — and what does each actually cost in bytes, requests, money, credentials and setup steps?
 
 This is a **research** note. It gathers facts and sharpens trade-offs; it decides nothing. Every non-obvious claim carries an inline primary source. Claims I reasoned rather than sourced are marked **[inference]**. Claims I measured are marked **[measured]** and the command is in §10.
 
-**Scope.** Clients are **desktop and Android only** — the web target was ruled out while resolving [#12](https://github.com/amin-bf/leitner/issues/12), so browser and cross-origin constraints are out of scope here. One user, 2–5 devices, no sharing between users. Two data shapes, per [ADR-0004](../../adr/0004-the-review-event-log.md): an append-only review log where every row carries `(writer id, sequence number)` and **each device appends only to its own rows**, plus a small mutable surface (deck names, tags, scheduler config, deletion flags) that settles per key by a counter that jumps above any counter it sees.
+**Scope.** Clients are **desktop and Android only** — the web target was ruled out while resolving [#12](https://github.com/amin-bf/cairn/issues/12), so browser and cross-origin constraints are out of scope here. One user, 2–5 devices, no sharing between users. Two data shapes, per [ADR-0004](../../adr/0004-the-review-event-log.md): an append-only review log where every row carries `(writer id, sequence number)` and **each device appends only to its own rows**, plus a small mutable surface (deck names, tags, scheduler config, deletion flags) that settles per key by a counter that jumps above any counter it sees.
 
 Sibling notes under this ticket cover the other candidate families. This one covers **(A) object storage the user rents** and **(B) personal cloud drives via their own APIs**.
 
@@ -558,6 +558,6 @@ route list_folder/longpoll (...)
 | Android network is disabled in Rare and Restricted standby buckets | **High** | Stated in Android's own power-management table |
 | All four Rust crates build for `aarch64-linux-android` | **High** | Measured today, `cargo check` only — not `cargo build`, so linking is unverified |
 
-**Not covered here, by design:** synced folders, WebDAV and a git remote (sibling notes under this ticket); conflict UX and the plane case (out of scope per the ticket); the web target (ruled out in [#12](https://github.com/amin-bf/leitner/issues/12)).
+**Not covered here, by design:** synced folders, WebDAV and a git remote (sibling notes under this ticket); conflict UX and the plane case (out of scope per the ticket); the web target (ruled out in [#12](https://github.com/amin-bf/cairn/issues/12)).
 
 **The two things a decision session should test before committing**, because they are cheap to test and expensive to be wrong about: (1) whether conditional writes work on the chosen store, with a real key and two racing clients; (2) how long a real Android handset, left alone for a fortnight, actually goes between successful background syncs.

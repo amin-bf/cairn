@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Resolves**: [Decide: what an import preview states, and what export reports back](https://github.com/amin-bf/leitner/issues/68)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: what an import preview states, and what export reports back](https://github.com/amin-bf/cairn/issues/68)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0002: The card model](0002-the-card-model.md),
   [ADR-0005: The deck model](0005-the-deck-model.md),
   [ADR-0006: The review session experience](0006-the-review-session-experience.md),
@@ -21,7 +21,7 @@ it. The manifest is readable from the zip central directory **without inflating 
 that property is the stated reason the container is a zip at all — *"so the application can show
 '3 decks, 1,240 notes, 12 retractions, requires kinds: vocab, cloze' before committing to an
 import."* No ADR ever said what the preview shows. Its *Open items* row named
-[#28](https://github.com/amin-bf/leitner/issues/28), which closed without reaching it.
+[#28](https://github.com/amin-bf/cairn/issues/28), which closed without reaching it.
 
 The gap matters because ADR-0008 gives an import a great deal to be surprising about, and every one
 of these is invisible from a file name:
@@ -33,7 +33,7 @@ of these is invisible from a file name:
 - **Note tombstones travel; deck deletion never does** (§5). An import can delete notes.
 - **On import, the file wins for everything it carries** ([ADR-0005 §9](0005-the-deck-model.md)),
   including over a user's own rename of the deck — a loss whose fix
-  [the map](https://github.com/amin-bf/leitner/issues/1) has ruled out of scope.
+  [the map](https://github.com/amin-bf/cairn/issues/1) has ruled out of scope.
 
 Two constraints this inherits rather than reopens. [ADR-0016 §5](0016-backup-and-restore.md) settled
 that there is **no file picker on either platform**, so the entry points are a well-known location,
@@ -45,7 +45,7 @@ argue against rather than from.
 
 **How the visual design pass bounds this ADR.** Everything below specifies what these surfaces
 *state* and *when*. How they look is the visual design pass's, which
-[the map](https://github.com/amin-bf/leitner/issues/1) ruled out of scope on 2026-07-31 — the same
+[the map](https://github.com/amin-bf/cairn/issues/1) ruled out of scope on 2026-07-31 — the same
 split [ADR-0015](0015-the-sync-experience.md) drew for sync settings and the notice channel.
 
 ## Decision
@@ -424,7 +424,7 @@ to admit desktop drag-and-drop as additive.
 **No exhortation and no next step.** [ADR-0016 §6](0016-backup-and-restore.md)'s *"not a backup until
 the user moves it off the device"* fact does **not** transfer: it exists to correct a false belief
 about safety, and a deck file exists to be sent to someone. There is no false belief here to correct.
-Whether the application helps send it is [#70](https://github.com/amin-bf/leitner/issues/70)'s.
+Whether the application helps send it is [#70](https://github.com/amin-bf/cairn/issues/70)'s.
 
 > **It does — and this section is amended rather than replaced, by
 > [ADR-0023](0023-sending-a-written-file.md).** This section's handoff predicted that *"§10's location
@@ -444,7 +444,7 @@ Whether the application helps send it is [#70](https://github.com/amin-bf/leitne
 >
 > **One thing this section could not have known.** `MediaStore` discards the media type we declare
 > and derives it from the extension, so a `.ldeck` and a `.lcoll` are both `application/octet-stream`
-> on the device. That is [#72](https://github.com/amin-bf/leitner/issues/72)'s, and it reaches
+> on the device. That is [#72](https://github.com/amin-bf/cairn/issues/72)'s, and it reaches
 > §11's list — *"query `MediaStore` for our extensions"* — as well as this section.
 
 ### 11. The list reads manifests
@@ -538,7 +538,7 @@ act. Nothing is ever populated from an operating-system user name or a device la
 
 ## Requirements this places on downstream tickets
 
-### [#70 — sending an exported deck file](https://github.com/amin-bf/leitner/issues/70)
+### [#70 — sending an exported deck file](https://github.com/amin-bf/cairn/issues/70)
 
 1. §10's report is written on the assumption that the application does **not** help send the file. If
    an outbound share affordance is adopted, §10's location line is what it replaces.
@@ -589,6 +589,6 @@ the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| ~~**Whether the application helps send an exported deck file**~~ — **closed by [ADR-0023](0023-sending-a-written-file.md)**: it does, on both platforms, never automatically. The picker argument was confirmed not to reach a send, by measurement in the shipped APK shape rather than by inference | [#70 — sending an exported deck file](https://github.com/amin-bf/leitner/issues/70) |
-| ~~**`MediaStore` collision behaviour on the handset**~~ — **answered**: it **dedupes**, to `French A1.ldeck (1)` — suffix after the extension. §10 was written to be correct under all three outcomes and is. What the mangled extension costs is a new question | [#72 — how a written file is identified again](https://github.com/amin-bf/leitner/issues/72) |
-| Visual treatment of the preview, the export screen, the export report and the file list. What they *say* and when they appear is settled here; only how they look is open | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened and [the map](https://github.com/amin-bf/leitner/issues/1) ruled out on 2026-07-31 |
+| ~~**Whether the application helps send an exported deck file**~~ — **closed by [ADR-0023](0023-sending-a-written-file.md)**: it does, on both platforms, never automatically. The picker argument was confirmed not to reach a send, by measurement in the shipped APK shape rather than by inference | [#70 — sending an exported deck file](https://github.com/amin-bf/cairn/issues/70) |
+| ~~**`MediaStore` collision behaviour on the handset**~~ — **answered**: it **dedupes**, to `French A1.ldeck (1)` — suffix after the extension. §10 was written to be correct under all three outcomes and is. What the mangled extension costs is a new question | [#72 — how a written file is identified again](https://github.com/amin-bf/cairn/issues/72) |
+| Visual treatment of the preview, the export screen, the export report and the file list. What they *say* and when they appear is settled here; only how they look is open | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened and [the map](https://github.com/amin-bf/cairn/issues/1) ruled out on 2026-07-31 |

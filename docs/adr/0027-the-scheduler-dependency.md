@@ -2,7 +2,7 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Surfaced by**: [The domain spine: content, scheduling, the log form, and replay](https://github.com/amin-bf/leitner/issues/78)
+- **Surfaced by**: [The domain spine: content, scheduling, the log form, and replay](https://github.com/amin-bf/cairn/issues/78)
 - **Related**: [ADR-0001 §1 §6 §7](0001-scheduling-algorithm-and-grade-scale.md) (FSRS-6 via the
   crate, pinned exactly; the parameter vector; fuzz seeded from card identity),
   [ADR-0009 §2 §3 §6 §8](0009-crate-and-workspace-layout.md) (the empty dependency list, contexts as
@@ -10,7 +10,7 @@
   [ADR-0007 §3](0007-the-local-store.md) (the derivation version carries the pinned crate version),
   [ADR-0014 §3](0014-when-parameter-optimisation-runs.md) (the optimiser on a worker thread)
 
-**This is the first ADR written after [the map](https://github.com/amin-bf/leitner/issues/1) closed**,
+**This is the first ADR written after [the map](https://github.com/amin-bf/cairn/issues/1) closed**,
 and it is the shape the map's own closing note predicted: not fog, but a decision that fell between
 two accepted documents because each believed the other owned it. It was found by writing the first
 implementation ticket, which is the earliest anything could have found it.
@@ -73,7 +73,7 @@ A crate may be added to `leitner-core` only if **all** of these hold:
    process. The test is §2's own: can `cargo test -p leitner-core` still run with no database, no
    window and no handset?
 3. **It builds for every supported target.** Desktop and Android today. Established for `fsrs` by
-   [#20](https://github.com/amin-bf/leitner/issues/20), which linked and ran it on the handset.
+   [#20](https://github.com/amin-bf/cairn/issues/20), which linked and ran it on the handset.
 4. **It is pinned exactly**, for the reason ADR-0001 §1 gives.
 5. **A new ADR records it.** This one is the precedent for the form, not for the leniency.
 
@@ -118,8 +118,8 @@ Logging still belongs at the edges, in `leitner-store` and `leitner-app`.
 is a problem to solve in the open rather than a detail to settle quietly, because a fuzz the crate
 seeds is a fuzz two devices do not agree on.
 
-**`rayon` is compiled in and never reached.** [#20](https://github.com/amin-bf/leitner/issues/20)
-confirmed by measurement what [#2](https://github.com/amin-bf/leitner/issues/2) inferred statically:
+**`rayon` is compiled in and never reached.** [#20](https://github.com/amin-bf/cairn/issues/20)
+confirmed by measurement what [#2](https://github.com/amin-bf/cairn/issues/2) inferred statically:
 `compute_parameters` is single-threaded at runtime. Recorded so that nobody later reads the
 dependency as an invitation to parallelise, and so that a future version that *does* reach it is
 noticed as a change rather than absorbed as normal.
@@ -179,7 +179,7 @@ the disagreement is invisible — every value still looks like a plausible inter
 
 ## Open items handed onward
 
-- **Whether the crate exposes an un-fuzzed interval** (§5) — [#78](https://github.com/amin-bf/leitner/issues/78)'s,
+- **Whether the crate exposes an un-fuzzed interval** (§5) — [#78](https://github.com/amin-bf/cairn/issues/78)'s,
   and the answer is a fact to be read out of the pinned version rather than a decision.
 - **Nothing else.** The contradiction is resolved, the rule that replaces it is stated, and what the
   dependency does *not* license is written down.

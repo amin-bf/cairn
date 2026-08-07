@@ -2,10 +2,10 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-29
-- **Resolves**: [Prototype: the review session experience](https://github.com/amin-bf/leitner/issues/11)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Prototype: the review session experience](https://github.com/amin-bf/cairn/issues/11)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: two rounds of egui/eframe variants at tag
-  [`prototypes/issue-11`](https://github.com/amin-bf/leitner/tree/prototypes/issue-11)
+  [`prototypes/issue-11`](https://github.com/amin-bf/cairn/tree/prototypes/issue-11)
   (`prototypes/review-session-11/`), judged live by the repo owner on a Pixel 8 Pro and on
   desktop.
 - **Related**: [ADR-0001](0001-scheduling-algorithm-and-grade-scale.md) (grades, box, FSRS-6),

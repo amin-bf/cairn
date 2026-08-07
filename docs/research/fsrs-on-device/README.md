@@ -1,14 +1,14 @@
 # FSRS parameter optimisation on the handset — measured
 
-Evidence for [#20 "Prove FSRS parameter optimisation runs in-client on Android"](https://github.com/amin-bf/leitner/issues/20).
-[#2](https://github.com/amin-bf/leitner/issues/2) proved the training path *compiles* for
+Evidence for [#20 "Prove FSRS parameter optimisation runs in-client on Android"](https://github.com/amin-bf/cairn/issues/20).
+[#2](https://github.com/amin-bf/cairn/issues/2) proved the training path *compiles* for
 `aarch64-linux-android`; `cargo check` needs no linker, so nothing about linking, loading or
 running was established. This note measures all three on the real device.
 
 **Measured 2026-07-30** on the handset from
-[#7](https://github.com/amin-bf/leitner/issues/7): Google Pixel 8 Pro (`husky`), Android 17 /
+[#7](https://github.com/amin-bf/cairn/issues/7): Google Pixel 8 Pro (`husky`), Android 17 /
 API 37, `arm64-v8a` only, 4 KB pages. Harness, kept at an archival tag rather than on `main`:
-[`prototypes/fsrs-android-bench/`](https://github.com/amin-bf/leitner/tree/prototypes/issue-20/prototypes/fsrs-android-bench),
+[`prototypes/fsrs-android-bench/`](https://github.com/amin-bf/cairn/tree/prototypes/issue-20/prototypes/fsrs-android-bench),
 `fsrs = "=6.6.1"`,
 built `--release` with `lto = true`, `codegen-units = 1`, `opt-level = 3`, via
 `cargo ndk` on NDK 29.0.13846066.
@@ -71,7 +71,7 @@ handset is **1.6× slower than a desktop**, not an order of magnitude.
 
 ## The optimiser is single-threaded, and that is now measured rather than inferred
 
-[#2](https://github.com/amin-bf/leitner/issues/2) inferred from call-site analysis that
+[#2](https://github.com/amin-bf/cairn/issues/2) inferred from call-site analysis that
 `compute_parameters` never reaches the `rayon` thread pool. The shell runs confirm it at runtime:
 the process holds **exactly one worker thread** throughout training (the harness's own sampling
 thread is the only other one). `rayon` is linked but never scheduled onto, and no thread pool
@@ -135,9 +135,9 @@ Stated plainly, because the numbers above are otherwise easy to over-read.
 
 ## Consequences for the map
 
-- **[#20](https://github.com/amin-bf/leitner/issues/20)'s worst case is dead.** Optimisation is
+- **[#20](https://github.com/amin-bf/cairn/issues/20)'s worst case is dead.** Optimisation is
   not desktop-only, so the "parameters differ per device" divergence flagged for
-  [#9](https://github.com/amin-bf/leitner/issues/9) never arises from a *capability* gap. The
+  [#9](https://github.com/amin-bf/cairn/issues/9) never arises from a *capability* gap. The
   structural answer in [ADR-0001 §6](../../adr/0001-scheduling-algorithm-and-grade-scale.md) —
   one device optimises and publishes 84 bytes, the others consume it — still stands, and is now a
   convenience rather than a necessity.

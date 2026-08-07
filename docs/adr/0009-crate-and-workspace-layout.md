@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-30
-- **Resolves**: [Decide: crate and workspace layout](https://github.com/amin-bf/leitner/issues/14)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: crate and workspace layout](https://github.com/amin-bf/cairn/issues/14)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: every prior ADR. This one gives the other seven a place to live.
 
 ## Context
@@ -333,7 +333,7 @@ Two independent reasons, either of which would be enough:
   property §2 exists to protect.
 - **The shape.** Export spans contexts. It reads `content` today, and ADR-0008 §1 reserves a
   **progress** profile carrying ADR-0004 §11 interchange lines, which
-  [#37](https://github.com/amin-bf/leitner/issues/37) will specify — so it will read `log` too. A
+  [#37](https://github.com/amin-bf/cairn/issues/37) will specify — so it will read `log` too. A
   thing that spans content and log is a peer of `replay`, not a module inside either.
 
 **`leitner-app` depends on `leitner-export`**, so the UI can offer import and export without
@@ -348,21 +348,21 @@ zero-dependency rule ambiguous on day one. It is cheap to reverse: folding `expo
 
 ## Requirements this places on downstream tickets
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37)
 
 1. The **progress** profile lands in `leitner-export`, not a new crate — ADR-0008 §1 rejected a
    second container, and §11 above gives the first one a home.
 2. It is the point at which `leitner-export` gains a dependency on `log`. That is expected, not a
    violation.
 
-### [#39 / #40 — sync transport and the sync experience](https://github.com/amin-bf/leitner/issues/39)
+### [#39 / #40 — sync transport and the sync experience](https://github.com/amin-bf/cairn/issues/39)
 
 1. A `sync` context is **anticipated but not created**. It will depend on `log` (the version summary
    is already `log`'s term) and will need a network dependency, which cannot go in `core` under §2 —
    so expect a fifth crate, `leitner-sync`, rather than a fifth module.
 2. The version summary and the ahead/behind test are `log`'s, not sync's. Do not reimplement them.
 
-### [#42 — when parameter optimisation runs](https://github.com/amin-bf/leitner/issues/42)
+### [#42 — when parameter optimisation runs](https://github.com/amin-bf/cairn/issues/42)
 
 1. The optimiser is a `scheduling` concern, but *when it runs* is a `ui` one — Android freezes a
    backgrounded app, so scheduling the work is a foreground-lifecycle question.
@@ -411,7 +411,7 @@ replaced by a pointer to its context:
 
 | Item | Owner |
 |---|---|
-| ~~A `sync` crate, once the transport is chosen~~ — **created by [ADR-0013](0013-the-sync-transport.md)**: `leitner-sync` is the sixth crate, which `CONTEXT-MAP.md` had predicted before the decision existed. That ADR also recorded a **contradiction on this ADR's own seam** — its handoff sends any new platform capability into `leitner-store::platform`, which §4 forbids — left unresolved there and since answered by [ADR-0016 §9](0016-backup-and-restore.md): the seam rule is **per crate**, so `leitner-export` gets its own platform module and `leitner-store::platform` keeps exactly two functions | [#39](https://github.com/amin-bf/leitner/issues/39) |
+| ~~A `sync` crate, once the transport is chosen~~ — **created by [ADR-0013](0013-the-sync-transport.md)**: `leitner-sync` is the sixth crate, which `CONTEXT-MAP.md` had predicted before the decision existed. That ADR also recorded a **contradiction on this ADR's own seam** — its handoff sends any new platform capability into `leitner-store::platform`, which §4 forbids — left unresolved there and since answered by [ADR-0016 §9](0016-backup-and-restore.md): the seam rule is **per crate**, so `leitner-export` gets its own platform module and `leitner-store::platform` keeps exactly two functions | [#39](https://github.com/amin-bf/cairn/issues/39) |
 | Whether `export` should have been a module in `content` after all | Reversible while the crate is empty |
 | Release signing configuration for the APK | Out of scope: deployment and CI |
 | Build sequencing for the implementing fleet — what lands first | The fleet, not this map |

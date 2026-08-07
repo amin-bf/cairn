@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-28
-- **Resolves**: [Decide: the review event log format](https://github.com/amin-bf/leitner/issues/9)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the review event log format](https://github.com/amin-bf/cairn/issues/9)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/local-first-event-log/`](../research/local-first-event-log/README.md)
 - **Related**: [ADR-0001: Scheduling algorithm and grade scale](0001-scheduling-algorithm-and-grade-scale.md),
   [ADR-0002: The card model](0002-the-card-model.md)
@@ -27,8 +27,8 @@ have been deferred to it by name:
 
 The scoping principle throughout: this ADR owns the log's *logical* content and one canonical
 interchange form. It does not own local storage
-([#12](https://github.com/amin-bf/leitner/issues/12)), the export container
-([#13](https://github.com/amin-bf/leitner/issues/13)), or sync transport, which remains deliberately
+([#12](https://github.com/amin-bf/cairn/issues/12)), the export container
+([#13](https://github.com/amin-bf/cairn/issues/13)), or sync transport, which remains deliberately
 deferred.
 
 ## Decision
@@ -76,7 +76,7 @@ that discards good history alongside bad.
 
 **Suspension** — "stop showing me this card" — is deliberately **not** decided here. It is personal
 progress so it cannot live in the note store, but it is a mutable flag rather than a fact that
-happened. It belongs with [#26](https://github.com/amin-bf/leitner/issues/26), which owns the leech
+happened. It belongs with [#26](https://github.com/amin-bf/cairn/issues/26), which owns the leech
 policy that needs it, and it is additive: a fourth row kind costs nothing under the rule above.
 
 > **Settled by [ADR-0010 §5](0010-leeches.md): it is *not* a fourth row kind.** The reasoning in the
@@ -217,7 +217,7 @@ wrong writes wrong day numbers permanently. §8 confronts this.
 **"Due today" and daily limits are a different question and use the device's *local* day**, not the
 collection day. `delta_t` is a difference, so it needs only a consistent scale; "today" needs to
 match the day the user is living in. Binding on
-[#21](https://github.com/amin-bf/leitner/issues/21).
+[#21](https://github.com/amin-bf/cairn/issues/21).
 
 ### 5. What a review row carries
 
@@ -236,7 +236,7 @@ duration    4200 ms               how long the answer took
 grades even behind a UI that hides some, because *a grade never recorded cannot be recovered*.
 Duration is the same class of fact: nobody can reconstruct next year how long a card was sat on
 tonight. It has near-term consumers — time-studied statistics, and a leech signal for
-[#26](https://github.com/amin-bf/leitner/issues/26), since a card always answered correctly after
+[#26](https://github.com/amin-bf/cairn/issues/26), since a card always answered correctly after
 twenty seconds of grinding is a bad card. It costs a handful of bytes.
 
 **Deliberately absent:**
@@ -249,7 +249,7 @@ twenty seconds of grinding is a bad card. It costs a handful of bytes.
   closed off, and because the residual cause (differing app versions) leaves no permanent trace and
   heals on its own (§9).
 - **Which deck the card was in.** Deck membership is mutable content
-  ([#10](https://github.com/amin-bf/leitner/issues/10)); per-deck statistics should follow where a
+  ([#10](https://github.com/amin-bf/cairn/issues/10)); per-deck statistics should follow where a
   card lives *now*.
 - **Flags such as "this was a relearning re-show" or "this was the first ever review".** Both fall out
   of replay (§1).
@@ -442,7 +442,7 @@ with nothing to repair.
 
 Growth is bounded by arithmetic, not by policy. Heavy use — 200 reviews a day — is about 73,000 rows
 a year: roughly 11 MB a year in the interchange form of §11, or under 2 MB compressed, and a packed
-local representation ([#12](https://github.com/amin-bf/leitner/issues/12)'s choice) would be smaller
+local representation ([#12](https://github.com/amin-bf/cairn/issues/12)'s choice) would be smaller
 still. A decade of heavy use is therefore around 110 MB raw and 15 MB compressed. Typical use is a
 quarter of that. Against the storage of any device we target, this is not a problem in any timeframe
 the application will exist for.
@@ -479,7 +479,7 @@ irreversible on that device.** Moving the cutoff back later cannot recover what 
 ### 11. The interchange form
 
 This ADR owns the row schema and **one canonical interchange form** — how a row is written when it
-moves between devices or into an export. [#12](https://github.com/amin-bf/leitner/issues/12) owns
+moves between devices or into an export. [#12](https://github.com/amin-bf/cairn/issues/12) owns
 local storage, which may be anything (database columns, for instance) provided it round-trips
 exactly. The interchange form is the log's real identity: what a future implementation must agree
 with, and what makes device-scoped segments on a commodity store possible.
@@ -533,7 +533,7 @@ bad byte must never render the application unusable.
 
 ## Requirements this places on downstream tickets
 
-### [#12 — the local store](https://github.com/amin-bf/leitner/issues/12)
+### [#12 — the local store](https://github.com/amin-bf/cairn/issues/12)
 
 1. Must **round-trip the interchange form of §11 exactly**, including fields it does not understand.
 2. Owns the **disposable cache** of §9 — including its invalidation and the guarantee that losing it
@@ -541,7 +541,7 @@ bad byte must never render the application unusable.
 3. Needs efficient **append** and **per-card review lookup**; replay is per card.
 4. The **mutable store** of §7 needs per-value stamps, not per-record ones.
 
-### [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13)
+### [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13)
 
 1. A progress export is **log rows**, in the interchange form.
 2. **Writer ids are a device fingerprint.** Exporting progress exports them. This needs scrubbing or
@@ -549,13 +549,13 @@ bad byte must never render the application unusable.
 3. Content export is the note store; §7's stamps travel with it or are reset on import, which #13
    decides.
 
-### [#10 — the deck model](https://github.com/amin-bf/leitner/issues/10)
+### [#10 — the deck model](https://github.com/amin-bf/cairn/issues/10)
 
 1. **Deck membership is mutable content and never appears in the log.** A review row does not record
    which deck the card was in (§5).
 2. Deck fields settle by §7 like any other mutable value.
 
-### [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
+### [#21 — new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
 
 1. **"Today" is the device's local day**, not the collection day scale used for `delta_t` (§4).
    > **Discharged by [ADR-0011 §5](0011-new-card-rate-and-daily-limits.md).** The daily new-card
@@ -564,7 +564,7 @@ bad byte must never render the application unusable.
    > replay?"* test for the same two reasons ADR-0010 §5 gave for suspension. Constraint 1 needs no
    > third widening.
 
-### [#26 — leeches](https://github.com/amin-bf/leitner/issues/26)
+### [#26 — leeches](https://github.com/amin-bf/cairn/issues/26)
 
 1. ~~**Owns suspension**, which is additive as a fourth row kind (§1).~~
    > **Amended by [ADR-0010 §5](0010-leeches.md).** Suspension is a value on the **§7 mutable
@@ -575,7 +575,7 @@ bad byte must never render the application unusable.
 2. **Answer duration is available** as a leech signal (§5) — taken up by ADR-0010 §6 as a *cost
    display*, having been rejected as a trigger for being too noisy (ADR-0010 §3).
 
-### [#11 — the review session prototype](https://github.com/amin-bf/leitner/issues/11)
+### [#11 — the review session prototype](https://github.com/amin-bf/cairn/issues/11)
 
 1. A same-session re-show after a lapse is a **real logged review** with a zero day gap, not a UI-only
    loop (ADR-0001 §5, §1 here).
@@ -609,9 +609,9 @@ authoritative, and this ADR keeps the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| Local storage engine; the cache; per-value stamps | [#12 — the local store](https://github.com/amin-bf/leitner/issues/12) |
-| Export container; scrubbing writer ids from a progress export | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
-| ~~Suspension as a fourth row kind~~ — **closed by [ADR-0010 §5](0010-leeches.md)**: it is a value on the §7 mutable surface, keyed by `CardRef`, and no fourth row kind exists | [#26 — leeches](https://github.com/amin-bf/leitner/issues/26) |
-| ~~How the mutable store moves between devices — snapshot or change stream~~ — **closed by [ADR-0013 §7](0013-the-sync-transport.md)**: the question dissolves, because a writer's own counter is monotone, so compacting its change stream to the latest value per key *is* a per-writer snapshot. Deltas per sync, snapshot as the roll-up result. Publishing it **per writer** rather than as one shared document is what keeps conditional writes out of the design | [#39 — the sync transport](https://github.com/amin-bf/leitner/issues/39) |
+| Local storage engine; the cache; per-value stamps | [#12 — the local store](https://github.com/amin-bf/cairn/issues/12) |
+| Export container; scrubbing writer ids from a progress export | [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13) |
+| ~~Suspension as a fourth row kind~~ — **closed by [ADR-0010 §5](0010-leeches.md)**: it is a value on the §7 mutable surface, keyed by `CardRef`, and no fourth row kind exists | [#26 — leeches](https://github.com/amin-bf/cairn/issues/26) |
+| ~~How the mutable store moves between devices — snapshot or change stream~~ — **closed by [ADR-0013 §7](0013-the-sync-transport.md)**: the question dissolves, because a writer's own counter is monotone, so compacting its change stream to the latest value per key *is* a per-writer snapshot. Deltas per sync, snapshot as the roll-up result. Publishing it **per writer** rather than as one shared document is what keeps conditional writes out of the design | [#39 — the sync transport](https://github.com/amin-bf/cairn/issues/39) |
 | Whether a precise clock-correction row is ever needed | Deferred until the failure is seen |
-| ~~"Everything is merged, you are safe" reassurance in the UI~~ — **refused by [ADR-0015 §1](0015-the-sync-experience.md)**, and the reason is that the app is not entitled to the claim: after a sync it knows every writer's highest *published* sequence and never whether another device has reviewed since. The resting surface states a fact instead — *"last caught up ⟨when⟩"* | [#40 — the sync experience](https://github.com/amin-bf/leitner/issues/40) |
+| ~~"Everything is merged, you are safe" reassurance in the UI~~ — **refused by [ADR-0015 §1](0015-the-sync-experience.md)**, and the reason is that the app is not entitled to the claim: after a sync it knows every writer's highest *published* sequence and never whether another device has reviewed since. The resting surface states a fact instead — *"last caught up ⟨when⟩"* | [#40 — the sync experience](https://github.com/amin-bf/cairn/issues/40) |

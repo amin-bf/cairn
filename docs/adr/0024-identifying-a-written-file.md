@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Resolves**: [Decide: how a written file is identified again, when Android keeps neither our media type nor our extension](https://github.com/amin-bf/leitner/issues/72)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: how a written file is identified again, when Android keeps neither our media type nor our extension](https://github.com/amin-bf/cairn/issues/72)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0003 §2](0003-client-stack.md) (manifest plus one `.so`),
   [ADR-0008 §2, §10](0008-the-deck-export-format.md) (the artifact that leaves the machine; the
   extension and the `mimetype` member), [ADR-0016 §5, §9](0016-backup-and-restore.md) (the platform
@@ -61,7 +61,7 @@ content is not a contradiction — it is the only split the platform permits.
 
 > **Correction: the extension has a second job it was never given here — it gates *reachability*,
 > upstream of the sniff, so "exactly one job" understates what it decides.** Measured on the handset
-> (Pixel 8 Pro, API 37) while working [#99](https://github.com/amin-bf/leitner/issues/99): the **same
+> (Pixel 8 Pro, API 37) while working [#99](https://github.com/amin-bf/cairn/issues/99): the **same
 > deck bytes** written under three names, then typed by `MediaStore`:
 >
 > | Name | Stored type | Handlers our filters resolve for |
@@ -170,7 +170,7 @@ real type; declaring nothing lets that improvement through for free.
 > have.** The clause was incidental — nothing above or below argues for it, every measurement here is
 > about `mime_type`, and the implementation has never set it. The **collection already decides the
 > folder**: inserting into `MediaStore.Downloads.EXTERNAL_CONTENT_URI` lands in `Download/`, verified
-> on the handset at API 29 and API 37 ([#98](https://github.com/amin-bf/leitner/issues/98)). So the
+> on the handset at API 29 and API 37 ([#98](https://github.com/amin-bf/cairn/issues/98)). So the
 > clause bought nothing it was not already getting, and it asked for **one thing more than it looked
 > like**: a `relative_path` is how a subfolder gets chosen, and no ADR has ever chosen one. Declaring
 > `Download/` explicitly would have been this section's own mistake in miniature — stating a claim we
@@ -218,7 +218,7 @@ cost this ADR a build cycle each.
    presents as the file simply never arriving. **Distinguish the two by sending a file this
    application owns**, which needs no grant at all — if that arrives and a shell-owned one does not,
    the reader is correct and the harness is the thing that cannot deliver a grant. Measured both ways
-   while working [#99](https://github.com/amin-bf/leitner/issues/99).
+   while working [#99](https://github.com/amin-bf/cairn/issues/99).
 
 ## Amendments to accepted ADRs
 
@@ -313,13 +313,13 @@ touch.
 | ~~**Whether an inbound `ACTION_SEND` delivers a readable URI.**~~ The filter is decided here; that the grant arrives is not measured, because completing a share needed a real send from a real account | **Discharged** — see below |
 | **The API 24–28 path.** Scoped storage and `MediaStore.Downloads` as measured are API 29+; `min_sdk_version` is 24. Inherited from [ADR-0016 §5](0016-backup-and-restore.md), not created here | Implementation |
 | **Whether a recipient can read the bytes** — carried forward unchanged from [ADR-0023](0023-sending-a-written-file.md) | Implementation, under `AGENTS.md` rule 9 |
-| Visual treatment of the refusal when an unrecognised file is opened | **Out of scope** — *the visual design pass*, ruled out by [the map](https://github.com/amin-bf/leitner/issues/1) on 2026-07-31 |
+| Visual treatment of the refusal when an unrecognised file is opened | **Out of scope** — *the visual design pass*, ruled out by [the map](https://github.com/amin-bf/cairn/issues/1) on 2026-07-31 |
 
 ### The inbound share, discharged
 
 > **The grant arrives.** A `.ldeck` shared to this application through `ACTION_SEND` was read,
 > sniffed and planned — `Arrived: shared (ACTION_SEND)`, `Sniffed: a deck`
-> ([#99](https://github.com/amin-bf/leitner/issues/99), Pixel 8 Pro, API 37).
+> ([#99](https://github.com/amin-bf/cairn/issues/99), Pixel 8 Pro, API 37).
 
 **What blocked it was the sender, not a real account.** This item assumed a share could only be
 completed from a messaging application signed into the owner's own accounts. That was too narrow: the

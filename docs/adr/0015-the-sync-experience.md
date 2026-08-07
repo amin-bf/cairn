@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: the sync experience](https://github.com/amin-bf/leitner/issues/40)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the sync experience](https://github.com/amin-bf/cairn/issues/40)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0013](0013-the-sync-transport.md) (the transport, and the four requirements it
   placed here), [ADR-0014](0014-when-parameter-optimisation-runs.md) (the mid-session queue shift,
   handed here whole), [ADR-0004](0004-the-review-event-log.md) (row identity, device labels, the
@@ -519,7 +519,7 @@ producing an error.
 
 ## Requirements this places on downstream tickets
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37) — both answered
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37) — both answered
 
 Written while #37 was open; [ADR-0016](0016-backup-and-restore.md) landed shortly after and answered
 both by name in its §13, **one of them negatively**. Recorded as asked and answered rather than
@@ -571,6 +571,6 @@ edited away, because the negative answer is the more useful of the two.
 | ~~How long a handset left alone goes between successful background syncs~~ — **dissolved in §2**: there are none | — |
 | The recency floor's value for §2's trigger 1 | Implementation; a debounce, not a compatibility constant |
 | Exact copy for the drive's connected-applications route (§10) — a third party's UI, expected to drift | Implementation |
-| Visual treatment of sync settings, the notice channel and cold-start progress | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened; [the map](https://github.com/amin-bf/leitner/issues/1) ruled it out on 2026-07-31. What these surfaces *say* and when they appear is settled here; only how they look is that pass's |
+| Visual treatment of sync settings, the notice channel and cold-start progress | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened; [the map](https://github.com/amin-bf/cairn/issues/1) ruled it out on 2026-07-31. What these surfaces *say* and when they appear is settled here; only how they look is that pass's |
 | ~~Whether collection identity makes a wrong-account enrolment detectable~~ — **answered `no` by [ADR-0016 §13](0016-backup-and-restore.md)**: every id agrees, so the failure is reachability rather than identity | — |
 | ~~**Whether to name the account on the enrolment screen**, at the cost of the `email` or `profile` scope §7 and [ADR-0013 §8](0013-the-sync-transport.md) both decline~~ — **taken by [ADR-0019](0019-naming-the-account-at-enrolment.md)**: it is named, on the enrolment screen *and* in §12's settings, at the cost of `openid email` (not `profile`); *"the only lever left"* was **wrong** — §7's sentence already detects, and the name is bought for diagnosis | — |

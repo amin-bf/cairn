@@ -2,16 +2,16 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-27
-- **Resolves**: [Decide: the card model](https://github.com/amin-bf/leitner/issues/6)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: the card model](https://github.com/amin-bf/cairn/issues/6)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/local-first-event-log/`](../research/local-first-event-log/README.md)
 - **Related**: [ADR-0001: Scheduling algorithm and grade scale](0001-scheduling-algorithm-and-grade-scale.md)
 
 ## Context
 
-Three tickets wait on this one — [the review event log format](https://github.com/amin-bf/leitner/issues/9),
-[the deck model](https://github.com/amin-bf/leitner/issues/10) and
-[the deck export format](https://github.com/amin-bf/leitner/issues/13) — and all three wait on the
+Three tickets wait on this one — [the review event log format](https://github.com/amin-bf/cairn/issues/9),
+[the deck model](https://github.com/amin-bf/cairn/issues/10) and
+[the deck export format](https://github.com/amin-bf/cairn/issues/13) — and all three wait on the
 same thing: **what a review event points at, and whether that thing holds still.**
 
 The map's standing constraint 1 makes the review log append-only and immutable, and derives all
@@ -454,7 +454,7 @@ Removal under set union needs its own answer, which is #9's to give.
 
 ## Requirements this places on downstream tickets
 
-### [#9 — the review event log format](https://github.com/amin-bf/leitner/issues/9)
+### [#9 — the review event log format](https://github.com/amin-bf/cairn/issues/9)
 
 1. A review event references a card as a **`CardRef`**, per the canonical 18-byte encoding in §6.
    There is no standalone card identifier to record.
@@ -466,7 +466,7 @@ Removal under set union needs its own answer, which is #9's to give.
    (per-field recommended); set-union for tags (§10); whether the log is ever compacted.
 5. The clock-skew tension the map flags is **untouched** by this ADR and remains #9's to confront.
 
-### [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13)
+### [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13)
 
 1. **A container able to hold binary files**, from the first version (§9).
 2. **Carries the kind definitions its notes use** (§4), so the file explains itself.
@@ -474,12 +474,12 @@ Removal under set union needs its own answer, which is #9's to give.
    of what to include, not a filtering pass.
 4. Note ids are stable across export and import (§6); import deduplicates on them.
 
-### [#10 — the deck model](https://github.com/amin-bf/leitner/issues/10)
+### [#10 — the deck model](https://github.com/amin-bf/cairn/issues/10)
 
 1. **Notes** belong to decks; cards do not belong to decks independently of their note.
 2. Tags cut across decks (§10) and are not a deck mechanism.
 
-### [#11 — the review session prototype](https://github.com/amin-bf/leitner/issues/11)
+### [#11 — the review session prototype](https://github.com/amin-bf/cairn/issues/11)
 
 1. The prompt/answer split of a card comes from its kind definition, and `shown-with` fields follow
    their anchor field to whichever side it lands on (§3).
@@ -517,11 +517,11 @@ authoritative, and this ADR keeps the reasoning behind them.
 
 | Item | Owner |
 |---|---|
-| Field-level versus note-level merge; tag set-union; compaction | [#9 — the review event log format](https://github.com/amin-bf/leitner/issues/9) |
-| Export container format; what a "share without progress" export contains | [#13 — the deck export format](https://github.com/amin-bf/leitner/issues/13) |
-| Whether a note may belong to more than one deck | [#10 — the deck model](https://github.com/amin-bf/leitner/issues/10) |
-| Note id encoding in the physical store | [#12 — the local store](https://github.com/amin-bf/leitner/issues/12) |
-| ~~Authoring UI: preview, blank entry, destructive-edit warning~~ — **closed by [ADR-0012](0012-the-note-authoring-experience.md)**: a form beside the cards the note generates, blanks numbered one above the highest ever used, and the destructive-edit warning **ambient and recomputed every frame** rather than modal at save | [#28 — note authoring and editing](https://github.com/amin-bf/leitner/issues/28) |
-| Audio on cards | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1) ruled it out on 2026-07-31. Left *de-risked* rather than free: [ADR-0008](0008-the-deck-export-format.md) ships a binary-capable container from day one and its importer accepts a `media/` prefix, so re-entry fills a reserved slot |
-| Mathematical notation in fields | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-07-31. §8's re-entry hazard stands as written, and **reserving the delimiter now was considered and rejected**: note content is a plain string settled by §7's last-write-wins, so a later syntax collision is *repairable*, where reserving `$` today taxes every note containing a currency amount |
-| Removing or renaming a field on an existing kind | **Out of scope** — [the map](https://github.com/amin-bf/leitner/issues/1), 2026-08-01. On **scope, not sharpness**: §4 makes kinds a closed, code-defined set, so no user can reach this — it arises only when a later release of ours changes a shipped kind's fields, which this destination does not contain. Adding a field stays free (a note predating it reads it as empty) |
+| Field-level versus note-level merge; tag set-union; compaction | [#9 — the review event log format](https://github.com/amin-bf/cairn/issues/9) |
+| Export container format; what a "share without progress" export contains | [#13 — the deck export format](https://github.com/amin-bf/cairn/issues/13) |
+| Whether a note may belong to more than one deck | [#10 — the deck model](https://github.com/amin-bf/cairn/issues/10) |
+| Note id encoding in the physical store | [#12 — the local store](https://github.com/amin-bf/cairn/issues/12) |
+| ~~Authoring UI: preview, blank entry, destructive-edit warning~~ — **closed by [ADR-0012](0012-the-note-authoring-experience.md)**: a form beside the cards the note generates, blanks numbered one above the highest ever used, and the destructive-edit warning **ambient and recomputed every frame** rather than modal at save | [#28 — note authoring and editing](https://github.com/amin-bf/cairn/issues/28) |
+| Audio on cards | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1) ruled it out on 2026-07-31. Left *de-risked* rather than free: [ADR-0008](0008-the-deck-export-format.md) ships a binary-capable container from day one and its importer accepts a `media/` prefix, so re-entry fills a reserved slot |
+| Mathematical notation in fields | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1), 2026-07-31. §8's re-entry hazard stands as written, and **reserving the delimiter now was considered and rejected**: note content is a plain string settled by §7's last-write-wins, so a later syntax collision is *repairable*, where reserving `$` today taxes every note containing a currency amount |
+| Removing or renaming a field on an existing kind | **Out of scope** — [the map](https://github.com/amin-bf/cairn/issues/1), 2026-08-01. On **scope, not sharpness**: §4 makes kinds a closed, code-defined set, so no user can reach this — it arises only when a later release of ours changes a shipped kind's fields, which this destination does not contain. Adding a field stays free (a note predating it reads it as empty) |

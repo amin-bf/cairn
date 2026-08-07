@@ -1,11 +1,11 @@
 # Git as the sync transport
 
-**Research ticket:** [#33](https://github.com/amin-bf/leitner/issues/33) (under wayfinder map [#1](https://github.com/amin-bf/leitner/issues/1)) · **Date of research:** 2026-07-30
+**Research ticket:** [#33](https://github.com/amin-bf/cairn/issues/33) (under wayfinder map [#1](https://github.com/amin-bf/cairn/issues/1)) · **Date of research:** 2026-07-30
 **Question:** Can a git remote carry the review event log between a user's desktop and Android devices, with no server of our own?
 
 This is a **research** note. It gathers facts and sharpens trade-offs; it does not pick a design. Every non-obvious claim carries an inline source; claims I reasoned rather than sourced are marked **[inference]**; claims I could not settle are collected in §8.
 
-Context assumed throughout, from [ADR-0004](../../adr/0004-the-review-event-log.md) and the ticket: Rust, egui/eframe, **desktop and Android only** (the web target was ruled out while resolving [#12](https://github.com/amin-bf/leitner/issues/12), so browser constraints are out of scope). No server of our own, ever. An append-only JSON Lines review log where every row carries `(writer id, sequence number)` and **each device appends only to its own rows**, so two devices never write the same file and merging is set union — there are no cross-device write conflicts. One user, 2–5 devices. Worst case ~200 reviews/day.
+Context assumed throughout, from [ADR-0004](../../adr/0004-the-review-event-log.md) and the ticket: Rust, egui/eframe, **desktop and Android only** (the web target was ruled out while resolving [#12](https://github.com/amin-bf/cairn/issues/12), so browser constraints are out of scope). No server of our own, ever. An append-only JSON Lines review log where every row carries `(writer id, sequence number)` and **each device appends only to its own rows**, so two devices never write the same file and merging is set union — there are no cross-device write conflicts. One user, 2–5 devices. Worst case ~200 reviews/day.
 
 Where a claim is load-bearing I tested it with the `git` CLI (2.55.0) or the Rust toolchain (rustc 1.97.0, Android NDK 29.0.13846066) on this machine and reported the command and output. **The workload numbers in §4 come from a synthetic log I generated; they are not measurements of real user data.** The generator is in the appendix.
 

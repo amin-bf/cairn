@@ -1,8 +1,8 @@
 # Research: Rust multi-platform client stacks
 
-**Ticket:** [#3 Research: Rust multi-platform client stacks](https://github.com/amin-bf/leitner/issues/3) ·
-**Map:** [#1 Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1) ·
-**Research date:** 2026-07-26 · **Blocks:** [#8 Prototype: pick the client stack](https://github.com/amin-bf/leitner/issues/8)
+**Ticket:** [#3 Research: Rust multi-platform client stacks](https://github.com/amin-bf/cairn/issues/3) ·
+**Map:** [#1 Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1) ·
+**Research date:** 2026-07-26 · **Blocks:** [#8 Prototype: pick the client stack](https://github.com/amin-bf/cairn/issues/8)
 
 This document **gathers facts and does not choose**. The choice belongs to #8.
 
@@ -457,7 +457,7 @@ Handing these to #8 explicitly, rather than letting them look answered.
 2. **Nobody actually compiled `rusqlite` with `bundled` for Android under either stack.** The
    environment is correct by construction and no issue reports the contrary, but it is unproven here.
    The same goes for the full web path — registering an OPFS VFS in a worker and persisting across
-   reloads. Ticket [#7](https://github.com/amin-bf/leitner/issues/7) is the natural place to prove
+   reloads. Ticket [#7](https://github.com/amin-bf/cairn/issues/7) is the natural place to prove
    both.
 3. **Whether Dioxus 0.8 stabilises, and whether the tao API-30 fix is backported to 0.7.x.** There is
    no public milestone with dates. Choosing Dioxus today means choosing 0.7.9-with-an-API-30-floor,
@@ -468,8 +468,8 @@ Handing these to #8 explicitly, rather than letting them look answered.
    which could mean it works, or that nobody is doing it. Framework-specific HMR-on-Android failures
    are open for Angular, Dioxus, Next and Nuxt.
 6. **The seam decision itself** (§3.4) is a design choice, not a fact, and interacts with the deck
-   export format ([#13](https://github.com/amin-bf/leitner/issues/13)) and the local store
-   ([#12](https://github.com/amin-bf/leitner/issues/12)).
+   export format ([#13](https://github.com/amin-bf/cairn/issues/13)) and the local store
+   ([#12](https://github.com/amin-bf/cairn/issues/12)).
 
 Each appendix carries its own register of unverified claims — 8 items for Dioxus, 13 for
 Leptos+Tauri, 12 for storage/contenders. They are worth reading in full before #8 commits.

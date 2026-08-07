@@ -2,10 +2,10 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Prototype: the note authoring and editing experience](https://github.com/amin-bf/leitner/issues/28)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Prototype: the note authoring and editing experience](https://github.com/amin-bf/cairn/issues/28)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: four egui/eframe variants at tag
-  [`prototypes/issue-28`](https://github.com/amin-bf/leitner/tree/prototypes/issue-28)
+  [`prototypes/issue-28`](https://github.com/amin-bf/cairn/tree/prototypes/issue-28)
   (`prototypes/note-authoring-28/`), judged live by the repo owner on desktop across two rounds.
 - **Related**: [ADR-0002](0002-the-card-model.md) (notes, cards, kinds, blanks — this ADR **amends
   it**), [ADR-0003](0003-client-stack.md) (egui/eframe, the bidi helper, the font rules),

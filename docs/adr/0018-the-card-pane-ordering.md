@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: card-pane ordering when dormant cards outrank live ones](https://github.com/amin-bf/leitner/issues/57)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: card-pane ordering when dormant cards outrank live ones](https://github.com/amin-bf/cairn/issues/57)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0002 §4 §7](0002-the-card-model.md) (kind definitions, replay and dormancy),
   [ADR-0006](0006-the-review-session-experience.md) (how review draws a card),
   [ADR-0012 §1 §3 §5](0012-the-note-authoring-experience.md) (the card pane, blank numbering, the
@@ -259,6 +259,6 @@ sentence and is reachable by an ordinary edit.
 
 - **The visual design pass** ([ADR-0006 §10](0006-the-review-session-experience.md)) — the typography,
   weight and spacing of a dormant line, and how *dormant* reads against a live card without becoming a
-  second warning. **Out of scope** for [the map](https://github.com/amin-bf/leitner/issues/1) as of
+  second warning. **Out of scope** for [the map](https://github.com/amin-bf/cairn/issues/1) as of
   2026-07-31: what a dormant entry *says*, where it *sits* and when it appears are settled above, and
   only how it *looks* belongs to that pass.

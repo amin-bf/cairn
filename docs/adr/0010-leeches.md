@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-30
-- **Resolves**: [Decide: leeches — cards the user keeps failing](https://github.com/amin-bf/leitner/issues/26)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: leeches — cards the user keeps failing](https://github.com/amin-bf/cairn/issues/26)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0001](0001-scheduling-algorithm-and-grade-scale.md) (no lapse rule of our own,
   the box means durability), [ADR-0002](0002-the-card-model.md) (cards are generated views; tags are
   content), [ADR-0004](0004-the-review-event-log.md) (the log's membership test; the mutable
@@ -183,7 +183,7 @@ failures before it stop counting and the leech clears. If the user disowned the 
 disowned the failures.
 
 **No new event kind is required, so nothing returns to
-[#9](https://github.com/amin-bf/leitner/issues/9).** The three row kinds of ADR-0004 §1 stand
+[#9](https://github.com/amin-bf/cairn/issues/9).** The three row kinds of ADR-0004 §1 stand
 unchanged.
 
 ### 6. Where the user meets the list
@@ -285,7 +285,7 @@ literally), or ADR-0008 (nothing new enters the export).
 
 ## Requirements this places on downstream tickets
 
-### [#21 — new-card rate and daily limits](https://github.com/amin-bf/leitner/issues/21)
+### [#21 — new-card rate and daily limits](https://github.com/amin-bf/cairn/issues/21)
 
 1. **A suspended card is not introduced and is not counted** against any daily limit, for the same
    reason §8 removes it from the due count.
@@ -294,12 +294,12 @@ literally), or ADR-0008 (nothing new enters the export).
    > singular: ADR-0011 §1 declines a daily review limit entirely, so the new-card cap is the only
    > count a suspended card could have entered.
 
-### [#37 — backup and restore](https://github.com/amin-bf/leitner/issues/37)
+### [#37 — backup and restore](https://github.com/amin-bf/cairn/issues/37)
 
 1. **Suspension is part of the progress profile**, not of deck content — it must survive a backup and
    restore, and must never appear in a `.ldeck` export (§5).
 
-### Sync transport ([#39](https://github.com/amin-bf/leitner/issues/39), [#40](https://github.com/amin-bf/leitner/issues/40))
+### Sync transport ([#39](https://github.com/amin-bf/cairn/issues/39), [#40](https://github.com/amin-bf/cairn/issues/40))
 
 1. Suspension rides the **mutable surface**, so it inherits whatever answer sync gives to
    ADR-0004's open item *"how the mutable store moves between devices — snapshot or change stream"*.
@@ -333,6 +333,6 @@ New terms are of record in the `CONTEXT.md` files, per
 
 | Item | Owner |
 |---|---|
-| The exact visual design of the leech screen and the end-of-session notice | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened and ADR-0015, ADR-0017, ADR-0018 and ADR-0019 have joined; [the map](https://github.com/amin-bf/leitner/issues/1) ruled it out on 2026-07-31, on the ground that these surfaces have specified existence, content and wording, so an agent fleet handed the spec today is not blocked |
+| The exact visual design of the leech screen and the end-of-session notice | **Out of scope** — *the visual design pass*, which [ADR-0006 §10](0006-the-review-session-experience.md) opened and ADR-0015, ADR-0017, ADR-0018 and ADR-0019 have joined; [the map](https://github.com/amin-bf/cairn/issues/1) ruled it out on 2026-07-31, on the ground that these surfaces have specified existence, content and wording, so an agent fleet handed the spec today is not blocked |
 | Whether the four-in-ninety thresholds survive real usage | Post-implementation, not a spec question |
-| ~~How the mutable surface (and so suspension) moves between devices~~ — **answered by [ADR-0013 §7](0013-the-sync-transport.md)**: published **per writer**, which is what keeps conditional writes out of the design, and a writer's own counter being monotone means compacting its change stream to the latest value per key *is* a per-writer snapshot | [#39 — the sync transport](https://github.com/amin-bf/leitner/issues/39) |
+| ~~How the mutable surface (and so suspension) moves between devices~~ — **answered by [ADR-0013 §7](0013-the-sync-transport.md)**: published **per writer**, which is what keeps conditional writes out of the design, and a writer's own counter being monotone means compacting its change stream to the latest value per key *is* a per-writer snapshot | [#39 — the sync transport](https://github.com/amin-bf/cairn/issues/39) |

@@ -2,8 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-01
-- **Resolves**: [Decide: whether the app helps send an exported deck file](https://github.com/amin-bf/leitner/issues/70)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: whether the app helps send an exported deck file](https://github.com/amin-bf/cairn/issues/70)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Related**: [ADR-0003 §2](0003-client-stack.md) (manifest plus one `.so`),
   [ADR-0008 §2, §10](0008-the-deck-export-format.md) (the artifact that leaves the machine; the
   extension and the `mimetype` member), [ADR-0009 §4](0009-crate-and-workspace-layout.md) (the
@@ -36,7 +36,7 @@ said so and was careful about what it had: *"That is an argument for looking, no
 
 **This ADR looked.** Everything below about Android rests on measurement on the handset — a Pixel 8
 Pro, Android 17 / API 37 — in the shipped APK shape, and the handset answered a question it had not
-been asked, which is §7 and [#72](https://github.com/amin-bf/leitner/issues/72).
+been asked, which is §7 and [#72](https://github.com/amin-bf/cairn/issues/72).
 
 ## Decision
 
@@ -88,7 +88,7 @@ floor §6 conceded it could not raise.
 dedupes to `collection.lcoll (1)` — suffix after the extension (§7). Re-writing the same name is the
 **exception** for decks and the **rule** for archives, so a user who backs up monthly accumulates
 files whose names no longer end in `.lcoll`. What that costs is
-[#72](https://github.com/amin-bf/leitner/issues/72)'s; that it makes the send worth *more* on the
+[#72](https://github.com/amin-bf/cairn/issues/72)'s; that it makes the send worth *more* on the
 archive, not less, is this section's.
 
 ### 3. Android: the system share sheet
@@ -107,7 +107,7 @@ permission, no new crate.** So [ADR-0003 §2](0003-client-stack.md)'s property, 
 **The intent declares `application/vnd.leitner.deck+zip`** (and the archive's type for a `.lcoll`).
 A custom `vnd.` type is not a problem for the chooser — it drew the full sheet for exactly that
 type. The type **stored** on the `MediaStore` row is a different matter and is
-[#72](https://github.com/amin-bf/leitner/issues/72)'s.
+[#72](https://github.com/amin-bf/cairn/issues/72)'s.
 
 ### 4. Desktop: the file, revealed and selected in the file manager
 
@@ -235,7 +235,7 @@ in an instructive direction** — it wrote the deduped example as `French A1 (1)
 handset produces **`French A1.ldeck (1)`**, suffix after the extension, verified on disk. §10's
 decision to state *"the name the platform actually wrote, never the name requested"* is what makes
 that knowable at all, and it is vindicated. What the mangled name costs is
-[#72](https://github.com/amin-bf/leitner/issues/72)'s.
+[#72](https://github.com/amin-bf/cairn/issues/72)'s.
 
 > **Corrected by [ADR-0024 §4](0024-identifying-a-written-file.md): the suffix-after-extension
 > behaviour is conditional, not unconditional.** It happens only when the insert declares a media
@@ -250,7 +250,7 @@ that knowable at all, and it is vindicated. What the mangled name costs is
 
 ## Requirements this places on downstream tickets
 
-### [#72 — how a written file is identified again](https://github.com/amin-bf/leitner/issues/72)
+### [#72 — how a written file is identified again](https://github.com/amin-bf/cairn/issues/72)
 
 1. **This ADR fixes the outbound intent's declared type and nothing about the stored type.** The
    chooser accepts `application/vnd.leitner.deck+zip`; the `MediaStore` row does not keep it. Those
@@ -283,17 +283,17 @@ that knowable at all, and it is vindicated. What the mangled name costs is
 
 | Item | Owner |
 |---|---|
-| **What identifies a written file when Android keeps neither our media type nor our extension** — measured here, decided there | [#72 — how a written file is identified again](https://github.com/amin-bf/leitner/issues/72) |
+| **What identifies a written file when Android keeps neither our media type nor our extension** — measured here, decided there | [#72 — how a written file is identified again](https://github.com/amin-bf/cairn/issues/72) |
 | ~~**Whether a recipient can read the bytes.**~~ The grant is set correctly and metadata resolves, but completing a share into a real application would have sent a file to a real contact from the owner's own accounts, so it was deliberately not done | **Discharged** — see below |
 | **The API 24–28 path**, narrowed from *"below API 29"*. `MediaStore.Downloads` and the permission-free insert are API 29+; `min_sdk_version` is 24. **29 itself is now measured** and behaves as §7 and [ADR-0024 §4](0024-identifying-a-written-file.md) describe, so the gap is 24–28 exactly. Inherited from [ADR-0016 §5](0016-backup-and-restore.md) rather than created here | Implementation |
-| Visual treatment of the affordance — where the action sits and what it is labelled | **Out of scope** — *the visual design pass*, ruled out by [the map](https://github.com/amin-bf/leitner/issues/1) on 2026-07-31 |
+| Visual treatment of the affordance — where the action sits and what it is labelled | **Out of scope** — *the visual design pass*, ruled out by [the map](https://github.com/amin-bf/cairn/issues/1) on 2026-07-31 |
 
 ### The recipient read, discharged
 
 > **The bytes arrive.** A `.ldeck` handed off from the handset reached a **second device that has
 > never held this application**, byte for byte — same SHA-256, same four members, `mimetype` still
 > first and uncompressed
-> ([#98](https://github.com/amin-bf/leitner/issues/98)).
+> ([#98](https://github.com/amin-bf/cairn/issues/98)).
 
 **What blocked it was the recipient, not the measurement.** This ADR did not decline to look; it
 declined to *send a file to a person* from the owner's own accounts to find out. A second handset the

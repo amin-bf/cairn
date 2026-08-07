@@ -2,10 +2,10 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-31
-- **Resolves**: [Decide: what, if anything, is protected at rest](https://github.com/amin-bf/leitner/issues/58)
-- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/leitner/issues/1)
+- **Resolves**: [Decide: what, if anything, is protected at rest](https://github.com/amin-bf/cairn/issues/58)
+- **Map**: [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1)
 - **Evidence**: [`docs/research/auto-backup-at-rest/`](../research/auto-backup-at-rest/README.md)
-  ([Research: is Android Auto Backup's payload readable by the provider](https://github.com/amin-bf/leitner/issues/60)),
+  ([Research: is Android Auto Backup's payload readable by the provider](https://github.com/amin-bf/cairn/issues/60)),
   and [`docs/research/sync-transport/`](../research/sync-transport/README.md) for the application data
   folder's deletion route
 - **Related**: [ADR-0007](0007-the-local-store.md) (`collection.db`, and the open item this
@@ -417,6 +417,6 @@ three things, and it survives until one of them stops being true:
 | Item | Owner |
 |---|---|
 | **Nothing about encryption.** §8 states the three conditions under which this returns; none is a ticket | — |
-| ~~Whether the 25 MB Auto Backup quota is measured **before or after compression**~~ — **measured: BEFORE compression**, so [ADR-0016 §7](0016-backup-and-restore.md) stands as written and [ADR-0007 §6](0007-the-local-store.md)'s nine-month estimate is confirmed. The documentation was already exhausted, so this was settled by experiment against the real cloud transport: a 40 MiB payload compressing 158× (`gzip -9`) and 11,022× (`zstd -19`) was **rejected**, and the transport named the uncompressed figure in its own pre-flight log line. **The unit is tar-stream bytes** — 512 of header per file plus content padded to 512 | [Research: is the 25 MB Auto Backup quota measured before or after compression](https://github.com/amin-bf/leitner/issues/64) |
-| ~~**Quota failure is silent**~~ — **confirmed by observation** rather than inferred from an absence in the documentation: no notification was posted by any backup component across the over-quota runs, though the provider owns channels capable of it. One correction rides with it — the two published log lines are **not** equivalent, and only *"Transport quota exceeded for package"* means what the testing guide says both mean; *"Transport rejected backup of … , skipping"* was observed on a **1 KB** payload during the transport's post-failure backoff | [#64](https://github.com/amin-bf/leitner/issues/64) |
+| ~~Whether the 25 MB Auto Backup quota is measured **before or after compression**~~ — **measured: BEFORE compression**, so [ADR-0016 §7](0016-backup-and-restore.md) stands as written and [ADR-0007 §6](0007-the-local-store.md)'s nine-month estimate is confirmed. The documentation was already exhausted, so this was settled by experiment against the real cloud transport: a 40 MiB payload compressing 158× (`gzip -9`) and 11,022× (`zstd -19`) was **rejected**, and the transport named the uncompressed figure in its own pre-flight log line. **The unit is tar-stream bytes** — 512 of header per file plus content padded to 512 | [Research: is the 25 MB Auto Backup quota measured before or after compression](https://github.com/amin-bf/cairn/issues/64) |
+| ~~**Quota failure is silent**~~ — **confirmed by observation** rather than inferred from an absence in the documentation: no notification was posted by any backup component across the over-quota runs, though the provider owns channels capable of it. One correction rides with it — the two published log lines are **not** equivalent, and only *"Transport quota exceeded for package"* means what the testing guide says both mean; *"Transport rejected backup of … , skipping"* was observed on a **1 KB** payload during the transport's post-failure backoff | [#64](https://github.com/amin-bf/cairn/issues/64) |
 | Whether the manifest attribute behind the platform's declarative backup refusal is expressible under ADR-0003's Gradle-free packaging — needs a build test, and is only interesting if §6 is ever reopened | Implementation |
