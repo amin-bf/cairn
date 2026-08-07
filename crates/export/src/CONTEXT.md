@@ -48,6 +48,21 @@ never fires, and the bytes never arrive to be sniffed
 _Avoid_: Detect, guess — the member is written by us at a known position, so nothing here is
 heuristic.
 
+**Reachability**:
+Whether a file can be **offered** to this application at all — settled before, and independently of,
+what the file is. On Android the **extension** decides it: `MediaStore` derives the stored media type
+from the name, and the type is what the broad filter matches. So a byte-identical deck named `.txt`
+types as `text/plain`, resolves to none of our filters, and is *unreachable rather than misnamed*; a
+**stripped** name still types as `application/octet-stream` and still arrives. This is the extension's
+one real authority and the sniff's blind spot — measured on the handset (Pixel 8 Pro, API 37) for
+[#106](https://github.com/amin-bf/leitner/issues/106) and again for
+[#99](https://github.com/amin-bf/leitner/issues/99), where five fixtures typed `application/octet-stream`
+resolved to us and the `.txt` one resolved to nothing
+([ADR-0024 §1](../../../docs/adr/0024-identifying-a-written-file.md)).
+_Avoid_: Hidden, unreadable, permission-denied — an unreachable file is none of those. It is never
+offered, so there is no refusal to show and no permission a user could grant. Naming it as a
+visibility or permission problem is what sends someone after a fix that does not exist.
+
 **Collection archive**:
 A `.lcoll` zip archive carrying the whole collection: the log verbatim, plus everything that settles,
 minus device identity and credentials. The artifact a user keeps for themselves.
