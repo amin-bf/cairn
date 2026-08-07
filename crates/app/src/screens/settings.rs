@@ -2,9 +2,9 @@
 //! sync surface, and the **temporary** specimens. The specimens are development controls, not
 //! specified features — each keeps the doc comment marking it so.
 
-use leitner_core::content::{DeckId, NoteId};
-use leitner_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
-use leitner_store::Collection;
+use cairn_core::content::{DeckId, NoteId};
+use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
+use cairn_store::Collection;
 
 use crate::screens::enrolment::enrolment_screen;
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
 /// **Temporary, and not a specified feature.** What the hand-off specimen carries between frames.
 #[derive(Default)]
 pub(crate) struct HandOff {
-    /// The name the platform reported for the last successful [`leitner_export::platform::put`] —
+    /// The name the platform reported for the last successful [`cairn_export::platform::put`] —
     /// **the written one, never the requested one** (ADR-0022 §10). This is what `hand_off` is then
     /// asked for, so the specimen exercises the read-back rather than asserting it.
     written: Option<String>,
@@ -45,7 +45,7 @@ pub(crate) struct FileList {
 /// history cutoff) is modelled and proven in `sync`, but it needs a live grant, and the device flow
 /// that obtains one carries the network this environment lacks (ADR-0013 §11) — so it is wired when
 /// that mechanism lands, not faked here. What is fixed now is what each surface *says*.
-// Each screen threads its own `&mut` slice of `LeitnerApp` state plus the frame's `now_ms`; grouping
+// Each screen threads its own `&mut` slice of `CairnApp` state plus the frame's `now_ms`; grouping
 // them behind a struct would only relocate the same fields, not reduce them.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn settings_screen(
@@ -124,25 +124,25 @@ pub(crate) fn settings_screen(
 }
 
 /// **Temporary, and not a specified feature.** The file-list specimen: the first call site of
-/// [`leitner_export::platform::list`] (issue #108), which until now had none. It enumerates the files
+/// [`cairn_export::platform::list`] (issue #108), which until now had none. It enumerates the files
 /// this application wrote, describes each **from its own bytes**, and on selection hands one to the
 /// same inbound read an arriving file takes.
 ///
 /// **It says what the list *is*, never what is missing.** Scoped storage grants this application its
-/// own `MediaStore` rows and nothing else, so a `.ldeck` another application dropped in `Downloads` is
+/// own `MediaStore` rows and nothing else, so a `.cdeck` another application dropped in `Downloads` is
 /// invisible to the query — not unreadable, *absent* (ADR-0024 §3). That absence is the platform, not
 /// a defect to explain, so the wording is *"the files this application wrote"* and never invites a
 /// user to drop a file in a folder and expect it here. On the desktop the same list is a real folder
 /// scan, and the wording is true there too.
 ///
 /// **Each row is described from its sniff, never its extension** (ADR-0024 §1, deck-export rule 13):
-/// enumeration is by `.ldeck`/`.lcoll`, but a `.ldeck` may carry a collection archive and only the
+/// enumeration is by `.cdeck`/`.ccoll`, but a `.cdeck` may carry a collection archive and only the
 /// `mimetype` member tells them apart — so both profiles appear, told apart by the bytes. A file we
 /// wrote but can no longer parse is **listed and marked unreadable**, never hidden (ADR-0022 §11):
 /// hiding it sends a user after a permissions problem that does not exist.
 ///
 /// **Selecting a row is one mechanism, not two.** It re-reads the bytes through
-/// [`leitner_export::platform::get`] and hands them
+/// [`cairn_export::platform::get`] and hands them
 /// to [`listing::select`], producing an [`inbound::Inbound`] the [`inbound_specimen`] below then plans
 /// against the live collection — the same gate-and-describe read a drop or a launch intent reaches
 /// (ADR-0022 §5). The row description stays the cheap sniff so enumerating the whole list inflates
@@ -152,7 +152,7 @@ fn file_list_specimen(
     state: &mut FileList,
     inbound: &mut Option<inbound::Inbound>,
 ) {
-    use leitner_export::platform;
+    use cairn_export::platform;
 
     body(
         ui,
@@ -236,7 +236,7 @@ fn file_list_specimen(
 /// and a file we wrote but can no longer parse is *unreadable* — the honest word for a row that stays
 /// on the list rather than disappearing from it (ADR-0022 §11).
 fn listed_label(listed: &listing::Listed) -> &'static str {
-    use leitner_export::Profile;
+    use cairn_export::Profile;
     match &listed.sniffed {
         Some(Profile::Deck) => "deck",
         Some(Profile::Collection) => "collection archive",
@@ -296,8 +296,8 @@ fn rendering_specimen(ui: &mut egui::Ui) {
 /// **Temporary, and not a specified feature.** The hand-off specimen: the two user-files calls issue
 /// #98 asks to be verified on the handset, behind **two separate buttons**.
 ///
-/// **It is here because nothing else reaches them.** [#88](https://github.com/amin-bf/leitner/issues/88)
-/// landed `leitner-export` and its four-operation seam but deferred the export *screen* to the visual
+/// **It is here because nothing else reaches them.** [#88](https://github.com/amin-bf/cairn/issues/88)
+/// landed `cairn-export` and its four-operation seam but deferred the export *screen* to the visual
 /// pass, so `put` and `hand_off` have no call site in this crate — and every one of #98's criteria is
 /// about what those two calls do at runtime on a real `MediaStore`. A seam with no caller cannot be
 /// verified by holding the phone.
@@ -317,7 +317,7 @@ fn rendering_specimen(ui: &mut egui::Ui) {
 fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
     body(
         ui,
-        "Development control — the two user-files calls, one per button. Write puts a real .ldeck \
+        "Development control — the two user-files calls, one per button. Write puts a real .cdeck \
          through the seam and states the name the platform wrote back. Hand off opens the system \
          share sheet for it, and only when pressed: writing never opens anything.",
     );
@@ -327,8 +327,8 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
         state.said = match specimen_deck() {
             Err(e) => format!("Could not build the file: {e}"),
             Ok(bytes) => {
-                let requested = leitner_export::export_filename(&[SPECIMEN_DECK_NAME]);
-                match leitner_export::platform::put(&requested, &bytes) {
+                let requested = cairn_export::export_filename(&[SPECIMEN_DECK_NAME]);
+                match cairn_export::platform::put(&requested, &bytes) {
                     Err(e) => format!("Could not write it: {e}"),
                     Ok(written) => {
                         let said = format!(
@@ -348,7 +348,7 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
     if full_width_button(ui, "Hand it off (temporary)").clicked() {
         state.said = match &state.written {
             None => "Nothing written yet — write a deck file first.".to_owned(),
-            Some(name) => match leitner_export::platform::hand_off(name) {
+            Some(name) => match cairn_export::platform::hand_off(name) {
                 Ok(()) => format!("Handed \"{name}\" onward. Nothing is reported after this."),
                 Err(e) => format!("Could not hand it off: {e}"),
             },
@@ -364,12 +364,12 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
 /// **Temporary, and not a specified feature.** The inbound specimen: it states what the platform
 /// handed the application at launch or by a drop, and what was decided about it — the action, whether
 /// a name came with it, the sniffed profile, and the plan behind the gate or the refusal in its place
-/// (acceptance of #107). It is what makes [#99](https://github.com/amin-bf/leitner/issues/99)'s
+/// (acceptance of #107). It is what makes [#99](https://github.com/amin-bf/cairn/issues/99)'s
 /// on-device criteria readable off one screen by someone holding the phone.
 ///
 /// **It is here because the preview *screen* is the visual design pass's, ruled out of scope by the
 /// map.** So this ends where #98's specimen did — a development control that reports, not the
-/// ADR-0022 surface. What it reports is real: a `.ldeck` opened from a file manager, or shared from a
+/// ADR-0022 surface. What it reports is real: a `.cdeck` opened from a file manager, or shared from a
 /// messaging application, or dropped on the desktop window, reaches this through the same
 /// identification and plan path as the real importer will.
 ///
@@ -382,7 +382,7 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
 fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbound::Inbound>) {
     body(
         ui,
-        "Development control — what the platform handed us to open. Drop a .ldeck on this window, or \
+        "Development control — what the platform handed us to open. Drop a .cdeck on this window, or \
          open one from a file manager or a share on the handset; this states what arrived and what \
          an import would do, derived fresh and never held.",
     );
@@ -426,8 +426,8 @@ fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbou
 
 /// What the sniff said the file is, for the specimen (ADR-0024 §1). `Other` carries the type it
 /// declared; `None` is a file that is not a sniffable container at all.
-fn profile_label(profile: Option<&leitner_export::Profile>) -> String {
-    use leitner_export::Profile;
+fn profile_label(profile: Option<&cairn_export::Profile>) -> String {
+    use cairn_export::Profile;
     match profile {
         Some(Profile::Deck) => "a deck".to_owned(),
         Some(Profile::Collection) => "a collection archive".to_owned(),
@@ -439,8 +439,8 @@ fn profile_label(profile: Option<&leitner_export::Profile>) -> String {
 /// The refusal shown in place of a preview (ADR-0022 §4). One plain message each, **with no detail
 /// that reads as an invitation to repair the file** — the classic zip-traversal defect, and the
 /// message is not a diagnostic channel for whoever built it.
-fn refusal_wording(refusal: &leitner_export::Refusal) -> String {
-    use leitner_export::Refusal;
+fn refusal_wording(refusal: &cairn_export::Refusal) -> String {
+    use cairn_export::Refusal;
     match refusal {
         Refusal::Unreadable => "This file could not be read as a deck.".to_owned(),
         Refusal::UnknownFormat(_) => "This file needs a newer version of the app.".to_owned(),
@@ -456,8 +456,8 @@ fn refusal_wording(refusal: &leitner_export::Refusal) -> String {
 /// The plan's effect lines, one string each so [`body`] lays each through the bidi helper (ADR-0022
 /// §3, client-stack rule 1). A line that does not apply is **absent, never shown as zero** — a screen
 /// of zeroes buries the one line that is not. The last line is always present (ADR-0022 §3).
-fn plan_lines(plan: &leitner_export::Plan) -> Vec<String> {
-    use leitner_export::Path;
+fn plan_lines(plan: &cairn_export::Plan) -> Vec<String> {
+    use cairn_export::Path;
     let mut lines = Vec::new();
 
     let header = &plan.header;
@@ -528,7 +528,7 @@ fn plan_lines(plan: &leitner_export::Plan) -> Vec<String> {
 const SPECIMEN_DECK_NAME: &str = "Specimen";
 
 /// Fixed ids, so every press builds **byte-identical** content and a second write is a true
-/// same-name collision rather than a new file. `leitner-core` never mints an id (ADR-0009 §8), and a
+/// same-name collision rather than a new file. `cairn-core` never mints an id (ADR-0009 §8), and a
 /// specimen has no collection to take one from.
 const SPECIMEN_DECK_ID: DeckId = DeckId([
     0x98, 0x0d, 0xec, 0x00, 0x40, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -537,14 +537,14 @@ const SPECIMEN_NOTE_ID: NoteId = NoteId([
     0x98, 0x0d, 0xec, 0x00, 0x40, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
 ]);
 
-/// A real `.ldeck` — the actual container, not a stand-in. What is being verified is what the
+/// A real `.cdeck` — the actual container, not a stand-in. What is being verified is what the
 /// platform does with the bytes and the name, so a placeholder payload would still exercise the
 /// seam; a real one additionally lets whoever receives the share open it.
-fn specimen_deck() -> Result<Vec<u8>, leitner_export::ExportError> {
-    let content = leitner_export::DeckContent {
+fn specimen_deck() -> Result<Vec<u8>, cairn_export::ExportError> {
+    let content = cairn_export::DeckContent {
         id: SPECIMEN_DECK_ID,
         name: SPECIMEN_DECK_NAME.to_owned(),
-        notes: vec![leitner_export::NoteContent {
+        notes: vec![cairn_export::NoteContent {
             id: SPECIMEN_NOTE_ID,
             position: "n".to_owned(),
             kind: "basic".to_owned(),
@@ -555,11 +555,11 @@ fn specimen_deck() -> Result<Vec<u8>, leitner_export::ExportError> {
         }],
         tombstones: Vec::new(),
     };
-    let digest = leitner_export::deck_digest(&content)?;
-    let revision = leitner_export::next_revision(None, &digest);
-    leitner_export::build_deck(
-        &leitner_export::Metadata::default(),
-        &[leitner_export::DeckExport { content, revision }],
+    let digest = cairn_export::deck_digest(&content)?;
+    let revision = cairn_export::next_revision(None, &digest);
+    cairn_export::build_deck(
+        &cairn_export::Metadata::default(),
+        &[cairn_export::DeckExport { content, revision }],
     )
 }
 
@@ -573,7 +573,7 @@ fn family_tag(family: &egui::FontFamily) -> String {
 }
 
 /// **Temporary, and not a specified feature.** A development control that returns this device to a
-/// **first launch** — the collection deleted and reseeded exactly as [`LeitnerApp::open_store`] does it
+/// **first launch** — the collection deleted and reseeded exactly as [`CairnApp::open_store`] does it
 /// on a fresh install — so an on-handset verification run does not need a cable and `run-as` to get back
 /// to a known state. Returns whether it was pressed.
 ///
@@ -712,7 +712,7 @@ fn optimise_control(
         .log_lines()
         .map(|lines| {
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-            optimise::nudge_text(&leitner_core::replay::optimisation_nudge(&refs))
+            optimise::nudge_text(&cairn_core::replay::optimisation_nudge(&refs))
         })
         .unwrap_or_default();
     body(ui, &nudge);

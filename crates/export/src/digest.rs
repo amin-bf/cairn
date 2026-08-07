@@ -1,6 +1,6 @@
 //! SHA-256, hand-written, for the per-deck content digest (ADR-0008 §4, §9).
 //!
-//! Hand-written for the same reason `leitner-core`'s JSON reader is: a hash is a dozen constants and
+//! Hand-written for the same reason `cairn-core`'s JSON reader is: a hash is a dozen constants and
 //! two loops, and it is not worth a dependency in the one crate whose whole point is a *small*,
 //! auditable container. The digest answers *"has this deck's content changed since the last
 //! export?"* — [`crate::deck::DeckExport`] advances the revision only when it moves (ADR-0008 §9) —

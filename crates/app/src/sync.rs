@@ -1,5 +1,5 @@
 //! The sync **experience** — everything the user sees about sync, and almost all of it made of
-//! things the application refuses to say (ADR-0015, ADR-0019). The `leitner-sync` crate holds the
+//! things the application refuses to say (ADR-0015, ADR-0019). The `cairn-sync` crate holds the
 //! *mechanism*; this module holds the *surface*, and it is deliberately pure: the trigger policy,
 //! the notice channel, the resting statement, the enrolment sentences and the one capability
 //! constant are decisions and words, testable with no window, no network and no handset.
@@ -241,7 +241,7 @@ pub const DISCLOSURE_CLAUSE: &str = "Your review history is published to that fo
 /// consent screen's application name, a console setting — so if it does not match what the user knows
 /// the application as, *"find it in the list"* fails silently. Kept as a constant so there is one
 /// place to correct it when the console is set.
-pub const APP_NAME: &str = "Leitner";
+pub const APP_NAME: &str = "Cairn";
 
 /// The connected account row's label in settings (ADR-0019 §1): *"Connected as you@example.com"*,
 /// kept — not shown once and discarded — because the wrong-account failure surfaces months later and

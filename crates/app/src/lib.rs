@@ -3,7 +3,7 @@
 //!
 //! **This crate deliberately has no `src/main.rs`.** `cargo-apk` panics after signing
 //! (`Bin is not compatible with Cdylib`) when one crate has both a cdylib and a bin — the APK comes
-//! out correct but the exit code does not, and CI breaks. The desktop binary is `leitner-desktop`,
+//! out correct but the exit code does not, and CI breaks. The desktop binary is `cairn-desktop`,
 //! which is a shim with no logic (ADR-0003 §5, ADR-0009 §3).
 //!
 //! **The Android entry point is `platform::android`**, not this file. The activity handle the inset
@@ -33,15 +33,15 @@ pub mod sync;
 use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use leitner_core::content::{CardRef, DeckId, NoteId};
-use leitner_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
-use leitner_store::Collection;
+use cairn_core::content::{CardRef, DeckId, NoteId};
+use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
+use cairn_store::Collection;
 
 use screens::notes::notes_screen;
 use screens::review::review;
 use screens::settings::{FileList, HandOff, settings_screen};
 
-/// Re-exported so `leitner-desktop` needs no `eframe` dependency of its own — it cannot then
+/// Re-exported so `cairn-desktop` needs no `eframe` dependency of its own — it cannot then
 /// resolve a different feature set from the one this crate was built with, and it has no route to
 /// grow real code unnoticed.
 pub use eframe;
@@ -207,7 +207,7 @@ impl Editing {
 
 /// The application: an open collection (or the message saying why it would not open), the current
 /// destination, the transient review sitting, and the editor's live state when one is open.
-pub struct LeitnerApp {
+pub struct CairnApp {
     store: Result<Collection, String>,
     dest: Destination,
     sitting: Option<Sitting>,
@@ -268,7 +268,7 @@ pub struct LeitnerApp {
     launch_checked: bool,
 }
 
-impl LeitnerApp {
+impl CairnApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         // Fonts are installed on the **first frame**, never here (see `ui` and the `fonts` module).
         // Registering a face during creation was found in #8 to break rendering on some backends;
@@ -317,8 +317,8 @@ impl LeitnerApp {
             ("maison", "house"),
         ];
 
-        let data = leitner_store::platform::data_dir().map_err(|e| e.to_string())?;
-        let state = leitner_store::platform::state_dir().map_err(|e| e.to_string())?;
+        let data = cairn_store::platform::data_dir().map_err(|e| e.to_string())?;
+        let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
         let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
         if coll.is_empty().map_err(|e| e.to_string())? {
             for (front, back) in SEED {
@@ -353,10 +353,10 @@ impl LeitnerApp {
     fn reset_collection(&mut self) {
         self.store = Err("Resetting…".to_owned());
 
-        let dirs = leitner_store::platform::data_dir()
-            .and_then(|data| leitner_store::platform::state_dir().map(|state| (data, state)));
+        let dirs = cairn_store::platform::data_dir()
+            .and_then(|data| cairn_store::platform::state_dir().map(|state| (data, state)));
         if let Ok((data, state)) = dirs {
-            leitner_store::remove_files(&data, &state);
+            cairn_store::remove_files(&data, &state);
         }
 
         self.store = Self::open_store();
@@ -371,7 +371,7 @@ impl LeitnerApp {
     }
 }
 
-impl eframe::App for LeitnerApp {
+impl eframe::App for CairnApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // The shipped font set is installed here, on the first frame, and this frame draws nothing:
         // `set_fonts` applies at the start of the *next* pass, so the newly-named bold family is not
@@ -407,7 +407,7 @@ impl eframe::App for LeitnerApp {
 
         let coll = match self.store.as_mut() {
             Err(message) => {
-                heading(ui, "Leitner");
+                heading(ui, "Cairn");
                 body(ui, message);
                 return;
             }
@@ -541,7 +541,7 @@ fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination) {
 // --- small rendering helpers, every one through the bidi layout so no screen holds a bare label ---
 
 fn now_ms() -> i64 {
-    // The one clock read on the review path — an edge value, never reached from `leitner-core`
+    // The one clock read on the review path — an edge value, never reached from `cairn-core`
     // (ADR-0009 §8). A clock before the epoch is not a real handset state; clamp rather than wrap.
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -577,7 +577,7 @@ pub(crate) fn body(ui: &mut egui::Ui, s: &str) {
 /// (ADR-0006 §6).
 ///
 /// The `new` case is not a nicety, and it is the one every call site is liable to drop, because
-/// [`box_of`](leitner_core::scheduling::box_of) is total and answers `1` for a card it has never seen.
+/// [`box_of`](cairn_core::scheduling::box_of) is total and answers `1` for a card it has never seen.
 /// `1` is *also* the honest answer for a card reviewed thirty times and never retained — so rendering
 /// the number regardless makes the badge state a durability nothing has measured, on the one card where
 /// the user can tell it is wrong. A first introduction then reads as *bottom box*, a position in a queue

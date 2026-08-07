@@ -3,19 +3,19 @@
 //!
 //! [ADR-0022 §10](../../../docs/adr/0022-the-import-preview-and-export-report.md) requires the report
 //! to state **the name the platform actually wrote, never the one requested**, because a colliding
-//! name **dedupes** — `French A1.ldeck` becomes `French A1 (1).ldeck`, the suffix *before* the
+//! name **dedupes** — `French A1.cdeck` becomes `French A1 (1).cdeck`, the suffix *before* the
 //! extension once the Android write declares no media type (ADR-0024 §4). The desktop controls its
 //! own write and dedupes the same way, so this rule is shared and lives here where a unit test can
 //! hold it; each platform arm applies it against its own directory.
 
 use crate::name::DECK_EXTENSION;
 
-/// The `.lcoll` collection-archive extension — recognised alongside `.ldeck` so the file list can
-/// enumerate both (ADR-0022 §11). Its container is [#37](https://github.com/amin-bf/leitner/issues/37)'s;
+/// The `.ccoll` collection-archive extension — recognised alongside `.cdeck` so the file list can
+/// enumerate both (ADR-0022 §11). Its container is [#37](https://github.com/amin-bf/cairn/issues/37)'s;
 /// the seam recognises the name now so the list does not have to change when it lands.
-pub const COLLECTION_EXTENSION: &str = "lcoll";
+pub const COLLECTION_EXTENSION: &str = "ccoll";
 
-/// Whether a filename is one the application recognises — a `.ldeck` or `.lcoll`. The extension is a
+/// Whether a filename is one the application recognises — a `.cdeck` or `.ccoll`. The extension is a
 /// **display and enumeration hint only** (ADR-0008 §13): the `mimetype` member is the authority on a
 /// file's profile, and this predicate never decides one.
 pub fn is_recognised(name: &str) -> bool {
@@ -53,23 +53,23 @@ mod tests {
 
     #[test]
     fn a_free_name_is_written_unchanged() {
-        assert_eq!(dedupe_name("French A1.ldeck", |_| false), "French A1.ldeck");
+        assert_eq!(dedupe_name("French A1.cdeck", |_| false), "French A1.cdeck");
     }
 
     #[test]
     fn a_collision_dedupes_before_the_extension() {
-        let taken = ["French A1.ldeck", "French A1 (1).ldeck"];
-        let written = dedupe_name("French A1.ldeck", |n| taken.contains(&n));
-        assert_eq!(written, "French A1 (2).ldeck");
+        let taken = ["French A1.cdeck", "French A1 (1).cdeck"];
+        let written = dedupe_name("French A1.cdeck", |n| taken.contains(&n));
+        assert_eq!(written, "French A1 (2).cdeck");
         // The extension survives, which is what keeps the file recognised on a collision.
         assert!(is_recognised(&written));
     }
 
     #[test]
     fn recognises_both_profiles_case_insensitively() {
-        assert!(is_recognised("deck.ldeck"));
-        assert!(is_recognised("backup.LCOLL"));
+        assert!(is_recognised("deck.cdeck"));
+        assert!(is_recognised("backup.CCOLL"));
         assert!(!is_recognised("notes.txt"));
-        assert!(!is_recognised("ldeck"));
+        assert!(!is_recognised("cdeck"));
     }
 }

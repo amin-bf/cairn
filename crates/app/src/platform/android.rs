@@ -2,7 +2,7 @@
 //!
 //! This is the one call chain available to an application whose APK is a manifest plus a shared
 //! object, with no Java and no Gradle project (ADR-0003 §2) — the same shape as
-//! `leitner_store::platform`'s directory lookups.
+//! `cairn_store::platform`'s directory lookups.
 //!
 //! Two traps live here, both paid for on the handset, and both of the kind that present as a crash
 //! somewhere else entirely. They are written out because neither is visible from the code that
@@ -29,7 +29,7 @@ const KEYBOARD_UP_THRESHOLD_PX: f32 = 1.0;
 /// **Not `ndk_context::android_context().context()`.** That handle is the
 /// `android.app.Application` — `android-activity` initialises it from `getApplication()` — and
 /// `getWindow()` is an `Activity` method, so looking it up there throws `NoSuchMethodError` and
-/// aborts the process. The existing JNI in `leitner-store` gives no warning about this, because
+/// aborts the process. The existing JNI in `cairn-store` gives no warning about this, because
 /// `getFilesDir()` is a `Context` method that `Application` has too: the wrong handle works
 /// everywhere it has been used so far and fails on the first activity-shaped question.
 static ACTIVITY: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
@@ -378,8 +378,8 @@ fn android_main(app: android_activity::AndroidApp) {
         ..Default::default()
     };
     let _ = eframe::run_native(
-        "Leitner",
+        "Cairn",
         options,
-        Box::new(|cc| Ok(Box::new(crate::LeitnerApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(crate::CairnApp::new(cc)))),
     );
 }

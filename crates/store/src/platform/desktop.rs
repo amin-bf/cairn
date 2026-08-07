@@ -1,12 +1,12 @@
 //! Desktop directories, per the XDG Base Directory specification (ADR-0007 §6).
 //!
 //! No crate dependency for this: the two lookups plus their documented fallbacks are a dozen lines,
-//! and `leitner-store`'s dependency list is short enough to be worth keeping that way.
+//! and `cairn-store`'s dependency list is short enough to be worth keeping that way.
 
 use super::PlatformError;
 use std::path::PathBuf;
 
-const APP_DIR: &str = "leitner";
+const APP_DIR: &str = "cairn";
 
 fn home() -> Result<PathBuf, PlatformError> {
     std::env::var_os("HOME")
@@ -15,12 +15,12 @@ fn home() -> Result<PathBuf, PlatformError> {
         .ok_or_else(|| PlatformError("HOME is unset".into()))
 }
 
-/// `$XDG_DATA_HOME/leitner`, falling back to `~/.local/share/leitner`.
+/// `$XDG_DATA_HOME/cairn`, falling back to `~/.local/share/cairn`.
 pub fn data_dir() -> Result<PathBuf, PlatformError> {
     xdg("XDG_DATA_HOME", ".local/share")
 }
 
-/// `$XDG_STATE_HOME/leitner`, falling back to `~/.local/state/leitner`.
+/// `$XDG_STATE_HOME/cairn`, falling back to `~/.local/state/cairn`.
 ///
 /// XDG's slot for state that persists but is not the user's portable data — which is exactly the
 /// writer marker's requirement. The desktop form of the Android backup hazard is a collection in a

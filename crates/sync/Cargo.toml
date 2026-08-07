@@ -1,12 +1,12 @@
 [package]
-name = "leitner-sync"
+name = "cairn-sync"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
 # This crate exists because ADR-0013 chose a **key-value namespace on a personal cloud drive** as the
-# transport, and `leitner-core`'s empty dependency list (ADR-0009 §2) has no room for HTTP, TLS or
+# transport, and `cairn-core`'s empty dependency list (ADR-0009 §2) has no room for HTTP, TLS or
 # OAuth. `CONTEXT-MAP.md` anticipated exactly this crate before the decision was taken.
 #
 # It must stay testable without a window and without a handset: the transport surface is four
@@ -18,9 +18,9 @@ license.workspace = true
 # `aarch64-linux-android`; note the TLS backend compiles C, so the NDK's clang must be exported —
 # see `scripts/android-env.sh`.
 [dependencies]
-leitner-core.workspace = true
+cairn-core.workspace = true
 # ADR-0013 §4: published objects carry `zstd`-compressed interchange lines and nothing else. The
 # compressor is a container over ADR-0004 §11's byte-for-byte rows, never a re-encoding — the exact
-# bytes come back out — so it lives at the transport edge, not in `leitner-core`. Level is pinned in
+# bytes come back out — so it lives at the transport edge, not in `cairn-core`. Level is pinned in
 # `codec.rs`. Compiles C, like `rusqlite bundled`; the Android note in the package header applies.
 zstd.workspace = true

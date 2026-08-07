@@ -1,9 +1,9 @@
 //! Reading a file the platform hands us — a launch intent on Android, a dropped file on the desktop
-//! — and turning it into the same declinable preview or honest refusal `leitner-export::import`
+//! — and turning it into the same declinable preview or honest refusal `cairn-export::import`
 //! derives (ADR-0022 §2, ADR-0024 §1).
 //!
 //! **This module is the join, not a second copy of the identification logic.** The sniff, the gate
-//! and the describe stage all live in [`leitner_export::import`], fully tested there; this file only
+//! and the describe stage all live in [`cairn_export::import`], fully tested there; this file only
 //! carries what arrived to them and hands back what they decided. The two arrival routes converge
 //! here on purpose (acceptance of #107): a deck opened from a file manager and one shared from a
 //! messaging application take the **same** path once their bytes are in hand, and so does a file
@@ -22,9 +22,9 @@
 //! plan — the plan is recomputed against the collection as it stands, so a sync landing underneath a
 //! preview changes the numbers before the user can act on stale ones.
 
-use leitner_core::content::DeckId;
-use leitner_export::import::{self, Plan, Profile, Refusal};
-use leitner_store::{Collection, StoreError};
+use cairn_core::content::DeckId;
+use cairn_export::import::{self, Plan, Profile, Refusal};
+use cairn_store::{Collection, StoreError};
 
 use crate::notes;
 
@@ -40,7 +40,7 @@ pub enum Arrival {
     /// A file dropped onto the desktop window, surfaced by egui with no seam function (ADR-0016 §5).
     Dropped,
     /// A file **this application wrote**, chosen from the file list — enumerated by
-    /// [`leitner_export::platform::list`] and re-read on selection (issue #108). It reaches this same
+    /// [`cairn_export::platform::list`] and re-read on selection (issue #108). It reaches this same
     /// read so the list and an arriving file share one identification path, not two (ADR-0022 §5).
     Listed,
 }
@@ -94,7 +94,7 @@ pub struct Report {
 /// the whole gate-then-describe read re-run, so nothing about the plan is cached and a merge landing
 /// underneath cannot stale it.
 ///
-/// The identification is `leitner-export`'s: the bytes are sniffed by their `mimetype` member and
+/// The identification is `cairn-export`'s: the bytes are sniffed by their `mimetype` member and
 /// diffed by [`import::preview`]. The name, if any, is carried through for display only — it never
 /// decides what the file is (ADR-0024 §1).
 pub fn read(inbound: &Inbound, coll: &Collection) -> Result<Report, StoreError> {
@@ -180,8 +180,8 @@ pub fn take_dropped(ctx: &egui::Context) -> Option<Inbound> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use leitner_core::content::NoteId;
-    use leitner_export::{
+    use cairn_core::content::NoteId;
+    use cairn_export::{
         DeckContent, DeckExport, Metadata, NoteContent, build_deck, deck_digest, next_revision,
     };
     use tempfile::TempDir;
@@ -193,7 +193,7 @@ mod tests {
         (coll, data, state)
     }
 
-    /// A real `.ldeck`, assembled by the export path so the reader is tested against the writer.
+    /// A real `.cdeck`, assembled by the export path so the reader is tested against the writer.
     fn real_deck(id: DeckId, name: &str, notes: &[(NoteId, &str)]) -> Vec<u8> {
         let content = DeckContent {
             id,

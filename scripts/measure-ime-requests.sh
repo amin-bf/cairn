@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-PACKAGE="${PACKAGE:-dev.leitner.app}"
+PACKAGE="${PACKAGE:-dev.cairn.app}"
 
 if ! adb get-state >/dev/null 2>&1; then
   echo "no handset attached — the emulator cannot answer this (client-stack rule 9)" >&2

@@ -7,7 +7,7 @@
 //! (ADR-0002 §1, ADR-0017 §1).
 //!
 //! The four shipped kinds and the slot namespace that gives their cards identity, per
-//! [#81](https://github.com/amin-bf/leitner/issues/81): `basic`, `basic-reverse`, `vocab` and
+//! [#81](https://github.com/amin-bf/cairn/issues/81): `basic`, `basic-reverse`, `vocab` and
 //! `cloze`, drawing their slots from **one namespace shared by every kind** (ADR-0017 §1). `basic`
 //! and `basic-reverse` share slot 0 for Front→Back deliberately, and cloze blanks are partitioned
 //! above the high bit (`0x8000 | n`, ADR-0017 §3). The two tests that make a slot's immutability
@@ -20,7 +20,7 @@ pub mod order;
 
 /// A note's identity: sixteen bytes, minted once at creation as a UUIDv4 (ADR-0002 §6).
 ///
-/// `leitner-core` never mints one — minting is a write-time act at the edge, and this crate takes
+/// `cairn-core` never mints one — minting is a write-time act at the edge, and this crate takes
 /// identity as a value (ADR-0009 §8). The bytes are stored in RFC 9562 order so that
 /// [`CardRef::encode`] is a fixed, cross-device byte string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -48,7 +48,7 @@ impl NoteId {
 /// deck rather than a new one, matched against your notes by note id so review history survives.
 ///
 /// A deck is `{ id, name }` and nothing else (ADR-0005 §5): the name is a mutable, non-unique display
-/// label, and no configuration ever lives here. Like [`NoteId`], `leitner-core` never mints one —
+/// label, and no configuration ever lives here. Like [`NoteId`], `cairn-core` never mints one —
 /// minting is a write-time act at the edge (ADR-0009 §8) — and the bytes are stored in RFC 9562 order
 /// so the canonical text form is a fixed, cross-device string. A note's `deck` reference is this id's
 /// [`DeckId::to_canonical`] text; a reference naming no held deck is **unfiled, never lost**
@@ -298,7 +298,7 @@ pub fn cloze_cards(note: NoteId, text: &str) -> Vec<CardRef> {
 ///
 /// This reads only the current text; the editor widens "ever used" to include a note's **dormant**
 /// blanks — deleted blanks still carrying history — which are not in the text but must not be reused
-/// either (see `leitner-app::cards`).
+/// either (see `cairn-app::cards`).
 pub fn next_blank_number(text: &str) -> u16 {
     cloze_blanks(text).into_iter().max().map_or(1, |n| n + 1)
 }

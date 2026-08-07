@@ -5,17 +5,17 @@
 //! force-quit simply no longer offers it. There is nothing to persist and nothing to resume.
 //!
 //! Everything in this module is pure: it takes the current card set and a [`Replayed`] projection
-//! (both from `leitner-core`) plus the **device-local day**, and returns what to offer. That day is
+//! (both from `cairn-core`) plus the **device-local day**, and returns what to offer. That day is
 //! the edge value replay refuses to read (replay `CONTEXT.md`): "due today" is measured against the
 //! device's local day, never the collection day scale.
 
 use std::collections::{HashMap, HashSet};
 
-use leitner_core::content::{CardRef, NoteId};
-use leitner_core::replay::{
+use cairn_core::content::{CardRef, NoteId};
+use cairn_core::replay::{
     Leech, NewCard, Replayed, introduction_candidates, notes_introduced_today,
 };
-use leitner_core::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, day_gap};
+use cairn_core::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, day_gap};
 
 /// More cards due than a sitting will clear: past this, the count picker **frames** the backlog
 /// rather than reporting a bare number (ADR-0001 §3 forbids a due-count presented as a queue; the
@@ -162,7 +162,7 @@ pub fn interval_preview(offered: &Offered, grade: Grade, today: i64) -> u32 {
 
 /// The leeches that **crossed the floor during the sitting just finished** — the end-of-session
 /// pointer's contents (ADR-0010 §6). `before` is the set of leech cards captured when the sitting
-/// began; `now` is [`leeches`](leitner_core::replay::leeches) recomputed at its end. A leech in `now`
+/// began; `now` is [`leeches`](cairn_core::replay::leeches) recomputed at its end. A leech in `now`
 /// but not in `before` crossed *this* session, caused by a failure the running app just logged — and
 /// this needs **zero stored state**: no dismissal flag, no last-seen marker (ADR-0010 §6), only the
 /// in-memory snapshot a sitting already is. The order of `now` (worst first) is preserved.
@@ -243,11 +243,11 @@ impl ReviewState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use leitner_core::content::{BASIC, NoteId};
-    use leitner_core::log::DayScale;
-    use leitner_core::replay::replay;
-    use leitner_core::scheduling::Grade;
-    use leitner_store::Collection;
+    use cairn_core::content::{BASIC, NoteId};
+    use cairn_core::log::DayScale;
+    use cairn_core::replay::replay;
+    use cairn_core::scheduling::Grade;
+    use cairn_store::Collection;
     use tempfile::TempDir;
 
     fn note(byte: u8) -> NoteId {
@@ -638,8 +638,8 @@ mod tests {
         for &card in &cards {
             replayed.cards.insert(
                 card,
-                leitner_core::replay::CardState {
-                    memory: leitner_core::scheduling::MemoryState {
+                cairn_core::replay::CardState {
+                    memory: cairn_core::scheduling::MemoryState {
                         stability: 5.0,
                         difficulty: 5.0,
                     },

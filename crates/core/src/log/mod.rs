@@ -5,7 +5,7 @@
 //! (ADR-0004 §2), the frozen day number (ADR-0004 §4), and the canonical JSON-lines interchange
 //! form (ADR-0004 §11).
 //!
-//! **Naming hazard.** This module is called `log` and would shadow the `log` crate. `leitner-core`
+//! **Naming hazard.** This module is called `log` and would shadow the `log` crate. `cairn-core`
 //! takes no *direct* dependency named `log` (ADR-0009 §6, as amended by ADR-0027 §4) — `fsrs`
 //! depends on it, but a transitive dependency never enters the extern prelude, so the collision
 //! cannot fire. There is also **no serialisation crate here**: `serde` arrives transitively through

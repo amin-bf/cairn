@@ -1,4 +1,4 @@
-//! The **deck profile**: what a `.ldeck` file carries, how it is serialised, and the revision and
+//! The **deck profile**: what a `.cdeck` file carries, how it is serialised, and the revision and
 //! digest that make an import able to refuse going backwards without ever consulting a stamp.
 //!
 //! This is the profile [ADR-0008](../../../docs/adr/0008-the-deck-export-format.md) specifies in
@@ -10,7 +10,7 @@
 use crate::container::{self, Member};
 use crate::digest::sha256_hex;
 use crate::json::{Array, Object};
-use leitner_core::content::{DeckId, FieldRole, KindDefinition, NoteId, SHIPPED_KINDS};
+use cairn_core::content::{DeckId, FieldRole, KindDefinition, NoteId, SHIPPED_KINDS};
 
 /// A live note's content, as the file carries it. `position` fixes the note's place in
 /// `(position, note id)` emission order (ADR-0011 §7) and is **not itself emitted** — the file
@@ -141,7 +141,7 @@ fn kind_member(kind: &KindDefinition) -> String {
             .fold(Array::new(), |arr, s| arr.string(s))
             .finish()
     };
-    let mut cards: Vec<&leitner_core::content::CardTemplate> = kind.cards.iter().collect();
+    let mut cards: Vec<&cairn_core::content::CardTemplate> = kind.cards.iter().collect();
     cards.sort_by_key(|c| c.slot);
     let cards_json = cards
         .iter()
@@ -273,7 +273,7 @@ fn manifest(meta: &Metadata, decks: &[DeckExport], notes: usize, tombstones: usi
         .finish()
 }
 
-/// Assemble the whole `.ldeck` archive for `decks` under `metadata`, byte-for-byte deterministically
+/// Assemble the whole `.cdeck` archive for `decks` under `metadata`, byte-for-byte deterministically
 /// (ADR-0008 §12). Members in fixed order: `mimetype` (stored, first), `manifest.json`,
 /// `notes.jsonl` (all decks' notes then tombstones, `(position, note id)`-ordered per deck), and one
 /// `kinds/<id>.json` per kind any note uses.

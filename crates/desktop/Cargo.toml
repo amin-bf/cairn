@@ -1,21 +1,21 @@
 [package]
-name = "leitner-desktop"
+name = "cairn-desktop"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
 # This crate exists for exactly one reason (ADR-0003 §5): `cargo-apk` panics after signing when one
-# crate has both a cdylib and a bin, so the desktop binary cannot live in `leitner-app`. It must
+# crate has both a cdylib and a bin, so the desktop binary cannot live in `cairn-app`. It must
 # stay a shim with no logic — anything written here is never compiled by the Android build and never
 # exercised on the handset, which is the same class of defect as a runtime platform check.
 #
-# It depends on `leitner-app` and nothing else — `eframe` arrives by re-export. That is not
-# tidiness: a direct `eframe` here could resolve different features from the ones `leitner-app` was
+# It depends on `cairn-app` and nothing else — `eframe` arrives by re-export. That is not
+# tidiness: a direct `eframe` here could resolve different features from the ones `cairn-app` was
 # built with, and it would give this crate a way to grow real code without anyone noticing.
 [dependencies]
-leitner-app.workspace = true
+cairn-app.workspace = true
 
 [[bin]]
-name = "leitner"
+name = "cairn"
 path = "src/main.rs"

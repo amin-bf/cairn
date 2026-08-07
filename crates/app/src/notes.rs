@@ -18,8 +18,8 @@
 //! Everything here is a projection of the mutable surface, computed fresh — there is no cached list
 //! to fall out of step with an edit made from the review screen (ADR-0021 §6).
 
-use leitner_core::content::NoteId;
-use leitner_store::{Collection, StoreError, TAG_ATTR_PREFIX};
+use cairn_core::content::NoteId;
+use cairn_store::{Collection, StoreError, TAG_ATTR_PREFIX};
 
 /// One note as the browse surface sees it. Carries what narrows the list (deck, tags, field values)
 /// and what identifies it (id, kind) — and **deliberately no schedule information**: no box, no due
@@ -321,7 +321,7 @@ mod tests {
         coll.mutable_set("note", &filed.0, "deck", Some(&deck.to_canonical()))
             .unwrap();
         // A reference to a deck that was never created — unfiled, not deleted.
-        let ghost = leitner_core::content::DeckId([0xab; 16]).to_canonical();
+        let ghost = cairn_core::content::DeckId([0xab; 16]).to_canonical();
         coll.mutable_set("note", &dangling.0, "deck", Some(&ghost))
             .unwrap();
 

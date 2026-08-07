@@ -6,8 +6,8 @@
 //! carried forward from the #8 slice, where it was proven on the handset.
 //!
 //! **Ordering hazard.** The JVM handle comes from `ndk_context`, which is populated by
-//! `android-activity` inside `leitner-app`. So the store cannot be opened before the activity
-//! exists. Under `android_main` that is automatic; it does mean `leitner-store` is not
+//! `android-activity` inside `cairn-app`. So the store cannot be opened before the activity
+//! exists. Under `android_main` that is automatic; it does mean `cairn-store` is not
 //! independently runnable on Android, and store tests run on desktop.
 
 use super::PlatformError;

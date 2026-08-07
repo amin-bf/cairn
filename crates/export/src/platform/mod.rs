@@ -1,12 +1,12 @@
 //! The user-files seam — **put, get, list, hand_off** — and it is four functions wide.
 //!
-//! This is `leitner-export`'s own `platform` module, a peer of `leitner-store`'s two-function seam
+//! This is `cairn-export`'s own `platform` module, a peer of `cairn-store`'s two-function seam
 //! under the same compile-time `#[cfg]` discipline (ADR-0009 §4, ADR-0016 §5, ADR-0023 §1). It moves
 //! an artifact to a place the user can see, reads one back, lists the ones we recognise, and hands
 //! one onward. The invariant is **opaque, minimal, enumerable** — *not* a function count: ADR-0016
 //! §5's *"three operations, not four"* was an argument about **delete**, which is still absent, and
 //! [`hand_off`] is the fourth operation ADR-0023 added on the deck file's own purpose.
-//! `leitner-store::platform` still keeps exactly two, so its erosion signal is intact.
+//! `cairn-store::platform` still keeps exactly two, so its erosion signal is intact.
 //!
 //! **The third arm is the point.** A binary `android` / `not(android)` split can never fail to
 //! compile, which is its defect: a new target would silently take the desktop arm. The
@@ -29,7 +29,7 @@ mod imp;
     target_os = "windows"
 )))]
 compile_error!(
-    "unsupported target: add an arm to leitner_export::platform. \
+    "unsupported target: add an arm to cairn_export::platform. \
      Do not widen an existing arm to cover it — see ADR-0009 §4 and ADR-0023 §1."
 );
 
@@ -54,7 +54,7 @@ pub fn get(name: &str) -> Result<Vec<u8>, PlatformError> {
     imp::get(name)
 }
 
-/// The names of the recognised files the application can see — `.ldeck` and `.lcoll`. On Android
+/// The names of the recognised files the application can see — `.cdeck` and `.ccoll`. On Android
 /// this is the `MediaStore` rows we wrote, and **only** those: a file another application dropped in
 /// `Downloads` is invisible to the query, not merely unreadable (ADR-0024 §3).
 pub fn list() -> Result<Vec<String>, PlatformError> {

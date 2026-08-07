@@ -22,8 +22,8 @@
 
 use std::thread::JoinHandle;
 
-use leitner_core::replay::{OptimisationNudge, training_histories};
-use leitner_core::scheduling::{OptimisationOutcome, OptimisationProgress, optimise};
+use cairn_core::replay::{OptimisationNudge, training_histories};
+use cairn_core::scheduling::{OptimisationOutcome, OptimisationProgress, optimise};
 
 /// What the settings screen says on completion (ADR-0014 §4). Two facts and no third: the parameters
 /// changed, and — the half that is not decoration — **every due date moved**, because the current
@@ -106,7 +106,7 @@ pub enum Phase {
 /// train* — is the caller's to sequence before starting a job, and is a no-op where no transport is
 /// enrolled or reachable (an offline device optimising on local history is a fine outcome). The write
 /// of the fitted vector is likewise the caller's, once `poll` hands back the outcome, through
-/// [`leitner_store::Collection::set_scheduler_parameters`], which skips an unchanged vector.
+/// [`cairn_store::Collection::set_scheduler_parameters`], which skips an unchanged vector.
 pub struct OptimiseJob {
     progress: OptimisationProgress,
     handle: Option<JoinHandle<Option<OptimisationOutcome>>>,

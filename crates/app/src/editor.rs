@@ -16,8 +16,8 @@
 //! destructive-edit warning that sits above the fields are `cards`, not here. What *is* here is the
 //! form pane's own logic: the commit rule and the dropdown's contents.
 
-use leitner_core::content::{DeckId, KindDefinition, NoteId, SHIPPED_KINDS};
-use leitner_store::{Collection, StoreError};
+use cairn_core::content::{DeckId, KindDefinition, NoteId, SHIPPED_KINDS};
+use cairn_store::{Collection, StoreError};
 
 /// The kinds the dropdown offers for a note whose current kind is `current` (ADR-0012 §2 as amended
 /// by ADR-0017 §6): every shipped kind, **plus** `current` itself when it is an acquired kind this

@@ -7,7 +7,7 @@
 //! *says*, where it *sits* and when it appears are settled below.
 //!
 //! The rules this module holds, each an acceptance criterion of
-//! [#83](https://github.com/amin-bf/leitner/issues/83):
+//! [#83](https://github.com/amin-bf/cairn/issues/83):
 //!
 //! - **Ordered by raw slot number, live and dormant alike** (ADR-0018 §1) — never grouped by
 //!   dormancy, and **never sorted on `ordinal & 0x7FFF`**, which would interleave cloze blanks among
@@ -32,12 +32,12 @@
 
 use std::collections::HashSet;
 
-use leitner_core::content::{
+use cairn_core::content::{
     CLOZE, CLOZE_SLOT_BIT, CardRef, NoteId, SHIPPED_KINDS, cloze_blank, cloze_cards,
 };
-use leitner_core::log::{ParsedLine, Row, parse_line};
-use leitner_core::replay::replay;
-use leitner_store::{Collection, StoreError};
+use cairn_core::log::{ParsedLine, Row, parse_line};
+use cairn_core::replay::replay;
+use cairn_store::{Collection, StoreError};
 
 use crate::deck;
 
@@ -322,7 +322,7 @@ fn slot_roles(slot: u16) -> Option<String> {
 /// and now dormant, so *Blank it* can never reclaim a deleted blank's card identity. Never the lowest
 /// free one — gaps stay gaps.
 pub fn next_blank_number(pane: &CardPane, text: &str) -> u16 {
-    leitner_core::content::cloze_blanks(text)
+    cairn_core::content::cloze_blanks(text)
         .into_iter()
         .chain(pane.dormant_blanks())
         .max()
@@ -332,9 +332,9 @@ pub fn next_blank_number(pane: &CardPane, text: &str) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use leitner_core::content::cloze_slot;
-    use leitner_core::log::DayScale;
-    use leitner_core::scheduling::Grade;
+    use cairn_core::content::cloze_slot;
+    use cairn_core::log::DayScale;
+    use cairn_core::scheduling::Grade;
     use tempfile::TempDir;
 
     fn open() -> (Collection, TempDir, TempDir) {

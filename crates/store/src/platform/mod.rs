@@ -31,7 +31,7 @@ mod imp;
     target_os = "windows"
 )))]
 compile_error!(
-    "unsupported target: add an arm to leitner_store::platform. \
+    "unsupported target: add an arm to cairn_store::platform. \
      Do not widen an existing arm to cover it — see ADR-0003 and ADR-0009 §4."
 );
 

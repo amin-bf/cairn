@@ -1,4 +1,4 @@
-//! Reading a received `.ldeck`: the **sniff**, the **gate** and the **describe** stage, and the
+//! Reading a received `.cdeck`: the **sniff**, the **gate** and the **describe** stage, and the
 //! declinable [`Plan`] the preview is drawn from.
 //!
 //! [ADR-0022 §2](../../../docs/adr/0022-the-import-preview-and-export-report.md) splits reading a file
@@ -20,8 +20,8 @@ use crate::container::{
     self, COLLECTION_MEDIA_TYPE, DECK_MEDIA_TYPE, FORMAT, KINDS_PREFIX, MANIFEST_MEMBER,
     NOTES_MEMBER,
 };
-use leitner_core::content::{DeckId, NoteId, SHIPPED_KINDS};
-use leitner_core::log::Json;
+use cairn_core::content::{DeckId, NoteId, SHIPPED_KINDS};
+use cairn_core::log::Json;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Cursor;
 
@@ -59,9 +59,9 @@ pub fn plain(s: &str, max: usize) -> String {
 /// What a file is, decided by its `mimetype` member and nothing else (ADR-0024 §1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Profile {
-    /// A `.ldeck` — the media type is [`DECK_MEDIA_TYPE`].
+    /// A `.cdeck` — the media type is [`DECK_MEDIA_TYPE`].
     Deck,
-    /// A `.lcoll` collection archive — the media type is [`COLLECTION_MEDIA_TYPE`]. Read by
+    /// A `.ccoll` collection archive — the media type is [`COLLECTION_MEDIA_TYPE`]. Read by
     /// [`crate::collection::restore_preview`], and refused by deck [`preview`] as the **wrong
     /// profile**: the two carry opposite stamp rules, so a reader that mistakes one for the other is
     /// the destructive error a distinct profile exists to make impossible (ADR-0016 §2).
@@ -563,7 +563,7 @@ mod tests {
         DeckId([b; 16])
     }
 
-    /// A real `.ldeck`, assembled by the export path so the reader is tested against the writer.
+    /// A real `.cdeck`, assembled by the export path so the reader is tested against the writer.
     fn real_deck(
         id: DeckId,
         name: &str,
@@ -823,8 +823,8 @@ mod tests {
             Err(Refusal::WrongProfile)
         );
 
-        // A collection container renamed to `.ldeck` is refused on its mimetype alone.
-        let coll = craft("application/vnd.leitner.collection+zip", vec![]);
+        // A collection container renamed to `.cdeck` is refused on its mimetype alone.
+        let coll = craft("application/vnd.cairn.collection+zip", vec![]);
         assert_eq!(
             preview(&coll, &Collection::new()),
             Err(Refusal::WrongProfile)

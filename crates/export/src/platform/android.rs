@@ -1,8 +1,14 @@
 //! Android user files: `MediaStore` for put/get/list, the system share sheet for hand-off — reached
-//! by hand-written JNI, the same shim `leitner-store::platform::android` established (ADR-0007 §6).
+//! by hand-written JNI, the same shim `cairn-store::platform::android` established (ADR-0007 §6).
+//!
+//! **The measured names below say `.ldeck`, and are left as run.** That was the extension in force
+//! when these figures were taken; [ADR-0028 §3](../../../docs/adr/0028-the-application-is-named-cairn.md)
+//! renamed it to `.cdeck` and §4 does not rewrite a record of a handset run. Nothing in the findings
+//! depends on the letters — what was measured is where the dedupe suffix lands and what type
+//! `MediaStore` stores.
 //!
 //! **Verified on the handset** — a Pixel 8 Pro, through this code rather than through a probe
-//! ([#98](https://github.com/amin-bf/leitner/issues/98)). Both decisions the shape encodes held:
+//! ([#98](https://github.com/amin-bf/cairn/issues/98)). Both decisions the shape encodes held:
 //!
 //! - **The write declares no `mime_type`** ([ADR-0024 §4](../../../docs/adr/0024-identifying-a-written-file.md)).
 //!   A declared type that disagrees with the name is the *only* reason a collision produces

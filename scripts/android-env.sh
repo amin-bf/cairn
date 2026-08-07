@@ -1,4 +1,4 @@
-# Android toolchain environment for leitner-app.
+# Android toolchain environment for cairn-app.
 #
 # Source this before any Android build:  source scripts/android-env.sh
 #
