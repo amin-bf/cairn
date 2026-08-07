@@ -176,6 +176,20 @@ pub fn launch_file() -> Option<Inbound> {
     read
 }
 
+/// Call a JNI method that returns an object, mapping a thrown exception or a `null` result to
+/// `None`. This is the launch-read's whole idiom — every arm degrades to a refusal rather than a
+/// crash (ADR-0024 §1) — so the null and the failure fold into one `?`.
+fn call_object<'local>(
+    env: &mut jni::JNIEnv<'local>,
+    obj: &JObject,
+    name: &str,
+    sig: &str,
+    args: &[JValue],
+) -> Option<JObject<'local>> {
+    let obj = env.call_method(obj, name, sig, args).ok()?.l().ok()?;
+    (!obj.is_null()).then_some(obj)
+}
+
 fn read_launch_file() -> Option<Inbound> {
     let activity = ACTIVITY.load(Ordering::Relaxed);
     if activity.is_null() {
@@ -189,71 +203,50 @@ fn read_launch_file() -> Option<Inbound> {
     let mut env = vm.attach_current_thread().ok()?;
     let activity = unsafe { JObject::from_raw(activity.cast()) };
 
-    let intent = env
-        .call_method(&activity, "getIntent", "()Landroid/content/Intent;", &[])
-        .ok()?
-        .l()
-        .ok()?;
-    if intent.is_null() {
-        return None;
-    }
+    let intent = call_object(
+        &mut env,
+        &activity,
+        "getIntent",
+        "()Landroid/content/Intent;",
+        &[],
+    )?;
 
-    let action = env
-        .call_method(&intent, "getAction", "()Ljava/lang/String;", &[])
-        .ok()?
-        .l()
-        .ok()?;
-    if action.is_null() {
-        return None;
-    }
+    let action = call_object(&mut env, &intent, "getAction", "()Ljava/lang/String;", &[])?;
     let action: String = env.get_string(&JString::from(action)).ok()?.into();
 
     // `ACTION_VIEW` carries the URI in `getData()`; `ACTION_SEND` carries it in `EXTRA_STREAM`
     // (ADR-0024 §2). Any other action — the app was launched, not handed a file — is `None`.
     let (arrival, uri) = match action.as_str() {
         "android.intent.action.VIEW" => {
-            let uri = env
-                .call_method(&intent, "getData", "()Landroid/net/Uri;", &[])
-                .ok()?
-                .l()
-                .ok()?;
+            let uri = call_object(&mut env, &intent, "getData", "()Landroid/net/Uri;", &[])?;
             (Arrival::Opened, uri)
         }
         "android.intent.action.SEND" => {
             let key = env.new_string("android.intent.extra.STREAM").ok()?;
             // The single-argument `getParcelableExtra` is deprecated at API 33+ but present and
             // functional from 24; `min_sdk_version` is 24, so it is the portable call.
-            let uri = env
-                .call_method(
-                    &intent,
-                    "getParcelableExtra",
-                    "(Ljava/lang/String;)Landroid/os/Parcelable;",
-                    &[JValue::Object(&JObject::from(key))],
-                )
-                .ok()?
-                .l()
-                .ok()?;
+            let uri = call_object(
+                &mut env,
+                &intent,
+                "getParcelableExtra",
+                "(Ljava/lang/String;)Landroid/os/Parcelable;",
+                &[JValue::Object(&JObject::from(key))],
+            )?;
             (Arrival::Shared, uri)
         }
         _ => return None,
     };
-    if uri.is_null() {
-        return None;
-    }
 
     let context = ndk_context::android_context();
     // SAFETY: valid for the process lifetime; the resolver is borrowed for this one read.
     let context = unsafe { JObject::from_raw(context.context().cast()) };
-    let resolver = env
-        .call_method(
-            &context,
-            "getContentResolver",
-            "()Landroid/content/ContentResolver;",
-            &[],
-        )
-        .ok()?
-        .l()
-        .ok()?;
+    let resolver = call_object(
+        &mut env,
+        &context,
+        "getContentResolver",
+        "()Landroid/content/ContentResolver;",
+        &[],
+    )?;
 
     let bytes = read_stream(&mut env, &resolver, &uri)?;
     // Best-effort only: identity is in the bytes, so a missing name is no obstacle (ADR-0024 §1).
@@ -270,19 +263,13 @@ fn read_launch_file() -> Option<Inbound> {
 /// launch intent carries. `None` if the stream will not open — a refusal the caller surfaces, never
 /// a crash.
 fn read_stream(env: &mut jni::JNIEnv, resolver: &JObject, uri: &JObject) -> Option<Vec<u8>> {
-    let stream = env
-        .call_method(
-            resolver,
-            "openInputStream",
-            "(Landroid/net/Uri;)Ljava/io/InputStream;",
-            &[JValue::Object(uri)],
-        )
-        .ok()?
-        .l()
-        .ok()?;
-    if stream.is_null() {
-        return None;
-    }
+    let stream = call_object(
+        env,
+        resolver,
+        "openInputStream",
+        "(Landroid/net/Uri;)Ljava/io/InputStream;",
+        &[JValue::Object(uri)],
+    )?;
 
     let mut out = Vec::new();
     let buffer = env.new_byte_array(8192).ok()?;
@@ -312,25 +299,19 @@ fn inbound_display_name(
     uri: &JObject,
 ) -> Option<String> {
     let null = JObject::null();
-    let cursor = env
-        .call_method(
-            resolver,
-            "query",
-            "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;",
-            &[
-                JValue::Object(uri),
-                JValue::Object(&null),
-                JValue::Object(&null),
-                JValue::Object(&null),
-                JValue::Object(&null),
-            ],
-        )
-        .ok()?
-        .l()
-        .ok()?;
-    if cursor.is_null() {
-        return None;
-    }
+    let cursor = call_object(
+        env,
+        resolver,
+        "query",
+        "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;",
+        &[
+            JValue::Object(uri),
+            JValue::Object(&null),
+            JValue::Object(&null),
+            JValue::Object(&null),
+            JValue::Object(&null),
+        ],
+    )?;
     let name = if env
         .call_method(&cursor, "moveToFirst", "()Z", &[])
         .ok()?
