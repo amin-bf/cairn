@@ -12,9 +12,10 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use jni::objects::{JObject, JValue};
+use jni::objects::{JObject, JString, JValue};
 
 use super::{Insets, SoftKeyboard};
+use crate::inbound::{Arrival, Inbound};
 
 /// Below this many physical pixels the keyboard is treated as **down**.
 ///
@@ -155,6 +156,220 @@ fn clear_pending_exception() {
     if env.exception_check().unwrap_or(false) {
         let _ = env.exception_clear();
     }
+}
+
+/// The file this process was launched pointing at, read from the **activity's** launch intent, or
+/// `None` for an ordinary launch (`super::launch_file`'s Android arm).
+///
+/// `getIntent()` is an `Activity` method, which is why this reads [`ACTIVITY`] rather than the
+/// `Application` handle `ndk_context` hands back — looking an `Activity` method up on the
+/// `Application` throws `NoSuchMethodError` and aborts the process, the same trap [`read_insets`]
+/// records. The bytes are opened through the content resolver under the read grant the intent
+/// carries; the display name is asked for but **not required** (ADR-0024 §1) — a share may carry
+/// none, and a provider URI carries a row id where the name would be.
+pub fn launch_file() -> Option<Inbound> {
+    let read = read_launch_file();
+    // **Clear before returning, always** — the same discipline as `insets`. A failed JNI lookup
+    // leaves a Java exception pending, and the next call armed with one aborts the process inside an
+    // unrelated frame. `?` above is only safe because this runs behind it (acceptance of #107).
+    clear_pending_exception();
+    read
+}
+
+fn read_launch_file() -> Option<Inbound> {
+    let activity = ACTIVITY.load(Ordering::Relaxed);
+    if activity.is_null() {
+        return None;
+    }
+
+    let ctx = ndk_context::android_context();
+    // SAFETY: `ndk_context` hands back the VM `android-activity` registered at startup, and both the
+    // activity and the application context are global refs valid for the process lifetime.
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+    let mut env = vm.attach_current_thread().ok()?;
+    let activity = unsafe { JObject::from_raw(activity.cast()) };
+
+    let intent = env
+        .call_method(&activity, "getIntent", "()Landroid/content/Intent;", &[])
+        .ok()?
+        .l()
+        .ok()?;
+    if intent.is_null() {
+        return None;
+    }
+
+    let action = env
+        .call_method(&intent, "getAction", "()Ljava/lang/String;", &[])
+        .ok()?
+        .l()
+        .ok()?;
+    if action.is_null() {
+        return None;
+    }
+    let action: String = env.get_string(&JString::from(action)).ok()?.into();
+
+    // `ACTION_VIEW` carries the URI in `getData()`; `ACTION_SEND` carries it in `EXTRA_STREAM`
+    // (ADR-0024 §2). Any other action — the app was launched, not handed a file — is `None`.
+    let (arrival, uri) = match action.as_str() {
+        "android.intent.action.VIEW" => {
+            let uri = env
+                .call_method(&intent, "getData", "()Landroid/net/Uri;", &[])
+                .ok()?
+                .l()
+                .ok()?;
+            (Arrival::Opened, uri)
+        }
+        "android.intent.action.SEND" => {
+            let key = env.new_string("android.intent.extra.STREAM").ok()?;
+            // The single-argument `getParcelableExtra` is deprecated at API 33+ but present and
+            // functional from 24; `min_sdk_version` is 24, so it is the portable call.
+            let uri = env
+                .call_method(
+                    &intent,
+                    "getParcelableExtra",
+                    "(Ljava/lang/String;)Landroid/os/Parcelable;",
+                    &[JValue::Object(&JObject::from(key))],
+                )
+                .ok()?
+                .l()
+                .ok()?;
+            (Arrival::Shared, uri)
+        }
+        _ => return None,
+    };
+    if uri.is_null() {
+        return None;
+    }
+
+    let context = ndk_context::android_context();
+    // SAFETY: valid for the process lifetime; the resolver is borrowed for this one read.
+    let context = unsafe { JObject::from_raw(context.context().cast()) };
+    let resolver = env
+        .call_method(
+            &context,
+            "getContentResolver",
+            "()Landroid/content/ContentResolver;",
+            &[],
+        )
+        .ok()?
+        .l()
+        .ok()?;
+
+    let bytes = read_stream(&mut env, &resolver, &uri)?;
+    // Best-effort only: identity is in the bytes, so a missing name is no obstacle (ADR-0024 §1).
+    let name = inbound_display_name(&mut env, &resolver, &uri);
+
+    Some(Inbound {
+        arrival,
+        name,
+        bytes,
+    })
+}
+
+/// Read every byte behind a `content://` URI through `openInputStream`, under the read grant the
+/// launch intent carries. `None` if the stream will not open — a refusal the caller surfaces, never
+/// a crash.
+fn read_stream(env: &mut jni::JNIEnv, resolver: &JObject, uri: &JObject) -> Option<Vec<u8>> {
+    let stream = env
+        .call_method(
+            resolver,
+            "openInputStream",
+            "(Landroid/net/Uri;)Ljava/io/InputStream;",
+            &[JValue::Object(uri)],
+        )
+        .ok()?
+        .l()
+        .ok()?;
+    if stream.is_null() {
+        return None;
+    }
+
+    let mut out = Vec::new();
+    let buffer = env.new_byte_array(8192).ok()?;
+    loop {
+        let read = env
+            .call_method(&stream, "read", "([B)I", &[JValue::Object(&buffer)])
+            .ok()?
+            .i()
+            .ok()?;
+        if read < 0 {
+            break;
+        }
+        let mut chunk = vec![0i8; read as usize];
+        env.get_byte_array_region(&buffer, 0, &mut chunk).ok()?;
+        out.extend(chunk.into_iter().map(|b| b as u8));
+    }
+    let _ = env.call_method(&stream, "close", "()V", &[]);
+    Some(out)
+}
+
+/// The `OpenableColumns.DISPLAY_NAME` a provider exposes for the URI, or `None` when it exposes none
+/// — which is legal and common for a share (ADR-0024 §1). Every failure degrades to `None`, so this
+/// never turns a nameless-but-readable file into a refusal.
+fn inbound_display_name(
+    env: &mut jni::JNIEnv,
+    resolver: &JObject,
+    uri: &JObject,
+) -> Option<String> {
+    let null = JObject::null();
+    let cursor = env
+        .call_method(
+            resolver,
+            "query",
+            "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;",
+            &[
+                JValue::Object(uri),
+                JValue::Object(&null),
+                JValue::Object(&null),
+                JValue::Object(&null),
+                JValue::Object(&null),
+            ],
+        )
+        .ok()?
+        .l()
+        .ok()?;
+    if cursor.is_null() {
+        return None;
+    }
+    let name = if env
+        .call_method(&cursor, "moveToFirst", "()Z", &[])
+        .ok()?
+        .z()
+        .ok()?
+    {
+        let column = env.new_string("_display_name").ok()?;
+        let index = env
+            .call_method(
+                &cursor,
+                "getColumnIndex",
+                "(Ljava/lang/String;)I",
+                &[JValue::Object(&JObject::from(column))],
+            )
+            .ok()?
+            .i()
+            .ok()?;
+        if index < 0 {
+            None
+        } else {
+            let value = env
+                .call_method(
+                    &cursor,
+                    "getString",
+                    "(I)Ljava/lang/String;",
+                    &[JValue::Int(index)],
+                )
+                .ok()?
+                .l()
+                .ok()?;
+            (!value.is_null())
+                .then(|| env.get_string(&JString::from(value)).ok().map(Into::into))
+                .flatten()
+        }
+    } else {
+        None
+    };
+    let _ = env.call_method(&cursor, "close", "()V", &[]);
+    name
 }
 
 /// Android entry point. `NativeActivity` hosts the application directly: the APK is this `.so` plus

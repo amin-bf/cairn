@@ -10,6 +10,7 @@
 //! wrapper would fire on every click into a field (ADR-0026 §5).
 
 use super::{Insets, SoftKeyboard};
+use crate::inbound::Inbound;
 
 pub fn insets() -> Insets {
     Insets {
@@ -17,4 +18,12 @@ pub fn insets() -> Insets {
         bottom: 0.0,
         keyboard: SoftKeyboard::Absent,
     }
+}
+
+/// The desktop has no launch intent: a file opened from a file manager arrives by drag-and-drop,
+/// which egui surfaces directly with no seam function (ADR-0016 §5). So this is always `None`, and
+/// that is a fact rather than a stub — [`crate::inbound::take_dropped`] is the desktop inbound path,
+/// read off the frame's raw input, and this seam exists only for the arm that genuinely has one.
+pub fn launch_file() -> Option<Inbound> {
+    None
 }

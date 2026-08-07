@@ -18,6 +18,7 @@ pub mod cards;
 pub mod deck;
 pub mod editor;
 pub mod fonts;
+pub mod inbound;
 pub mod keyboard;
 pub mod markdown;
 pub mod notes;
@@ -253,6 +254,14 @@ pub struct LeitnerApp {
     band: keyboard::Band,
     /// **Temporary** — the hand-off specimen's state (see [`handoff_specimen`]).
     handoff: HandOff,
+    /// The file the platform handed us — a launch intent read once at startup, or the last file
+    /// dropped on the window — held so the inbound specimen can **re-derive** its plan every frame
+    /// (ADR-0022 §5). This is the *file*, never a cached plan: `inbound::read` runs the whole
+    /// gate-then-describe read against the live collection each time the specimen draws.
+    inbound: Option<inbound::Inbound>,
+    /// Whether the launch intent has been consulted yet (`platform::launch_file` is a one-shot read,
+    /// so it is asked once as the app comes up — which is where cold start is satisfied, ADR-0016 §5).
+    launch_checked: bool,
 }
 
 /// **Temporary, and not a specified feature.** What the hand-off specimen carries between frames.
@@ -291,6 +300,8 @@ impl LeitnerApp {
             fonts_installed: false,
             band: keyboard::Band::default(),
             handoff: HandOff::default(),
+            inbound: None,
+            launch_checked: false,
         }
     }
 
@@ -378,6 +389,22 @@ impl eframe::App for LeitnerApp {
             self.fonts_installed = true;
             ui.ctx().request_repaint();
             return;
+        }
+
+        // ---- The inbound file, read before the collection is borrowed (ADR-0016 §5, #107) --------
+        //
+        // Two routes converge on one held [`inbound::Inbound`]: the Android launch intent, consulted
+        // once as the app comes up (cold-start capable — the intent is on the activity from the
+        // first frame), and a desktop drop, surfaced by egui directly on the frame it lands. The
+        // *file* is held; its plan is derived fresh every frame by the specimen (ADR-0022 §5).
+        if !self.launch_checked {
+            self.launch_checked = true;
+            if let Some(launched) = platform::launch_file() {
+                self.inbound = Some(launched);
+            }
+        }
+        if let Some(dropped) = inbound::take_dropped(ui.ctx()) {
+            self.inbound = Some(dropped);
         }
 
         let now_ms = now_ms();
@@ -483,6 +510,7 @@ impl eframe::App for LeitnerApp {
                         &mut self.optimise_job,
                         &mut self.optimise_done,
                         &mut self.handoff,
+                        self.inbound.as_ref(),
                         now_ms,
                     );
                 }
@@ -1448,6 +1476,7 @@ fn settings_screen(
     optimise_job: &mut Option<optimise::OptimiseJob>,
     optimise_done: &mut bool,
     handoff: &mut HandOff,
+    inbound: Option<&inbound::Inbound>,
     now_ms: i64,
 ) -> bool {
     heading(ui, "Settings");
@@ -1497,6 +1526,11 @@ fn settings_screen(
     ui.separator();
     ui.add_space(8.0);
     handoff_specimen(ui, handoff);
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+    inbound_specimen(ui, coll, inbound);
 
     reset
 }
@@ -1615,6 +1649,169 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
         ui.add_space(8.0);
         body(ui, &state.said);
     }
+}
+
+/// **Temporary, and not a specified feature.** The inbound specimen: it states what the platform
+/// handed the application at launch or by a drop, and what was decided about it — the action, whether
+/// a name came with it, the sniffed profile, and the plan behind the gate or the refusal in its place
+/// (acceptance of #107). It is what makes [#99](https://github.com/amin-bf/leitner/issues/99)'s
+/// on-device criteria readable off one screen by someone holding the phone.
+///
+/// **It is here because the preview *screen* is the visual design pass's, ruled out of scope by the
+/// map.** So this ends where #98's specimen did — a development control that reports, not the
+/// ADR-0022 surface. What it reports is real: a `.ldeck` opened from a file manager, or shared from a
+/// messaging application, or dropped on the desktop window, reaches this through the same
+/// identification and plan path as the real importer will.
+///
+/// **The plan is derived here, every frame, and never cached** ([ADR-0022 §5](../../../docs/adr/0022-the-import-preview-and-export-report.md)):
+/// the application holds the arrived *file* ([`inbound::Inbound`]) across frames, and this calls
+/// [`inbound::read`] fresh on each draw, so a sync landing while the specimen is on screen changes
+/// the numbers rather than staling them. Every string the file carries is already bounded plain text
+/// (ADR-0022 §7) and is drawn through [`bidi::job`] like all chrome — a stranger's string can never
+/// style the screen it is previewed on (client-stack rule 1).
+fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbound::Inbound>) {
+    body(
+        ui,
+        "Development control — what the platform handed us to open. Drop a .ldeck on this window, or \
+         open one from a file manager or a share on the handset; this states what arrived and what \
+         an import would do, derived fresh and never held.",
+    );
+    ui.add_space(8.0);
+
+    let Some(inbound) = inbound else {
+        body(ui, "Nothing has arrived yet.");
+        return;
+    };
+
+    field_label(ui, &format!("Arrived: {}", inbound.arrival.label()));
+    match &inbound.name {
+        Some(name) => field_label(ui, &format!("Name it gave: \"{name}\"")),
+        // A share may carry none, and identity never needs it (ADR-0024 §1).
+        None => field_label(ui, "Name it gave: none — identified by its bytes."),
+    }
+
+    // Derived on the spot against the collection as it stands (ADR-0022 §5), never stored.
+    match inbound::read(inbound, coll) {
+        Err(e) => body(
+            ui,
+            &format!("Could not read the collection to diff against: {e}"),
+        ),
+        Ok(report) => {
+            field_label(
+                ui,
+                &format!("Sniffed: {}", profile_label(report.sniffed.as_ref())),
+            );
+            ui.add_space(6.0);
+            match &report.outcome {
+                Err(refusal) => body(ui, &refusal_wording(refusal)),
+                Ok(plan) => {
+                    for line in plan_lines(plan) {
+                        body(ui, &line);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// What the sniff said the file is, for the specimen (ADR-0024 §1). `Other` carries the type it
+/// declared; `None` is a file that is not a sniffable container at all.
+fn profile_label(profile: Option<&leitner_export::Profile>) -> String {
+    use leitner_export::Profile;
+    match profile {
+        Some(Profile::Deck) => "a deck".to_owned(),
+        Some(Profile::Collection) => "a collection archive".to_owned(),
+        Some(Profile::Other(media)) => media.clone(),
+        None => "not a recognised container".to_owned(),
+    }
+}
+
+/// The refusal shown in place of a preview (ADR-0022 §4). One plain message each, **with no detail
+/// that reads as an invitation to repair the file** — the classic zip-traversal defect, and the
+/// message is not a diagnostic channel for whoever built it.
+fn refusal_wording(refusal: &leitner_export::Refusal) -> String {
+    use leitner_export::Refusal;
+    match refusal {
+        Refusal::Unreadable => "This file could not be read as a deck.".to_owned(),
+        Refusal::UnknownFormat(_) => "This file needs a newer version of the app.".to_owned(),
+        Refusal::WrongProfile => "This is a collection archive, not a deck file.".to_owned(),
+        Refusal::BrokenPath => "This file is not put together the way a deck is.".to_owned(),
+        // Named as older, never as damaged (ADR-0022 §4), and it names the held deck.
+        Refusal::Older { deck } => {
+            format!("This is an older copy of \"{deck}\" than the one you have.")
+        }
+    }
+}
+
+/// The plan's effect lines, one string each so [`body`] lays each through the bidi helper (ADR-0022
+/// §3, client-stack rule 1). A line that does not apply is **absent, never shown as zero** — a screen
+/// of zeroes buries the one line that is not. The last line is always present (ADR-0022 §3).
+fn plan_lines(plan: &leitner_export::Plan) -> Vec<String> {
+    use leitner_export::Path;
+    let mut lines = Vec::new();
+
+    let header = &plan.header;
+    if !header.author.is_empty() {
+        lines.push(format!("by {}", header.author));
+    }
+    if !header.description.is_empty() {
+        lines.push(header.description.clone());
+    }
+    if !header.licence.is_empty() {
+        lines.push(header.licence.clone());
+    }
+
+    for deck in &plan.decks {
+        let path = match deck.path {
+            Path::Update => "updating a deck you already have",
+            Path::Create => "new deck",
+        };
+        lines.push(format!("{} — {path}", deck.name));
+
+        if deck.no_change {
+            lines.push("Nothing will change.".to_owned());
+            continue;
+        }
+
+        let mut counts = Vec::new();
+        if deck.new_notes > 0 {
+            counts.push(format!("{} new", deck.new_notes));
+        }
+        if deck.already_yours > 0 {
+            counts.push(format!("{} already yours", deck.already_yours));
+        }
+        if !counts.is_empty() {
+            lines.push(counts.join(", "));
+        }
+        for moving in &deck.moving_in {
+            let from = moving.from.as_deref().unwrap_or("an unfiled note");
+            lines.push(format!("{} moving in from {from}", moving.count));
+        }
+        if deck.deleted > 0 {
+            lines.push(format!("{} of your notes will be deleted", deck.deleted));
+        }
+        if let Some(from) = &deck.renamed_from {
+            lines.push(format!("renaming your \"{from}\" to \"{}\"", deck.name));
+        }
+        if deck.revision_conflict {
+            lines.push("same revision as yours, different content".to_owned());
+        }
+    }
+
+    if !plan.adopted_kinds.is_empty() {
+        lines.push(format!(
+            "adds a card type this build does not have: {}",
+            plan.adopted_kinds.join(", ")
+        ));
+    }
+    for emptied in &plan.emptied_decks {
+        lines.push(format!("\"{emptied}\" will be left empty"));
+    }
+
+    // Always present, even when it is the only line (ADR-0022 §3): "Import" implies risk to a
+    // schedule, which ADR-0005 §9 makes structurally impossible.
+    lines.push("Your review history is untouched.".to_owned());
+    lines
 }
 
 /// The specimen deck's display name — the filename derives from it, sanitised outbound.

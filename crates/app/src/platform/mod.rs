@@ -1,4 +1,6 @@
-//! This crate's platform surface, and it is **one function wide**.
+//! This crate's platform surface. It holds **two functions** — the window's insets, and the file
+//! the platform launched us pointing at — for the same reason: both are questions about *this
+//! crate's own window and activity* that nothing below it can answer.
 //!
 //! An inset is a fact about the window this crate is drawing into, so it is asked here rather than
 //! routed through `leitner-store`, which would then be answering a question about layout. ADR-0016
@@ -7,6 +9,16 @@
 //! its four file operations, and this is the third such module
 //! ([ADR-0025 §2](../../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)). The
 //! count is not the invariant — *opaque, minimal, enumerable* is.
+//!
+//! **[`launch_file`] is the second function, and it is here for the same reason the first is: it
+//! needs the Activity.** `getIntent()` is an `Activity` method, and this crate is the sole holder of
+//! the activity handle — the user-files seam in `leitner-export` only ever holds the
+//! `android.app.Application` ([ADR-0023 §7](../../../../docs/adr/0023-sending-a-written-file.md),
+//! the reason [`android.rs`](android.rs)'s `ACTIVITY` is stashed separately), so an inbound read
+//! cannot live there and ADR-0016 §5 deliberately keeps that seam at put/get/list/hand_off. The
+//! read is a genuine platform question — *did the OS start us pointing at a file, and if so its
+//! bytes and how it came* — opaque, minimal and answered honestly per arm. It is **not** a widening
+//! of the file seam; it is this crate answering a question that is genuinely its own.
 //!
 //! **Why the application has to ask at all.** Nothing below it reports the soft keyboard. winit's
 //! Android backend handles only motion and key events; `AGENTS.md` client-stack rule 8 records the
@@ -26,10 +38,14 @@
 //! arm and fail on a device instead of in CI. The `compile_error!` is what makes the rule real
 //! rather than stylistic. Same discipline as `leitner_store::platform`, deliberately.
 //!
-//! **If a second function ever appears here, the seam is eroding** — that is the signal to stop and
-//! ask why, not to add it. Note what is *not* a second function: the Android arm also holds
-//! `android_main`, because the entry point is where the activity handle originates and it answers no
-//! portable question. There is nothing there for a caller to reach.
+//! **A *third* function appearing here is the erosion signal** — that is where to stop and ask why,
+//! not to add it. The two that are here each answer a question only this crate's window or activity
+//! can, and each was forced by a ticket that could not be resolved anywhere else (ADR-0025 §2 for
+//! insets, #107 for the launch file); a third wants the same bar cleared. Note what is *not* a
+//! function of the seam at all: the Android arm also holds `android_main`, because the entry point
+//! is where the activity handle originates and it answers no portable question — there is nothing
+//! there for a caller to reach — and desktop drag-and-drop is not here either, because egui surfaces
+//! dropped files directly with no seam function (ADR-0016 §5, [`crate::inbound::take_dropped`]).
 
 #[cfg(target_os = "android")]
 #[path = "android.rs"]
@@ -57,6 +73,24 @@ compile_error!(
 /// whatever the inset happened to be one frame in, usually near zero.
 pub fn insets() -> Insets {
     imp::insets()
+}
+
+/// The file the platform launched this process pointing at, read from the **activity's** launch
+/// intent — `getData()` for `ACTION_VIEW`, the `EXTRA_STREAM` extra for `ACTION_SEND` (ADR-0024 §2)
+/// — or `None` when it was an ordinary launch.
+///
+/// **Read once, at startup, and this is where cold start is satisfied** (ADR-0016 §5): the intent
+/// is on the activity from the first frame the process runs for, whether or not the application was
+/// already alive, so consulting it as the app comes up is what makes a file-manager open work on a
+/// cold process rather than only on a warm one. The caller consults it once and holds the resulting
+/// [`crate::inbound::Inbound`] — the *file*, never a derived plan (ADR-0022 §5).
+///
+/// The bytes are opened through the content resolver under the read grant the intent carries; the
+/// display name is **not** required and may be absent (ADR-0024 §1). `None` on the desktop, which
+/// has no launch intent — a desktop file arrives by drag-and-drop, read separately and directly off
+/// egui's input with no seam function ([`crate::inbound::take_dropped`], ADR-0016 §5).
+pub fn launch_file() -> Option<crate::inbound::Inbound> {
+    imp::launch_file()
 }
 
 /// The platform's insets, in **physical pixels**. Divide by `pixels_per_point` for egui points.
