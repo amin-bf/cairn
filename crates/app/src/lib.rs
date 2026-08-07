@@ -1579,7 +1579,8 @@ fn settings_screen(
 /// wrote but can no longer parse is **listed and marked unreadable**, never hidden (ADR-0022 §11):
 /// hiding it sends a user after a permissions problem that does not exist.
 ///
-/// **Selecting a row is one mechanism, not two.** It re-reads the bytes through [`get`] and hands them
+/// **Selecting a row is one mechanism, not two.** It re-reads the bytes through
+/// [`leitner_export::platform::get`] and hands them
 /// to [`listing::select`], producing an [`inbound::Inbound`] the [`inbound_specimen`] below then plans
 /// against the live collection — the same gate-and-describe read a drop or a launch intent reaches
 /// (ADR-0022 §5). The row description stays the cheap sniff so enumerating the whole list inflates
