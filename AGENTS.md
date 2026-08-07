@@ -384,12 +384,17 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
     instead of `French A1 (1).ldeck` — measured across three declarations
     ([evidence](./docs/research/android-file-identity/README.md)). `MediaStore` stores
     `application/octet-stream` either way, so the declaration buys nothing and costs the extension.
-13. **A file is identified by its bytes, never by its name.** The `mimetype` member is stored first
-    and uncompressed so the type sits at a fixed offset, and on Android that is the *sole* authority:
-    `.ldeck` and `.lcoll` both store as `application/octet-stream`, and a file arriving through a
-    share may have no usable name. The extension survives as a display string and as the `LIKE`
-    clause the list enumerates with — never as the thing that decides a file's profile
-    ([ADR-0024 §1](./docs/adr/0024-identifying-a-written-file.md)).
+13. **A file is identified by its bytes, never by its name — but whether it *reaches* us is decided by
+    the name.** The `mimetype` member is stored first and uncompressed so the type sits at a fixed
+    offset, and on Android that is the *sole* authority over a file's **profile**: `.ldeck` and
+    `.lcoll` both store as `application/octet-stream`, and a file arriving through a share may have no
+    usable name. But identification is downstream of arrival, and **arrival is gated by the
+    extension**: `MediaStore` derives the stored type from the extension, so a byte-identical deck
+    named `.txt` types as `text/plain`, the broad filter never fires, and no sniff can recover it — it
+    is unreachable, not merely misnamed (Pixel 8 Pro, API 37). A **stripped** name still types as
+    `application/octet-stream` and still arrives. So the extension survives as a display string, as the
+    `LIKE` clause the list enumerates with, and as the reachability gate — never as the thing that
+    decides a file's profile ([ADR-0024 §1](./docs/adr/0024-identifying-a-written-file.md)).
 14. **The Android file list shows only files this application wrote, and the interface must not imply
     otherwise.** Scoped storage gives us our own `MediaStore` rows and nothing else — a `.ldeck` another
     application put in `Downloads` is **invisible**, not merely unreadable, and `READ_MEDIA_*` does not
@@ -400,7 +405,9 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
 15. **Never match an intent filter on the extension.** No filename reaches one: `MediaStore` URIs and
     a real file manager's alike carry a **row id** in the path. A `pathPattern` is also ignored
     outright unless the filter declares a host, and `cargo-apk` drops the `\` escape — so verify the
-    emitted `AndroidManifest.xml`, never the source.
+    emitted `AndroidManifest.xml`, never the source. The filter matches on **type**, but the extension
+    still gates arrival one step upstream: it is what `MediaStore` derives that type from (rule 13), so
+    the extension decides reachability without the filter ever reading it.
 
 ## Sync
 

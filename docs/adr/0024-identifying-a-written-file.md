@@ -59,6 +59,30 @@ reasons:
 because an application cannot sniff a file it cannot enumerate. Enumerating by name and *deciding* by
 content is not a contradiction — it is the only split the platform permits.
 
+> **Correction: the extension has a second job it was never given here — it gates *reachability*,
+> upstream of the sniff, so "exactly one job" understates what it decides.** Measured on the handset
+> (Pixel 8 Pro, API 37) while working [#99](https://github.com/amin-bf/leitner/issues/99): the **same
+> deck bytes** written under three names, then typed by `MediaStore`:
+>
+> | Name | Stored type | Handlers our filters resolve for |
+> |---|---|---|
+> | `Inbound.ldeck` | `application/octet-stream` | ours among them |
+> | `Inbound` (no extension) | `application/octet-stream` | ours among them |
+> | `Inbound.txt` | **`text/plain`** | **zero — we are not offered** |
+>
+> The extension decides the type `MediaStore` stores, which decides whether the broad filter of §2
+> fires at all — and that gate sits **upstream of the sniff**. A byte-identical deck named `.txt`
+> types as `text/plain`, never reaches the code that would identify it correctly, and **no sniff can
+> recover it**: the file is never offered to us in the first place. So a deck under an extension the
+> platform recognises is unreachable by any means this application has.
+>
+> **What does not change.** The sniff remains the sole authority over a file's **profile** — the
+> `mimetype` member decides what a file *is*, and this correction is only about what makes a file
+> *arrive*. And the reassuring half of the same measurement holds: a **stripped** name still types as
+> `application/octet-stream` and still arrives, which is the case reason 2 above (*"the name may not
+> survive the route"*) actually cares about. What §1 originally implied and this narrows is the
+> extension's authority over **arrival**, never its (absent) authority over profile.
+
 ### 2. Reach costs a broad filter, and we pay it
 
 > **The manifest declares `application/octet-stream` for `ACTION_VIEW` and `ACTION_SEND`, alongside

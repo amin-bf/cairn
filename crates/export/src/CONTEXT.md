@@ -40,7 +40,11 @@ which is why it is a profile and not a flag.
 
 **Sniff**:
 Reading the `mimetype` member at its fixed offset to decide what a file is, without parsing the
-archive. The **sole authority** for a file's identity; the extension never decides.
+archive. The **sole authority** for a file's identity; the extension never decides. Sniffing decides
+what a file **is**, never whether it **reaches us**: on Android the extension gates reachability
+upstream of the sniff — `MediaStore` types a `.txt`-named deck as `text/plain`, the broad filter
+never fires, and the bytes never arrive to be sniffed
+([ADR-0024 §1](../../../docs/adr/0024-identifying-a-written-file.md)).
 _Avoid_: Detect, guess — the member is written by us at a known position, so nothing here is
 heuristic.
 
