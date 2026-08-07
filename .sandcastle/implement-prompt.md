@@ -8,6 +8,14 @@ Only work on the issue specified.
 
 Work on branch {{BRANCH}}. Make commits and run tests.
 
+**The branch may already carry work.** A previous run on this issue can be interrupted after it
+commits, and you will then start on a branch where some or all of the issue is already done. Check
+`git log HEAD --not $(git merge-base HEAD @{u} 2>/dev/null || echo HEAD~0)` — or simply read the
+branch's commits — before writing anything. Finish only what is left. If the issue is already fully
+implemented and the feedback loops below are clean, **do not manufacture a commit to show for it**:
+say so on the issue and output the completion promise. An empty run on a finished branch is a
+correct outcome, and the harness reads the branch itself rather than your commit count.
+
 # CONTEXT
 
 Here are the last 10 commits:

@@ -23,6 +23,7 @@
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { execFileSync } from "node:child_process";
 import { z } from "zod";
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts
@@ -62,6 +63,32 @@ const hooks = {
 // Cargo's registry cache lives in ~/.cargo, outside the worktree, so it cannot
 // be seeded this way; the `cargo fetch` hook above covers it per sandbox.
 const copyToWorktree: string[] = [];
+
+// How many commits the branch carries that the mainline does not.
+//
+// This is the question both the review gate and the merge gate actually want
+// answered, and `RunResult.commits` does not answer it: that field holds only
+// the commits of the run that just finished. An implementer that dies after
+// committing leaves finished work on the branch, and the next implementer to
+// pick the issue up correctly concludes there is nothing left to do and exits
+// with zero commits — so gating on `commits.length` skips the review AND drops
+// the branch from the merge, stranding work that was complete all along.
+//
+// The host repository is the right place to ask. Each iteration ends with
+// `applyToHost`, so by the time `run()` returns, the branch and its commits
+// exist here. HEAD is the mainline and does not move during the execute phase;
+// merges land afterwards, in phase 3.
+function commitsAhead(branch: string): number {
+  try {
+    const out = execFileSync("git", ["rev-list", "--count", `HEAD..${branch}`], {
+      encoding: "utf8",
+    });
+    return Number(out.trim());
+  } catch {
+    // No such branch — an implementer that has never committed anything.
+    return 0;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -143,8 +170,13 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           },
         });
 
-        // Only review if the implementer produced commits
-        if (implement.commits.length > 0) {
+        // Review whenever the branch carries unmerged work — not merely when
+        // this run is the one that produced it. A resumed branch whose work
+        // was committed by an earlier, interrupted implementer still needs
+        // reviewing, and is indistinguishable from a fresh one here.
+        const ahead = commitsAhead(issue.branch);
+
+        if (ahead > 0) {
           const review = await sandbox.run({
             name: "reviewer",
             maxIterations: 1,
@@ -160,10 +192,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           return {
             ...review,
             commits: [...implement.commits, ...review.commits],
+            ahead,
           };
         }
 
-        return implement;
+        return { ...implement, ahead };
       } finally {
         await sandbox.close();
       }
@@ -179,14 +212,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     }
   }
 
-  // Only pass branches that actually produced commits to the merge phase.
-  // An agent that ran successfully but made no commits has nothing to merge.
+  // Only pass branches that carry unmerged work to the merge phase. This is
+  // the same question the review gate asked, and for the same reason: a branch
+  // finished by an earlier interrupted run has nothing to merge *this* round
+  // but everything to merge overall.
   const completedIssues = settled
     .map((outcome, i) => ({ outcome, issue: issues[i]! }))
     .filter(
-      (entry) =>
-        entry.outcome.status === "fulfilled" &&
-        entry.outcome.value.commits.length > 0,
+      (entry) => entry.outcome.status === "fulfilled" && entry.outcome.value.ahead > 0,
     )
     .map((entry) => entry.issue);
 
