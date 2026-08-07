@@ -126,7 +126,7 @@ _Avoid_: Fresh deck, empty, done for the day.
 **Leech screen**:
 The card-level list that hangs off Review — the one place cards are listed, not notes (the note list
 is the other, and two speakers for one fact is forbidden). Shows the **ranked** leeches (worst first,
-`leitner_core::replay::leeches`), each offering **edit** (primary), **suspend** and **delete** — and
+`cairn_core::replay::leeches`), each offering **edit** (primary), **suspend** and **delete** — and
 **never a tag**, which would publish a private struggle into a deck (ADR-0010 §7); plus the
 **permanent** section of suspended cards, each with **unsuspend** (ADR-0010 §8). It is a sub-state of
 Review, not a fourth destination, reached from the end-of-session pointer and a durable entry on the
@@ -368,4 +368,4 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
 ## Why this crate has no `main.rs`
 
 `cargo-apk` panics after signing when one crate has both a cdylib and a bin. The desktop binary is
-`leitner-desktop`. Adding a `[[bin]]` here breaks the Android release build (ADR-0003 §5).
+`cairn-desktop`. Adding a `[[bin]]` here breaks the Android release build (ADR-0003 §5).

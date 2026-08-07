@@ -28,12 +28,12 @@ Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
 
 | Crate | Path | What it is |
 |---|---|---|
-| `leitner-core` | [`crates/core/`](./crates/core) | The domain, entire and pure. **One dependency — `fsrs` — and nothing else** ([ADR-0027](./docs/adr/0027-the-scheduler-dependency.md)). |
-| `leitner-store` | [`crates/store/`](./crates/store) | SQLite persistence and the two-directory platform seam. |
-| `leitner-export` | [`crates/export/`](./crates/export) | The `.ldeck` and `.lcoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
-| `leitner-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
-| `leitner-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point. |
-| `leitner-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
+| `cairn-core` | [`crates/core/`](./crates/core) | The domain, entire and pure. **One dependency — `fsrs` — and nothing else** ([ADR-0027](./docs/adr/0027-the-scheduler-dependency.md)). |
+| `cairn-store` | [`crates/store/`](./crates/store) | SQLite persistence and the two-directory platform seam. |
+| `cairn-export` | [`crates/export/`](./crates/export) | The `.cdeck` and `.ccoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
+| `cairn-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
+| `cairn-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point. |
+| `cairn-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
 
 **And one directory that is not a crate.** [`vendor/egui-winit`](./vendor/PATCH.md) is third-party
 source the repository carries: a verbatim copy of the published `egui-winit` 0.35.0 with **one block**
@@ -46,13 +46,13 @@ check, and a release that restructures the block is **re-judged, not re-applied*
 
 Two rules about this table that are easy to break:
 
-- **Nothing is added to `leitner-core`'s `[dependencies]` casually.** It holds exactly one entry,
+- **Nothing is added to `cairn-core`'s `[dependencies]` casually.** It holds exactly one entry,
   `fsrs`, admitted by [ADR-0027](./docs/adr/0027-the-scheduler-dependency.md) because ADR-0001 §1
-  names it and `scheduling` is a module here. What makes `cargo test -p leitner-core` need no
+  names it and `scheduling` is a module here. What makes `cargo test -p cairn-core` need no
   database, no window and no handset is ADR-0027 §2's five-part test, not the count — and `rand`,
   `serde`, `rayon` and `ndarray` sitting in the lockfile transitively are **not** available to our
   code.
-- **`leitner-app` has no `src/main.rs`, and `leitner-desktop` has no logic.** `cargo-apk` panics
+- **`cairn-app` has no `src/main.rs`, and `cairn-desktop` has no logic.** `cargo-apk` panics
   after signing when one crate has both a cdylib and a bin, so the split is load-bearing, and code
   put in `desktop` is never compiled for Android and never runs on the handset.
 
@@ -89,10 +89,10 @@ content ──┬──> scheduling ──┐
 - **`export` is a crate, not a module, for the same reason `replay` is a context**: it spans content
   and — now that [ADR-0016](./docs/adr/0016-backup-and-restore.md) has specified the `collection`
   profile — the log, so it belongs inside neither, and it holds the zip dependency that
-  `leitner-core` cannot. It is also **the second crate with a platform seam**: ADR-0016 §5 puts
+  `cairn-core` cannot. It is also **the second crate with a platform seam**: ADR-0016 §5 puts
   put/get/list for user-visible files here — widened to **put/get/list/hand_off** by
   [ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md) — three `#[cfg]` arms with a
-  `compile_error!` third, so that `leitner-store::platform` stays at exactly two functions. **The
+  `compile_error!` third, so that `cairn-store::platform` stays at exactly two functions. **The
   seam rule is per crate**, and the *number* of operations is not the invariant.
 - **`ui` holds the third platform seam, and it is one function.** An inset is a fact about the window
   this crate is drawing into, so routing it through the store would make the store answer a question
@@ -103,7 +103,7 @@ content ──┬──> scheduling ──┐
   because the activity handle originates there and `ndk_context` holds the `Application`, not the
   `Activity`; keeping them together is what leaves the seam one function wide.
 - **`sync` is a crate for the reason this file predicted**: it needs HTTP, TLS and OAuth, which
-  `leitner-core` cannot hold. [ADR-0013](./docs/adr/0013-the-sync-transport.md) realised the
+  `cairn-core` cannot hold. [ADR-0013](./docs/adr/0013-the-sync-transport.md) realised the
   anticipated sixth crate rather than overturning anything. It depends on `log` and knows nothing
   about cards — the remote is a **rendezvous point, not a system of record**, so deleting it costs
   one republish and no data.
@@ -118,11 +118,11 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `log` | [0004](./docs/adr/0004-the-review-event-log.md) | 0002 §7, 0001 §6, 0010 §5, 0011 §5, 0013 §12, 0014 §6 |
 | `scheduling` | [0001](./docs/adr/0001-scheduling-algorithm-and-grade-scale.md), [0027](./docs/adr/0027-the-scheduler-dependency.md) | 0004 §4, 0004 §5, 0014 §6 |
 | `replay` | *none of its own* | 0001 §7, 0002 §7, 0004 §9, 0007 §2, 0010 §2, 0011 §8, 0012 §5, 0017 §1, 0017 §5, 0018 §2 |
-| `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4 |
-| `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3 |
+| `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4, 0028 §5 |
+| `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3 |
-| *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
+| *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
 purpose and sit scattered across four documents; its `CONTEXT.md` is the only place they appear as
@@ -170,17 +170,31 @@ import surfaces.
 
 **[0027](./docs/adr/0027-the-scheduler-dependency.md) is the first ADR written after the map closed,
 and it exists because two accepted ADRs contradicted each other.** ADR-0001 §1 requires the scheduler
-to be FSRS-6 *via the `fsrs` crate*; ADR-0009 §3 puts `scheduling` inside `leitner-core`; ADR-0009 §2
+to be FSRS-6 *via the `fsrs` crate*; ADR-0009 §3 puts `scheduling` inside `cairn-core`; ADR-0009 §2
 said that crate's dependency list was empty *"permanently"*. Read it before adding **anything** to
-`leitner-core`, and before reading a crate's presence in `Cargo.lock` as permission to use it — its
+`cairn-core`, and before reading a crate's presence in `Cargo.lock` as permission to use it — its
 §3 is entirely about what arrives transitively and stays off-limits.
+
+**[0028](./docs/adr/0028-the-application-is-named-cairn.md) renamed the application, and every ADR
+before it still says the old name in its prose.** That is deliberate — an ADR records a decision as it
+was made, and `docs/research/` least of all may be rewritten, since those files record what was
+measured under the names it was measured under. **So read 0028 before concluding that a document
+saying `leitner` or `.ldeck` is stale.** Its §4 draws the line the rest of this repository follows:
+what is frozen is the **claim a sentence makes** — a measured filename, a decided extension — never
+the **address it cites**, which is why every issue URL was re-pointed to `amin-bf/cairn` and no
+document depends on the rename redirect.
+
+0028 also carries the one item in that change that cannot be taken back, the Android package id. Its
+extension rename **is** discharged: `.cdeck` and `.ccoll` were measured on the handset at API 37 and
+reach our filters exactly as `.ldeck` did
+([evidence](./docs/research/extension-rename-reachability/README.md)).
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.
 
 ## Testing
 
-- **`cargo test -p leitner-core`** needs no database, no window and no handset. Most of the
+- **`cargo test -p cairn-core`** needs no database, no window and no handset. Most of the
   specification is verifiable here, and that is deliberate.
 - **Time and identity are values, never injected traits.** Replay needs no clock at all — day
   numbers are frozen on the row at write time and fuzz is seeded from card identity. The two places
@@ -188,7 +202,7 @@ the agent it was written for.
 - **There is no fake store.** Store tests open a real SQLite database in a temp directory, because
   the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and `INSERT OR IGNORE`.
 - **Store tests run on desktop.** On Android the store depends on the activity existing, so
-  `leitner-store` is not independently runnable there.
+  `cairn-store` is not independently runnable there.
 - **The highest-value test in the repository** is that any interleaving of two devices' rows replays
   to the same state. It needs no sync implementation and no second device.
 
@@ -197,7 +211,7 @@ the agent it was written for.
 See [`README.md`](./README.md) for prerequisites. In short:
 
 ```sh
-cargo run -p leitner-desktop            # desktop
+cargo run -p cairn-desktop            # desktop
 cargo test --workspace                  # everything testable without hardware
 scripts/verify-vendor.sh                # vendor/egui-winit: verbatim plus exactly one change
 

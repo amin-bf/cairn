@@ -1,10 +1,10 @@
 # Export
 
-Deck files: the `.ldeck` container, what goes in it, and the policy deciding what an imported file is
+Deck files: the `.cdeck` container, what goes in it, and the policy deciding what an imported file is
 allowed to change. This is constraint 2 of the map made concrete — decks are portable and
 publishable.
 
-Depends on `content`. Will depend on `log` once [#37](https://github.com/amin-bf/leitner/issues/37)
+Depends on `content`. Will depend on `log` once [#37](https://github.com/amin-bf/cairn/issues/37)
 specifies the progress profile — which is why this is a peer of `replay` rather than a module inside
 `content`.
 
@@ -26,7 +26,7 @@ where the file went, since with no picker the user chose neither its name nor it
 ## Language
 
 **Deck file**:
-A `.ldeck` zip archive carrying one or more decks' content and **no review progress**. The artifact
+A `.cdeck` zip archive carrying one or more decks' content and **no review progress**. The artifact
 handed to another person.
 _Avoid_: Export, bundle, package — all of which also name the act rather than the thing.
 
@@ -55,8 +55,8 @@ from the name, and the type is what the broad filter matches. So a byte-identica
 types as `text/plain`, resolves to none of our filters, and is *unreachable rather than misnamed*; a
 **stripped** name still types as `application/octet-stream` and still arrives. This is the extension's
 one real authority and the sniff's blind spot — measured on the handset (Pixel 8 Pro, API 37) for
-[#106](https://github.com/amin-bf/leitner/issues/106) and again for
-[#99](https://github.com/amin-bf/leitner/issues/99), where five fixtures typed `application/octet-stream`
+[#106](https://github.com/amin-bf/cairn/issues/106) and again for
+[#99](https://github.com/amin-bf/cairn/issues/99), where five fixtures typed `application/octet-stream`
 resolved to us and the `.txt` one resolved to nothing
 ([ADR-0024 §1](../../../docs/adr/0024-identifying-a-written-file.md)).
 _Avoid_: Hidden, unreadable, permission-denied — an unreachable file is none of those. It is never
@@ -64,7 +64,7 @@ offered, so there is no refusal to show and no permission a user could grant. Na
 visibility or permission problem is what sends someone after a fix that does not exist.
 
 **Collection archive**:
-A `.lcoll` zip archive carrying the whole collection: the log verbatim, plus everything that settles,
+A `.ccoll` zip archive carrying the whole collection: the log verbatim, plus everything that settles,
 minus device identity and credentials. The artifact a user keeps for themselves.
 _Avoid_: Backup file — the artifact is not a backup until the user moves it off the device.
 
@@ -77,7 +77,7 @@ labels.
 **Collection id**:
 A UUIDv4 identifying a collection across devices and files. Minted once, **adopted and never
 re-minted** — the exact opposite of a writer id's never-adopt rule. The *type* is
-`leitner_core::identity::CollectionId` (the crate both restore and enrolment depend on, so the check
+`cairn_core::identity::CollectionId` (the crate both restore and enrolment depend on, so the check
 below is written once); it is **minted** in [`store`](../../store/src/CONTEXT.md); this crate is what
 puts it in the container and reads it back.
 
@@ -85,7 +85,7 @@ puts it in the container and reads it back.
 The one line a `collection` archive is shown behind before it merges — `Collection archive, ⟨date⟩.
 ⟨N⟩ notes, ⟨M⟩ reviews.` ([`collection::RestorePlan::one_line`]). It states the **file**, not
 effects, because a restore only ever adds and so has no destructive effect to enumerate (ADR-0022
-§12). The one refusal it needs is the **identity gate** (`leitner_core::identity::adopt_or_refuse`,
+§12). The one refusal it needs is the **identity gate** (`cairn_core::identity::adopt_or_refuse`,
 run identically at the enrolment seam): an **empty** device adopts the archive's id, a **non-empty**
 one holding a **different** collection is refused **by name**, with the way out stated
 ([`collection::RESTORE_MISMATCH_WAY_OUT`]). The log and the mutable surface are never inflated to
@@ -94,7 +94,7 @@ _Avoid_: Restore summary, restore result — a merge reports nothing after the f
 import does not.
 
 **User-files seam**:
-`leitner-export`'s own `platform` module: **put, get, list, hand_off**, three `#[cfg]` arms with a
+`cairn-export`'s own `platform` module: **put, get, list, hand_off**, three `#[cfg]` arms with a
 `compile_error!` third. How an artifact reaches a place the user can see, and then leaves it.
 Deliberately [ADR-0013](../../../docs/adr/0013-the-sync-transport.md) §1's shape reused; the fourth
 operation is [ADR-0023](../../../docs/adr/0023-sending-a-written-file.md)'s.
@@ -179,10 +179,10 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   file manager opening unasked takes the screen. Android sends and the desktop reveals because there
   is no share portal on the desktop and nothing to drag on Android; making them symmetric means
   picking a mail client for the user.
-- **The hand-off delivers the bytes, not just a reference, and this is measured.** A `.ldeck` sent
+- **The hand-off delivers the bytes, not just a reference, and this is measured.** A `.cdeck` sent
   from the handset arrived on a second device that has never held this application **byte for
   byte** — same digest, same four members, `mimetype` still first and uncompressed
-  ([#98](https://github.com/amin-bf/leitner/issues/98)). The **display name travels with it**,
+  ([#98](https://github.com/amin-bf/cairn/issues/98)). The **display name travels with it**,
   dedupe suffix and all, so the chooser's own preview showing a bare row id is cosmetic exactly as
   ADR-0023 §7 argued. This is what makes ADR-0008 §2's *"arrives with someone who does not have our
   application"* a fact about the shipped path rather than a statement of intent.
@@ -203,8 +203,10 @@ The slot's other half is **personal** values, whose syncing is still open and wh
 - **Read back what the platform wrote.** Never echo the requested filename: on a collision
   `MediaStore` **dedupes** — it does not overwrite and does not fail — so the name the user needs is
   one only the platform knows. Measured through this crate's own seam on the handset
-  ([#98](https://github.com/amin-bf/leitner/issues/98)): the same name written twice, with identical
-  bytes, yields `Specimen (1).ldeck`. **The extension survives**, which is what declaring no media
+  ([#98](https://github.com/amin-bf/cairn/issues/98)): the same name written twice, with identical
+  bytes, yields `Specimen (1).ldeck` — the run predates
+  [ADR-0028 §3](../../../docs/adr/0028-the-application-is-named-cairn.md)'s rename of the extension
+  and is left as measured; what it establishes is where the suffix lands, not the letters. **The extension survives**, which is what declaring no media
   type buys (ADR-0024 §4) — and the stored type is `application/octet-stream` either way, so the
   read-back is the only thing that distinguishes the second write from the first.
   **Measured identically at API 29 and API 37**, so it is a property of the collection rather than of

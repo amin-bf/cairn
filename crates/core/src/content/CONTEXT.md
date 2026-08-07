@@ -60,7 +60,7 @@ note writes **exactly one value** (ADR-0021 §3). A key after the current last o
 line order on import, ties broken by note id. **Not dense and not unique** — it only has to sort, and
 under ADR-0021 that is finally true rather than decorative. Two things read it: new cards are
 introduced in `(position, ordinal)` order, and `export` emits notes in it (ADR-0011 §7) — the file
-carries **line order**, never the key, so the representation reaches no byte of `.ldeck`.
+carries **line order**, never the key, so the representation reaches no byte of `.cdeck`.
 _Avoid_: Index, sequence number (which means `log`'s per-writer counter), sort key, position *number*
 — it is not one and is never shown as one.
 

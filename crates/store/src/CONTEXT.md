@@ -36,7 +36,7 @@ collection was copied here, and a fresh writer id must be minted.
 
 **Collection id**:
 A UUIDv4 naming *this collection*, held in `local`, minted once at first launch beside the writer
-marker. The type is `leitner_core::identity::CollectionId` (shared with `export`'s restore and
+marker. The type is `cairn_core::identity::CollectionId` (shared with `export`'s restore and
 `sync`'s enrolment); this crate is the one place it is **minted**. **Adopted and never re-minted** —
 the exact opposite of the writer id, and the two rules must never be swapped:
 
@@ -60,7 +60,7 @@ from its **own** flag or its **deck's** (ADR-0005 §7).
 The single global integer bounding introductions (ADR-0011 §3), stored on the mutable surface under a
 distinct `entity = "setting"` singleton (one row, a fixed all-zero id, attr `new_card_rate`).
 `new_card_rate`/`set_new_card_rate` read and write it; the default (five), the range and the parse
-live in `leitner-core::log`, so the store holds no domain rule of its own. A **personal setting**, not
+live in `cairn-core::log`, so the store holds no domain rule of its own. A **personal setting**, not
 content: it **syncs between a user's own devices but never exports** — the separate entity keeps it out
 of any export that enumerates content by kind — and it **never enters the log** (ADR-0011 §5). Zero is
 legal, the backlog escape hatch. The per-deck slot ADR-0005 §5 reserved stays empty (ADR-0011 §6).
@@ -76,8 +76,8 @@ row still enters ADR-0004 §7's stamp contest and could displace a better fit, s
 `None` and emits no row when the vector equals what is current — which also disposes of a
 history-less collection fitting the defaults, with no zero-history guard. The **fitted-over count**
 travels on the row under `fov` and is **frozen at write time** (ADR-0014 §6), never re-derived here;
-`leitner-core::interchange` emits the line and `leitner_core::replay::optimisation_nudge` reads the
-count back. This crate holds no domain rule about *what* to fit — that is `leitner-core::scheduling`.
+`cairn-core::interchange` emits the line and `cairn_core::replay::optimisation_nudge` reads the
+count back. This crate holds no domain rule about *what* to fit — that is `cairn-core::scheduling`.
 _Avoid_: Weights setting, a mutable-surface `params` attribute — settling the vector by stamp
 recomputes memory state under the wall clock.
 
@@ -96,7 +96,7 @@ _Avoid_: Suspend event, leech flag, buried, archived — the row kind ADR-0010 �
 
 **Reorder**:
 Moving a note in authored order is `move_note_between`, which writes **exactly one** `position` value
-between two neighbours (`leitner_core::content::order::between`) and **never renumbers** (ADR-0021 §3,
+between two neighbours (`cairn_core::content::order::between`) and **never renumbers** (ADR-0021 §3,
 §4). Touching only the moved note is what makes reordering inside a *filtered* list well-defined:
 hidden notes keep their keys and stay between the neighbours they were between. `create_note` places a
 new note after `MAX(position)`; the two are the only writers of a note's place, and both are one write.
@@ -152,7 +152,7 @@ disown every earlier `reviewed` row.
   never happened. It needs every row's instant, so `ingest` populates the derived `instant` column
   for absorbed rows too — best-effort, NULL when the token is not the canonical form.
 - **A cache that cannot prove its derivation is discarded, not trusted.** `derived.db` is stamped
-  with `leitner_core::replay::DERIVATION_VERSION`; a missing or mismatched stamp clears it on open.
+  with `cairn_core::replay::DERIVATION_VERSION`; a missing or mismatched stamp clears it on open.
   The derivation is versioned, the projection is not — there is no cache migration (ADR-0004 §9).
 - **WAL on both files; `synchronous=FULL` on the collection, `OFF` on the cache.**
 - **A tag is one attribute per tag, never a joined `tags` value.** Set union is the required merge
@@ -176,8 +176,8 @@ handset in #7.
 recorded a contradiction — ADR-0009's handoff sends every platform capability *here*, while the rule
 above forbids a third arriving — and [ADR-0016 §5](../../../docs/adr/0016-backup-and-restore.md)
 resolved it: a crate that must touch the platform for an unrelated reason gets **its own** `platform`
-module under the same three-arm discipline. `leitner-export` has one (put/get/list/hand_off for
-user-visible files), and `leitner-app` has the third — one function returning the window's insets,
+module under the same three-arm discipline. `cairn-export` has one (put/get/list/hand_off for
+user-visible files), and `cairn-app` has the third — one function returning the window's insets,
 since an inset is a fact about the window the UI draws into and routing it here would make this crate
 answer a question about layout ([ADR-0025 §2](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)).
 **This module still stays at two functions**, and that limit is now load-bearing rather than merely

@@ -49,7 +49,7 @@ Before committing, run all four and make sure they are clean:
 2. `cargo clippy --all-targets --all-features -- -D warnings` — lints, warnings are errors
 3. `cargo test --all-features` — the test suite
 4. `cargo build --release` **only** if the change could plausibly affect release-only behaviour
-5. `cargo build --target aarch64-linux-android` **only** if the change touches a `#[cfg(target_os = "android")]` arm, a `platform` module, or `leitner-app`
+5. `cargo build --target aarch64-linux-android` **only** if the change touches a `#[cfg(target_os = "android")]` arm, a `platform` module, or `cairn-app`
 
 This sandbox can **compile and link** for the handset but cannot package or run: there is no JDK, no SDK and no device, so `cargo apk build` is unavailable and nothing here can verify on-device behaviour. Issues needing that carry a separate "Verify on the handset" ticket — do not attempt to discharge one, and do not treat its absence as a reason to skip step 5.
 

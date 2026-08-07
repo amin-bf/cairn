@@ -1,4 +1,4 @@
-# leitner-app
+# cairn
 
 ## Writing conventions
 
@@ -70,29 +70,29 @@ Read this file first, then the context map, then the `CONTEXT.md` for the area y
 
 Six crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
 [ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
-`leitner-core` (the domain, pure), `leitner-store` (SQLite and the two directory lookups), `leitner-export`
-(the `.ldeck` container), `leitner-sync` (publishing to the remote; holds the network dependencies),
-`leitner-app` (egui, lib + cdylib), `leitner-desktop` (a shim, forced by `cargo-apk`).
+`cairn-core` (the domain, pure), `cairn-store` (SQLite and the two directory lookups), `cairn-export`
+(the `.cdeck` container), `cairn-sync` (publishing to the remote; holds the network dependencies),
+`cairn-app` (egui, lib + cdylib), `cairn-desktop` (a shim, forced by `cargo-apk`).
 
 Contexts are **modules, not crates** — with two exceptions, both for the same reason: `export` and
-`sync` hold dependencies `leitner-core` may not have. A context becomes a crate only when it must
+`sync` hold dependencies `cairn-core` may not have. A context becomes a crate only when it must
 carry one. Vocabulary lives in a `CONTEXT.md` beside the code; decisions live system-wide in
 `docs/adr/`, and context-scoped `docs/adr/` directories are not used here.
 
 ### Rules that are easy to break silently
 
-1. **`leitner-core` has exactly one dependency — `fsrs` — and adding a second is an ADR-sized
-   decision.** What makes `cargo test -p leitner-core` need no database, no window and no handset is
+1. **`cairn-core` has exactly one dependency — `fsrs` — and adding a second is an ADR-sized
+   decision.** What makes `cargo test -p cairn-core` need no database, no window and no handset is
    not the *count* but [ADR-0027 §2](./docs/adr/0027-the-scheduler-dependency.md)'s test: the spec
    must name the crate, it must be computation and nothing else, it must build for every target, it
-   must be pinned exactly, and it needs its own ADR. `rusqlite` belongs in `leitner-store`; `egui`
-   and `eframe` belong in `leitner-app`. **`rand`, `serde`, `rayon` and `ndarray` are in the lockfile
+   must be pinned exactly, and it needs its own ADR. `rusqlite` belongs in `cairn-store`; `egui`
+   and `eframe` belong in `cairn-app`. **`rand`, `serde`, `rayon` and `ndarray` are in the lockfile
    transitively and are not thereby available** — finding one there is not a precedent for reaching
    for it, and `log` must still never be a *direct* dependency here (it would shadow the `log`
    context module).
 2. **Time and identity are values, never injected traits.** Replay needs no clock at all — day
    numbers are frozen on the row at write time, and fuzz is seeded from card identity. The two call
-   sites that need "now" take it as a parameter. A `SystemTime::now()` inside `leitner-core` breaks
+   sites that need "now" take it as a parameter. A `SystemTime::now()` inside `cairn-core` breaks
    the property that two devices replaying one log agree.
 3. **There is no fake store.** Store tests open a real SQLite database in a temp directory, because
    the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and `INSERT OR IGNORE`.
@@ -215,7 +215,7 @@ because they are validated findings, not because a web build ships.
    buffer is logical, so RTL editing is imprecise; design around it rather than fighting it.
 3. **The storage seam is a compile-time `#[cfg]`.** Keep it that way. Never introduce a runtime
    platform check — the whole stack choice rests on wrong platform code failing the build. It is two
-   functions in `leitner-store::platform`, and a **third function appearing there means the seam is
+   functions in `cairn-store::platform`, and a **third function appearing there means the seam is
    eroding**. A `#[cfg(target_os)]` anywhere else in the workspace is a defect. **The vendored
    dependency of rule 12 is outside this rule** — it is not a workspace member and it is not our code,
    so the `#[cfg]` you will find there is correct. Said explicitly because a correct instance of a
@@ -225,9 +225,9 @@ because they are validated findings, not because a web build ships.
    next input event.
 5. **The desktop binary lives in its own crate, and that crate stays empty.** `cargo-apk` panics
    after signing when one crate has both a cdylib and a bin — the APK is fine, the exit code is not,
-   and CI breaks. So never add a `[[bin]]` to `leitner-app`, and never put logic in
-   `leitner-desktop`: code there is never compiled for Android and never runs on the handset.
-   It takes `eframe` by re-export from `leitner-app`, not as its own dependency.
+   and CI breaks. So never add a `[[bin]]` to `cairn-app`, and never put logic in
+   `cairn-desktop`: code there is never compiled for Android and never runs on the handset.
+   It takes `eframe` by re-export from `cairn-app`, not as its own dependency.
 6. **`eframe`'s dependency is split per target** — its default `accesskit` feature is rejected
    alongside `android-native-activity`.
 7. **Fonts are ours to ship — and must be installed on the first frame, not in `CreationContext`.**
@@ -246,7 +246,7 @@ because they are validated findings, not because a web build ships.
 8. **Android text input is ASCII-only, and cannot be fixed here.** winit's Android backend handles
    only motion and key events — it has no IME path, so composed text never reaches the app. This is
    not the activity backend: GameActivity was tried and reverted (see
-   [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/leitner/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
+   [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/cairn/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
    text on Android. **This rule is also rule 12's tripwire**: the patch there is justified by the
    absence of an IME path, so the day winit grows one, that patch becomes a bug and must be re-judged
    rather than re-applied. Whoever retires this rule owns that.
@@ -281,7 +281,7 @@ because they are validated findings, not because a web build ships.
     Measured on the handset: **923dp of usable height down to 565dp, 39% of the screen, silently**.
     So the `ui` crate carries a one-function `platform` seam returning the IME and system-bar insets
     and reserves the band — a **third** per-crate seam under
-    [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md), not a widening of `leitner-store`'s two.
+    [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md), not a widening of `cairn-store`'s two.
     **That seam's return type must distinguish "this platform has no soft keyboard" from "the keyboard
     is down"** — collapsing both to zero, as ADR-0025 §2 first wrote it, makes every gate on "the
     keyboard is down" permanently true off Android
@@ -339,7 +339,7 @@ authoritative, `derived.db` is a disposable cache attached to the same connectio
 
 ## Deck export
 
-A `.ldeck` file is a **zip archive** carrying deck content and never review progress, chosen in
+A `.cdeck` file is a **zip archive** carrying deck content and never review progress, chosen in
 [ADR-0008](./docs/adr/0008-the-deck-export-format.md).
 
 ### Rules that are easy to break silently
@@ -389,14 +389,14 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
     ([evidence](./docs/research/android-outbound-share/README.md)). `MediaStore` also **discards the
     media type we declare**, deriving it from the extension instead.
 12. **The Android write declares no `mime_type`, and that is what keeps the extension.** A declared
-    type that disagrees with the name is the *only* reason a collision produces `French A1.ldeck (1)`
-    instead of `French A1 (1).ldeck` — measured across three declarations
+    type that disagrees with the name is the *only* reason a collision produces `French A1.cdeck (1)`
+    instead of `French A1 (1).cdeck` — measured across three declarations
     ([evidence](./docs/research/android-file-identity/README.md)). `MediaStore` stores
     `application/octet-stream` either way, so the declaration buys nothing and costs the extension.
 13. **A file is identified by its bytes, never by its name — but whether it *reaches* us is decided by
     the name.** The `mimetype` member is stored first and uncompressed so the type sits at a fixed
-    offset, and on Android that is the *sole* authority over a file's **profile**: `.ldeck` and
-    `.lcoll` both store as `application/octet-stream`, and a file arriving through a share may have no
+    offset, and on Android that is the *sole* authority over a file's **profile**: `.cdeck` and
+    `.ccoll` both store as `application/octet-stream`, and a file arriving through a share may have no
     usable name. But identification is downstream of arrival, and **arrival is gated by the
     extension**: `MediaStore` derives the stored type from the extension, so a byte-identical deck
     named `.txt` types as `text/plain`, the broad filter never fires, and no sniff can recover it — it
@@ -405,7 +405,7 @@ A `.ldeck` file is a **zip archive** carrying deck content and never review prog
     `LIKE` clause the list enumerates with, and as the reachability gate — never as the thing that
     decides a file's profile ([ADR-0024 §1](./docs/adr/0024-identifying-a-written-file.md)).
 14. **The Android file list shows only files this application wrote, and the interface must not imply
-    otherwise.** Scoped storage gives us our own `MediaStore` rows and nothing else — a `.ldeck` another
+    otherwise.** Scoped storage gives us our own `MediaStore` rows and nothing else — a `.cdeck` another
     application put in `Downloads` is **invisible**, not merely unreadable, and `READ_MEDIA_*` does not
     cover documents. A deck someone sends can therefore only arrive through an **intent filter**, which
     is why the manifest declares the broad `application/octet-stream` filter for `ACTION_VIEW` and
@@ -447,12 +447,12 @@ remote costs one republish and no data.
    fixed-width zero-padded range in the key may not, because the listing *is* ADR-0004 §2's version
    summary and it works by lexicographic sort.
 6. **Never present the sync folder as a backup.** It is hidden, it is deleted when the user removes
-   the app's data, and backup is the separate `.lcoll` archive specified in
+   the app's data, and backup is the separate `.ccoll` archive specified in
    [ADR-0016](./docs/adr/0016-backup-and-restore.md).
 
 ## Backup and restore
 
-A **collection archive** is a `.lcoll` file — the same zip container as a deck file, carrying a
+A **collection archive** is a `.ccoll` file — the same zip container as a deck file, carrying a
 different profile — holding the log verbatim plus everything that settles, and written only when the
 user asks. Chosen in [ADR-0016](./docs/adr/0016-backup-and-restore.md). Sync does **not** discharge
 it: sync is opt-in, so a never-enrolled user has nothing, and sync propagates a deletion rather than
@@ -486,10 +486,10 @@ archiving against it.
    intents and dropped files need neither and are fine. And rule 8 of the client stack makes Android
    text input ASCII-only, so a passphrase set on the desktop in the user's own language cannot be
    typed on the phone — which is why **archives are never encrypted**.
-6. **The platform seam rule is per crate.** `leitner-store::platform` keeps exactly two functions;
+6. **The platform seam rule is per crate.** `cairn-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm
-   discipline. `leitner-export` has one — put, get, list, **hand_off**
-   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)) — and `leitner-app` has the **third**,
+   discipline. `cairn-export` has one — put, get, list, **hand_off**
+   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)) — and `cairn-app` has the **third**,
    a single function returning the window's insets ([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md),
    client-stack rule 11). The count is **not** the invariant: ADR-0016 §5's *"three operations, not
    four"* was an argument about **delete**, which is still absent. *Opaque, minimal, enumerable* is
@@ -552,13 +552,13 @@ them.
    is a property of the *grant*, not the collection, so it is never published and never enters either
    export profile — [ADR-0016 §4](./docs/adr/0016-backup-and-restore.md)'s `collection` rule excludes
    credentials, which is what keeps it out without a clause naming it. Put it on the mutable surface
-   and it lands in every `.lcoll` **and** on the remote, buying nothing: a published address is
+   and it lands in every `.ccoll` **and** on the remote, buying nothing: a published address is
    unreadable by the device that needs it, which is looking at a different folder.
 
 ## Protection at rest
 
 **Nothing is encrypted, anywhere**, decided once for all four artifacts in
-[ADR-0020](./docs/adr/0020-protection-at-rest.md): `collection.db`, the drive credential, the `.lcoll`
+[ADR-0020](./docs/adr/0020-protection-at-rest.md): `collection.db`, the drive credential, the `.ccoll`
 archive, and the log published to the drive. Three earlier ADRs each acted on this default while
 deferring the reasoning; the reasoning now lives in one place, and it is made of refusals — the kind of
 decision that erodes fastest when met without it.
@@ -613,7 +613,11 @@ decision that erodes fastest when met without it.
 
 ### Issue tracker
 
-Issues live as GitHub issues on `amin-bf/leitner`, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues on `amin-bf/cairn`, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issue URLs everywhere — decided ADRs and recorded evidence included — name `amin-bf/cairn`, so
+nothing depends on the host's rename redirect. **Old-name prose does remain in those files and is not
+a defect**: [ADR-0028 §4](./docs/adr/0028-the-application-is-named-cairn.md) freezes the *claims* a
+document makes, never the addresses it cites.
 
 **File issues directly — this repo overrides the global "don't create GitHub issues unprompted" rule.**
 Work here is charted as wayfinder maps whose tickets *are* issues, so a rule against filing them
