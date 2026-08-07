@@ -206,3 +206,53 @@ and its absence surfaces only at the signing step, after a full NDK compile, as
 
 Every probe row was deleted from `MediaStore` and from `/storage/emulated/0/Download/` after the
 run, verified empty by query and by `ls`.
+
+## Addendum: the extension gates reachability, not only enumeration
+
+**Measured 2026-08-07** on the same handset — Google Pixel 8 Pro (`husky`), Android 17 / API 37 —
+while working [#99](https://github.com/amin-bf/leitner/issues/99). It settles a claim the
+2026-08-01 note left implicit and that [ADR-0024 §1](../../adr/0024-identifying-a-written-file.md)
+overstated: §1 said the extension *"keeps exactly one job: it is the `LIKE` clause the list queries
+`MediaStore` with."* That undersells it. The extension has a **second job** — it decides the type
+`MediaStore` stores, which decides whether the broad `application/octet-stream` filter of §2 fires
+at all. That gate sits **upstream of the sniff**.
+
+### The fixture
+
+One deck's **byte-identical** payload — a real `.ldeck` archive, `mimetype` member first and
+uncompressed — inserted into `MediaStore.Downloads` under three display names, bytes written each
+time (the dedupe trap of §7 above applies: `openOutputStream` and a write are what make the row
+real), then the stored `mime_type` read back and the resolvable handlers queried with
+`adb shell cmd package query-activities` against the row URI:
+
+| Name | Stored type | Handlers our filters resolve for |
+|---|---|---|
+| `Inbound.ldeck` | `application/octet-stream` | ours among them |
+| `Inbound` (no extension) | `application/octet-stream` | ours among them |
+| `Inbound.txt` | **`text/plain`** | **zero — we are not offered** |
+
+### What it shows
+
+`MediaStore` derives the stored type from the **name's extension**, not from the bytes: the same
+deck payload types as `application/octet-stream` under `.ldeck` and under no extension, and as
+`text/plain` under `.txt`. Under `text/plain` the broad filter never fires, so the file **never
+reaches the code that would sniff it correctly** — and no sniff can recover it, because the bytes
+are never offered to us in the first place. A deck under an extension the platform recognises is
+therefore unreachable by any means this application has.
+
+Two things do **not** change, and both are load-bearing:
+
+- **The sniff stays the sole authority over profile.** Where a file *does* arrive, the `mimetype`
+  member still decides `deck` versus `collection`. This addendum is about arrival, never identity.
+- **A stripped name still arrives.** `Inbound` with no extension types as
+  `application/octet-stream` and resolves for us — the case ADR-0024 §1's second reason (*"the name
+  may not survive the route"*) actually cares about. Losing the extension does not lose the file;
+  replacing it with a recognised one does.
+
+### Reproducing this
+
+The same JDK-on-`PATH` requirement as the main note applies (`cargo apk build` invokes `apksigner`).
+The fixture needs no new harness beyond the probe: insert the one deck payload three times under the
+names above, write the bytes each time, then read `mime_type` back per row and run
+`cmd package query-activities` against each row URI at `typ=` the stored type. Delete every probe row
+from `MediaStore` and `/storage/emulated/0/Download/` afterwards, verified by query and by `ls`.
