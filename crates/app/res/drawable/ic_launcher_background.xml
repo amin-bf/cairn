@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon background: a flat slate field at full bleed (108dp), so every OEM mask crops
+     only ground and never a stone. The mark's colours are the Cairn design-system's, not the app
+     palette, which ADR-0006 §10 leaves a blank slate. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#3B4A5A"
+        android:pathData="M0,0 h108 v108 h-108 z" />
+</vector>

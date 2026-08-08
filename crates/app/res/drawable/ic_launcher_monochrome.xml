@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome silhouette for themed icons: the same four stones as one flat shape. The fill is a
+     placeholder — for a themed icon the system discards this colour and tints the alpha with the
+     user's theme, so only the shape and its coverage matter here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#000000"
+        android:pathData="M28,70 C28,64 36,62 50,62 C64,61 80,63 80,70 C80,76 70,80 54,80 C40,80 28,76 28,70 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M33,57 C33,51 40,49 52,49 C65,48 77,50 77,57 C77,62 68,65 55,65 C43,65 33,63 33,57 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M36,45 C36,40 42,38 52,38 C62,37 70,39 70,45 C70,50 62,52 52,52 C42,52 36,50 36,45 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M43,33 C43,29 47,27 54,27 C61,27 65,30 64,34 C64,38 59,40 53,40 C47,40 43,37 43,33 Z" />
+</vector>

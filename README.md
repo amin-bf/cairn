@@ -98,7 +98,7 @@ cargo test -p cairn-core            # the domain alone: no database, no window, 
 scripts/verify-vendor.sh              # the vendored adapter: verbatim plus exactly one change
 
 source scripts/android-env.sh
-cd crates/app && cargo apk build      # APK: a manifest and one .so, no classes.dex
+cd crates/app && cargo apk build      # APK: a manifest, one .so and res/ (the icon), no classes.dex
 ```
 
 `cargo apk build --release` compiles but stops at signing — no release keystore is configured, since

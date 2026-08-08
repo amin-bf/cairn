@@ -226,7 +226,7 @@ cargo test --workspace                  # everything testable without hardware
 scripts/verify-vendor.sh                # vendor/egui-winit: verbatim plus exactly one change
 
 source scripts/android-env.sh           # required before ANY Android command
-cd crates/app && cargo apk build        # APK: a manifest and one .so
+cd crates/app && cargo apk build        # APK: a manifest, one .so and res/ (the icon)
 ```
 
 Verify UI judgements on the **real handset** — the emulator is x86_64 and the Pixel 8 Pro is
