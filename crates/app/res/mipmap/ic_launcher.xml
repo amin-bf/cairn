@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback for API 24-25, which predate adaptive icons (API 26). Without an unqualified
+     `mipmap/ic_launcher` the launcher on those two levels shows the platform default rather than
+     the mark. A layer-list composites the same two vector layers — no OEM mask applies here, so the
+     safe-zone foreground simply sits on the full-bleed background with margin. Reuses the layers
+     rather than duplicating their paths, so the mark cannot drift between the two entries. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_launcher_background" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

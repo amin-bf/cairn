@@ -44,12 +44,21 @@ eframe = { version = "=0.35.0", default-features = false, features = [
 name = "cairn_app"
 crate-type = ["lib", "cdylib"]
 
-# cargo-apk packaging: NativeActivity, so the APK is a manifest plus a `.so` — no Java, no Kotlin,
-# no Gradle project in the repository (ADR-0003 §2). GameActivity was tried and reverted in #8.
+# cargo-apk packaging: NativeActivity, so the APK is a manifest, a `.so` and a `res/` folder — no
+# Java, no Kotlin, no Gradle project and no `classes.dex` (ADR-0003 §2). The resources directory is
+# the adaptive launcher icon (issue #119) and nothing else; it needs no Gradle and no dex, which is
+# the expensive half ADR-0003 refused. GameActivity was tried and reverted in #8.
 [package.metadata.android]
 package = "dev.cairn.app"
 build_targets = ["aarch64-linux-android"]
 apk_name = "cairn"
+
+# The launcher mark. `resources` is the folder cargo-apk compiles with aapt2 and bundles; without it
+# nothing under `res/` enters the APK. The vector layers live in `res/drawable`, the adaptive icon
+# in `res/mipmap-anydpi-v26` (API 26+) and a layer-list fallback in `res/mipmap` (API 24-25).
+# **Verify against the *emitted* manifest and the built APK, never this source** — the same warning
+# the intent filters carry below; on-device checks (mask shapes, themed icons) are the handset's.
+resources = "res"
 
 [package.metadata.android.sdk]
 min_sdk_version = 24
@@ -57,6 +66,7 @@ target_sdk_version = 36
 
 [package.metadata.android.application]
 label = "Cairn"
+icon = "@mipmap/ic_launcher"
 
 # Inbound deck files (ADR-0024 §2, issue #89). A `.cdeck` arriving through a file manager or a
 # messaging app carries a `content://` URI with a **row id** in the path and no filename, and

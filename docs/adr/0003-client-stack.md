@@ -66,9 +66,15 @@ Measured, not inferred:
   and 268 native (against A's 352).
 - **Smallest release artifact** — a 5.4 MB Android APK, against A's 9.0 MB and B's 13 MB.
 - **No Gradle project in the repository** — *if* we stay on `NativeActivity`. Packaged via
-  `cargo-apk` with `android-native-activity`, the APK is a manifest and a `.so`: no Java, no Kotlin,
-  no `classes.dex`, against 44 committed generated files for each Tauri option. **This advantage is
-  conditional — see §6.**
+  `cargo-apk` with `android-native-activity`, the APK is a manifest, a `.so` and — since
+  [issue #119](https://github.com/amin-bf/cairn/issues/119) — a `res/` folder holding the adaptive
+  launcher icon: still no Java, no Kotlin, no Gradle project and no `classes.dex`, against 44
+  committed generated files for each Tauri option. The resources directory is what "a manifest and a
+  `.so`" first read as ruling out, and it is worth being exact about *why* it does not: the property
+  three later decisions lean on (no file picker, no background sync) is the absence of Gradle and
+  dex — the expensive, agent-hostile half — not the absence of a `res/` folder, which `cargo-apk`
+  compiles with aapt2 and bundles from Cargo metadata alone. So the departure costs none of what the
+  phrase was protecting. **This advantage is conditional — see §6.**
 - No webkit2gtk, and therefore no three-CSS-engine divergence.
 
 ### 3. Bidi is patched in our application, not upstream
