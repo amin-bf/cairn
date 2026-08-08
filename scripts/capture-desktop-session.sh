@@ -54,10 +54,40 @@ start_app
 cx=$(( ${CAIRN_WIDTH:-1280} / 2 ))
 cy=$(( ${CAIRN_HEIGHT:-800} / 2 ))
 
+# `%LX%` — the left edge of the page frame's column, and `%LX+n%` for a control `n` px inside it.
+#
+# Before the frame existed, content started at the window edge and a literal `86` for the *Notes*
+# button was correct at every width. It no longer is: the column is centred, so its left edge is 320
+# at 1280 and 28 at 560, and a storyboard written with literals silently clicks empty page at one
+# width and the wrong control at the other — the failure `%CX%` was introduced to kill, arriving
+# from the other side.
+#
+# The two numbers are `cairn_app::frame`'s and are duplicated here on purpose rather than read from
+# the binary: a capture harness that imports the app cannot photograph a *broken* app, which is most
+# of what it is for. They are overridable so a run against a build that moved them stays honest.
+margin=${CAIRN_PAGE_MARGIN:-28}
+measure=${CAIRN_MEASURE:-640}
+inner=$(( ${CAIRN_WIDTH:-1280} - margin * 2 ))
+[ "$inner" -gt "$measure" ] && inner=$measure
+lx=$(( (${CAIRN_WIDTH:-1280} - inner) / 2 ))
+echo "session: page frame — margin $margin, measure $measure, column left edge $lx"
+
 while IFS= read -r line || [ -n "$line" ]; do
   [ -z "$line" ] && continue
   line="${line//%CX%/$cx}"
   line="${line//%CY%/$cy}"
+  # **Rebuilt from the capture groups, never `${line/${BASH_REMATCH[0]}/…}`.** That form looks
+  # obvious and does not work: the replacement *pattern* is a glob, and an unquoted `+` in it is a
+  # quantifier rather than a literal, so `%LX+39%` never matches itself and the loop spins forever
+  # with the token still in place. Measured on bash 5.3: the same substring replaces fine when the
+  # pattern is written as a quoted literal and not at all when it arrives through a variable.
+  while [[ "$line" =~ (.*)%LX\+([0-9]+)%(.*) ]]; do
+    pre="${BASH_REMATCH[1]}"
+    off="${BASH_REMATCH[2]}"
+    post="${BASH_REMATCH[3]}"
+    line="$pre$(( lx + off ))$post"
+  done
+  line="${line//%LX%/$lx}"
   case "$line" in
     \#*) continue ;;
     shot\ *)

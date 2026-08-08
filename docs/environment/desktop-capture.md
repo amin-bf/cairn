@@ -78,11 +78,33 @@ A storyboard is a line-per-step file under `scripts/storyboards/`:
 
 **The first click of any storyboard is spent giving the window keyboard focus and never reaches a
 widget**, so aim it at empty space. This is not a timing problem and more settle time does not fix
-it.
+it — but it *is* fixable another way, and the distinction matters when a storyboard has no empty
+space to spare. Sending the move and the press as **separate lines** with a settle between them
+(`mousemove x y`, `sleep 0.5`, `click 1`) delivers the motion as its own event and the first click
+then lands. Measured while proving the #131 prototype's click-through mode: as one
+`mousemove x y click 1`, none of three nav clicks reached a widget; split, all three did.
 
 **Write `%CX%` and `%CY%` rather than a literal centre.** They expand to the centre of the output, so
-one storyboard runs at any width. Almost every control the app draws is full-width, and the nav row
-is the one place a literal x is right.
+one storyboard runs at any width. Almost every control the app draws is full-width.
+
+**And write `%LX+n%` rather than a literal left-edge x.** It expands to `n` px inside the **page
+frame's** column (`%LX%` alone is the edge itself). A literal x used to be correct for the nav row and
+anything else packed against the start of a line, because content ran to the window edge. Since
+[ADR-0031](../adr/0031-the-page-frame.md) the column is centred, so the same nav button sits at
+`320+n` at 1280 and `28+n` at 560 — and a storyboard written with literals clicks empty page at one
+width and the wrong control at the other. That is the failure `%CX%` exists to kill, arriving from
+the other side.
+
+The margin and measure are **duplicated** in `capture-desktop-session.sh` rather than read out of the
+binary, and overridable with `CAIRN_PAGE_MARGIN` / `CAIRN_MEASURE`. A harness that imported them
+could not start unless the app was already correct, and photographing a *broken* app is most of what
+this is for.
+
+**Two of the app's arrangements move the nav row, so mind the order of a storyboard.** Above
+`frame::TWO_COLUMN_MIN_WIDTH` the editor takes a wider frame and the nav follows it (ADR-0031 §3), so
+a `%LX+n%` nav click *after* the editor is open lands on empty page. Leaving by *Done* does not help:
+that button is compact at 1280 and full-width at 560, so no single coordinate reaches it at both.
+`storyboards/baseline.txt` visits the editor **last** for exactly this reason, and says so.
 
 This is worth more than convenience, because **the failure it prevents is silent**. A click aimed at
 a full-width control with a hard-coded `640` simply misses at 560 — nothing errors, the screen never
