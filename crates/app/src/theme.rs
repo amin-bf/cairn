@@ -286,7 +286,7 @@ mod tests {
     }
 
     /// The hover stroke against its own fill must clear **3:1** (ADR-0030 §3). This is the pair the
-    /// draft regressed to 2.49:1; the fix lifts `STONE_8`. Non-text, so the floor is 3:1, not 7:1 —
+    /// draft regressed to 2.49:1; the fix lifts it to `STONE_9`. Non-text, so the floor is 3:1, not 7:1 —
     /// but hover is exactly the state the rule covers, so it is not left failing.
     #[test]
     fn hover_stroke_clears_three_to_one() {
