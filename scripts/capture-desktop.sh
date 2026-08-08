@@ -36,7 +36,11 @@ height="${3:-800}"
 export CAIRN_SETTLE="${4:-6}"
 export CAIRN_WIDTH="$width"
 export CAIRN_HEIGHT="$height"
-export CAIRN_BIN="$root/target/debug/cairn"
+# Overridable so the same harness can photograph something *other* than the shipped app — the
+# throwaway prototypes a design ticket builds to be reacted to. The harness's value is that a
+# capture costs the operator no window and no focus, and that is worth exactly as much to a
+# prototype as to the app.
+export CAIRN_BIN="${CAIRN_BIN:-$root/target/debug/cairn}"
 export CAIRN_STORYBOARD="$(cd "$(dirname "$storyboard")" && pwd)/$(basename "$storyboard")"
 export CAIRN_SHOTS="${CAIRN_SHOTS:-$root/target/capture/${width}x${height}}"
 
