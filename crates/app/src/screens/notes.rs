@@ -159,24 +159,21 @@ fn placement_list(
     // The gaps run among the *other* visible rows — the moving note removed so it is never offered a
     // place beside itself. Gap `i` sits before `visible[i]`, and the last gap (past the final row) is
     // the end; the open ends send the note to either extreme (ADR-0021 §4).
-    let visible: Vec<NoteId> = rows.iter().map(|r| r.id).filter(|id| *id != mid).collect();
+    let visible: Vec<&notes::NoteRow> = rows.iter().filter(|r| r.id != mid).collect();
     let mut place: Option<usize> = None;
     for gap in 0..=visible.len() {
         if full_width_button(ui, "Place here").clicked() {
             place = Some(gap);
         }
-        if let Some(id) = visible.get(gap) {
-            let preview = rows
-                .iter()
-                .find(|r| r.id == *id)
-                .map_or("", |r| r.preview());
-            body(ui, preview);
+        if let Some(row) = visible.get(gap) {
+            body(ui, row.preview());
         }
     }
     if let Some(gap) = place {
         // One write, and the mode ends. A failed write drops the state too: there is no half-move to
         // recover, and the list is re-read from the surface next frame regardless.
-        let _ = notes::place_between(coll, mid, &visible, gap);
+        let ids: Vec<NoteId> = visible.iter().map(|r| r.id).collect();
+        let _ = notes::place_between(coll, mid, &ids, gap);
         *moving = None;
     }
 }
@@ -658,7 +655,9 @@ mod tests {
         );
     }
 
-    /// Cancelling a move clears the state and leaves the ordinary list — the order untouched, no write.
+    /// A move whose note the filter hides is dropped: placement is *between visible neighbours*
+    /// (ADR-0021 §4), so once the note leaves the view there is nothing to place it against and the
+    /// state must not survive into a frame the user cannot see.
     #[test]
     fn a_move_is_dropped_when_its_note_leaves_the_filtered_view() {
         let data = TempDir::new().unwrap();
