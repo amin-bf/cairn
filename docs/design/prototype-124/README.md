@@ -3,10 +3,20 @@
 The primary source for [#124](https://github.com/amin-bf/cairn/issues/124): forty captures of a
 throwaway prototype, at both judging widths, of four structurally different Review screens.
 
-**This directory is not meant for `main`.** It lives on the throwaway branch
-`DesignPass/TakeTheReviewSlice` beside the prototype that produced it, which is where a prototype
-belongs once it has been reacted to — main keeps the validated decision, not the options that lost.
-The branch is the context pointer #124 carries.
+**This lands on `main`, and that reverses the intention it was written with.** The first draft of
+this file said the opposite — a prototype belongs on a throwaway branch, and main keeps the
+validated decision rather than the options that lost. That is the general rule, and it is wrong
+*here*, for a reason specific to how this repo works.
+
+Tickets are worked in **parallel worktree sessions, each branching from `origin/main`**
+(`AGENTS.md`, *Landing work*). #124 split into four children, every one of them a prototype ticket
+that continues from variant E. A prototype reachable only from a branch those sessions never see is
+a prototype that does not exist for the work it was built to serve — each child would rebuild it,
+and rebuild it differently, and the comparison this directory exists to preserve would be gone.
+
+So the binary, the capture driver and the images land together. The options that lost stay because
+they are what makes E legible: E is a graft, and a graft is unreadable without the things it was
+grafted from.
 
 ## What produced these
 
