@@ -1,0 +1,31 @@
+# The review prototype's four screens, for #124.
+#
+# **Nothing here clicks.** The prototype takes its screen from `PROTO_SCREEN` and draws it
+# statically, so each screen is reached by exporting the variable and restarting rather than by
+# aiming a coordinate at a control. That is deliberate: `docs/environment/desktop-capture.md`
+# records that a storyboard cannot tell you it missed, and this map exists to *move* the things
+# coordinates point at — so a prototype that is being redrawn every hour is the worst possible
+# thing to drive by pixel position.
+#
+# `PROTO_VARIANT` is set once by `capture-prototype.sh`, for the whole run.
+# The first screen needs no restart: the app is already up, launched with PROTO_SCREEN=picker.
+
+shot 1-picker
+
+sh export PROTO_SCREEN=question
+restart
+shot 2-question
+
+sh export PROTO_SCREEN=revealed
+restart
+shot 3-revealed
+
+sh export PROTO_SCREEN=empty
+restart
+shot 4-empty
+
+# Mid-sitting. The dashboard is one of the ticket's named questions and it cannot be judged at
+# zero: an empty rule and an empty row of ticks are both just absence.
+sh export PROTO_SCREEN=revealed PROTO_GRADED=2
+restart
+shot 5-midsitting
