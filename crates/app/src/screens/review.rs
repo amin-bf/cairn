@@ -17,8 +17,10 @@ use crate::{
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
 /// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
-/// screen is one of the editor's four entrances (ADR-0021 §5), and opening it counts as a reveal
-/// (ADR-0021 §6), which is why the card is flipped here before the request leaves.
+/// screen is one of the editor's four entrances (ADR-0021 §5), and it offers that entrance **only on
+/// a revealed card** (ADR-0029 §1). Nothing is flipped on the way out: ADR-0021 §6's "counts as a
+/// reveal" is retired with the pre-reveal control that needed it, so ADR-0006 §4's guarantee holds by
+/// there being no route rather than by a side-effect.
 pub(crate) fn review(
     ui: &mut egui::Ui,
     coll: &mut Collection,
@@ -158,18 +160,6 @@ pub(crate) fn review(
                 s.revealed = true;
             }
 
-            // Edit this note, at any point in the card's life (ADR-0021 §6): the honest diagnosis of
-            // most leeches is a defective card, and the moment to fix it is when it is in front of
-            // you, not twenty cards later. Opening the editor **counts as a reveal** — the editor
-            // shows the back, so without flipping the card here ADR-0006 §4's "no grading before the
-            // answer is seen" would be quietly false. An edit that makes the card dormant needs no
-            // mechanism: the next frame re-derives the queue and simply does not offer it.
-            ui.add_space(4.0);
-            if full_width_button(ui, "Edit note").clicked() {
-                s.revealed = true;
-                edit_request = Some(offered.card.note);
-            }
-
             if s.revealed {
                 ui.add_space(4.0);
                 card_face(ui, &rendered.answer);
@@ -182,7 +172,29 @@ pub(crate) fn review(
                 badge(ui, &box_badge_wording(!offered.is_new, offered.box_));
 
                 ui.add_space(12.0);
-                if let Some(grade) = grade_buttons(ui, &offered, today) {
+                let pressed = grade_buttons(ui, &offered, today);
+
+                // Edit this note — offered **only now the card is revealed** (ADR-0029 §1). The
+                // honest diagnosis of most leeches is a defective card (ADR-0010 §7), and its three
+                // named forms — ambiguous, too large, testing two facts at once — are all judgements
+                // about the *pair*, so all three are post-reveal findings already.
+                //
+                // **Nothing flips the card here, and that absence is the decision.** ADR-0021 §6's
+                // "entering the editor counts as a reveal" is retired with the pre-reveal control it
+                // existed for: a full-width button under the card, which is itself the reveal target,
+                // made a mis-tap spend the reveal on a card nobody chose to look at. So ADR-0006 §4's
+                // "no grading before the answer is seen" now holds because there is **no route** into
+                // the editor before the reveal — put this control back outside the `revealed` branch
+                // and the guarantee is silently false again, with no rule left to catch it.
+                //
+                // An edit that makes the card dormant still needs no mechanism: the next frame
+                // re-derives the queue and simply does not offer it (ADR-0006 §2).
+                ui.add_space(12.0);
+                if full_width_button(ui, "Edit note").clicked() {
+                    edit_request = Some(offered.card.note);
+                }
+
+                if let Some(grade) = pressed {
                     let duration_ms = s.card_shown.elapsed().as_millis() as u64;
                     // A failed append drops this one review rather than wedging the session: the next
                     // frame re-derives the queue from whatever did commit. Surfacing write errors is
@@ -463,6 +475,99 @@ fn new_only_wording(new: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    /// Every string a frame actually drew, so a control's presence can be **asserted** rather than
+    /// assumed from reading the branch it sits in.
+    ///
+    /// Text reaches the frame as laid-out galleys inside its shapes, and shapes nest — a widget's
+    /// contents arrive as a `Shape::Vec` — so this recurses. Reading the galley rather than the
+    /// source string is what makes the assertion about what the user can see.
+    fn drawn_text(out: &egui::FullOutput) -> String {
+        fn walk(shape: &egui::Shape, into: &mut String) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    into.push_str(t.galley.text());
+                    into.push('\n');
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, into)),
+                _ => {}
+            }
+        }
+        let mut text = String::new();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut text);
+        }
+        text
+    }
+
+    /// **ADR-0029 §1, and the only reason it is enforceable.** The edit entrance appears on a
+    /// revealed card and never before one.
+    ///
+    /// Nothing fails when this drifts. Moving the control out of the `revealed` branch compiles,
+    /// renders and passes every other test — and silently restores the hazard ADR-0029 removed: the
+    /// button sits under the card, the card *is* the reveal target (ADR-0006 §3), and a mis-tap would
+    /// open the editor on an unrevealed card. That used to be guarded by ADR-0021 §6's "entering the
+    /// editor counts as a reveal", which ADR-0029 **retired** along with the state that needed it —
+    /// so ADR-0006 §4's "no self-grading before the answer is seen" now rests on there being *no
+    /// route*, with no rule left underneath to catch a regression.
+    #[test]
+    fn the_edit_entrance_appears_only_once_the_card_is_revealed() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        coll.create_note("basic", &[("Front", "der Hund"), ("Back", "the dog")])
+            .unwrap();
+
+        const TODAY: i64 = 20_514;
+        let now_ms = TODAY * 86_400_000 + 4 * 3_600_000;
+
+        let mut sitting = Some(Sitting::new(10, HashSet::new()));
+        let mut showing_leeches = false;
+        let mut pointer = None;
+        let ctx = egui::Context::default();
+
+        let mut frame = |sitting: &mut Option<Sitting>, coll: &mut Collection| {
+            ctx.run_ui(Default::default(), |ui| {
+                review(
+                    ui,
+                    coll,
+                    sitting,
+                    &mut showing_leeches,
+                    &mut pointer,
+                    now_ms,
+                    TODAY,
+                );
+            })
+        };
+
+        // The first frame is what binds the card to the sitting — `shown` is `None` until a card is
+        // offered, and the reveal resets whenever it changes. So it must run before `revealed` is set,
+        // or the next frame would clear it again.
+        let unrevealed = frame(&mut sitting, &mut coll);
+        let text = drawn_text(&unrevealed);
+        assert!(
+            text.contains("der Hund"),
+            "the prompt should be on screen, so the absence below is about the control and not \
+             about an empty queue — drew: {text}"
+        );
+        assert!(
+            !text.contains("Edit note"),
+            "ADR-0029 §1: no route into the editor exists before the reveal — drew: {text}"
+        );
+
+        sitting.as_mut().unwrap().revealed = true;
+        let revealed = drawn_text(&frame(&mut sitting, &mut coll));
+        assert!(
+            revealed.contains("the dog"),
+            "the answer should be on screen once revealed — drew: {revealed}"
+        );
+        assert!(
+            revealed.contains("Edit note"),
+            "ADR-0021 §5: the review screen is one of the editor's four entrances, and ADR-0029 \
+             narrows *when* it is offered rather than removing it — drew: {revealed}"
+        );
+    }
 
     #[test]
     fn the_pointer_states_a_cost_and_is_singular_or_plural() {

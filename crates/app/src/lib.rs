@@ -464,10 +464,11 @@ impl eframe::App for CairnApp {
 
             match self.dest {
                 Destination::Review => {
-                    // Opening the editor from the review screen counts as a reveal (ADR-0021 §6):
-                    // the request carries the note, and `review` has already flipped the card face
-                    // over. The edit entrance is shared by the leech screen, which also hangs off
-                    // Review (ADR-0010 §7).
+                    // The review screen's edit entrance, offered only on a **revealed** card
+                    // (ADR-0029 §1) — so nothing needs flipping on the way through here, and
+                    // ADR-0021 §6's "counts as a reveal" is retired along with the pre-reveal
+                    // control it existed for. The entrance is shared by the leech screen, which
+                    // also hangs off Review (ADR-0010 §7) and has no reveal to spend.
                     if let Some(note) = review(
                         ui,
                         coll,
