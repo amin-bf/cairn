@@ -66,13 +66,16 @@ _Avoid_: Theme, colour scheme; a per-screen colour; a light palette treated as a
 **Contrast floor**:
 The minimum contrast a **text** colour must clear against the surface it is drawn on: **7:1**
 (ADR-0030 §3), chosen over WCAG AA's 4.5:1 because the small text style is 9px, where 4.5 is already
-marginal. Body-on-panel clears it at **13.34:1** (up from stock's 5.12:1). It binds text pairs only —
-the **non-text** pairs (widget fills, decorative strokes) fail even 3:1 in stock *and* in the new
-palette, a pre-existing weakness out of scope for this pass, so do not "fix" a decorative stroke to
-satisfy the floor. One non-text pair *regresses* and is accepted rather than fixed: the hover stroke
-against its own fill, 3.19:1 → 2.49:1.
-_Avoid_: A contrast rule read as binding fills and strokes; treating the hover-stroke regression as a
-bug to close here.
+marginal. Body-on-panel clears it at **13.34:1** (up from stock's 5.12:1), and #115's test holds
+body-on-card and body-over-selection to it too. It binds text pairs only, with one carve-out: **weak
+text** (`weak_text_color()`, ~5.6:1) stays below the floor by design, because §4 wants the box badge
+quiet and lifting weak text makes it loud — a pre-existing weakness (stock is 5.12:1), pinned against
+stock, not the floor. The **non-text** pairs (widget fills, decorative strokes) fail even 3:1 in stock
+*and* in the palette, out of scope, so do not "fix" a decorative stroke to reach 7:1 — **except** the
+hover stroke, the lone pair the palette *regressed* (3.19:1 → 2.49:1), which #115 lifted back over
+**3:1** (`theme::install`'s `STONE_9`).
+_Avoid_: A contrast rule read as binding fills and strokes; reading weak text as clearing 7:1;
+treating the lifted hover stroke as still a regression to accept.
 
 **Top-level destination**:
 One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR-0021 §1). The floor

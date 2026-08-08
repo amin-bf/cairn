@@ -98,19 +98,30 @@ and 9px is exactly where stock egui's 5.12:1 hurts.
 > marginal case this pass exists to leave behind; 7:1 is WCAG AAA for body text.
 
 - **Bound (text):** body-on-panel — measured at **13.34:1**, clearing the floor with margin — and by
-  the same rule weak-text-on-panel and any accent that carries text. Implementation (#115) confirms
-  each remaining text pair against 7:1; the measured exemplar is the headline, not the whole set.
+  the same rule any accent that carries text. Implementation (#115) confirms each such pair against
+  7:1 (body-on-panel 13.34:1, body-on-card 10.32:1, body over the selection fill 8.14:1); the
+  measured exemplar is the headline, not the whole set.
+  - **Weak text is the exception, and #115 reclassifies it.** This section listed weak-text-on-panel
+    among the bound pairs, but the derived `weak_text_color()` lands near `#8b979b`, ~5.6:1 on the
+    panel — below the floor. It is **not** lifted: §4 draws the box badge in the weak colour as a
+    *quiet footnote*, and a 7:1 weak text is a loud one, so the two decisions pull against each other
+    and §4's quiet-footnote requirement governs the colour. It is treated as a **pre-existing
+    weakness** (stock's weak text is 5.12:1, so the palette *improves* it and never regresses it),
+    of the same kind as the non-text pairs below, and #115's test pins it against stock rather than
+    against 7:1. Recorded here so its absence from the enforced floor is a decision, not an oversight.
 - **Not bound (non-text):** widget fills against the panel, and decorative strokes against their
   fills. These mostly fail even 3:1 in stock egui **and** in the new palette, so they are a
   **pre-existing weakness rather than a regression**, and lifting them is a separate, larger job than
   a palette swap. Out of scope for this pass, stated so their absence from the floor is a decision
   rather than an oversight.
-  - **One exception is called out because it *regresses*:** the hover stroke against its own fill
-    crosses **3.19:1 → 2.49:1**. It is **recorded and accepted, not fixed** — a hover stroke is
-    decoration, the hovered state is also carried by the fill change beneath it, and binding
-    decorative strokes to a contrast floor is the larger job above. Named because a lone regression
-    inside an across-the-board improvement is exactly the kind of thing a later reader assumes was
-    missed.
+  - **One exception was called out because it *regresses*, and #115 lifted it.** The hover stroke
+    against its own fill crossed **3.19:1 → 2.49:1**. This section originally recorded it as accepted,
+    not fixed, and deferred it to a separate contrast pass. Implementation (#115) reversed that: it is
+    a lone regression inside an across-the-board improvement — exactly the thing a later reader
+    assumes was missed — and the fix is one rung of the stone ramp (the stroke moves up to `#8b979b`,
+    the light stone the derived weak text also lands near, clearing 3:1 with margin), not the larger
+    job of binding decorative strokes to a floor. So it is lifted and tested (`hover_stroke_clears_
+    three_to_one`) rather than deferred; the *other* non-text pairs stay out of scope.
 
 ### 4. The box badge: lower-case, in the small-text face
 
@@ -155,7 +166,8 @@ for the surface that will read it rather than for someone to invent one.
 - **The rest of the finish pass** — typography beyond the badge's one face, spacing, weight
   ([ADR-0006 §10](0006-the-review-session-experience.md)).
 - **A light palette**, and with it the restoration of system-following (§2).
-- **The decorative, non-text contrast pairs** (§3), including the accepted hover-stroke regression.
+- **The decorative, non-text contrast pairs** (§3) — *except* the lone hover-stroke regression, which
+  #115 lifted back over 3:1 (§3); the rest stay deferred.
 
 ## Amendments to accepted ADRs
 
@@ -178,9 +190,11 @@ case and face, and the **Finish pass** entry to record that its first decisions 
 - **Following the OS theme is gone.** A user on a light-preferring OS now sees the dark palette. This
   is a real behaviour change, recorded rather than silent, and reopenable when a light palette is
   drawn.
-- **Body text reads at 13.34:1**, up from 5.12:1, which is the point. Non-text contrast is unchanged
-  from stock — no better, and in the one hover-stroke case slightly worse — and that is accepted for
-  this pass.
+- **Body text reads at 13.34:1**, up from 5.12:1, which is the point. Non-text contrast is otherwise
+  unchanged from stock — no better — except the one hover-stroke pair, which #115 lifted back over
+  3:1 rather than shipping the regression this ADR first recorded (§3). Weak text stays below the
+  floor as a pre-existing weakness, deliberately, so the box badge reads as the quiet footnote §4
+  asks for (§3).
 - **Three accents are defined and have no caller.** That is the expected resting state until the
   notice channel and links exist, not drift, and not an invitation to give them one.
 - **This was judged from measurements and wireframes, not a build.** Like
@@ -196,5 +210,6 @@ case and face, and the **Finish pass** entry to record that its first decisions 
 |---|---|
 | A light palette, and restoring system-following behind it | The **finish pass**, reopenable without permission (§2) |
 | Typography beyond the badge's face, spacing, weight | The **finish pass** ([ADR-0006 §10](0006-the-review-session-experience.md)) |
-| The decorative non-text contrast pairs, including the accepted hover-stroke regression | A separate contrast pass (§3) |
+| The decorative non-text contrast pairs (the hover-stroke regression is **done** — #115 lifted it, §3) | A separate contrast pass (§3) |
+| Lifting weak text to the 7:1 floor, if §4's quiet footnote is ever reconsidered | The **finish pass** (§3) |
 | Whether the badge's lower-case register reads right in daily use | Post-implementation, like [ADR-0010](0010-leeches.md)'s thresholds |

@@ -29,6 +29,7 @@ pub mod platform;
 mod screens;
 pub mod session;
 pub mod sync;
+pub mod theme;
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -269,11 +270,17 @@ pub struct CairnApp {
 }
 
 impl CairnApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // Fonts are installed on the **first frame**, never here (see `ui` and the `fonts` module).
         // Registering a face during creation was found in #8 to break rendering on some backends;
         // deferring it one frame fixes it, and a newly-named family (bold) is not referenceable on
         // the frame it is registered anyway (ADR-0012 §8).
+        //
+        // The palette is the opposite: installed here, at construction, because visuals allocate no
+        // texture so the font hazard does not reach them, and setting them now avoids a frame of the
+        // wrong theme (ADR-0030 §1). `install` pins dark into the dark slot and disables
+        // theme-following — both acts, or an OS theme flip silently restores stock egui (§2).
+        theme::install(&cc.egui_ctx);
         let store = Self::open_store();
         Self {
             store,

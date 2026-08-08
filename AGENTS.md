@@ -330,8 +330,12 @@ because they are validated findings, not because a web build ships.
     rule. Ask for a role (`ui.visuals().text_color()`, `weak_text_color()`, `hyperlink_color`), never
     a value. The white in `fonts.rs`'s coverage probe is not an exception — it draws nothing a user
     sees. **The contrast floor is 7:1 for text against its surface** (§3): a text colour added to the
-    palette that clears less is a defect the floor catches; the non-text pairs are deliberately out of
-    scope, so do not "fix" a decorative stroke to satisfy it.
+    palette that clears less is a defect the floor catches. Two carve-outs, both recorded in §3:
+    **weak text** (the derived `weak_text_color()`, ~5.6:1) stays below the floor on purpose, because
+    §4 wants the box badge quiet and a 7:1 weak text is a loud one — it is a pre-existing weakness, not
+    a defect, held only against stock. And the **non-text** pairs are out of scope, so do not "fix" a
+    decorative stroke to reach 7:1 — the one exception being the hover stroke, which #115 lifted back
+    over **3:1** (not 7:1) because it was the lone pair the palette *regressed*.
 14. **The app pins dark and does not follow the OS theme — and pinning is two acts, not one.**
     [ADR-0030 §2](./docs/adr/0030-the-first-finish-pass-decisions.md): install the dark palette as the
     visuals **and** disable theme-following. Set only the first and an OS theme change silently
