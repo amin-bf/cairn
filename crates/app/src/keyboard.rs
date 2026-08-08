@@ -76,6 +76,20 @@ impl Band {
         }
     }
 
+    /// Whether the soft keyboard is **up** right now, from the insets [`Band::read`] last took.
+    ///
+    /// The navigation shell reads this to decide whether to pin itself (`ui` `CONTEXT.md`'s
+    /// *Top-level destination*), and the question is deliberately *is it up* rather than *is it
+    /// down*: the two are not complements. A platform with **no** soft keyboard answers `false` to
+    /// both, which is the distinction [`SoftKeyboard`] exists to carry (ADR-0026 §5) — so the shell
+    /// is simply always pinned off Android, from the same rule rather than from a second one.
+    ///
+    /// It reads the stored insets rather than the platform, so it is free and agrees with the bands
+    /// this frame actually reserved. Call it after [`Band::read`].
+    pub(crate) fn keyboard_is_up(&self) -> bool {
+        self.insets.keyboard.is_up()
+    }
+
     /// **Guard 1** — keep the focused field inside the viewport, *in the same frame it shrinks*.
     ///
     /// Not a nicety. Reserving the band clips the focused field, which stops its IME output, which
@@ -270,6 +284,32 @@ mod tests {
         band.keep_focus_visible(&ctx, reserving(0.0), 965.0);
         assert_eq!(band.prev_bottom_pts, 0.0);
         assert_eq!(band.forced_scroll, None);
+    }
+
+    /// The navigation shell yields only to a keyboard that is **actually up**, and the three states
+    /// are not two (`ui` `CONTEXT.md`'s *Top-level destination*, ADR-0026 §5).
+    ///
+    /// This is the silent half of the pinning rule. *Absent* and *Down* must answer alike — the row
+    /// is pinned in both — so a platform with no soft keyboard gets a permanently pinned shell from
+    /// the **same** rule rather than from a platform branch. Written as `!is_down()` instead, the
+    /// desktop would answer *"the keyboard is not down"* and hide the only way out of a destination,
+    /// forever, with nothing failing anywhere. That is the exact collapse ADR-0025 §2 first shipped
+    /// and ADR-0026 §5 corrected, arriving here through a different caller.
+    #[test]
+    fn the_shell_yields_only_to_a_keyboard_that_is_actually_up() {
+        let mut band = Band::default();
+
+        band.insets.keyboard = platform::SoftKeyboard::Absent;
+        assert!(!band.keyboard_is_up(), "no soft keyboard: the shell stays");
+
+        band.insets.keyboard = platform::SoftKeyboard::Down;
+        assert!(!band.keyboard_is_up(), "keyboard down: the shell stays");
+
+        band.insets.keyboard = platform::SoftKeyboard::Up { height: 400.0 };
+        assert!(
+            band.keyboard_is_up(),
+            "keyboard up: the shell yields its band to the form pane's first screen"
+        );
     }
 
     /// Off Android the seam reports no keyboard and no bars, so there is nothing to reserve and the

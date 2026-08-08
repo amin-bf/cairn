@@ -429,6 +429,32 @@ impl eframe::App for CairnApp {
                 .show(ui, |_| {});
         }
 
+        // ---- The navigation shell (ADR-0021 §1; `CONTEXT.md`'s *Top-level destination*) ----------
+        //
+        // **Pinned, and it yields the screen to the soft keyboard.** Two accepted constraints pull
+        // against each other here, and neither document recorded which won. ADR-0021 §1 wants a
+        // *persistent* affordance, because "a destination reachable only by completing a session is
+        // not reachable" — and a row that scrolls away is not persistent. ADR-0025's consequences
+        // make the form pane's **first screen** a specified resource, holding the destructive-edit
+        // warning because nowhere else works — and a row that is always pinned spends that resource
+        // out of the 565dp a keyboard leaves of 923dp.
+        //
+        // So it is drawn whenever the keyboard is **not up**: full reachability while the user is
+        // reading, the whole first screen while they are typing, and the row is back the moment the
+        // keyboard goes down. **One rule reading one fact.** It is expressible only because
+        // ADR-0026 §5 made the seam distinguish *no soft keyboard on this platform* from *keyboard
+        // down* — off Android the seam reports the first, `keyboard_is_up` is permanently false, and
+        // the row is simply always pinned. One rule reaching two answers is **not**
+        // platform-conditional behaviour, so client-stack rule 3 is untouched.
+        //
+        // It sits below the status-bar band and outside the scroll area, which is what makes it
+        // pinned rather than merely first.
+        if !self.band.keyboard_is_up() {
+            egui::Panel::top("nav")
+                .resizable(false)
+                .show(ui, |ui| nav_bar(ui, &mut self.dest));
+        }
+
         // **Before the band is reserved, not after.** The focused field has to be inside the
         // viewport on the *same* frame it shrinks, or its IME output lapses for one frame and the
         // keyboard is gone before the next one — see `keyboard` for the loop this breaks.
@@ -445,21 +471,14 @@ impl eframe::App for CairnApp {
         }
 
         // Everything the destination draws scrolls, which is what makes the covered band reachable
-        // rather than merely clipped. The nav row scrolls with it deliberately: pinning it would
-        // spend the form pane's first screen, which is the resource ADR-0025's consequences name —
-        // under a keyboard that screen is all the user has, and the destructive-edit warning was
-        // moved into it because nowhere else works.
+        // rather than merely clipped. The nav row is **not** in here — it is the pinned panel above,
+        // so scrolling a long note list never carries the way out off the screen with it.
         //
         // The area is taken *before* the closure so it carries guard 1's forced offset without
         // holding a borrow of `band` across the frame the destinations are drawn in.
         let area = self.band.scroll_area();
         let mut reset_requested = false;
         let out = area.show(ui, |ui| {
-            // The persistent affordance that makes all three destinations reachable (ADR-0021 §1):
-            // a destination reachable only by completing a session is not reachable, so the nav row
-            // is drawn every frame, above whatever the current destination shows.
-            nav_bar(ui, &mut self.dest);
-            ui.separator();
             ui.add_space(4.0);
 
             match self.dest {
@@ -520,8 +539,9 @@ impl eframe::App for CairnApp {
 }
 
 /// The nav row: three buttons, the current one marked. This is the persistent affordance ADR-0021 §1
-/// fixes; its *appearance* (a tab bar, a drawer) is the visual design pass's, and a row of buttons is
-/// the honest floor.
+/// fixes. **Where it sits is settled** — pinned above the scroll area, yielding to the soft keyboard
+/// (see the call site) — which is the *layout pass*'s half; how it **looks** is the *finish pass*'s,
+/// and a row of buttons is the honest floor.
 fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination) {
     ui.horizontal(|ui| {
         for (target, label) in [
