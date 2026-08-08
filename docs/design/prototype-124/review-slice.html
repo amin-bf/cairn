@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Review Slice — four takes</title>
+<style>
+  /* Cairn's own palette (crates/app/src/theme.rs, ADR-0030). The artifact is about this app's
+     UI, so it is drawn in that app's colours rather than a generic one. */
+  :root {
+    --stone-0:#0f1214; --stone-2:#1a1e21; --stone-3:#21262a; --stone-4:#282e33;
+    --stone-5:#2c3237; --stone-6:#363d43; --stone-9:#8b979b; --stone-10:#b9c2c3;
+    --stone-11:#e2e6e6; --quiet:#333b40;
+    --lichen:#6f93a8; --lichen-deep:#2a4453; --lichen-pale:#cfe3ec;
+    --clay:#c2a37a; --rose:#b57e79;
+    --measure: 1180px;
+  }
+  * { box-sizing: border-box; min-width: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin:0; background:var(--stone-2); color:var(--stone-11);
+    font: 15px/1.65 "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
+  }
+  .wrap { max-width:var(--measure); margin:0 auto; padding:0 24px 96px; }
+  h1,h2,h3 { line-height:1.25; font-weight:600; }
+  h1 { font-size:30px; margin:0 0 8px; letter-spacing:-0.015em; }
+  h2 { font-size:21px; margin:56px 0 6px; letter-spacing:-0.01em; }
+  h3 { font-size:16px; margin:28px 0 6px; }
+  p { margin:0 0 12px; color:var(--stone-10); }
+  a { color:var(--lichen); }
+  code { font-family: ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:.88em;
+         background:var(--stone-0); border:1px solid var(--quiet); border-radius:3px; padding:1px 5px; }
+  .lede { font-size:17px; color:var(--stone-10); max-width:74ch; }
+  .muted { color:var(--stone-9); }
+  .rule { height:1px; background:var(--quiet); border:0; margin:44px 0 0; }
+
+  header.top { padding:44px 0 0; }
+  .kicker { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--stone-9); margin:0 0 10px; }
+  .tagrow { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 0; }
+  .tag { font-size:12px; padding:3px 9px; border-radius:99px; border:1px solid var(--quiet);
+         background:var(--stone-3); color:var(--stone-10); }
+  .tag.warn { border-color:var(--clay); color:var(--clay); }
+  .tag.on { border-color:var(--lichen); color:var(--lichen-pale); background:var(--lichen-deep); }
+
+  /* --- the width switch ------------------------------------------------------------------ */
+  .switchbar {
+    position:sticky; top:0; z-index:20; background:rgba(26,30,33,.94);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--quiet);
+    padding:10px 0; margin:0 0 4px;
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+  }
+  .switchbar .lbl { font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--stone-9); }
+  .seg { display:inline-flex; border:1px solid var(--quiet); border-radius:6px; overflow:hidden; }
+  .seg button {
+    font:inherit; font-size:13px; padding:6px 14px; background:var(--stone-3);
+    color:var(--stone-10); border:0; cursor:pointer;
+  }
+  .seg button + button { border-left:1px solid var(--quiet); }
+  .seg button[aria-pressed="true"] { background:var(--lichen-deep); color:var(--lichen-pale); }
+
+  /* --- shots ----------------------------------------------------------------------------- */
+  .shots { display:grid; gap:18px; margin:14px 0 0; }
+  .shots.five { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+  .shots.two  { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  figure { margin:0; }
+  figure img {
+    display:block; width:100%; height:auto; border:1px solid var(--quiet);
+    border-radius:6px; background:var(--stone-0);
+  }
+  figure img.narrow { max-width:340px; }
+  figcaption { font-size:12.5px; color:var(--stone-9); margin:8px 0 0; }
+  figcaption b { color:var(--stone-11); font-weight:600; }
+  .noshot {
+    border:1px dashed var(--quiet); border-radius:6px; color:var(--stone-9);
+    font-size:13px; padding:26px 16px; text-align:center; background:var(--stone-3);
+  }
+
+  /* --- cards ----------------------------------------------------------------------------- */
+  .card {
+    background:var(--stone-3); border:1px solid var(--quiet); border-radius:10px;
+    padding:22px 22px 24px; margin:18px 0 0;
+  }
+  .card.pick { border-left:3px solid var(--lichen); }
+  .card h3 { margin-top:0; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .vletter {
+    font-size:12px; font-weight:700; letter-spacing:.08em; color:var(--stone-2);
+    background:var(--lichen); border-radius:4px; padding:2px 7px;
+  }
+  .thesis { color:var(--stone-11); font-size:15.5px; margin:0 0 4px; }
+
+  table { border-collapse:collapse; width:100%; font-size:13.5px; margin:14px 0 0; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--quiet); vertical-align:top; }
+  th { color:var(--stone-9); font-weight:600; font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+  td.num { font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--lichen-pale); white-space:nowrap; }
+  .scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+  ol.findings { counter-reset:f; list-style:none; padding:0; margin:14px 0 0; }
+  ol.findings > li {
+    counter-increment:f; position:relative; padding:14px 0 14px 46px;
+    border-bottom:1px solid var(--quiet);
+  }
+  ol.findings > li::before {
+    content:counter(f); position:absolute; left:0; top:13px;
+    width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+    background:var(--stone-5); border:1px solid var(--quiet);
+    font-size:12.5px; font-weight:700; color:var(--lichen-pale);
+  }
+  ol.findings b { color:var(--stone-11); }
+
+  /* --- questions -------------------------------------------------------------------------- */
+  .q { background:var(--stone-0); border:1px solid var(--quiet); border-radius:10px;
+       padding:20px 20px 22px; margin:18px 0 0; }
+  .q h3 { margin:0 0 4px; }
+  .q .why { font-size:13.5px; color:var(--stone-9); margin:0 0 14px; }
+  .opts { display:grid; gap:8px; margin:0 0 14px; }
+  .opts label {
+    display:flex; gap:11px; align-items:flex-start; padding:11px 13px;
+    border:1px solid var(--quiet); border-radius:7px; background:var(--stone-3);
+    cursor:pointer; font-size:14px;
+  }
+  .opts label:hover { border-color:var(--stone-6); background:var(--stone-4); }
+  .opts input { margin:3px 0 0; accent-color:var(--lichen); flex:none; }
+  .opts .oname { color:var(--stone-11); font-weight:600; }
+  .opts .odesc { display:block; color:var(--stone-9); font-size:13px; margin-top:2px; }
+  textarea {
+    width:100%; background:var(--stone-3); color:var(--stone-11); font:inherit; font-size:14px;
+    border:1px solid var(--quiet); border-radius:7px; padding:10px 12px; resize:vertical; min-height:64px;
+  }
+  .qsubmit {
+    font:inherit; font-size:14px; font-weight:600; margin-top:12px; cursor:pointer;
+    background:var(--lichen-deep); color:var(--lichen-pale);
+    border:1px solid var(--lichen); border-radius:7px; padding:9px 18px;
+  }
+  .qsubmit:hover { background:#33556a; }
+  .qdone { color:var(--lichen); font-size:13px; margin-left:12px; }
+
+  .split { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin:16px 0 0; }
+  .tk { background:var(--stone-3); border:1px solid var(--quiet); border-radius:9px; padding:16px 16px 18px; }
+  .tk .tno { font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--stone-9); }
+  .tk h4 { margin:5px 0 7px; font-size:15px; line-height:1.35; }
+  .tk p { font-size:13.5px; margin:0; }
+  .tk .type { display:inline-block; margin-top:11px; font-size:11.5px; padding:2px 8px; border-radius:99px;
+              border:1px solid var(--quiet); color:var(--stone-10); background:var(--stone-2); }
+
+  .callout { border-left:3px solid var(--clay); background:var(--stone-3); padding:14px 18px;
+             border-radius:0 8px 8px 0; margin:18px 0 0; }
+  .callout b { color:var(--clay); }
+  @media (max-width:640px) { .wrap { padding:0 16px 72px; } h1 { font-size:25px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="kicker">Cairn design pass · ticket #124</p>
+  <h1>Take the Review Slice</h1>
+  <p class="lede">
+    Four structurally different takes on the Review screen, built as a throwaway egui binary and
+    photographed through the headless harness at both judging widths. Nothing here is committed to
+    the app. The point is to have something concrete to react to — and then to decide how this
+    ticket gets split, because it is too big as one.
+  </p>
+  <div class="tagrow">
+    <span class="tag">32 captures · 2 widths · 5 states</span>
+    <span class="tag">ADR-0030 palette held constant</span>
+    <span class="tag warn">Needs your judgement</span>
+  </div>
+</header>
+
+<hr class="rule">
+
+<h2>What the baseline actually shows</h2>
+<p>
+  Before any of the variants: the single largest defect in the Review screen today is <b>not on this
+  ticket's list</b>. The ticket names palette, type scale, spacing, radius, weight, motion and
+  elevation as the foundations, and the picker, dashboard, grade buttons and empty state as the
+  arrangement. What the captures show is that the screen has <b>no page frame at all</b> — no margin,
+  no measure. Content runs edge to edge at 1280 exactly as it does at 560.
+</p>
+<p class="muted">
+  At 1280 that means a card 1280px wide with one word centred in it, and four grade bars each a
+  metre long. The map's fog already suspected this — “one responsive design currently means one
+  design, stretched” — but it reads as a *responsive* problem there, and it is not. It is a missing
+  foundation, and it is missing at every width.
+</p>
+
+<div class="switchbar">
+  <span class="lbl">Window</span>
+  <div class="seg" role="group" aria-label="Capture width">
+    <button type="button" data-w="1280x800" aria-pressed="true">1280 × 800 — the judging width</button>
+    <button type="button" data-w="560x860" aria-pressed="false">560 × 860 — the app's default</button>
+  </div>
+  <span class="lbl" id="wnote">Every image below switches together.</span>
+</div>
+
+<h3>Today, on <code>main</code></h3>
+<div class="shots two">
+  <figure>
+    <img data-base="03-review-revealed" alt="Baseline: the revealed card at the current width">
+    <figcaption><b>Revealed</b> — prompt, answer, <code>new</code> badge, four grades, <em>Edit note</em>.</figcaption>
+  </figure>
+  <figure>
+    <img data-base="01-review-start" alt="Baseline: the count picker">
+    <figcaption><b>The entrance</b> — a sentence and two stock buttons, top-left.</figcaption>
+  </figure>
+</div>
+
+<hr class="rule">
+
+<h2>The four takes</h2>
+<p>
+  Each variant carries a <b>complete</b> set of foundation tokens rather than sharing one, because a
+  hero-card layout and a dense two-column layout do not want the same type scale — and pretending
+  they do is how a scale ends up decided in the abstract, which is the cost ADR-0030 records. Colour
+  is held constant across all four so that what you are looking at is arrangement, type and rhythm.
+</p>
+
+<div class="card">
+  <h3><span class="vletter">A</span> The framed column <span class="muted" style="font-weight:400;font-size:14px">— the control</span></h3>
+  <p class="thesis">Today's arrangement, drawn properly. A margin, a capped measure, a real type scale, and nothing moved.</p>
+  <p class="muted">Worth taking seriously: if this is enough, the slice is a far smaller job than it looks, and most of the ticket's arrangement half dissolves.</p>
+  <div class="shots five" data-variant="a"></div>
+  <div class="scroll"><table>
+    <tr><th>display</th><th>heading</th><th>body</th><th>small</th><th>unit</th><th>margin</th><th>measure</th><th>radius</th><th>control</th></tr>
+    <tr><td class="num">24</td><td class="num">19</td><td class="num">15</td><td class="num">12</td><td class="num">4</td><td class="num">20</td><td class="num">640</td><td class="num">3</td><td class="num">40</td></tr>
+  </table></div>
+</div>
+
+<div class="card">
+  <h3><span class="vletter">B</span> The card is the screen</h3>
+  <p class="thesis">One card with two halves rather than two slabs, the badge riding in its corner, the card cut into the page as a well rather than sitting on it as a button — and the dashboard demoted to a hairline.</p>
+  <p class="muted">Tests “does the dashboard earn its place” by very nearly taking it away, and tests whether prompt and answer are one object or two.</p>
+  <div class="shots five" data-variant="b"></div>
+  <div class="scroll"><table>
+    <tr><th>display</th><th>heading</th><th>body</th><th>small</th><th>unit</th><th>margin</th><th>measure</th><th>radius</th><th>control</th></tr>
+    <tr><td class="num">40</td><td class="num">20</td><td class="num">15</td><td class="num">12</td><td class="num">8</td><td class="num">28</td><td class="num">560</td><td class="num">8</td><td class="num">44</td></tr>
+  </table></div>
+</div>
+
+<div class="card">
+  <h3><span class="vletter">C</span> Two columns at width</h3>
+  <p class="thesis">The only variant that spends the 1280 on anything: card left, grades right, so the answer and the choice about it are read together instead of 400px apart. Collapses to A's stack below 900.</p>
+  <p class="muted">This proposes the app's <b>second</b> breakpoint — #122 measured the editor's 640 as the only one that exists. That is a real cost, and it is the thing to weigh here.</p>
+  <div class="shots five" data-variant="c"></div>
+  <div class="scroll"><table>
+    <tr><th>display</th><th>heading</th><th>body</th><th>small</th><th>unit</th><th>margin</th><th>measure</th><th>radius</th><th>control</th></tr>
+    <tr><td class="num">30</td><td class="num">19</td><td class="num">14</td><td class="num">11</td><td class="num">6</td><td class="num">24</td><td class="num">1040</td><td class="num">4</td><td class="num">42</td></tr>
+  </table></div>
+</div>
+
+<div class="card">
+  <h3><span class="vletter">D</span> Grades as one row</h3>
+  <p class="thesis">Attacks the four-stacked-full-width-controls decision head on: Forgot held apart, the three passes in a single segmented row. Buys back most of the vertical budget and lets the card be genuinely large at any width.</p>
+  <p class="muted">Hit targets stay touch-sized — the row's segments are 48px tall, wider than they are on a handset but never shorter.</p>
+  <div class="shots five" data-variant="d"></div>
+  <div class="scroll"><table>
+    <tr><th>display</th><th>heading</th><th>body</th><th>small</th><th>unit</th><th>margin</th><th>measure</th><th>radius</th><th>control</th></tr>
+    <tr><td class="num">36</td><td class="num">19</td><td class="num">15</td><td class="num">11</td><td class="num">6</td><td class="num">24</td><td class="num">720</td><td class="num">6</td><td class="num">48</td></tr>
+  </table></div>
+</div>
+
+<hr class="rule">
+
+<h2>Side by side, one state at a time</h2>
+<p class="muted">Baseline first where one exists, then A → D. The width switch above drives these too.</p>
+
+<h3>Revealed — the state the screen is for</h3>
+<div class="shots five" data-row="3-revealed" data-base="03-review-revealed"></div>
+
+<h3>Mid-sitting — two of five graded</h3>
+<p class="muted">The dashboard cannot be judged at zero: an empty rule and an empty row of ticks are both just absence.</p>
+<div class="shots five" data-row="5-midsitting" data-base="12-review-mid-session"></div>
+
+<h3>The question — answer hidden</h3>
+<div class="shots five" data-row="2-question" data-base="02-review-question"></div>
+
+<h3>The entrance</h3>
+<div class="shots five" data-row="1-picker" data-base="01-review-start"></div>
+
+<h3>Caught up — the empty state</h3>
+<p class="muted">No baseline: the capture seed always has cards due, so this state has never been photographed. That is itself worth knowing.</p>
+<div class="shots five" data-row="4-empty"></div>
+
+<hr class="rule">
+
+<h2>What the images establish</h2>
+<ol class="findings">
+  <li><b>The frame is the lever, and it is not on the ticket's list.</b> A page margin and a capped measure account for most of the visible distance between the baseline and <em>every</em> variant. It belongs in the foundations half and is missing from it.</li>
+  <li><b>The palette is not the problem.</b> All four variants use ADR-0030's colours unchanged and all four read markedly better than the baseline. The ticket expects to supersede ADR-0030; on this evidence the Review slice gives no reason to.</li>
+  <li><b>The type scale is the second lever.</b> Stock egui's 12.5px body and 9px small were never decided — the app simply inherited them. Lifting the card face to a display tier is what makes the card read as the thing being studied rather than as a label.</li>
+  <li><b>The card currently reads as a button.</b> It is drawn on the <code>inactive</code> widget fill, which is <em>lighter</em> than the panel, so it sits on the page like a control. B's well — darker than the page — reads as a surface to read into.</li>
+  <li><b>Prompt and answer are one thing.</b> A's two equal slabs read as two objects; B, C and D's single card divided by a hairline reads as two faces of one card, which is what it is.</li>
+  <li><b>“Review” as a heading duplicates the “Review” nav tab.</b> Visible in A, C and D. One of them should go.</li>
+  <li><b>Two grades sharing <code>1d</code> looks like a fault</b> when label and interval are set at the same size and weight. Demoting the interval to the small tier fixes the reading without touching the fact.</li>
+  <li><b>1280 genuinely has nothing to do</b> unless an arrangement changes. A, B and D centre a column and leave roughly half the window empty. Only C spends it. This is the real content of “one responsive design” for this screen, and it is a decision, not a defect.</li>
+</ol>
+
+<div class="callout">
+  <p style="margin:0"><b>Two harness bugs were found and fixed on the way.</b> A storyboard's
+  <code>sh export …</code> was being swallowed by a subshell, so every shot after the first
+  photographed the previous screen — the exact silent failure <code>%CX%</code> was introduced to
+  kill. And <code>CAIRN_BIN</code> is now overridable, so the harness can photograph a prototype and
+  not only the shipped app. Both are committed independently of anything you decide below.</p>
+</div>
+
+<hr class="rule">
+
+<h2>The split</h2>
+<p>
+  The ticket says: <em>“This may well split once its size is real. If it does, split it — do not
+  quietly do half.”</em> Its size is now real. Held against the convergence rule — a ticket closes
+  only when the ADR, the design project and the running app agree — the honest count is four
+  tickets, not one, and they stay in the Review slice rather than becoming a foundations-first
+  detour.
+</p>
+<div class="split">
+  <div class="tk">
+    <div class="tno">First</div>
+    <h4>The frame: margin, measure, and what width does</h4>
+    <p>The page frame and the answer to whether Review gets a second breakpoint. Everything else is judged inside it, so it goes first.</p>
+    <span class="type">wayfinder:prototype</span>
+  </div>
+  <div class="tk">
+    <div class="tno">Second</div>
+    <h4>The type scale and the rhythm, against Review</h4>
+    <p>Fixing the five tiers and the spacing unit on the numbers the chosen direction implies — the first values the app ever names for these.</p>
+    <span class="type">wayfinder:grilling</span>
+  </div>
+  <div class="tk">
+    <div class="tno">Third</div>
+    <h4>The card: one object or two, and what a card is</h4>
+    <p>Slab or well, one card or two, where the box badge lives, and the surface treatment the whole app inherits from the answer.</p>
+    <span class="type">wayfinder:prototype</span>
+  </div>
+  <div class="tk">
+    <div class="tno">Fourth</div>
+    <h4>The controls: grades, the entrance, the empty state</h4>
+    <p>Four stacked or Forgot-plus-a-row; whether the count picker is the right entrance; what caught-up looks like.</p>
+    <span class="type">wayfinder:prototype</span>
+  </div>
+</div>
+<p class="muted" style="margin-top:16px">
+  Where the dashboard goes is deliberately not its own ticket — it is decided inside <em>the
+  frame</em> or inside <em>the card</em> depending on your answer to Q3 below.
+</p>
+
+<hr class="rule">
+
+<h2>What I need from you</h2>
+<p class="muted">Five questions. Each queues one prompt when you press its button; nothing is sent until you hit Send in the Lavish bar.</p>
+
+<form class="q" data-lavish-question="direction" onsubmit="qsub(event,'direction','Direction')">
+  <h3>Q1 · Which direction?</h3>
+  <p class="why">You can also graft — take B's card into A's frame, and so on. Say so in the box.</p>
+  <div class="opts">
+    <label><input type="radio" name="direction" value="A — the framed column"><span><span class="oname">A — the framed column</span><span class="odesc">Frame it and change nothing else. The cheapest answer, and possibly the right one.</span></span></label>
+    <label><input type="radio" name="direction" value="B — the card is the screen"><span><span class="oname">B — the card is the screen</span><span class="odesc">Big card, one object, dashboard demoted to a hairline.</span></span></label>
+    <label><input type="radio" name="direction" value="C — two columns at width"><span><span class="oname">C — two columns at width</span><span class="odesc">Spend the 1280. Costs the app its second breakpoint.</span></span></label>
+    <label><input type="radio" name="direction" value="D — grades as one row"><span><span class="oname">D — grades as one row</span><span class="odesc">Reopens the four-stacked-buttons decision; buys a much larger card.</span></span></label>
+    <label><input type="radio" name="direction" value="a graft — see notes"><span><span class="oname">A graft</span><span class="odesc">Bits of several. Describe it below.</span></span></label>
+  </div>
+  <textarea name="notes" placeholder="Anything about the graft, or what you disliked in the ones you did not pick…"></textarea>
+  <button class="qsubmit" type="submit">Queue this answer</button><span class="qdone" hidden>queued ✓</span>
+</form>
+
+<form class="q" data-lavish-question="breakpoint" onsubmit="qsub(event,'breakpoint','Second breakpoint')">
+  <h3>Q2 · Does Review earn a second breakpoint?</h3>
+  <p class="why">The editor's 640 is currently the app's only arrangement change. C proposes one at 900.</p>
+  <div class="opts">
+    <label><input type="radio" name="breakpoint" value="yes — Review changes arrangement with width"><span><span class="oname">Yes</span><span class="odesc">Wide is a different arrangement, not a wider one.</span></span></label>
+    <label><input type="radio" name="breakpoint" value="no — one arrangement, centred, at every width"><span><span class="oname">No</span><span class="odesc">One arrangement, centred; the window simply gets emptier.</span></span></label>
+    <label><input type="radio" name="breakpoint" value="undecided — needs its own ticket"><span><span class="oname">Undecided</span><span class="odesc">Push it into the frame ticket and decide it there.</span></span></label>
+  </div>
+  <button class="qsubmit" type="submit">Queue this answer</button><span class="qdone" hidden>queued ✓</span>
+</form>
+
+<form class="q" data-lavish-question="dashboard" onsubmit="qsub(event,'dashboard','Dashboard')">
+  <h3>Q3 · Does the sitting dashboard survive, and as what?</h3>
+  <p class="why">The quiet constraint forbids counting <em>at</em> the user. All four readings below are defensible under it; they say different things.</p>
+  <div class="opts">
+    <label><input type="radio" name="dashboard" value="the sentence — n of m, as today"><span><span class="oname">“0 of 5”, as today</span><span class="odesc">A statement, demoted to the footnote tier (A).</span></span></label>
+    <label><input type="radio" name="dashboard" value="a progress rule"><span><span class="oname">A progress rule</span><span class="odesc">Width says how far through; nothing is numbered (B).</span></span></label>
+    <label><input type="radio" name="dashboard" value="ticks — one per card in the sitting"><span><span class="oname">Ticks</span><span class="odesc">One per card, countable at a glance without a number (C, D).</span></span></label>
+    <label><input type="radio" name="dashboard" value="nothing — remove it"><span><span class="oname">Nothing</span><span class="odesc">The sitting size was chosen at the entrance; that was the point of choosing it.</span></span></label>
+  </div>
+  <button class="qsubmit" type="submit">Queue this answer</button><span class="qdone" hidden>queued ✓</span>
+</form>
+
+<form class="q" data-lavish-question="grades" onsubmit="qsub(event,'grades','Grade buttons')">
+  <h3>Q4 · The four grade buttons</h3>
+  <div class="opts">
+    <label><input type="radio" name="grades" value="four stacked full-width, break after Forgot"><span><span class="oname">Four stacked, full width</span><span class="odesc">As today, with the break after Forgot (A, B, C).</span></span></label>
+    <label><input type="radio" name="grades" value="Forgot apart, three passes in one row"><span><span class="oname">Forgot apart, three in a row</span><span class="odesc">Forgot is a different kind of answer, not the first rung (D).</span></span></label>
+    <label><input type="radio" name="grades" value="something else — see notes"><span><span class="oname">Something else</span><span class="odesc">Describe it.</span></span></label>
+  </div>
+  <textarea name="notes" placeholder="Optional…"></textarea>
+  <button class="qsubmit" type="submit">Queue this answer</button><span class="qdone" hidden>queued ✓</span>
+</form>
+
+<form class="q" data-lavish-question="split" onsubmit="qsub(event,'split','The split')">
+  <h3>Q5 · The split</h3>
+  <p class="why">#124 would close as “the slice's shape is decided”, with its four children created and wired.</p>
+  <div class="opts">
+    <label><input type="radio" name="split" value="yes — split into the four tickets as proposed"><span><span class="oname">Split it as proposed</span><span class="odesc">Four children, in that order, blocking left to right.</span></span></label>
+    <label><input type="radio" name="split" value="split differently — see notes"><span><span class="oname">Split differently</span><span class="odesc">Say how.</span></span></label>
+    <label><input type="radio" name="split" value="no — keep #124 whole and carry on in it"><span><span class="oname">Keep it whole</span><span class="odesc">Carry on inside #124 across several sessions.</span></span></label>
+  </div>
+  <textarea name="notes" placeholder="Optional…"></textarea>
+  <button class="qsubmit" type="submit">Queue this answer</button><span class="qdone" hidden>queued ✓</span>
+</form>
+
+<hr class="rule">
+<p class="muted" style="margin-top:20px;font-size:13px">
+  Prototype source: <code>crates/desktop/src/bin/review-prototype.rs</code> on branch
+  <code>DesignPass/TakeTheReviewSlice</code>. Captures:
+  <code>scripts/capture-prototype.sh</code>. Throwaway by construction — nothing here is wired into
+  the app.
+</p>
+
+</div>
+
+<script>
+  // --- the shot matrix ---------------------------------------------------------------------
+  var WIDTH = '1280x800';
+  var STATES = [
+    ['1-picker',    'The entrance'],
+    ['2-question',  'Question'],
+    ['3-revealed',  'Revealed'],
+    ['5-midsitting','Mid-sitting'],
+    ['4-empty',     'Caught up']
+  ];
+  var VARIANTS = [['a','A'],['b','B'],['c','C'],['d','D']];
+
+  function fig(src, alt, capHtml) {
+    var f = document.createElement('figure');
+    var i = document.createElement('img');
+    i.alt = alt; i.loading = 'lazy';
+    i.setAttribute('data-src-tmpl', src);
+    var c = document.createElement('figcaption');
+    c.innerHTML = capHtml;
+    f.appendChild(i); f.appendChild(c);
+    return f;
+  }
+
+  // Per-variant strips: all five states of one variant.
+  document.querySelectorAll('.shots[data-variant]').forEach(function (host) {
+    var v = host.getAttribute('data-variant');
+    STATES.forEach(function (s) {
+      host.appendChild(fig(
+        'shots/{W}/' + v + '-' + s[0] + '.png',
+        'Variant ' + v.toUpperCase() + ' — ' + s[1],
+        '<b>' + s[1] + '</b>'
+      ));
+    });
+  });
+
+  // Per-state rows: baseline, then A–D.
+  document.querySelectorAll('.shots[data-row]').forEach(function (host) {
+    var state = host.getAttribute('data-row');
+    var base = host.getAttribute('data-base');
+    if (base) {
+      host.appendChild(fig('baseline/{W}/' + base + '.png', 'Baseline — ' + state,
+        '<b>Baseline</b> — today on <code>main</code>'));
+    } else {
+      var d = document.createElement('div');
+      d.className = 'noshot';
+      d.textContent = 'No baseline — this state has never been captured.';
+      host.appendChild(d);
+    }
+    VARIANTS.forEach(function (v) {
+      host.appendChild(fig('shots/{W}/' + v[0] + '-' + state + '.png',
+        'Variant ' + v[1] + ' — ' + state, '<b>' + v[1] + '</b>'));
+    });
+  });
+
+  function paint() {
+    document.querySelectorAll('img[data-src-tmpl]').forEach(function (i) {
+      var next = i.getAttribute('data-src-tmpl').replace('{W}', WIDTH);
+      if (i.getAttribute('src') !== next) i.setAttribute('src', next);
+      i.classList.toggle('narrow', WIDTH === '560x860');
+    });
+  }
+  paint();
+
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      WIDTH = b.getAttribute('data-w');
+      document.querySelectorAll('.seg button').forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o === b));
+      });
+      paint();
+    });
+  });
+
+  // --- questions ---------------------------------------------------------------------------
+  // Radios only update local state; the prompt is queued once, by the submit button.
+  function qsub(e, key, human) {
+    e.preventDefault();
+    var form = e.currentTarget;
+    var data = new FormData(form);
+    var answer = data.get(key);
+    if (!answer) return;
+    var notes = (data.get('notes') || '').toString().trim();
+    var msg = '#124 — ' + human + ': ' + answer + (notes ? '\n\nNotes: ' + notes : '');
+    if (window.lavish && window.lavish.queuePrompt) {
+      window.lavish.queuePrompt(msg, {
+        tag: 'choice',
+        text: human + ': ' + answer,
+        element: form,
+        queueKey: key,
+        data: { question: key, answer: answer, notes: notes }
+      });
+    }
+    var done = form.querySelector('.qdone');
+    if (done) done.hidden = false;
+  }
+</script>
+</body>
+</html>
