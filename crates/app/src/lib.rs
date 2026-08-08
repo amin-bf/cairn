@@ -29,6 +29,7 @@ pub mod platform;
 mod screens;
 pub mod session;
 pub mod sync;
+pub mod theme;
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -225,6 +226,11 @@ pub struct CairnApp {
     /// The note list's *new deck* name buffer: decks are created where they are filtered (ADR-0021
     /// §9), so the create control sits beside the deck filter.
     new_deck: String,
+    /// The note being reordered, or `None` when the list is not in its two-tap placement state
+    /// (ADR-0021 §4). `Some(id)` after **Move**: the list then offers a gap target between every
+    /// visible pair, and one tap places the note there. Held across frames; cleared on place or
+    /// cancel, and dropped if a filter change hides the moving note.
+    moving: Option<NoteId>,
     /// The settings screen's new-card-rate edit buffer, held across frames. `None` until the settings
     /// screen first reads the stored rate into it; committed back to the mutable surface on change
     /// (ADR-0011 §3, §5). Kept as text so a mid-edit empty field does not read as zero.
@@ -269,11 +275,17 @@ pub struct CairnApp {
 }
 
 impl CairnApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // Fonts are installed on the **first frame**, never here (see `ui` and the `fonts` module).
         // Registering a face during creation was found in #8 to break rendering on some backends;
         // deferring it one frame fixes it, and a newly-named family (bold) is not referenceable on
         // the frame it is registered anyway (ADR-0012 §8).
+        //
+        // The palette is the opposite: installed here, at construction, because visuals allocate no
+        // texture so the font hazard does not reach them, and setting them now avoids a frame of the
+        // wrong theme (ADR-0030 §1). `install` pins dark into the dark slot and disables
+        // theme-following — both acts, or an OS theme flip silently restores stock egui (§2).
+        theme::install(&cc.egui_ctx);
         let store = Self::open_store();
         Self {
             store,
@@ -284,6 +296,7 @@ impl CairnApp {
             setting_up_sync: false,
             deck_filter: None,
             new_deck: String::new(),
+            moving: None,
             new_card_rate: None,
             showing_leeches: false,
             session_pointer: None,
@@ -509,6 +522,7 @@ impl eframe::App for CairnApp {
                         &mut self.search,
                         &mut self.deck_filter,
                         &mut self.new_deck,
+                        &mut self.moving,
                     );
                 }
                 Destination::Settings => {

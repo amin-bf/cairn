@@ -20,6 +20,7 @@ pub(crate) fn notes_screen(
     search: &mut String,
     deck_filter: &mut Option<DeckId>,
     new_deck: &mut String,
+    moving: &mut Option<NoteId>,
 ) {
     if let Some(ed) = editing {
         if full_width_button(ui, "Done").clicked() {
@@ -74,22 +75,51 @@ pub(crate) fn notes_screen(
     ui.add_space(8.0);
     let rows = notes::list(coll, &filter).unwrap_or_default();
     if rows.is_empty() {
+        // A move whose target view is now empty has no gaps to offer; drop it rather than strand it.
+        *moving = None;
         body(ui, "No notes match.");
         return;
     }
+
+    // A move stands only while its note is on screen: placement is *between visible neighbours*
+    // (ADR-0021 §4), so a filter change that hides the moving note leaves nothing to name or place
+    // against, and the mode is cancelled rather than carried in a state the user cannot see.
+    if let Some(mid) = *moving
+        && !rows.iter().any(|r| r.id == mid)
+    {
+        *moving = None;
+    }
+
+    // In the placement state every gap between the visible rows is a one-tap target (ADR-0021 §4);
+    // otherwise the list offers each row's open, move and delete.
+    if let Some(mid) = *moving {
+        placement_list(ui, coll, moving, &rows, mid);
+        return;
+    }
+
     // The list's own sequence is the rendering of `position` order — there is no sort control and the
     // key is never shown (ADR-0021 §4). No row carries schedule information (ADR-0021 §2).
     let mut open: Option<NoteId> = None;
     let mut delete: Option<NoteId> = None;
+    let mut start_move: Option<NoteId> = None;
     for row in &rows {
         ui.horizontal(|ui| {
             if ui.button(text(ui, row.preview())).clicked() {
                 open = Some(row.id);
             }
+            // **Move** enters the two-tap placement state (ADR-0021 §4): a tap here, then a tap on a
+            // gap. No drag and no long-press — the two taps behave identically under touch and mouse,
+            // which is the finding ADR-0006 §5 recorded and this must not break.
+            if ui.button(text(ui, "Move")).clicked() {
+                start_move = Some(row.id);
+            }
             if ui.button(text(ui, "Delete")).clicked() {
                 delete = Some(row.id);
             }
         });
+    }
+    if let Some(id) = start_move {
+        *moving = Some(id);
     }
     if let Some(id) = delete {
         // ADR-0004 §7's delete: a marker on the mutable surface that discards the content. There is no
@@ -98,6 +128,53 @@ pub(crate) fn notes_screen(
     }
     if let Some(id) = open {
         *editing = Some(Editing::for_note(coll, id));
+    }
+}
+
+/// The note list in its **placement state** (ADR-0021 §4). After **Move**, the moving note is named
+/// and every gap between the *other* visible rows becomes a one-tap **Place here** target; **Cancel**
+/// leaves the order untouched. There is no drag, no long-press and no auto-scroll — two taps that
+/// behave identically under touch and mouse (ADR-0006 §5). Placing writes **exactly one** `position`
+/// value ([`notes::place_between`], ADR-0021 §3), and because the neighbours are the two *visible*
+/// notes flanking the gap, a hidden note between them keeps its place (ADR-0021 §4).
+fn placement_list(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    moving: &mut Option<NoteId>,
+    rows: &[notes::NoteRow],
+    mid: NoteId,
+) {
+    if full_width_button(ui, "Cancel move").clicked() {
+        *moving = None;
+        return;
+    }
+    ui.add_space(8.0);
+    let name = rows
+        .iter()
+        .find(|r| r.id == mid)
+        .map_or("", |r| r.preview());
+    field_label(ui, &format!("Placing: {name}"));
+    ui.add_space(8.0);
+
+    // The gaps run among the *other* visible rows — the moving note removed so it is never offered a
+    // place beside itself. Gap `i` sits before `visible[i]`, and the last gap (past the final row) is
+    // the end; the open ends send the note to either extreme (ADR-0021 §4).
+    let visible: Vec<&notes::NoteRow> = rows.iter().filter(|r| r.id != mid).collect();
+    let mut place: Option<usize> = None;
+    for gap in 0..=visible.len() {
+        if full_width_button(ui, "Place here").clicked() {
+            place = Some(gap);
+        }
+        if let Some(row) = visible.get(gap) {
+            body(ui, row.preview());
+        }
+    }
+    if let Some(gap) = place {
+        // One write, and the mode ends. A failed write drops the state too: there is no half-move to
+        // recover, and the list is re-read from the surface next frame regardless.
+        let ids: Vec<NoteId> = visible.iter().map(|r| r.id).collect();
+        let _ = notes::place_between(coll, mid, &ids, gap);
+        *moving = None;
     }
 }
 
@@ -489,4 +566,130 @@ fn multiline_field_output(
     // promise made to "every field" that skipped `cloze`'s Text is not a promise.
     raise_keyboard(ui.ctx(), &out.response);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// Every string a frame actually drew — the galley text inside its shapes, walked recursively —
+    /// so a control's presence is **asserted** from what the user sees, not from the branch it sits in.
+    fn drawn_text(out: &egui::FullOutput) -> String {
+        fn walk(shape: &egui::Shape, into: &mut String) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    into.push_str(t.galley.text());
+                    into.push('\n');
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, into)),
+                _ => {}
+            }
+        }
+        let mut text = String::new();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut text);
+        }
+        text
+    }
+
+    /// **ADR-0021 §4, and the half that fails in silence.** *Move* is present on a row, and taking it
+    /// turns the list into the placement state: the moving note is named, the sort control is *not*
+    /// reintroduced, and gap targets appear. Nothing else exercises the state, so a regression that
+    /// dropped the entrance or never swapped in the gaps would pass every other test.
+    #[test]
+    fn move_opens_a_two_tap_placement_state_with_gap_targets() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let first = coll.create_note("basic", &[("Front", "alpha")]).unwrap();
+        coll.create_note("basic", &[("Front", "beta")]).unwrap();
+
+        let ctx = egui::Context::default();
+        let mut editing = None;
+        let mut search = String::new();
+        let mut deck_filter = None;
+        let mut new_deck = String::new();
+
+        let mut frame = |moving: &mut Option<NoteId>, coll: &mut Collection| {
+            ctx.run_ui(Default::default(), |ui| {
+                notes_screen(
+                    ui,
+                    coll,
+                    &mut editing,
+                    &mut search,
+                    &mut deck_filter,
+                    &mut new_deck,
+                    moving,
+                );
+            })
+        };
+
+        // Normal mode: the row offers *Move*, and there is no placement control yet.
+        let mut moving = None;
+        let listed = drawn_text(&frame(&mut moving, &mut coll));
+        assert!(
+            listed.contains("Move"),
+            "a row offers the reorder entrance — drew: {listed}"
+        );
+        assert!(
+            !listed.contains("Place here"),
+            "the gaps only appear once a move is under way — drew: {listed}"
+        );
+
+        // Tapping *Move* on the first row is modelled by the state it sets; the next frame is the
+        // placement list.
+        moving = Some(first);
+        let placing = drawn_text(&frame(&mut moving, &mut coll));
+        assert!(
+            placing.contains("Placing: alpha"),
+            "the moving note is named — drew: {placing}"
+        );
+        assert!(
+            placing.contains("Cancel move"),
+            "cancel leaves the order untouched (ADR-0021 §4) — drew: {placing}"
+        );
+        assert!(
+            placing.contains("Place here"),
+            "every gap between the visible rows is a one-tap target — drew: {placing}"
+        );
+    }
+
+    /// A move whose note the filter hides is dropped: placement is *between visible neighbours*
+    /// (ADR-0021 §4), so once the note leaves the view there is nothing to place it against and the
+    /// state must not survive into a frame the user cannot see.
+    #[test]
+    fn a_move_is_dropped_when_its_note_leaves_the_filtered_view() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let hidden = coll.create_note("basic", &[("Front", "alpha")]).unwrap();
+        coll.create_note("basic", &[("Front", "beta")]).unwrap();
+
+        let ctx = egui::Context::default();
+        let mut editing = None;
+        // A text filter that the moving note does not match — it cannot be placed against neighbours
+        // the user cannot see, so the mode must not survive (ADR-0021 §4).
+        let mut search = "beta".to_owned();
+        let mut deck_filter = None;
+        let mut new_deck = String::new();
+        let mut moving = Some(hidden);
+
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            notes_screen(
+                ui,
+                &mut coll,
+                &mut editing,
+                &mut search,
+                &mut deck_filter,
+                &mut new_deck,
+                &mut moving,
+            );
+        });
+
+        assert_eq!(
+            moving, None,
+            "a move whose note the filter hides is cancelled"
+        );
+    }
 }

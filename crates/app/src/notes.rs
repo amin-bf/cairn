@@ -170,6 +170,27 @@ pub fn list(coll: &Collection, filter: &Filter) -> Result<Vec<NoteRow>, StoreErr
     Ok(rows.into_iter().map(|(_, row)| row).collect())
 }
 
+/// Place `moving` into the gap at `gap` among `visible` — the note ids the list is currently
+/// showing **in list order, with the moving note itself removed**. Gap `i` sits *before* `visible[i]`,
+/// so gap `0` is the front and gap `visible.len()` the end; a note reaches either end because the
+/// flanking neighbour there is absent, which [`Collection::move_note_between`] reads as an open end.
+///
+/// This is the whole of the two-tap reorder gesture's logic (ADR-0021 §4): tapping **Move** on a row
+/// chooses `moving`, tapping a gap chooses `gap`, and this writes **exactly one** `position` value —
+/// never a renumber (ADR-0021 §3). The neighbours are the two *visible* notes flanking the gap, which
+/// is why reordering inside a filter is well-defined: a hidden note that sat between them keeps its
+/// key and stays between them, needing no special case (ADR-0021 §4).
+pub fn place_between(
+    coll: &mut Collection,
+    moving: NoteId,
+    visible: &[NoteId],
+    gap: usize,
+) -> Result<(), StoreError> {
+    let low = gap.checked_sub(1).and_then(|i| visible.get(i)).copied();
+    let high = visible.get(gap).copied();
+    coll.move_note_between(moving, low, high)
+}
+
 /// Whether the collection has any note at all — the test the browse screen uses to choose between its
 /// **empty state** (ADR-0015 §7's *"Nothing here yet — create a deck, import one, or set up sync"*)
 /// and a "no matches" for a filter that hit nothing. Deleted notes do not count, since they are not
@@ -371,6 +392,85 @@ mod tests {
         .unwrap();
         assert!(none.is_empty());
         assert!(any_notes(&coll).unwrap());
+    }
+
+    #[test]
+    fn placing_inside_a_filtered_list_is_one_write_and_keeps_hidden_notes_between_neighbours() {
+        // ADR-0021 §4: the reorder operation is *place this note before/after that one*, and it is
+        // well-defined inside an active filter. Create a, b, c, d in order; a filter hides b, so the
+        // list shows a, c, d. Move d into the gap the user sees between a and c. Only d's key may
+        // change (one write, ADR-0021 §3), and the hidden b must stay where it sat — between a and c.
+        let (mut coll, _d, _s) = open();
+        let a = coll.create_note("basic", &[("Front", "keep-a")]).unwrap();
+        let b = coll.create_note("basic", &[("Front", "hide-b")]).unwrap();
+        let c = coll.create_note("basic", &[("Front", "keep-c")]).unwrap();
+        let d = coll.create_note("basic", &[("Front", "keep-d")]).unwrap();
+
+        let pos = |coll: &Collection, id: &NoteId| {
+            coll.mutable_get("note", &id.0, "position")
+                .unwrap()
+                .unwrap()
+        };
+        let before: Vec<String> = [&a, &b, &c].iter().map(|id| pos(&coll, id)).collect();
+
+        // The list the user is looking at under the "keep" filter, moving note removed: a, c.
+        let filter = Filter {
+            text: Some("keep".to_owned()),
+            ..Filter::default()
+        };
+        let visible: Vec<NoteId> = list(&coll, &filter)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.id)
+            .filter(|id| *id != d)
+            .collect();
+        assert_eq!(
+            visible,
+            vec![a, c],
+            "the filter hides b; the user sees a, c, d"
+        );
+
+        // Gap 1 sits between the visible a and c — one tap places d there.
+        place_between(&mut coll, d, &visible, 1).unwrap();
+
+        // One write: a, b and c keep their keys untouched (no renumber, ADR-0021 §3).
+        let after: Vec<String> = [&a, &b, &c].iter().map(|id| pos(&coll, id)).collect();
+        assert_eq!(
+            after, before,
+            "only d's position may change — one write, no renumber"
+        );
+
+        // d landed between the two visible neighbours, and the hidden b kept its place between them.
+        let (pa, pb, pc, pd) = (
+            pos(&coll, &a),
+            pos(&coll, &b),
+            pos(&coll, &c),
+            pos(&coll, &d),
+        );
+        assert!(pa < pd && pd < pc, "d sits between the visible a and c");
+        assert!(pa < pb && pb < pc, "the hidden b stays between a and c");
+    }
+
+    #[test]
+    fn placing_at_either_end_uses_an_open_neighbour() {
+        // ADR-0021 §4: a note can be moved to either end. Gap 0 is the front (open low), gap len the
+        // end (open high) — the open end is what `move_note_between` reads as "no neighbour".
+        let (mut coll, _d, _s) = open();
+        let a = coll.create_note("basic", &[("Front", "a")]).unwrap();
+        let b = coll.create_note("basic", &[("Front", "b")]).unwrap();
+        let pos = |coll: &Collection, id: &NoteId| {
+            coll.mutable_get("note", &id.0, "position")
+                .unwrap()
+                .unwrap()
+        };
+
+        // Move b to the front: gap 0 among the visible [a].
+        place_between(&mut coll, b, &[a], 0).unwrap();
+        assert!(pos(&coll, &b) < pos(&coll, &a), "b moved before a");
+
+        // And back to the end: gap 1 (past the last visible) among [a].
+        place_between(&mut coll, b, &[a], 1).unwrap();
+        assert!(pos(&coll, &b) > pos(&coll, &a), "b moved after a");
     }
 
     #[test]

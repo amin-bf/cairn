@@ -66,13 +66,16 @@ _Avoid_: Theme, colour scheme; a per-screen colour; a light palette treated as a
 **Contrast floor**:
 The minimum contrast a **text** colour must clear against the surface it is drawn on: **7:1**
 (ADR-0030 §3), chosen over WCAG AA's 4.5:1 because the small text style is 9px, where 4.5 is already
-marginal. Body-on-panel clears it at **13.34:1** (up from stock's 5.12:1). It binds text pairs only —
-the **non-text** pairs (widget fills, decorative strokes) fail even 3:1 in stock *and* in the new
-palette, a pre-existing weakness out of scope for this pass, so do not "fix" a decorative stroke to
-satisfy the floor. One non-text pair *regresses* and is accepted rather than fixed: the hover stroke
-against its own fill, 3.19:1 → 2.49:1.
-_Avoid_: A contrast rule read as binding fills and strokes; treating the hover-stroke regression as a
-bug to close here.
+marginal. Body-on-panel clears it at **13.34:1** (up from stock's 5.12:1), and #115's test holds
+body-on-card and body-over-selection to it too. It binds text pairs only, with one carve-out: **weak
+text** (`weak_text_color()`, ~5.6:1) stays below the floor by design, because §4 wants the box badge
+quiet and lifting weak text makes it loud — a pre-existing weakness (stock is 5.12:1), pinned against
+stock, not the floor. The **non-text** pairs (widget fills, decorative strokes) fail even 3:1 in stock
+*and* in the palette, out of scope, so do not "fix" a decorative stroke to reach 7:1 — **except** the
+hover stroke, the lone pair the palette *regressed* (3.19:1 → 2.49:1), which #115 lifted back over
+**3:1** (`theme::install`'s `STONE_9`).
+_Avoid_: A contrast rule read as binding fills and strokes; reading weak text as clearing 7:1;
+treating the lifted hover stroke as still a regression to accept.
 
 **Top-level destination**:
 One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR-0021 §1). The floor
@@ -115,6 +118,19 @@ is never shown** — the list's own sequence *is* the rendering of order — and
 filtered list is well-defined, hidden notes staying between the neighbours they were between. A new
 note goes to the end of the **collection's** order, not of the filtered view.
 _Avoid_: Sort, sort order, position number.
+
+**Two-tap placement**:
+The reorder **gesture** (ADR-0021 §4 fixed the operation — *place this note before/after that one*,
+one write — and handed the gesture to the layout pass; this discharges it). A **Move** on a row puts
+the list into a *placement state*: the moving note is named and every gap between the other visible
+rows becomes a one-tap **Place here** target, with a **Cancel** that leaves the order untouched.
+**No drag, no long-press, no auto-scroll** — long-press-drag in a scrolling list is genuinely poor on
+a phone, and two taps behave identically under touch and mouse, which is ADR-0006 §5's finding this
+must not break. Placing calls `place_between`, which writes **exactly one** `position` value; the gap
+sits between the two *visible* neighbours, so a hidden note between them keeps its place. The state is
+cancelled if a filter change hides the moving note — placement is *between visible neighbours*, so a
+note off screen has nothing to place against.
+_Avoid_: Drag, drag handle, long-press, reorder handle, move to… menu.
 
 **Autosave**:
 How the editor saves: **per field, on blur or a short idle**, with a new note committed on its first
