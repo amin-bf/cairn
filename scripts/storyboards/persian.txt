@@ -1,0 +1,25 @@
+# Persian into the note editor, and the mixed-direction case beside it.
+#
+# `xdotool type` remaps keysyms to reach characters the layout does not carry, so what this exercises
+# is the **keymap** path — the same events an `ir(pes)` layout produces, delivered as ordinary key
+# presses. It does **not** exercise a composing input method (`zwp_text_input_v3`); Persian does not
+# need one, but see `docs/environment/desktop-capture.md` for what that leaves unproven.
+mousemove 900 600 click 1
+sleep 1
+mousemove 86 11 click 1
+sleep 1.2
+mousemove 640 76 click 1
+sleep 1.5
+mousemove 640 233 click 1
+sleep 0.8
+sh xdotool type --delay 120 'سگ در خانه است.'
+sleep 1.5
+shot 08-editor-persian-front
+mousemove 640 268 click 1
+sleep 0.8
+sh xdotool type --delay 120 'the dog is in the house'
+sleep 1.5
+shot 09-editor-persian-and-latin
+mousemove 640 44 click 1
+sleep 1.5
+shot 10-notes-list-with-persian

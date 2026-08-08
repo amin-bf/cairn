@@ -1,0 +1,31 @@
+# The screens reachable from a first launch, in one pass.
+#
+# Coordinates are for a 1280x800 output. At 560x860 the same script still works, because every
+# control it touches is either in the nav row or full-width — but read
+# `docs/environment/desktop-capture.md` before assuming that of a script you add.
+#
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove 900 600 click 1
+sleep 1
+shot 01-review-start
+mousemove 39 93 click 1
+sleep 1.5
+shot 02-review-question
+# Reveal is tap-the-card (review.rs: "the prompt is one wide button").
+mousemove 640 131 click 1
+sleep 1.5
+shot 03-review-revealed
+mousemove 86 11 click 1
+sleep 1.2
+shot 04-notes-list
+mousemove 640 76 click 1
+sleep 1.5
+shot 05-notes-editor
+mousemove 140 11 click 1
+sleep 1.2
+shot 06-settings-top
+# Settings is longer than any window this pass uses, so the font specimen needs scrolling to.
+mousemove 640 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1.2
+shot 07-settings-scrolled

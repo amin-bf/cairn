@@ -1,0 +1,38 @@
+# Enrolment, then a whole sitting graded through to the end-of-session screen.
+#
+# Coordinates are for a 1280x800 output.
+mousemove 900 600 click 1
+sleep 1
+mousemove 140 11 click 1
+sleep 1.2
+mousemove 640 291 click 1
+sleep 2
+shot 11-enrolment
+mousemove 33 11 click 1
+sleep 1.2
+mousemove 39 93 click 1
+sleep 1.5
+# Five gradings: reveal the card, then press *Good*. The sitting runs to the count chosen, and the
+# seed is one note past DEFAULT_NEW_CARD_RATE, so five is the whole of it.
+mousemove 640 131 click 1
+sleep 1
+mousemove 640 423 click 1
+sleep 1
+mousemove 640 131 click 1
+sleep 1
+mousemove 640 423 click 1
+sleep 1
+mousemove 640 131 click 1
+sleep 1
+mousemove 640 423 click 1
+sleep 1
+mousemove 640 131 click 1
+sleep 1
+mousemove 640 423 click 1
+sleep 1
+shot 12-review-mid-session
+mousemove 640 131 click 1
+sleep 1
+mousemove 640 423 click 1
+sleep 1.5
+shot 13-session-complete
