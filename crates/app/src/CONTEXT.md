@@ -30,10 +30,32 @@ it before touching the settings screen's optimisation control.
 
 ## Language
 
+**Layout pass** / **Finish pass**:
+The two halves of *the visual design pass* — which **fourteen ADRs name** and ADR-0006 §10 opened —
+because it names two jobs with different dependencies. The **layout pass** settles arrangement —
+where a thing sits, which affordance carries an operation, what yields when the screen shrinks — and
+is constrained hard by reachability (ADR-0021 §1), the two-speakers rule (ADR-0015 §5) and the form
+pane's first screen (ADR-0025). The **finish pass** settles palette, typography, spacing, case and
+weight, and is a blank slate by ADR-0006 §10. What a surface *says* and *when* is neither: the ADRs
+settled that, exhaustively.
+ADR-0021's own Context draws this line without naming it — *"what an entry says, where it sits and
+when it appears were answerable without knowing a single colour."*
+_Avoid_: The visual design pass, for either half alone — it is the word that lets a settled
+arrangement read as an open colour question, and an open colour question read as settled.
+
 **Top-level destination**:
 One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR-0021 §1). The floor
 that makes every specified screen reachable — the leech screen hangs off review's end-of-session
-pointer, enrolment sits inside settings. How the three are rendered is the visual design pass's.
+pointer, enrolment sits inside settings. Every screen is reachable from one of the three **except the
+import preview**, which belongs to none.
+**The nav row is pinned, and yields the screen to the soft keyboard.** ADR-0021 §1's *persistent*
+affordance and ADR-0025's *"the form pane's first screen is a specified resource"* pull against each
+other, and nothing recorded which won: a row that scrolls away is not persistent, and a row that is
+always pinned spends the band the destructive-edit warning was moved into because nowhere else works.
+So it is pinned whenever the keyboard is **down**, and absent while it is **up** — one rule reading
+one fact, expressible only because ADR-0026 §5 made the seam distinguish *no soft keyboard on this
+platform* from *keyboard down*. On the desktop the seam says the first, so it is simply always
+pinned; this is **not** platform-conditional behaviour and client-stack rule 3 is untouched.
 _Avoid_: Tab, page, route — none of which is fixed here.
 
 **Note list**:
@@ -284,6 +306,33 @@ move and makes **no quality claim**, because the application has no instrument f
 ADR-0014 §7's *sync, then train* is a leading sequence, never a gate; it is a no-op where no transport
 is enrolled, and an offline device optimising on local history is a fine outcome.
 _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge or a quality verb.
+
+**Import preview**:
+The one gate in this specification (ADR-0022 §1), and **the one screen that belongs to no
+destination**. Three entry points — the file list, a desktop drop, an Android launch intent —
+produce **one** screen, which must be **cold-start capable**, because the intent can start the
+application directly into an import. So it is drawn without the nav row: there may not be a
+destination behind it. Applying returns to the **note list**, with the deck filter set to the
+imported deck when the file carried one and left unfiltered when it carried several; **cancelling
+from a cold start lands on the count picker**, the same place ADR-0006 §2's force-stop test lands.
+What it *states* is `export`'s (**import plan**, **preview**, **gate / describe**); what is here is
+that it has no home and takes the screen. The **restore preview** is the same screen, one line long.
+_Avoid_: Import dialog, import modal, import overlay — ADR-0022 §6 rules out all three, and *overlay*
+implies a destination underneath that a cold start does not have.
+
+**Export screen** / **Export report** / **File list**:
+The three outbound surfaces, all in **Settings** beside ADR-0016 §6's archive action (ADR-0022 §9) —
+they are **file** operations over whole decks, where Notes is where individual notes are authored.
+They need saying rather than leaving to arrangement, because ADR-0021 §1 requires every specified
+screen to be reachable from one of the three destinations. The **export screen** carries the deck
+selection, ADR-0022 §8's three metadata fields pre-filled per deck id, and the **collection-wide**
+count of unfiled notes — which never moves as decks are ticked, since no selection can reach them.
+The **report** states the name the platform actually wrote and where, with ADR-0023's hand-off
+**beside** those lines rather than in place of them. The **file list** describes each file from its
+own manifest, inflating zero payloads, and says *"the files this application wrote"* — never anything
+implying a folder view, which on Android it is not (ADR-0024 §3).
+_Avoid_: An *import screen* as a fourth member — import has no home, and the list is the only inbound
+surface that needed one.
 
 ## Rules that are easy to break silently
 
