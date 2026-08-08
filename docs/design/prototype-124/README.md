@@ -3,20 +3,28 @@
 The primary source for [#124](https://github.com/amin-bf/cairn/issues/124): forty captures of a
 throwaway prototype, at both judging widths, of four structurally different Review screens.
 
-**This lands on `main`, and that reverses the intention it was written with.** The first draft of
-this file said the opposite — a prototype belongs on a throwaway branch, and main keeps the
-validated decision rather than the options that lost. That is the general rule, and it is wrong
-*here*, for a reason specific to how this repo works.
+**This never merges into `main`.** It is preserved as the tag **`prototypes/issue-124`**, which is
+this repo's standing convention for prototypes — `prototypes/issue-8`, `-11`, `-20`, `-28`, `-67`
+and `-120` are its predecessors, and every one of them is reachable by tag and contained in no
+branch.
 
-Tickets are worked in **parallel worktree sessions, each branching from `origin/main`**
-(`AGENTS.md`, *Landing work*). #124 split into four children, every one of them a prototype ticket
-that continues from variant E. A prototype reachable only from a branch those sessions never see is
-a prototype that does not exist for the work it was built to serve — each child would rebuild it,
-and rebuild it differently, and the comparison this directory exists to preserve would be gone.
+The convention is right, and the argument for breaking it was wrong. That argument ran: tickets are
+worked in parallel worktree sessions branching from `origin/main`, #124's four children all continue
+from variant E, so a prototype those sessions cannot see is one each of them would rebuild
+differently. The premise is true and the conclusion does not follow — **a tag is fetched by every
+clone**. Any session can read this without merging it:
 
-So the binary, the capture driver and the images land together. The options that lost stay because
-they are what makes E legible: E is a graft, and a graft is unreadable without the things it was
-grafted from.
+```sh
+git show prototypes/issue-124:docs/design/prototype-124/README.md
+git checkout prototypes/issue-124 -- crates/desktop/src/bin/review-prototype.rs
+```
+
+So `main` keeps the validated decision, the options that lost stay reachable beside it, and neither
+a throwaway binary nor fifty PNGs sit in the tree of every future checkout.
+
+**What did land on `main` is the two harness fixes** — the swallowed storyboard `export` and the
+pinned `CAIRN_BIN`. Those are bugs in a tool the repo keeps, not prototype material, and they went
+up as their own pull request.
 
 ## What produced these
 
