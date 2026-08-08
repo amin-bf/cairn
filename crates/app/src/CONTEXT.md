@@ -116,6 +116,19 @@ filtered list is well-defined, hidden notes staying between the neighbours they 
 note goes to the end of the **collection's** order, not of the filtered view.
 _Avoid_: Sort, sort order, position number.
 
+**Two-tap placement**:
+The reorder **gesture** (ADR-0021 §4 fixed the operation — *place this note before/after that one*,
+one write — and handed the gesture to the layout pass; this discharges it). A **Move** on a row puts
+the list into a *placement state*: the moving note is named and every gap between the other visible
+rows becomes a one-tap **Place here** target, with a **Cancel** that leaves the order untouched.
+**No drag, no long-press, no auto-scroll** — long-press-drag in a scrolling list is genuinely poor on
+a phone, and two taps behave identically under touch and mouse, which is ADR-0006 §5's finding this
+must not break. Placing calls `place_between`, which writes **exactly one** `position` value; the gap
+sits between the two *visible* neighbours, so a hidden note between them keeps its place. The state is
+cancelled if a filter change hides the moving note — placement is *between visible neighbours*, so a
+note off screen has nothing to place against.
+_Avoid_: Drag, drag handle, long-press, reorder handle, move to… menu.
+
 **Autosave**:
 How the editor saves: **per field, on blur or a short idle**, with a new note committed on its first
 non-empty field (ADR-0021 §7). **There is no Save button and no discard.** ADR-0012 §5 already moved
