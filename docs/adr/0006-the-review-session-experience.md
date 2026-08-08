@@ -168,6 +168,12 @@ badge survived into the final design unchanged.
 > and printing that number claims a durability nothing measured while reading as *the bottom box*: the
 > queue-position reading ADR-0001 §3 exists to prevent. The badge renders `Box 3` in the small text
 > style today, which is **conformant** — the case and the face are the design pass's to settle.
+>
+> **Settled by [ADR-0030 §4](0030-the-first-finish-pass-decisions.md): lower case, in the small-text
+> proportional face.** The badge reads `box 3` and `new` in the ordinary small-text face and weak
+> colour — not monospace, which reads as data and makes a footnote louder, and lower case because it
+> is a footnote rather than a label. The `new`-not-a-number clause above is unchanged; only the
+> rendering the design pass was handed is now decided, discharging the handoff #96 opened.
 
 ### 7. The header is a persistent dashboard, and backlog is framed, not just reported
 
@@ -214,6 +220,12 @@ prototype rounds are scaffolding carried over from the `prototypes/egui-slice` c
 prototype for convenience — never a considered decision, confirmed explicitly live when asked.
 A real look-and-feel pass is separate, later work and starts from a blank slate, not from this
 prototype's colors.
+
+> **Opened in part by [ADR-0030](0030-the-first-finish-pass-decisions.md).** The finish pass takes
+> its first decisions there — the palette and its single naming site, dark pinned over
+> system-following, a 7:1 contrast floor on text, and §6's badge case and face. The rest of what this
+> section deferred — typography beyond the badge's one face, spacing, weight, and a light palette —
+> remains the blank slate it names.
 
 **The exact numbers are illustrative, not load-bearing.** 10/20/40 as count choices and 10 minutes
 as the timer default were picked to have *something* concrete to react to, not measured against

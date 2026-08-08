@@ -29,7 +29,11 @@ instead of it: §6 argued the edit action's *existence* and ADR-0029 narrows onl
 to the revealed state, retiring §6's *"counts as a reveal"* along with the state that needed it; and
 [ADR-0014](../../../docs/adr/0014-when-parameter-optimisation-runs.md) (the **Optimise** action, its
 worker thread and two-phase progress, the fact-only nudge and the no-quality-claim completion) — read
-it before touching the settings screen's optimisation control.
+it before touching the settings screen's optimisation control; and
+[ADR-0030](../../../docs/adr/0030-the-first-finish-pass-decisions.md) (the **finish pass**'s first
+decisions — the palette at one naming site, dark pinned over system-following, a 7:1 text-contrast
+floor, and ADR-0006 §6's box badge settled as lower-case in the small-text face) — read it before
+adding any colour to a screen or implementing the palette.
 
 ## Language
 
@@ -39,12 +43,36 @@ because it names two jobs with different dependencies. The **layout pass** settl
 where a thing sits, which affordance carries an operation, what yields when the screen shrinks — and
 is constrained hard by reachability (ADR-0021 §1), the two-speakers rule (ADR-0015 §5) and the form
 pane's first screen (ADR-0025). The **finish pass** settles palette, typography, spacing, case and
-weight, and is a blank slate by ADR-0006 §10. What a surface *says* and *when* is neither: the ADRs
-settled that, exhaustively.
+weight, and is a blank slate by ADR-0006 §10 — **its first decisions are now taken in ADR-0030**: the
+palette and its single naming site, dark pinned over system-following, the contrast floor, and the box
+badge's case and face. Typography beyond the badge's one face, spacing, weight and a light palette
+stay blank. What a surface *says* and *when* is neither: the ADRs settled that, exhaustively.
 ADR-0021's own Context draws this line without naming it — *"what an entry says, where it sits and
 when it appears were answerable without knowing a single colour."*
 _Avoid_: The visual design pass, for either half alone — it is the word that lets a settled
 arrangement read as an open colour question, and an open colour question read as settled.
+
+**Palette**:
+The app's colours, cool slate neutrals with **four desaturated accents**, named in **exactly one
+place** — a `theme` module producing an `egui::Visuals`, installed once — so every screen keeps
+reading the *ambient* visuals unchanged (ADR-0030 §1). A colour literal anywhere else is the defect.
+**Dark is pinned**, and system-following is dropped deliberately (§2): install the palette *and*
+disable following, or an OS theme change silently restores stock egui. Of the four accents only one —
+the accent egui already draws for selection and the active destination — has a call site today; **warn,
+error and link land set-and-unused** until the notice channel and links exist (§5), which is accepted,
+not overlooked, and not licence to invent callers for them.
+_Avoid_: Theme, colour scheme; a per-screen colour; a light palette treated as already following.
+
+**Contrast floor**:
+The minimum contrast a **text** colour must clear against the surface it is drawn on: **7:1**
+(ADR-0030 §3), chosen over WCAG AA's 4.5:1 because the small text style is 9px, where 4.5 is already
+marginal. Body-on-panel clears it at **13.34:1** (up from stock's 5.12:1). It binds text pairs only —
+the **non-text** pairs (widget fills, decorative strokes) fail even 3:1 in stock *and* in the new
+palette, a pre-existing weakness out of scope for this pass, so do not "fix" a decorative stroke to
+satisfy the floor. One non-text pair *regresses* and is accepted rather than fixed: the hover stroke
+against its own fill, 3.19:1 → 2.49:1.
+_Avoid_: A contrast rule read as binding fills and strokes; treating the hover-stroke regression as a
+bug to close here.
 
 **Top-level destination**:
 One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR-0021 §1). The floor
@@ -126,7 +154,12 @@ it gives a card reviewed thirty times and never retained — so printing the num
 nothing has measured, and on a first introduction it reads as *the bottom box*, a position in a queue
 of boxes. That is the one reading ADR-0001 §3 exists to keep the badge from acquiring, and it arrives
 by omission rather than by anyone deciding it.
-_Avoid_: Box 1 for an unseen card; "level", "stage".
+**Its case and face are settled** (ADR-0030 §4): **lower case** — `box 3` and `new` — in the ordinary
+small-text proportional face and weak colour, **not monospace**. Monospace was the prototype's
+scaffolding; it reads as *data* and gives the footnote a face nothing else on the screen uses, which
+makes it louder. Lower case because a badge is a footnote, not a label, and `box N` and `new` share
+one case so a card crossing between them changes its content, not its register.
+_Avoid_: Box 1 for an unseen card; `Box 3` or a monospace badge; "level", "stage".
 
 **Interval preview**:
 The illustrative next-interval shown on each grade button. Confirmed wanted rather than noise once
@@ -421,6 +454,13 @@ surface that needed one.
   `request_focus` fires while *dragging* too, and the version that hung off it issued **72 show requests
   from a single scroll gesture**. It lives in the wrapper because rule 2 already routes every field
   through it, which is the only way every field can be promised the same behaviour. ADR-0026 §4.
+- **Colour is named in one place — the `theme` module — and pinning dark is two acts, not one.**
+  Every screen reads the *ambient* visuals (`ui.visuals().text_color()`, `weak_text_color()`,
+  `hyperlink_color`); a `Color32::from_rgb` or a `ui.visuals_mut()` tweak in a screen renders fine and
+  drifts the palette one screen at a time with nothing failing (ADR-0030 §1). The text-contrast floor
+  is **7:1** and binds text against its surface, never the decorative non-text pairs (§3). And the app
+  **pins dark**: install the palette *and* disable theme-following, or an OS theme change silently
+  restores stock egui — the drafted palette is dark only, so nothing tests the light path (§2).
 - **Verify on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
 
 ## Why this crate has no `main.rs`
