@@ -118,6 +118,32 @@ the reverse of how the two numbers are usually argued about.
 sets carry all sixteen images, because the map holds **one responsive design** and the pair is what
 makes that claim checkable.
 
+## A harness finding, and a candidate for `main`
+
+`scripts/storyboards/frame-prototype-live.txt` is a smoke test for the click-through mode, written
+because the README above tells a reader `PROTO_SCREEN=live` gives them one, and a claim about a mode
+nobody has run is exactly what #122 found fails silently. Running it turned up something about the
+harness rather than the prototype.
+
+**Sent as one line — `mousemove 430 24 click 1` — none of three nav clicks reached a widget.** Split
+into `mousemove 430 24`, a settle, then `click 1`, **all three landed**, first click included. Same
+binary, same coordinates, same run length; the only variable was whether the motion was delivered as
+its own event before the press.
+
+That refines `docs/environment/desktop-capture.md`, which currently says *"the first click of any
+storyboard is spent giving the window keyboard focus and never reaches a widget … this is not a
+timing problem and more settle time does not fix it."* The first half holds for the combined form.
+The conclusion does not generalise: it is not settle time, but it *is* fixable, by making the motion
+its own event. The app's own storyboards get away with the combined form by following every click
+with `sleep 1`, which hides the distinction rather than resolving it.
+
+Scope of the evidence: two runs, one variable, three clicks each, F1 at 1280 only. Enough to write
+down, not enough to rewrite the section without a wider check.
+
+**This part belongs on `main`** — it is a fact about a tool the repo keeps, not prototype material —
+and per `AGENTS.md` it should be cherry-picked onto its own branch and land as its own pull request,
+the way #124's two harness fixes did.
+
 ## Reading them
 
 Look at the images. Each one carries a caption strip along its bottom edge naming its frame, its

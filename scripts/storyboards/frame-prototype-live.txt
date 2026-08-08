@@ -1,0 +1,35 @@
+# A smoke test for the prototype's interactive mode, driven by clicking the nav.
+#
+# Not a judging set — the stills in `frame-prototype.txt` are that. This exists because the README
+# tells a reader `PROTO_SCREEN=live` gives them a click-through, and a claim about a mode nobody has
+# run is the kind of thing #122 found fails silently.
+#
+# **The move and the press are separate lines with a settle between them.** Sent as one
+# `mousemove x y click 1`, egui can see the press before it has taken the motion, and resolves the
+# click against the pointer's *previous* position — which lands on nothing and looks exactly like a
+# dead control. The app's own storyboards get away with the combined form because they follow every
+# click with `sleep 1`; this one says it out loud.
+#
+# The nav pills sit at the frame's left edge, which moves with the frame, so these coordinates are
+# written for F1 at 1280 and are not width-portable. Acceptable for a smoke test, not for a capture
+# set.
+
+shot L1-review
+
+mousemove 430 24
+sleep 0.5
+click 1
+sleep 1
+shot L2-notes
+
+mousemove 500 24
+sleep 0.5
+click 1
+sleep 1
+shot L3-settings
+
+mousemove 358 24
+sleep 0.5
+click 1
+sleep 1
+shot L4-back-to-review
