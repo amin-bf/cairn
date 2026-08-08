@@ -4,10 +4,12 @@
 use cairn_core::content::{DeckId, NoteId};
 use cairn_store::Collection;
 
+use eframe::egui::{Align, Layout, vec2};
+
 use crate::notes::{self, Filter};
 use crate::{
-    Editing, badge, bidi, bidi_layouter, body, box_badge_wording, card_face, cards, editor,
-    field_label, full_width_button, heading, raise_keyboard, sync, text, text_field,
+    Editing, badge, bidi, bidi_layouter, body, box_badge_wording, card_face, cards, compact_button,
+    editor, field_label, frame, full_width_button, heading, raise_keyboard, sync, text, text_field,
 };
 
 /// The **Notes** destination (ADR-0021 §2): the browse surface and the app's authoring home. Shows
@@ -22,16 +24,62 @@ pub(crate) fn notes_screen(
     new_deck: &mut String,
     moving: &mut Option<NoteId>,
 ) {
-    if let Some(ed) = editing {
-        if full_width_button(ui, "Done").clicked() {
+    // **The two surfaces take different frames, and this is the only screen in the app that does.**
+    // The note list is a column like every other destination (#131); the editor earns a wider one by
+    // putting two real columns in it, which is the thing ADR-0012 §1 always said the wide layout was
+    // and the implementation never did.
+    if editing.is_some() {
+        editor_screen(ui, coll, editing);
+        return;
+    }
+    frame::column(ui, |ui| {
+        note_list(ui, coll, editing, search, deck_filter, new_deck, moving);
+    });
+}
+
+/// The editor inside its own frame. **Whether the panes sit side by side is decided here, against
+/// the window, and handed down** — never re-derived from `ui.available_width()` further in, which
+/// under the page frame is the *column's* width and would put every desktop into the phone's toggle
+/// (`frame::TWO_COLUMN_MIN_WIDTH`).
+fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<Editing>) {
+    // `viewport_rect`, not `available_width` and not `content_rect`. The width the whole window has
+    // is the thing this decision is about; `available_width` is the frame's column, which is the
+    // trap, and the safe-area insets `content_rect` subtracts are vertical on every device that has
+    // them — so taking them off would make an arrangement decision out of a notch.
+    let window = ui.ctx().viewport_rect().width();
+    let two_column = window >= frame::TWO_COLUMN_MIN_WIDTH;
+    let cap = frame::cap_for(true, window);
+    frame::wide_column(ui, cap, |ui| {
+        // Full width is a target on a phone and a distance on a desktop: at 1120 it drew a *Done*
+        // wider than the two columns of content beneath it. Same 36px height either way — the map
+        // holds hit targets to touch, so only the stretching goes.
+        let done = if two_column {
+            compact_button(ui, "Done")
+        } else {
+            full_width_button(ui, "Done")
+        };
+        if done.clicked() {
             *editing = None;
             return;
         }
         ui.add_space(8.0);
-        editor_pane(ui, coll, ed);
-        return;
-    }
+        if let Some(ed) = editing {
+            editor_pane(ui, coll, ed, two_column);
+        }
+    });
+}
 
+/// The note list: create, the deck controls, the text search, and the rows.
+#[allow(clippy::too_many_arguments)]
+fn note_list(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    editing: &mut Option<Editing>,
+    search: &mut String,
+    deck_filter: &mut Option<DeckId>,
+    new_deck: &mut String,
+    moving: &mut Option<NoteId>,
+) {
     heading(ui, "Notes");
     ui.add_space(8.0);
 
@@ -276,7 +324,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
 /// — the fields, each autosaved per blur (ADR-0021 §7), with the destructive-edit warning above them
 /// (ADR-0025 §4) — and the **card body**, *"what will I be asked"* (`cards`). On a narrow screen the
 /// two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show together.
-fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
+fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_column: bool) {
     heading(
         ui,
         if ed.note.is_some() {
@@ -287,6 +335,52 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     );
     ui.add_space(8.0);
 
+    // The card pane and the ambient destructive-edit warning are recomputed from current content
+    // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
+    // and nothing to auto-scroll to (ADR-0018 §4). A draft not yet born has no stored note, so no
+    // cards and no history — its pane is empty until its first field commits (ADR-0021 §7).
+    let pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
+
+    // On a phone the two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show
+    // together (ADR-0025 §5). **Where both fit, they now sit side by side** — which is what ADR-0012
+    // §1 has always described and what the implementation never did: the old wide layout stacked
+    // them vertically with a rule between, so its `640` was a *width* test gating a decision about
+    // *vertical* room. #131 made that latent oddity load-bearing, because a page frame changes what
+    // "the width" means, and #131's answer is this: the width test now decides the thing it names.
+    //
+    // `two_column` arrives from `editor_screen`, measured against the **window**. Re-deriving it from
+    // `ui.available_width()` here is the defect the whole change exists to remove.
+    if two_column {
+        // **The header travels with the form**, not across the top. Kind, deck and *new deck* are
+        // properties of the note being written, so side by side the left column reads as *the note*
+        // and the right as *its cards* — whereas a header stretched over both columns makes a 1050px
+        // text field out of *new deck* and belongs to neither.
+        let gutter = frame::PANE_GUTTER;
+        let each = ((ui.available_width() - gutter) / 2.0).max(1.0);
+        ui.horizontal_top(|ui| {
+            pane_column(ui, each, |ui| {
+                editor_header(ui, coll, ed);
+                editor_form_body(ui, coll, ed, pane.as_ref());
+            });
+            ui.add_space(gutter);
+            pane_column(ui, each, |ui| editor_cards_body(ui, pane.as_ref()));
+        });
+        return;
+    }
+
+    editor_header(ui, coll, ed);
+    pane_toggle(ui, &mut ed.show_cards);
+    ui.add_space(8.0);
+    if ed.show_cards {
+        editor_cards_body(ui, pane.as_ref());
+    } else {
+        editor_form_body(ui, coll, ed, pane.as_ref());
+    }
+}
+
+/// The editor's header: the Android input caveat, then the kind and deck dropdowns. Above the fields
+/// in one column, and at the top of the **form** column when there are two.
+fn editor_header(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     // The standing quiet line stating the Android text-input limitation *in advance* (ADR-0015 §9):
     // the failure is silence — composed non-Latin text never reaches the app — so it can only be
     // told, never detected. Off the one sanctioned `cfg(target_os)` capability constant (ADR-0015
@@ -326,38 +420,20 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     editor_deck_dropdown(ui, coll, ed);
 
     ui.add_space(8.0);
-
-    // The card pane and the ambient destructive-edit warning are recomputed from current content
-    // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
-    // and nothing to auto-scroll to (ADR-0018 §4). A draft not yet born has no stored note, so no
-    // cards and no history — its pane is empty until its first field commits (ADR-0021 §7).
-    let pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
-
-    // On a phone the two panes are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show
-    // together (ADR-0025 §5). Width is the only signal, and it is enough: the soft-keyboard failure
-    // ADR-0025 addresses is vertical, so the toggle stands on its own merits rather than necessity.
-    let both_fit = ui.available_width() >= TWO_PANE_MIN_WIDTH;
-    if !both_fit {
-        pane_toggle(ui, &mut ed.show_cards);
-        ui.add_space(8.0);
-    }
-
-    if both_fit || !ed.show_cards {
-        editor_form_body(ui, coll, ed, pane.as_ref());
-    }
-    if both_fit || ed.show_cards {
-        if both_fit {
-            ui.add_space(16.0);
-            ui.separator();
-            ui.add_space(8.0);
-        }
-        editor_cards_body(ui, pane.as_ref());
-    }
 }
 
-/// Below this width the two editor panes cannot sit side by side, and the screen shows the
-/// `Write | Cards` toggle instead (ADR-0012 §1, ADR-0025 §5). A layout threshold, never a device check.
-const TWO_PANE_MIN_WIDTH: f32 = 640.0;
+/// One of the editor's two side-by-side panes: a fixed-width, top-down child so the pane's own
+/// full-width controls size to the **pane** rather than to the row they sit in.
+fn pane_column(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) {
+    ui.allocate_ui_with_layout(
+        vec2(width, ui.available_height()),
+        Layout::top_down(Align::Min),
+        |ui| {
+            ui.set_width(width);
+            add(ui);
+        },
+    );
+}
 
 /// The phone's `Write | Cards` pane toggle (ADR-0012 §1): two mutually exclusive choices, the current
 /// one marked. Which pane is showing is the only thing it changes — there is no third state.
