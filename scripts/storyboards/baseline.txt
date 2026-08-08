@@ -1,32 +1,51 @@
 # The screens reachable from a first launch, in one pass. Runs unchanged at any width.
 #
 # `%CX%` is the centre of the output. Use it for anything full-width — which is almost everything the
-# app draws. Literal x coordinates are only correct for controls packed against the left edge, and
-# the nav row is the one place that is true.
+# app draws.
+#
+# `%LX+n%` is `n` px inside the **page frame's** left edge, and it is what a control packed against
+# the start of a line now needs. A literal x was right only while content ran to the window edge; the
+# frame centres the column, so the same button is at 320+n at 1280 and 28+n at 560 (#131).
+#
+# **The editor is visited last, and that is load-bearing rather than tidy.** On a window wide enough
+# for two columns the editor takes a wider frame, and the nav row follows it — so the nav is at a
+# different x while the editor is open, and any `%LX+n%` nav click *after* this point would land on
+# empty page. Leaving by *Done* is no better: that button is compact at 1280 and full-width at 560,
+# so no single coordinate reaches it at both. Ending here costs nothing and needs no coordinate that
+# is right at only one width.
 #
 # The first click is spent giving the window keyboard focus and never reaches a widget, so it is
 # aimed at empty space.
 mousemove %CX% 600 click 1
 sleep 1
 shot 01-review-start
-# The count picker sits at the left edge: `5` then `All 5`.
-mousemove 39 93 click 1
+# The count picker sits at the start of its line: `5` then `All 5`.
+mousemove %LX+39% 93 click 1
 sleep 1.5
 shot 02-review-question
 # Reveal is tap-the-card (review.rs: "the prompt is one wide button").
 mousemove %CX% 131 click 1
 sleep 1.5
 shot 03-review-revealed
-mousemove 86 11 click 1
+mousemove %LX+86% 11 click 1
 sleep 1.2
 shot 04-notes-list
-mousemove %CX% 76 click 1
-sleep 1.5
-shot 05-notes-editor
-mousemove 140 11 click 1
+mousemove %LX+140% 11 click 1
 sleep 1.2
 shot 06-settings-top
 # Settings is longer than any window this pass uses, so the font specimen needs scrolling to.
 mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1.2
 shot 07-settings-scrolled
+# Back to Notes. The scroll area is shared between destinations and keeps its offset, so wind it
+# back up before aiming at a row — otherwise the click lands wherever Settings left the page.
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 4 click 4 click 4 click 4 click 4 click 4 click 4 click 4
+sleep 1
+# Open the first note — `chien`, which has a card — rather than *Create note*. A fresh draft has no
+# cards, so the editor's card pane would read "No cards yet" and the two-column layout this pass
+# exists to photograph would have nothing in half of it.
+mousemove %LX+19% 221 click 1
+sleep 1.5
+shot 05-notes-editor
