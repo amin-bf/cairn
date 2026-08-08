@@ -70,6 +70,13 @@ is load-bearing, not a convenience, because without it "find note 200 of 500" is
 suspended cards (ADR-0010 §8). Carries **no schedule information at all**: a note generates several
 cards in several boxes, so any per-note figure is boxes *counted*, which ADR-0001 §3 forbids. Deleted
 notes are not listed — ADR-0004 §7's delete discards the content, so there is nothing to list.
+**Create sits at the top of the list, and that is a position rather than a taste** (ADR-0021 §10's
+handoff, taken by the layout pass): a new note goes to the end of the **collection's** order, never
+the end of the filtered view, and ADR-0021 §4 names *"the end of the deck I am looking at"* as the
+intuitive misreading that is not even expressible. A create control at the foot of a filtered list
+asserts that misreading with its position. In the editor the same action sits at the **bottom of the
+form pane**, which is free under ADR-0021 §7's autosave — no Save button competes for it — and is the
+one control there a phone cannot reach by accelerator.
 _Avoid_: Browser, card browser, deck view.
 
 **List order**:
@@ -295,6 +302,11 @@ What is protected is **consistency across enrolments**.
 The persistent, non-modal line for the **only two things permitted to speak about sync**: a dead
 grant, and ADR-0004 §8's clock-skew warning. A network failure never speaks — offline is normal
 (ADR-0015 §5).
+**It is one line directly beneath the nav row, on every destination** (the layout pass). That is the
+only place at once persistent, non-modal, and *not* a status area: it is empty almost always, so it
+costs nothing when silent, and it cannot be read as a sync indicator because there is no such thing
+— no badge, no icon, no checkmark, nowhere in the chrome, ever. Being per-destination rather than
+per-screen is what keeps it **one** channel: a second copy anywhere is a third speaker.
 
 **Optimise**:
 The parameter-optimisation experience (ADR-0014), living in `optimise` and wired into the settings

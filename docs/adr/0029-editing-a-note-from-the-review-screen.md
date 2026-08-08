@@ -9,8 +9,11 @@
   [ADR-0010 §7 §9](0010-leeches.md) (edit is the primary response to a leech; nothing may prompt for
   a judgement in the moment), [ADR-0012 §1](0012-the-note-authoring-experience.md) (the editor shows
   the back, which is the whole mechanism at issue)
-- **Evidence**: the layout pass, judged against the wireframes rather than a build. See
-  *Consequences* for what that does and does not buy.
+- **Evidence**: the layout pass, judged against wireframes rather than a build. See *Consequences*
+  for what that does and does not buy. **The wireframes are held outside this repository** — unlike
+  every prototype round before them, which sit at a `prototypes/issue-NN` tag — so there is no
+  address to cite here and nothing in the tree to hunt for. What they *decided* is recorded in
+  [`ui`'s `CONTEXT.md`](../../crates/app/src/CONTEXT.md); this line names the method, not a location.
 
 ## Context
 
