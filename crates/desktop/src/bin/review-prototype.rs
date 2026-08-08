@@ -26,6 +26,16 @@ use egui::{Align, Color32, CornerRadius, FontId, Layout, RichText, Stroke, Vec2,
 
 const PROMPT: &str = "chien";
 const ANSWER: &str = "dog";
+
+/// The sitting's cards, for the interactive mode. The stills all use the first pair, so a photograph
+/// and a live run are pictures of the same card.
+const SITTING: [(&str, &str); 5] = [
+    ("chien", "dog"),
+    ("livre", "book"),
+    ("maison", "house"),
+    ("eau", "water"),
+    ("pain", "bread"),
+];
 const CHOSEN: usize = 5;
 
 /// How many of the sitting are already graded. From the environment, because **the dashboard cannot
@@ -109,7 +119,7 @@ impl Tokens {
 
 // --- variants ---------------------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Variant {
     /// **The framed column.** The control: today's arrangement, drawn properly. A page margin, a
     /// capped measure, a real type scale — and nothing moved. If this is enough, the slice is a
@@ -128,6 +138,12 @@ enum Variant {
     /// passes become a single segmented row with Forgot held apart, which buys back most of the
     /// screen's vertical budget and lets the card be genuinely large at any width.
     D,
+    /// **The graft**, built from the first round of judgement rather than proposed alongside it:
+    /// B's card, frame and type, D's grade row, C/D's ticks, and two things the round asked for
+    /// that no variant had — the reveal prompt *inside* the card, and the durable leech entrance on
+    /// the caught-up screen. Single column at every width, because the second breakpoint was
+    /// refused.
+    E,
 }
 
 impl Variant {
@@ -137,7 +153,8 @@ impl Variant {
             "b" => Self::B,
             "c" => Self::C,
             "d" => Self::D,
-            other => panic!("unknown PROTO_VARIANT {other:?} — one of a, b, c, d"),
+            "e" => Self::E,
+            other => panic!("unknown PROTO_VARIANT {other:?} — one of a, b, c, d, e"),
         }
     }
 
@@ -197,6 +214,22 @@ impl Variant {
                 radius: 6,
                 control: 48.0,
             },
+            // B's type and rhythm — the pair that was liked — with D's control height, because a
+            // segmented row of three needs the taller target more than a full-width bar does. The
+            // measure sits between the two: B's 560 was set for a stacked column, and three grades
+            // side by side want a little more room before each one gets narrow.
+            Self::E => Tokens {
+                display: 40.0,
+                heading: 20.0,
+                body: 15.0,
+                label: 15.0,
+                small: 12.0,
+                unit: 8.0,
+                page_margin: 28.0,
+                measure: 620.0,
+                radius: 8,
+                control: 48.0,
+            },
         }
     }
 }
@@ -211,6 +244,12 @@ enum Screen {
     Revealed,
     /// The floor — nothing due. The empty state the ticket asks what to do with.
     Empty,
+    /// **Interactive.** Not a still: the whole sitting, driven by clicking. Start, tap the card to
+    /// reveal, grade, and the next card comes up until the sitting is done and the screen goes to
+    /// the caught-up state. This is the mode for judging with a hand on the mouse rather than by
+    /// looking at a photograph — the reveal and the grade press are the two things a still cannot
+    /// show.
+    Live,
 }
 
 impl Screen {
@@ -220,7 +259,10 @@ impl Screen {
             "question" => Self::Question,
             "revealed" => Self::Revealed,
             "empty" => Self::Empty,
-            other => panic!("unknown PROTO_SCREEN {other:?} — one of picker, question, revealed, empty"),
+            "live" => Self::Live,
+            other => panic!(
+                "unknown PROTO_SCREEN {other:?} — one of picker, question, revealed, empty, live"
+            ),
         }
     }
 }
@@ -295,7 +337,7 @@ fn nav(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
                                 }
                             }
                             // A pill on the current destination.
-                            Variant::B | Variant::D => {
+                            Variant::B | Variant::D | Variant::E => {
                                 ui.add(
                                     egui::Button::new(text)
                                         .frame(current)
@@ -334,8 +376,7 @@ fn wide_button(ui: &mut egui::Ui, t: Tokens, text: &str, primary: bool) -> egui:
 
 /// The progress reading. Each variant answers "does the dashboard earn its place" differently, and
 /// this is where that answer is drawn.
-fn progress(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
-    let done_count = graded();
+fn progress(ui: &mut egui::Ui, t: Tokens, variant: Variant, done_count: usize) {
     match variant {
         // A statement, as today — but set on the small tier and pushed to the right of the title,
         // so it reads as a footnote to the screen rather than as a heading of its own.
@@ -367,7 +408,7 @@ fn progress(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
         // Ticks: one per card in the sitting, filled as they are graded. Countable at a glance
         // without a number being stated — five ticks is a size you can hold, which is the point of
         // the picker in the first place.
-        Variant::C | Variant::D => {
+        Variant::C | Variant::D | Variant::E => {
             ui.horizontal(|ui| {
                 ui.label(label("Review", t.heading, STONE_11));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -386,17 +427,24 @@ fn progress(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
 
 /// A card face. The variants disagree about what a card *is* — a filled slab like today, a bounded
 /// surface with a stroke, or a well cut into the page — and that disagreement is the point.
-fn card(ui: &mut egui::Ui, t: Tokens, variant: Variant, text: &str, height: f32, badge: Option<&str>) {
+fn card(
+    ui: &mut egui::Ui,
+    t: Tokens,
+    variant: Variant,
+    text: &str,
+    height: f32,
+    footer: Option<&str>,
+) -> egui::Response {
     let (fill, stroke) = match variant {
         // As today: the `inactive` widget fill, lighter than the page.
         Variant::A => (STONE_5, Stroke::new(1.0, QUIET)),
         // A well — *darker* than the page, so the card is a hole you read into rather than a
         // button sitting on top of it.
-        Variant::B => (STONE_0, Stroke::new(1.0, STONE_4)),
+        Variant::B | Variant::E => (STONE_0, Stroke::new(1.0, STONE_4)),
         Variant::C => (STONE_3, Stroke::new(1.0, QUIET)),
         Variant::D => (STONE_3, Stroke::new(1.0, STONE_4)),
     };
-    egui::Frame::new()
+    let framed = egui::Frame::new()
         .fill(fill)
         .stroke(stroke)
         .corner_radius(CornerRadius::same(t.radius))
@@ -404,24 +452,39 @@ fn card(ui: &mut egui::Ui, t: Tokens, variant: Variant, text: &str, height: f32,
         .show(ui, |ui| {
             ui.set_min_size(vec2(ui.available_width(), height));
             ui.vertical_centered(|ui| {
-                ui.add_space((height - t.display) / 2.0 - t.gap(1.0));
+                // The word sits on the centre line of whatever the footer leaves, and the footer
+                // is pinned to the bottom — so an invitation to tap reads as the card's own quiet
+                // edge rather than as a second thing stacked under the word.
+                let word = t.display * 1.3;
+                let foot = if footer.is_some() { t.small * 1.4 } else { 0.0 };
+                let free = (height - word - foot).max(0.0);
+                ui.add_space(free / 2.0);
                 ui.label(label(text, t.display, STONE_11));
-                // The badge rides *in the card's corner* everywhere but A, where it keeps its
-                // baseline position on the page below.
-                if let Some(badge) = badge {
-                    ui.add_space(t.gap(1.0));
-                    ui.label(label(badge, t.small, STONE_9));
+                if let Some(footer) = footer {
+                    ui.add_space(free / 2.0);
+                    ui.label(label(footer, t.small, STONE_9));
                 }
             });
         });
+    // The whole face is the reveal target (ADR-0006 §3), so the click is taken over the frame's
+    // rect rather than by making the text a button — which is also what keeps the card a *surface*
+    // rather than a control that happens to be large.
+    ui.interact(
+        framed.response.rect,
+        ui.id().with(("card", text)),
+        egui::Sense::click(),
+    )
 }
 
 /// The four grades. A, B and C stack them full-width with the break after Forgot; D puts the three
 /// passes in one row.
-fn grades(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
-    if variant == Variant::D {
+fn grades(ui: &mut egui::Ui, t: Tokens, variant: Variant) -> Option<&'static str> {
+    let mut pressed = None;
+    if matches!(variant, Variant::D | Variant::E) {
         // Forgot is held apart — a different kind of answer, not the first rung of one scale.
-        grade_button(ui, t, "Forgot", "1d", ui.available_width());
+        if grade_button(ui, t, "Forgot", "1d", ui.available_width()).clicked() {
+            pressed = Some("Forgot");
+        }
         ui.add_space(t.gap(2.0));
         let gap = t.gap(1.0);
         // `n` controls and `n - 1` gaps. A trailing gap after the last one pushes the row *past*
@@ -434,23 +497,34 @@ fn grades(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
                 if i > 0 {
                     ui.add_space(gap);
                 }
-                grade_button(ui, t, name, days, each);
+                if grade_button(ui, t, name, days, each).clicked() {
+                    pressed = Some(name);
+                }
             }
         });
-        return;
+        return pressed;
     }
 
     for (i, (name, days)) in GRADES.into_iter().enumerate() {
-        grade_button(ui, t, name, days, ui.available_width());
+        if grade_button(ui, t, name, days, ui.available_width()).clicked() {
+            pressed = Some(name);
+        }
         // The break between the failure grade and the passes.
         ui.add_space(if i == 0 { t.gap(3.0) } else { t.gap(1.0) });
     }
+    pressed
 }
 
 /// One grade. The interval preview is set on the **small** tier and dimmed, so the button says
 /// *Good* first and *2d* second — the baseline sets both at the same size and weight, which is why
 /// two grades sharing `1d` reads as a fault.
-fn grade_button(ui: &mut egui::Ui, t: Tokens, name: &str, days: &str, width: f32) {
+fn grade_button(
+    ui: &mut egui::Ui,
+    t: Tokens,
+    name: &str,
+    days: &str,
+    width: f32,
+) -> egui::Response {
     let mut job = egui::text::LayoutJob::default();
     job.append(
         name,
@@ -474,12 +548,22 @@ fn grade_button(ui: &mut egui::Ui, t: Tokens, name: &str, days: &str, width: f32
         .corner_radius(CornerRadius::same(t.radius))
         .fill(STONE_5)
         .stroke(Stroke::new(1.0, QUIET));
-    ui.add_sized([width, t.control], button);
+    ui.add_sized([width, t.control], button)
 }
 
 // --- the screens ------------------------------------------------------------------------------
 
-fn draw(ui: &mut egui::Ui, variant: Variant, screen: Screen) {
+/// The interactive sitting's state. In memory only, and reset by relaunching — a prototype persists
+/// nothing, because persistence is a thing to check rather than a thing to lean on.
+#[derive(Default)]
+struct Live {
+    started: bool,
+    revealed: bool,
+    graded: usize,
+    index: usize,
+}
+
+fn draw(ui: &mut egui::Ui, variant: Variant, screen: Screen, live: &mut Live) {
     let t = variant.tokens();
 
     // **Every gap on this screen is stated, and nothing is inherited.** egui inserts
@@ -508,7 +592,87 @@ fn draw(ui: &mut egui::Ui, variant: Variant, screen: Screen) {
         Screen::Empty => empty(ui, t, variant),
         Screen::Question => question(ui, t, variant, two_column),
         Screen::Revealed => revealed(ui, t, variant, two_column),
+        Screen::Live => live_screen(ui, t, variant, live),
     });
+}
+
+/// The whole sitting, driven by clicking: start, tap the card, grade, next card, and the caught-up
+/// screen at the end. It reuses the same pieces the stills are drawn from, so what is clicked
+/// through is what was photographed — a live mode drawn its own way would be a different design
+/// wearing the same name.
+fn live_screen(ui: &mut egui::Ui, t: Tokens, variant: Variant, live: &mut Live) {
+    if !live.started {
+        ui.label(label("Review", t.heading, STONE_11));
+        ui.add_space(t.gap(2.0));
+        ui.label(label(
+            "A fresh deck. These cards are new — start whenever you like.",
+            t.body,
+            STONE_10,
+        ));
+        ui.add_space(t.gap(4.0));
+        if wide_button(ui, t, "Start — all 5", true).clicked() {
+            live.started = true;
+        }
+        ui.add_space(t.gap(2.0));
+        ui.horizontal(|ui| {
+            ui.label(label("or a shorter sitting:", t.small, STONE_9));
+            ui.add_space(t.gap(1.5));
+            for option in ["5", "10", "20"] {
+                let job = label(option, t.small, LICHEN);
+                if ui.add(egui::Button::new(job).frame(false)).clicked() {
+                    live.started = true;
+                }
+                ui.add_space(t.gap(2.0));
+            }
+        });
+        return;
+    }
+
+    // The sitting ends at the chosen count of gradings, and the screen becomes the floor.
+    if live.graded >= SITTING.len() {
+        empty(ui, t, variant);
+        ui.add_space(t.gap(4.0));
+        ui.vertical_centered(|ui| {
+            if ui
+                .add(egui::Button::new(label("Run it again", t.small, LICHEN)).frame(false))
+                .clicked()
+            {
+                *live = Live::default();
+            }
+        });
+        return;
+    }
+
+    let (prompt, answer) = SITTING[live.index];
+    progress(ui, t, variant, live.graded);
+    ui.add_space(t.gap(3.0));
+    let height = card_height(t, variant, false);
+
+    if !live.revealed {
+        let hint = (variant == Variant::E).then_some("Tap to reveal");
+        if card(ui, t, variant, prompt, height, hint).clicked() {
+            live.revealed = true;
+        }
+        if variant != Variant::E {
+            ui.add_space(t.gap(3.0));
+            ui.vertical_centered(|ui| {
+                ui.label(label("Tap the card to see the answer", t.small, STONE_9));
+            });
+        }
+        return;
+    }
+
+    one_card(ui, t, variant, height, prompt, answer);
+    ui.add_space(t.gap(3.0));
+    // A grading advances the count whatever the grade — which grade was pressed decides whether a
+    // card would return, and that is the scheduler's business, not this screen's.
+    if grades(ui, t, variant).is_some() {
+        live.graded += 1;
+        live.index = (live.index + 1) % SITTING.len();
+        live.revealed = false;
+    }
+    ui.add_space(t.gap(3.0));
+    wide_button(ui, t, "Edit note", false);
 }
 
 /// The entrance. The ticket asks whether the count picker is the right one at all; every variant
@@ -553,7 +717,7 @@ fn picker(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
         }
         // One primary way in, with the sizes as a quiet second line — the sitting size is a
         // decision most days do not want to make.
-        Variant::B | Variant::D => {
+        Variant::B | Variant::D | Variant::E => {
             wide_button(ui, t, "Start — all 5", true);
             ui.add_space(t.gap(2.0));
             ui.horizontal(|ui| {
@@ -593,6 +757,21 @@ fn empty(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
                 ui.label(label("Nothing is due right now.", t.body, STONE_9));
             });
         }
+        // B's treatment, **plus the one control this screen actually has**. The durable leech
+        // entrance is offered whenever any card is a leech or is suspended, and the leech screen is
+        // those cards' permanent home (ADR-0010 §6, §8) — so on a caught-up Review it is the only
+        // thing to do, and B's version silently dropped it. It stays below the sentence and quiet,
+        // per §6's "never competes with the picker": an offer to look, never a nag.
+        Variant::E => {
+            ui.add_space(t.gap(8.0));
+            ui.vertical_centered(|ui| {
+                ui.label(label("All caught up.", t.display * 0.6, STONE_11));
+                ui.add_space(t.gap(2.0));
+                ui.label(label("Nothing is due right now.", t.body, STONE_9));
+            });
+            ui.add_space(t.gap(5.0));
+            wide_button(ui, t, "Leeches (2) · suspended (1)", false);
+        }
         // The sentence plus the one thing there *is* to do — the durable leech entrance, which
         // today sits below the picker and is the only control on an empty Review screen.
         Variant::C => {
@@ -608,9 +787,19 @@ fn empty(ui: &mut egui::Ui, t: Tokens, variant: Variant) {
 }
 
 fn question(ui: &mut egui::Ui, t: Tokens, variant: Variant, two_column: bool) {
-    progress(ui, t, variant);
+    progress(ui, t, variant, graded());
     ui.add_space(t.gap(3.0));
     let height = card_height(t, variant, two_column);
+
+    // E puts the invitation **inside** the card. The card *is* the reveal target (ADR-0006 §3), so
+    // an instruction floating on the page below it is describing a control it is not part of —
+    // and it is the only thing on that page competing with the word being studied. Inside, it sits
+    // where the tap goes and reads as the card's own quiet footer.
+    if variant == Variant::E {
+        card(ui, t, variant, PROMPT, height, Some("Tap to reveal"));
+        return;
+    }
+
     card(ui, t, variant, PROMPT, height, None);
     ui.add_space(t.gap(3.0));
     ui.vertical_centered(|ui| {
@@ -619,7 +808,7 @@ fn question(ui: &mut egui::Ui, t: Tokens, variant: Variant, two_column: bool) {
 }
 
 fn revealed(ui: &mut egui::Ui, t: Tokens, variant: Variant, two_column: bool) {
-    progress(ui, t, variant);
+    progress(ui, t, variant, graded());
     ui.add_space(t.gap(3.0));
 
     if two_column {
@@ -633,7 +822,7 @@ fn revealed(ui: &mut egui::Ui, t: Tokens, variant: Variant, two_column: bool) {
                 Layout::top_down(Align::Min),
                 |ui| {
                     ui.set_width(left);
-                    one_card(ui, t, variant, 260.0);
+                    one_card(ui, t, variant, 260.0, PROMPT, ANSWER);
                 },
             );
             ui.add_space(gutter);
@@ -652,7 +841,7 @@ fn revealed(ui: &mut egui::Ui, t: Tokens, variant: Variant, two_column: bool) {
     }
 
     let height = card_height(t, variant, false);
-    one_card(ui, t, variant, height);
+    one_card(ui, t, variant, height, PROMPT, ANSWER);
     ui.add_space(t.gap(3.0));
     grades(ui, t, variant);
     ui.add_space(t.gap(3.0));
@@ -662,18 +851,25 @@ fn revealed(ui: &mut egui::Ui, t: Tokens, variant: Variant, two_column: bool) {
 /// The revealed card. A keeps the baseline's two slabs; the rest draw **one** card with the prompt
 /// and the answer as two halves of it, divided by a hairline, because they are two faces of one
 /// thing and not two things.
-fn one_card(ui: &mut egui::Ui, t: Tokens, variant: Variant, height: f32) {
+fn one_card(
+    ui: &mut egui::Ui,
+    t: Tokens,
+    variant: Variant,
+    height: f32,
+    prompt: &str,
+    answer: &str,
+) {
     if variant == Variant::A {
-        card(ui, t, variant, PROMPT, height * 0.5, None);
+        card(ui, t, variant, prompt, height * 0.5, None);
         ui.add_space(t.gap(1.0));
-        card(ui, t, variant, ANSWER, height * 0.5, None);
+        card(ui, t, variant, answer, height * 0.5, None);
         ui.add_space(t.gap(1.0));
         ui.label(label("new", t.small, STONE_9));
         return;
     }
 
     let (fill, stroke) = match variant {
-        Variant::B => (STONE_0, Stroke::new(1.0, STONE_4)),
+        Variant::B | Variant::E => (STONE_0, Stroke::new(1.0, STONE_4)),
         _ => (STONE_3, Stroke::new(1.0, STONE_4)),
     };
     egui::Frame::new()
@@ -695,7 +891,7 @@ fn one_card(ui: &mut egui::Ui, t: Tokens, variant: Variant, height: f32) {
             let pad = ((height - t.small * 1.3 - content) / 2.0).max(0.0);
             ui.vertical_centered(|ui| {
                 ui.add_space(pad);
-                ui.label(label(PROMPT, t.display, STONE_11));
+                ui.label(label(prompt, t.display, STONE_11));
                 ui.add_space(t.gap(3.0));
                 let (rect, _) = ui.allocate_exact_size(
                     vec2(ui.available_width() * 0.25, 1.0),
@@ -703,7 +899,7 @@ fn one_card(ui: &mut egui::Ui, t: Tokens, variant: Variant, height: f32) {
                 );
                 ui.painter().rect_filled(rect, CornerRadius::ZERO, STONE_4);
                 ui.add_space(t.gap(3.0));
-                ui.label(label(ANSWER, t.display, STONE_11));
+                ui.label(label(answer, t.display, STONE_11));
             });
         });
 }
@@ -720,6 +916,7 @@ fn card_height(t: Tokens, variant: Variant, two_column: bool) -> f32 {
         Variant::C => 200.0,
         // The row of grades bought this back.
         Variant::D => 300.0,
+        Variant::E => 300.0,
     };
     base.max(t.display * 3.0)
 }
@@ -730,6 +927,7 @@ struct Prototype {
     variant: Variant,
     screen: Screen,
     fonts_installed: bool,
+    live: Live,
 }
 
 impl eframe::App for Prototype {
@@ -746,7 +944,7 @@ impl eframe::App for Prototype {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(STONE_2))
             .show(ui, |ui| {
-                draw(ui, self.variant, self.screen);
+                draw(ui, self.variant, self.screen, &mut self.live);
             });
     }
 }
@@ -755,10 +953,27 @@ fn main() -> eframe::Result<()> {
     let variant = Variant::parse(&std::env::var("PROTO_VARIANT").unwrap_or_else(|_| "a".into()));
     let screen = Screen::parse(&std::env::var("PROTO_SCREEN").unwrap_or_else(|_| "revealed".into()));
 
+    // Size and placement from the environment. Placement matters because the operator's second
+    // screen is portrait: a window that opens wherever the compositor likes lands on the wrong one
+    // about half the time, and "look at this on the desktop" then costs a drag before it costs a
+    // judgement. Honoured on X11; Wayland does not let a client place itself, so under a Wayland
+    // backend the position is simply ignored.
+    let num = |key: &str, fallback: f32| {
+        std::env::var(key)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(fallback)
+    };
+
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_inner_size(Vec2::new(num("PROTO_W", 560.0), num("PROTO_H", 860.0)))
+        .with_title(format!("Cairn — review prototype {variant:?}"));
+    if std::env::var("PROTO_X").is_ok() || std::env::var("PROTO_Y").is_ok() {
+        viewport = viewport.with_position(egui::pos2(num("PROTO_X", 0.0), num("PROTO_Y", 0.0)));
+    }
+
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size(Vec2::new(560.0, 860.0))
-            .with_title("Cairn — review prototype"),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
@@ -769,6 +984,7 @@ fn main() -> eframe::Result<()> {
                 variant,
                 screen,
                 fonts_installed: false,
+                live: Live::default(),
             }))
         }),
     )
