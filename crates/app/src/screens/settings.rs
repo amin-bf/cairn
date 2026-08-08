@@ -411,7 +411,7 @@ fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbou
                 ui,
                 &format!("Sniffed: {}", profile_label(report.sniffed.as_ref())),
             );
-            ui.add_space(6.0);
+            ui.add_space(8.0);
             match &report.outcome {
                 Err(refusal) => body(ui, &refusal_wording(refusal)),
                 Ok(plan) => {
