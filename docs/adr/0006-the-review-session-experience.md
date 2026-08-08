@@ -95,8 +95,17 @@ The card itself is the tap target for revealing the answer — not a separate "S
 Verified by real touch on the Pixel 8 Pro and by mouse click on desktop; no divergence between the
 two was needed or found.
 
-> **Amended by [ADR-0021 §6](0021-note-ordering-saving-and-the-note-list.md): reveal has a second
-> cause.** The review screen gains an *edit this note* action opening
+> **Withdrawn by [ADR-0029 §1](0029-editing-a-note-from-the-review-screen.md): reveal has one cause
+> again, and this section stands as originally written.** The *edit this note* action survives but is
+> offered **only once the card is revealed**, so there is no longer a route into the editor before the
+> reveal and therefore nothing for a second cause to cover. The amendment below is recorded rather
+> than deleted, because its *reasoning* is what ADR-0029 acts on: the rule existed solely to keep §4
+> true in the pre-reveal state, and removing that state removes the rule rather than replacing it.
+> §4's guarantee is thereby **strengthened** — it now holds because no route exists, not because a
+> clause about the editor holds.
+
+> **~~Amended by [ADR-0021 §6](0021-note-ordering-saving-and-the-note-list.md): reveal has a second
+> cause.~~** The review screen gains an *edit this note* action opening
 > [ADR-0012](0012-the-note-authoring-experience.md)'s editor, and **entering the editor counts as a
 > reveal** — because the editor shows the back, so without this §4's *"self-grading can't happen
 > before the answer is seen"* is quietly false. Tap-the-card is unchanged as the ordinary cause.

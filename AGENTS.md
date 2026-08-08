@@ -171,11 +171,18 @@ already leaning on a screen nobody had built.
    (sync rule 2 below, ADR-0015 §6) bans an **unannounced** recompute caused by another device — not
    the visible result of the user's own act on the card in front of them. Read broadly, it deletes
    mid-review editing as a violation, which is the predictable mistake.
-7. **Opening the editor from the review screen counts as a reveal.** The editor shows the back, so
-   without this ADR-0006 §4's *"self-grading can't happen before the answer is seen"* is quietly false.
-   The alternatives both need state this design does not have: skipping a card ungraded needs an
-   in-session deferred set, which ADR-0006 §2 proved does not exist, and flagging it for later is the
-   stored *"since you last looked"* ADR-0010 §9 refused.
+7. **The review screen's *edit this note* appears only after the reveal, and restoring it before the
+   reveal re-opens a hazard whose guard no longer exists.** [ADR-0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md)
+   narrowed ADR-0021 §6's *"at any point in the card's life"* and **retired** its *"entering the editor
+   counts as a reveal"* rule in the same move — that rule had exactly one customer, the pre-reveal
+   edit, and after the reveal it is a no-op. So ADR-0006 §4's *"self-grading can't happen before the
+   answer is seen"* now holds because **there is no route into the editor before the reveal**, not
+   because a clause about the editor's side-effect holds. Put the control back in the pre-reveal state
+   and the guarantee is silently false again, with nothing failing and no rule left to catch it. The
+   alternatives to the old rule both needed state this design does not have: skipping a card ungraded
+   needs an in-session deferred set, which ADR-0006 §2 proved does not exist, and flagging it for later
+   is the stored *"since you last looked"* ADR-0010 §9 refused. **What ADR-0029 §2 gives up** — *"is
+   this prompt answerable?"* is unaskable once you know the answer — is accepted, not overlooked.
 
 ## The client stack
 

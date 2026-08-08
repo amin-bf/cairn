@@ -196,6 +196,23 @@ door that was never built), and **the review screen** (§6).
 
 **The review screen offers *edit this note*, at any point in the card's life.**
 
+> **Narrowed by [ADR-0029 §1](0029-editing-a-note-from-the-review-screen.md): the action is offered
+> only once the card is **revealed**, and *"counts as a reveal"* is retired with the state that needed
+> it.** This section argued for the action's **existence** — *"the moment a defective card can be
+> diagnosed is the moment it is in front of you"* — and never separately for its availability in the
+> two card states; the phrase *"at any point in the card's life"* settled both in one clause and only
+> the first half was argued. **The existence argument is unchanged and is not reopened**: a revealed
+> card is still in front of you, in the same session, one tap earlier than the end-of-session pointer
+> this section was written against. And ADR-0010 §7's three named defects — *ambiguous, too large,
+> testing two facts at once* — are all judgements about the **pair**, so all three are post-reveal
+> findings already.
+>
+> The paragraph below on *"counts as a reveal"* is **retired rather than deleted**, because its
+> reasoning is what ADR-0029 acts on: that rule had exactly one customer, the pre-reveal edit, and
+> after the reveal it is a no-op. Removing the state removes the rule, so the specification gets
+> smaller rather than gaining a condition. **What is given up** — *"is this prompt answerable?"* is
+> unaskable once you know the answer — is real and is accepted in ADR-0029 §2.
+
 **Why at all**: ADR-0010 §7 already fixes that *"the honest diagnosis of most leeches is a defective
 card"* and makes edit the primary response — but routes you there only from the end-of-session
 pointer, by which time the user must have carried "the note about X was wrong" across twenty more
@@ -207,7 +224,8 @@ demands a considered judgement when the user is most frustrated, which routes to
 has that failure mode, and reading §9 as "nothing may be done to a card mid-session" would delete
 this section.
 
-**Why "counts as a reveal" rather than anything cleverer.** The editor shows the back, so
+**~~Why "counts as a reveal" rather than anything cleverer.~~** *(Retired by ADR-0029 §1 — kept
+because ADR-0029's decisive argument is that this paragraph's rule had one caller.)* The editor shows the back, so
 [ADR-0006 §4](0006-the-review-session-experience.md)'s guarantee — grade buttons appear only after
 reveal, *"so self-grading can't happen before the answer is seen"* — is otherwise quietly broken. Both
 tidier-sounding alternatives fail on this design's own terms. *Skip the card ungraded* needs an
@@ -349,7 +367,7 @@ says *"create a deck"*, but no ADR says where. ADR-0012 specifies a **kind** dro
 | [ADR-0012 §7](0012-the-note-authoring-experience.md) | The Enter rule is **widened** to the last field: Enter is inert in every single-line field without exception, and the *New note* rhythm is an action with a modifier-chord accelerator. | §8: binding Enter to "the last field" makes a kind definition's field count change a key's behaviour silently, and an acquired kind puts that in a stranger's hands. |
 | [ADR-0012 §9](0012-the-note-authoring-experience.md) | Two of the four unsettled items are **closed** — saving semantics (§7), and editing mid-review plus where authoring is entered from (§5, §6). | This ADR. |
 | [ADR-0012 §2](0012-the-note-authoring-experience.md) | The editor gains a **deck** dropdown beside the kind dropdown, with deck creation available from it. | §9: no ADR said where a note's `deck` reference is set. |
-| [ADR-0006 §3 and §4](0006-the-review-session-experience.md) | **Reveal has a second cause**: entering the editor from the review screen counts as a reveal. Tap-the-card is unchanged as the ordinary one. | §6: the editor shows the back, so without this §4's *"self-grading can't happen before the answer is seen"* is quietly false. |
+| [ADR-0006 §3 and §4](0006-the-review-session-experience.md) | ~~**Reveal has a second cause**: entering the editor from the review screen counts as a reveal. Tap-the-card is unchanged as the ordinary one.~~ **Withdrawn by [ADR-0029 §1](0029-editing-a-note-from-the-review-screen.md)**: the action is offered only after the reveal, so no route into the editor precedes it and reveal has one cause again. | §6: the editor shows the back, so without this §4's *"self-grading can't happen before the answer is seen"* is quietly false. *ADR-0029 removes the state rather than the guarantee — §4 now holds because there is no route, not because a clause holds.* |
 | [ADR-0006 §5](0006-the-review-session-experience.md) | *"Keyboard-only grading: not requested; additive if wanted"* is amended by the app acquiring **one** shortcut, in the editor and not in review. | §8. |
 | [ADR-0008 §12](0008-the-deck-export-format.md) | **Touched but unchanged, recorded so nobody re-derives it.** Emission stays `(position, note id)` and stays byte-for-byte deterministic; the file carries line order rather than the value, so §3's type change reaches no byte of the format. | §3. |
 

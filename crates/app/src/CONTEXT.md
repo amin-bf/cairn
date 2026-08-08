@@ -23,7 +23,10 @@ sync — the `sync` crate holds the mechanism and none of the surface; the secon
 and §12**, adding the connected account to enrolment and to sync settings); and
 [ADR-0021](../../../docs/adr/0021-note-ordering-saving-and-the-note-list.md), which adds the **note
 list** and the app's navigation shell and **amends ADR-0012 §2, §7 and §9 and ADR-0006 §3 and §5** —
-read those before touching the editor or the review screen's actions; and
+read those before touching the editor or the review screen's actions, and read
+[ADR-0029](../../../docs/adr/0029-editing-a-note-from-the-review-screen.md) **with** its §6, never
+instead of it: §6 argued the edit action's *existence* and ADR-0029 narrows only its *availability*,
+to the revealed state, retiring §6's *"counts as a reveal"* along with the state that needed it; and
 [ADR-0014](../../../docs/adr/0014-when-parameter-optimisation-runs.md) (the **Optimise** action, its
 worker thread and two-phase progress, the fact-only nudge and the no-quality-claim completion) — read
 it before touching the settings screen's optimisation control.
@@ -106,7 +109,13 @@ enforcement mechanism — reaching the chosen count is what ends a session norma
 
 **Reveal**:
 Tapping the card to show its back. Verified identical by touch and by mouse; the two platforms do
-not diverge here.
+not diverge here. **It has exactly one cause** (ADR-0029 §1): ADR-0021 §6's second cause — entering
+the editor — is retired along with the pre-reveal edit that needed it, so *edit this note* is offered
+**only once the card is revealed**, full-width beneath it. Nothing else may flip the card, and
+ADR-0006 §4's *"self-grading can't happen before the answer is seen"* now holds because **no route
+into the editor precedes the reveal**, rather than because a rule about the editor's side-effect
+holds — which is why restoring a pre-reveal edit control breaks the guarantee with nothing failing.
+_Avoid_: Show answer, flip — and never *a second cause*, which is the thing ADR-0029 removed.
 
 **Box badge**:
 The small, non-interactive indicator shown **only after reveal**. Reports durability. Never sorted,
