@@ -1,0 +1,29 @@
+# The frame prototype's four screens, for #131.
+#
+# **Nothing here clicks.** The prototype takes its frame and its screen from the environment and
+# draws them statically, so each screen is reached by exporting a variable and restarting rather
+# than by aiming a coordinate at a control — `docs/environment/desktop-capture.md` records that a
+# storyboard cannot tell you it missed, and a design ticket is in the business of *moving* the
+# things coordinates point at.
+#
+# `PROTO_FRAME` is set once by `scripts/capture-frame.sh`, for the whole run.
+# The first screen needs no restart: the app is already up, launched with PROTO_SCREEN=review.
+
+# Review, revealed. The settled screen — here to show the frame leaves variant E alone.
+shot 1-review
+
+# The note list: rows under the frame.
+sh export PROTO_SCREEN=notes
+restart
+shot 2-notes
+
+# The editor. **The screen that decides the ticket** — `TWO_PANE_MIN_WIDTH = 640` is evaluated
+# against whatever width the frame leaves, so this shot says which branch each frame takes.
+sh export PROTO_SCREEN=editor
+restart
+shot 3-editor
+
+# Settings: prose and full-width controls in one scroll.
+sh export PROTO_SCREEN=settings
+restart
+shot 4-settings
