@@ -8,8 +8,13 @@
 #   sleep <n>       wait n seconds
 #   restart         kill the app and start it again, on the same collection
 #   sh <command>    run a shell command (used for `xdotool type`, which needs its own quoting)
-#   <anything else> passed to xdotool verbatim, e.g. `mousemove 640 131 click 1`
+#   <anything else> passed to xdotool verbatim, e.g. `mousemove %CX% 131 click 1`
 #   # <comment>     ignored
+#
+# `%CX%` and `%CY%` expand to the centre of the output. Almost every control the app draws is either
+# full-width or in the nav row, so a storyboard written with `%CX%` runs unchanged at any width —
+# whereas a literal `640` silently misses at 560 and shoots the *previous* screen under the new
+# screen's name, which is worse than failing.
 set -uo pipefail
 
 echo "session: DISPLAY=${DISPLAY:-unset} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}"
@@ -46,8 +51,13 @@ stop_app() {
 
 start_app
 
+cx=$(( ${CAIRN_WIDTH:-1280} / 2 ))
+cy=$(( ${CAIRN_HEIGHT:-800} / 2 ))
+
 while IFS= read -r line || [ -n "$line" ]; do
   [ -z "$line" ] && continue
+  line="${line//%CX%/$cx}"
+  line="${line//%CY%/$cy}"
   case "$line" in
     \#*) continue ;;
     shot\ *)

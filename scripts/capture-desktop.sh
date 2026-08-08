@@ -34,6 +34,8 @@ width="${2:-1280}"
 height="${3:-800}"
 
 export CAIRN_SETTLE="${4:-6}"
+export CAIRN_WIDTH="$width"
+export CAIRN_HEIGHT="$height"
 export CAIRN_BIN="$root/target/debug/cairn"
 export CAIRN_STORYBOARD="$(cd "$(dirname "$storyboard")" && pwd)/$(basename "$storyboard")"
 export CAIRN_SHOTS="${CAIRN_SHOTS:-$root/target/capture/${width}x${height}}"

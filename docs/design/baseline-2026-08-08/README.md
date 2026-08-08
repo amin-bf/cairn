@@ -33,5 +33,8 @@ checkable.
 which a first-launch seed cannot reach in one pass; the import preview needs a file dropped on the
 window. Both are noted as unreached rather than absent — see #122's resolution.
 
-The 560×860 set stops at `07`: the storyboard past that point aims at coordinates chosen for the
-wide output.
+Both sets carry all thirteen. An earlier narrow run carried only seven and silently mislabelled
+three of them: the storyboards held literal x coordinates chosen for the wide output, so a click
+aimed at a full-width control missed at 560 and the next `shot` photographed the *previous* screen
+under the new screen's name. Storyboards now write `%CX%` for the centre of the output, which is why
+one file serves both widths.

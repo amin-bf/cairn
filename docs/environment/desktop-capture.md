@@ -80,12 +80,22 @@ A storyboard is a line-per-step file under `scripts/storyboards/`:
 widget**, so aim it at empty space. This is not a timing problem and more settle time does not fix
 it.
 
-**Coordinates are the brittle part, and knowingly so.** They are fixed pixel positions, and this map
-exists to move the things they point at — so a storyboard is expected to need editing whenever the
-layout it drives changes. That cost was accepted rather than overlooked: the alternative is a
-capture-mode entry point *inside* the app, which is app code shaped by the harness's needs, and that
-is a decision the design pass should make deliberately if the editing ever becomes the expensive
-part. Keep storyboards short and keep the coordinates commented with what they aim at.
+**Write `%CX%` and `%CY%` rather than a literal centre.** They expand to the centre of the output, so
+one storyboard runs at any width. Almost every control the app draws is full-width, and the nav row
+is the one place a literal x is right.
+
+This is worth more than convenience, because **the failure it prevents is silent**. A click aimed at
+a full-width control with a hard-coded `640` simply misses at 560 — nothing errors, the screen never
+changes, and the next `shot` photographs the *previous* screen under the new screen's name. The
+first narrow run here produced three such images and they looked entirely plausible.
+
+**Coordinates are still the brittle part, and knowingly so.** They are fixed pixel positions, and
+this map exists to move the things they point at — so a storyboard is expected to need editing
+whenever the layout it drives changes. That cost was accepted rather than overlooked: the alternative
+is a capture-mode entry point *inside* the app, which is app code shaped by the harness's needs, and
+that is a decision the design pass should make deliberately if the editing ever becomes the expensive
+part. Keep storyboards short, keep coordinates commented with what they aim at, and **look at the
+images** — a storyboard cannot tell you it missed.
 
 ## Persian: what the harness proves, and what it does not
 
