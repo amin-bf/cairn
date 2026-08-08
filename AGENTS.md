@@ -322,6 +322,23 @@ because they are validated findings, not because a web build ships.
     The reasoning, the rejected alternatives and the exit condition live in
     [`vendor/PATCH.md`](./vendor/PATCH.md); read it before bumping the egui family.
     [ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md).
+13. **Colour is named in exactly one place — the `theme` module — and every screen reads the *ambient*
+    visuals.** [ADR-0030 §1](./docs/adr/0030-the-first-finish-pass-decisions.md) puts the palette
+    behind one function producing an `egui::Visuals`, installed once. A `Color32::from_rgb`, a
+    `ui.visuals_mut()` tweak, or a hard-coded shade **anywhere else renders fine to the author and
+    drifts the palette one screen at a time, with nothing failing** — which is exactly why it needs a
+    rule. Ask for a role (`ui.visuals().text_color()`, `weak_text_color()`, `hyperlink_color`), never
+    a value. The white in `fonts.rs`'s coverage probe is not an exception — it draws nothing a user
+    sees. **The contrast floor is 7:1 for text against its surface** (§3): a text colour added to the
+    palette that clears less is a defect the floor catches; the non-text pairs are deliberately out of
+    scope, so do not "fix" a decorative stroke to satisfy it.
+14. **The app pins dark and does not follow the OS theme — and pinning is two acts, not one.**
+    [ADR-0030 §2](./docs/adr/0030-the-first-finish-pass-decisions.md): install the dark palette as the
+    visuals **and** disable theme-following. Set only the first and an OS theme change silently
+    restores stock egui — the 5.12:1 body the palette exists to fix — with nothing failing and no test
+    covering it, because the drafted palette is dark only. Dropping system-following is a deliberate,
+    recorded behaviour change, not a default to reach past: a light palette is a separate finish pass,
+    and restoring following is its job, not something to re-add without one.
 
 ## The local store
 
