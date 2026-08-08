@@ -9,11 +9,13 @@
   [ADR-0010 §7 §9](0010-leeches.md) (edit is the primary response to a leech; nothing may prompt for
   a judgement in the moment), [ADR-0012 §1](0012-the-note-authoring-experience.md) (the editor shows
   the back, which is the whole mechanism at issue)
-- **Evidence**: the layout pass, judged against wireframes rather than a build. See *Consequences*
-  for what that does and does not buy. **The wireframes are held outside this repository** — unlike
-  every prototype round before them, which sit at a `prototypes/issue-NN` tag — so there is no
-  address to cite here and nothing in the tree to hunt for. What they *decided* is recorded in
-  [`ui`'s `CONTEXT.md`](../../crates/app/src/CONTEXT.md); this line names the method, not a location.
+- **Evidence**: the **layout pass** — twenty-two wireframes, judged live, at tag
+  [`prototypes/issue-120`](https://github.com/amin-bf/cairn/tree/prototypes/issue-120/prototypes/layout-pass-120)
+  ([#120](https://github.com/amin-bf/cairn/issues/120)), following the convention of #11, #28 and
+  #67. **Wireframes rather than a build**, which is the first time on this map — see *Consequences*
+  for what that does and does not buy. What the pass *decided* is recorded in
+  [`ui`'s `CONTEXT.md`](../../crates/app/src/CONTEXT.md); the tag is where to reopen a decision, not
+  where to read one.
 
 ## Context
 
