@@ -56,6 +56,32 @@ the PR titles already use. Branch and PR then agree on which part of the system 
    the *other* ADR at that number, and a blind replace corrupts those links. Re-read whatever landed
    meanwhile, too — an ADR that merged mid-session may place requirements on the ticket you are
    resolving.
+3. **A prototype is preserved as a tag and never merged.** Throwaway code built to answer a design
+   question — variants to react to, capture harnesses, spikes — is tagged
+   **`prototypes/issue-<N>`** and left contained in no branch. `git tag -l 'prototypes/*'` is the
+   inventory; `prototypes/issue-8`, `-11`, `-20`, `-28`, `-67`, `-120` and `-124` are the existing
+   ones.
+
+   `main` keeps the validated decision, not the options that lost. Merging a prototype puts a
+   throwaway binary and dozens of capture PNGs into the tree of every future checkout, permanently,
+   to preserve something a tag already preserves.
+
+   **Split the branch before opening the pull request.** Prototype work usually contains a little
+   that genuinely belongs on `main` — a bug fixed in a tool the repo keeps, say. Cherry-pick that
+   onto its own branch and PR only that; tag the rest. #124 is the worked example: two capture-harness
+   fixes went to `main` as their own PR, and five Review variants with fifty captures became
+   `prototypes/issue-124`.
+
+   **A tag is not out of reach, and "the next session cannot see it" is not a reason to merge.**
+   Tags are fetched by every clone, so a later worktree reads a prototype without merging anything:
+
+   ```sh
+   git show prototypes/issue-124:docs/design/prototype-124/README.md
+   git checkout prototypes/issue-124 -- crates/desktop/src/bin/review-prototype.rs
+   ```
+
+   This is written down because the convention lived **only in `git tag -l`**, and an agent that did
+   not think to look there argued its way into a pull request that merged a prototype into `main`.
 
 ## Start with the context map
 
