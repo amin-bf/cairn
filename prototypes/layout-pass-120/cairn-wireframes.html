@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="lofi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn — layout pass wireframes</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, li, dd, td, th, .badge) { overflow-wrap: anywhere; }
+  :where(img, svg) { max-width: 100%; height: auto; }
+
+  /* ---- wireframe kit -------------------------------------------------- */
+  .wf {
+    --ink: #1c1c1c;
+    --line: #b9b9b9;
+    --fill: #ececec;
+    --ghost: #d6d6d6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--ink);
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    border-radius: 3px;
+    padding: 0;
+    overflow: hidden;
+  }
+  .wf-phone { width: 100%; max-width: 330px; }
+  .wf-wide  { width: 100%; }
+  .wf-pad { padding: 9px 11px; }
+  .wf-sec { border-top: 1px dashed var(--line); }
+  .wf-nav { display: flex; gap: 0; border-bottom: 1.5px solid var(--ink); }
+  .wf-nav > * { flex: 1; text-align: center; padding: 7px 4px; border-right: 1px solid var(--line); letter-spacing: .04em; }
+  .wf-nav > *:last-child { border-right: 0; }
+  .wf-nav .on { background: var(--ink); color: #fff; font-weight: 700; }
+  .wf-btn {
+    display: block; width: 100%; text-align: center;
+    border: 1.2px solid var(--ink); border-radius: 2px;
+    padding: 7px 8px; margin: 5px 0; background: #fff;
+  }
+  .wf-btn.primary { background: var(--ink); color: #fff; }
+  .wf-btn.sm { display: inline-block; width: auto; padding: 3px 9px; margin: 0 4px 0 0; font-size: 10.5px; }
+  .wf-field { border: 1.2px solid var(--line); border-radius: 2px; padding: 6px 8px; margin: 4px 0; background: #fdfdfd; }
+  .wf-field .lbl { font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase; color: #777; display: block; margin-bottom: 2px; }
+  .wf-card { border: 1.2px solid var(--ink); border-radius: 2px; padding: 16px 12px; margin: 6px 0; min-height: 92px; display: flex; flex-direction: column; justify-content: center; }
+  .wf-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px dotted var(--line); }
+  .wf-row:last-child { border-bottom: 0; }
+  .wf-row .grow { flex: 1; min-width: 0; }
+  .wf-band { background: repeating-linear-gradient(135deg, #e4e4e4 0 5px, #f4f4f4 5px 10px); color: #666; text-align: center; padding: 5px; font-size: 9.5px; letter-spacing: .06em; }
+  .wf-kbd { background: repeating-linear-gradient(135deg, #d8d8d8 0 6px, #e8e8e8 6px 12px); color: #555; text-align: center; padding: 26px 6px; font-size: 10px; letter-spacing: .08em; border-top: 1.5px solid var(--ink); }
+  .wf-warn { border: 1.2px solid var(--ink); border-left-width: 4px; padding: 7px 9px; margin: 6px 0; background: #f7f7f7; }
+  .wf-badge { display: inline-block; border: 1px solid var(--line); border-radius: 2px; padding: 1px 6px; font-size: 9.5px; color: #555; }
+  .wf-mut { color: #777; }
+  .wf-sep { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+  .wf-bar { height: 7px; border: 1.2px solid var(--ink); border-radius: 2px; overflow: hidden; background: #fff; }
+  .wf-bar > i { display: block; height: 100%; background: var(--ink); }
+  .wf-toggle { display: flex; border: 1.2px solid var(--ink); border-radius: 2px; overflow: hidden; margin: 5px 0; }
+  .wf-toggle > * { flex: 1; text-align: center; padding: 5px; }
+  .wf-toggle .on { background: var(--ink); color: #fff; }
+  .wf-notice { border: 1.2px solid var(--ink); border-style: dashed; padding: 6px 9px; font-size: 10.5px; }
+  .wf-gap { border: 1.2px dashed var(--ink); border-radius: 2px; text-align: center; padding: 4px; margin: 3px 0; font-size: 10px; color: #444; background: #fafafa; }
+  .wf-slot { color: #888; font-size: 9.5px; }
+
+  /* callout pins */
+  .pin { display: inline-flex; align-items: center; justify-content: center;
+         min-width: 17px; height: 17px; border-radius: 99px; background: #1c1c1c; color: #fff;
+         font-size: 10px; font-weight: 700; font-family: ui-sans-serif, system-ui; padding: 0 4px; vertical-align: middle; }
+  .pinlist { font-size: 13px; line-height: 1.6; }
+  .pinlist li { margin-bottom: 6px; }
+
+  .screen-grid { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+  .screen h4 { font-size: 13px; font-weight: 700; letter-spacing: .02em; margin-bottom: 6px; }
+  .screen .sub { font-size: 12px; color: #666; margin-bottom: 8px; }
+
+  .mermaid { background: transparent; }
+  .anchor { scroll-margin-top: 16px; }
+</style>
+</head>
+<body class="bg-base-200">
+
+<main class="mx-auto max-w-6xl p-5 lg:p-9">
+
+<!-- ======================= HEADER ======================= -->
+<header class="mb-9">
+  <p class="text-xs uppercase tracking-[0.18em] text-base-content/50 mb-2">Cairn · the pass ADR-0006 §10 opened</p>
+  <h1 class="text-4xl lg:text-5xl font-bold leading-tight mb-3">Layout wireframes</h1>
+  <p class="text-lg text-base-content/75 max-w-3xl">
+    Every screen the twenty-eight ADRs specify, arranged. No palette, no type, no spacing decisions —
+    those are a separate pass and this artifact deliberately does not take them.
+  </p>
+
+  <div class="grid sm:grid-cols-3 gap-3 mt-6">
+    <div class="card card-border bg-base-100"><div class="card-body p-4">
+      <p class="text-xs uppercase tracking-wider text-base-content/50">What is settled already</p>
+      <p class="text-sm mt-1">What every surface <strong>says</strong>, and <strong>when</strong> it appears. The ADRs did that work. Nothing here re-decides it.</p>
+    </div></div>
+    <div class="card card-border bg-base-100"><div class="card-body p-4">
+      <p class="text-xs uppercase tracking-wider text-base-content/50">What this settles</p>
+      <p class="text-sm mt-1"><strong>Arrangement.</strong> Where a thing sits, which affordance carries an operation, what yields when the screen shrinks.</p>
+    </div></div>
+    <div class="card card-border bg-base-100"><div class="card-body p-4">
+      <p class="text-xs uppercase tracking-wider text-base-content/50">What is still open</p>
+      <p class="text-sm mt-1"><strong>Finish.</strong> Colour, typography, spacing, case. Including whether the box badge reads <code>Box 3</code> or <code>box 3</code>.</p>
+    </div></div>
+  </div>
+</header>
+
+<!-- ======================= THE SPLIT ======================= -->
+<section class="mb-10 anchor" id="split">
+  <h2 class="text-2xl font-bold mb-3">First, a word that names two jobs</h2>
+  <p class="mb-4 max-w-3xl text-base-content/80">
+    <strong>Fourteen ADRs</strong> name <em>“the visual design pass”</em>. Reading the handoffs side by side, they are
+    not asking for one thing. ADR-0006 §10 opened it as a <em>look-and-feel</em> question — “colors, typography,
+    spacing”. ADR-0021 §10 and ADR-0018 put <em>where a row sits</em> and <em>whether reordering is a drag</em> into
+    the same bag. Those have different dependencies: arrangement is constrained hard by the ADRs, and finish is genuinely free.
+  </p>
+  <p class="mb-4 max-w-3xl text-base-content/80">
+    ADR-0021's own Context already draws the line without naming it —
+    <em>“what an entry says, where it sits and when it appears were answerable without knowing a single colour.”</em>
+    So the term wants splitting:
+  </p>
+
+  <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+    <table class="table table-sm">
+      <thead><tr><th>Term</th><th>Answers</th><th>Constrained by</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td class="font-semibold">Wording</td><td>What a surface says, and when</td><td>The ADRs, exhaustively</td><td class="whitespace-nowrap">settled</td></tr>
+        <tr><td class="font-semibold">Layout pass</td><td>Where it sits, which affordance carries it, what yields under pressure</td><td>Reachability (0021 §1), the two-speakers rule (0015 §5), the form pane's first screen (0025)</td><td class="whitespace-nowrap font-semibold">this artifact</td></tr>
+        <tr><td class="font-semibold">Finish pass</td><td>Palette, type, spacing, case, weight</td><td>Nothing yet — a blank slate by ADR-0006 §10</td><td class="whitespace-nowrap">open</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="text-sm text-base-content/60 mt-3">
+    Proposed as vocabulary for <code>crates/app/src/CONTEXT.md</code> — the exact text is at the bottom of this page, unwritten until you have looked at it.
+  </p>
+</section>
+
+<!-- ======================= NAV MODEL ======================= -->
+<section class="mb-10 anchor" id="model">
+  <h2 class="text-2xl font-bold mb-3">The navigation model</h2>
+  <p class="mb-5 max-w-3xl text-base-content/80">
+    Three destinations is the floor ADR-0021 §1 fixed. Everything else hangs off one of them —
+    <em>except one screen</em>, which can precede any destination and therefore belongs to none. That exception
+    is the modelling gap this pass ran into; it is written up below.
+  </p>
+
+  <div class="card card-border bg-base-100"><div class="card-body">
+    <pre class="mermaid">
+flowchart TD
+  A["App"] --> R["REVIEW"]
+  A --> N["NOTES"]
+  A --> S["SETTINGS"]
+
+  R --> R1["Count picker<br/>4 worded states"]
+  R --> R2["Card · reveal · grade"]
+  R --> R3["Checkpoint"]
+  R --> R4["Session end<br/>+ leech pointer"]
+  R --> R5["Leech screen<br/>+ suspended, permanent"]
+
+  N --> N1["Note list<br/>deck · tag · text"]
+  N --> N2["Editor<br/>form | cards"]
+
+  S --> S1["New-card rate"]
+  S --> S2["Optimise + nudge"]
+  S --> S3["Export screen → report"]
+  S --> S4["Backup + nudge"]
+  S --> S5["Files this app wrote"]
+  S --> S6["Sync settings"]
+  S6 --> S7["Enrolment → cold start"]
+
+  R5 -.->|edit| N2
+  R2 -.->|edit = reveal| N2
+  N1 -.->|edit / create| N2
+
+  P["IMPORT / RESTORE PREVIEW<br/>belongs to no destination"]
+  F1["file list"] --> P
+  F2["desktop drop"] --> P
+  F3["Android intent<br/>can cold-start"] --> P
+  S5 --- F1
+  P -.->|applied| N1
+  P -.->|cancelled from cold start| R1
+    </pre>
+  </div></div>
+
+  <div class="grid sm:grid-cols-3 gap-3 mt-4">
+    <div class="alert alert-soft text-sm"><span><strong>Solid</strong> — reachable from the nav row.</span></div>
+    <div class="alert alert-soft text-sm"><span><strong>Dotted</strong> — an entrance into the shared editor, or where a screen returns you.</span></div>
+    <div class="alert alert-soft text-sm"><span><strong>The preview</strong> takes the whole screen and draws no nav row. It is the only one.</span></div>
+  </div>
+</section>
+
+<!-- ======================= DECISIONS ======================= -->
+<section class="mb-10 anchor" id="decisions">
+  <h2 class="text-2xl font-bold mb-1">Six arrangement decisions</h2>
+  <p class="mb-5 text-base-content/70 max-w-3xl">Each one was left open on purpose by an ADR. The alternatives are the ones those ADRs named.</p>
+
+  <div class="space-y-4">
+
+    <!-- D1 -->
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">D1</span>
+        <h3 class="card-title text-lg">The nav row is pinned to the top, and yields to the soft keyboard</h3>
+        <span class="badge badge-outline badge-sm">decided · in CONTEXT.md</span>
+      </div>
+      <p class="text-sm text-base-content/80">
+        This is the one decision that touches a stated constraint from both sides, so it is first.
+        ADR-0021 §1 requires all three destinations to be reachable “from a <strong>persistent</strong> affordance”, because
+        “a destination reachable only by completing a session is not reachable”. ADR-0025's Consequences make
+        the form pane's first screen “a specified resource”, with the destructive-edit warning moved into it
+        <em>because nowhere else works</em>. A pinned bar spends that resource; a scrolling one is not persistent.
+      </p>
+      <div class="overflow-x-auto"><table class="table table-sm mt-1">
+        <thead><tr><th>Option</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Scrolls with the content <span class="badge badge-sm badge-outline">what <code>lib.rs:448</code> does today</span></td><td>Honest about the resource, but the affordance is not persistent — you can be deep in a note list with no way out on screen.</td></tr>
+          <tr><td>Always pinned</td><td>Costs ~48dp of the 565dp that survives a keyboard, out of the exact band the warning was moved into.</td></tr>
+          <tr class="bg-base-200"><td><strong>Pinned, and hidden while the soft keyboard is up</strong></td><td>Full height for typing; the bar returns the moment the keyboard goes down. <strong>One rule, one fact.</strong></td></tr>
+        </tbody>
+      </table></div>
+      <p class="text-sm text-base-content/80 mt-1">
+        The third is only expressible because ADR-0026 §5 made the inset seam distinguish
+        <em>no soft keyboard on this platform</em> from <em>keyboard down</em>. On desktop the seam says the first,
+        so the bar is simply always pinned — that is one rule reading one fact, not platform-conditional
+        behaviour, so client-stack rule 3 is untouched.
+      </p>
+    </div></div>
+
+    <!-- D2 -->
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">D2</span>
+        <h3 class="card-title text-lg">Reordering is two taps, not a drag</h3>
+        <span class="badge badge-outline badge-sm">decided</span>
+      </div>
+      <p class="text-sm text-base-content/80">
+        ADR-0021 §4 fixed <em>the operation</em> — “place this note before/after that one”, one write — and explicitly
+        declined to pin the gesture, noting that “long-press-drag in a scrolling list is genuinely poor on a phone,
+        so pinning the spec to a drag would decide a handset interaction from a desktop assumption.”
+      </p>
+      <p class="text-sm text-base-content/80">
+        <strong>So: tap <code>Move</code> on a row, and every gap between rows becomes a target. Tap one.</strong>
+        It is the specified operation rendered literally, it is identical under touch and mouse
+        (ADR-0006 §5's finding, preserved), it needs no long-press and no auto-scroll, and it is well-defined
+        inside a filtered list — you are placing between two <em>visible</em> neighbours, which is exactly what
+        §4 says the order key buys.
+      </p>
+    </div></div>
+
+    <!-- D3 -->
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">D3</span>
+        <h3 class="card-title text-lg"><em>New note</em> sits at the top of the list and the bottom of the editor</h3>
+      </div>
+      <p class="text-sm text-base-content/80">
+        Two placements for one action, and the asymmetry is the point.
+        <strong>Top of the note list</strong>, because ADR-0021 §4 warns that “the end of the deck I am looking at”
+        is the intuitive misreading and is not expressible — a new note goes to the end of the <em>collection's</em>
+        order. A create button at the bottom of a filtered list asserts the misreading with its position.
+        <strong>Bottom of the editor's form pane</strong>, because under ADR-0021 §7's autosave there is no Save
+        button competing for that spot — §10 of that ADR says as much — and it is the one control there a phone
+        cannot reach by accelerator.
+      </p>
+    </div></div>
+
+    <!-- D4 -->
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">D4</span>
+        <h3 class="card-title text-lg">The two panes split on width; the toggle carries the dormant marker</h3>
+      </div>
+      <p class="text-sm text-base-content/80">
+        ADR-0025 §5 measured that both panes fit on the handset, so <em>“the toggle stands on its own merits rather
+        than on necessity”</em>. It keeps them: the card pane's job is “what will I be asked”, which wants a card
+        drawn at card size, not a column half a phone wide. The <code>· 1 dormant</code> marker rides the toggle —
+        and is <strong>never the warning</strong>, which ADR-0018 §4 established a count cannot be.
+      </p>
+    </div></div>
+
+    <!-- D5 -->
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">D5</span>
+        <h3 class="card-title text-lg">One screen draws no nav row: the import / restore preview</h3>
+      </div>
+      <p class="text-sm text-base-content/80">
+        ADR-0022 §6: three entry points, one screen, and it must be cold-start capable because the Android launch
+        intent “can cold-start the application directly into an import”. It is explicitly
+        <em>not an overlay and not the notice channel</em>. So it cannot be drawn inside a destination — there may
+        not be one yet. It takes the screen, and cancelling from a cold start lands on the count picker.
+        The <strong>file list</strong> is a different thing and does live in Settings (ADR-0022 §9), because it is
+        the only inbound surface that needs a home.
+      </p>
+    </div></div>
+
+    <!-- D6 -->
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">D6</span>
+        <h3 class="card-title text-lg">The notice channel is one line beneath the nav row, on every destination</h3>
+      </div>
+      <p class="text-sm text-base-content/80">
+        ADR-0015 §5 gives it exactly two speakers — a dead grant, and ADR-0004 §8's clock-skew warning — and
+        requires persistent and non-modal. Below the nav row is the only place that is all three without
+        becoming a status area: it is empty almost always, so it costs nothing when silent, and it cannot be
+        mistaken for a sync indicator because <strong>there isn't one</strong>. No badge, no icon, no checkmark,
+        no “syncing…”, anywhere in the chrome, ever.
+      </p>
+    </div></div>
+
+  </div>
+</section>
+
+<!-- ======================= REVIEW ======================= -->
+<section class="mb-10 anchor" id="review">
+  <div class="flex items-baseline gap-3 mb-1">
+    <h2 class="text-2xl font-bold">Review</h2>
+    <span class="text-sm text-base-content/50">ADR-0006, 0010, 0011</span>
+  </div>
+  <p class="mb-6 text-base-content/70 max-w-3xl">The picker, the card, the checkpoint, the end, and the leech screen that hangs off it.</p>
+
+  <div class="screen-grid">
+
+    <!-- picker normal -->
+    <div class="screen">
+      <h4>1 · Count picker <span class="wf-mut">— backlog</span></h4>
+      <p class="sub">The ordinary opening screen.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad">
+          <p><strong>127 due</strong> — pick a comfortable size,<br>the rest will keep.</p>
+          <hr class="wf-sep">
+          <div style="display:flex;gap:6px">
+            <span class="wf-btn sm" style="flex:1;text-align:center">10</span>
+            <span class="wf-btn sm" style="flex:1;text-align:center">20</span>
+            <span class="wf-btn sm" style="flex:1;text-align:center">40</span>
+            <span class="wf-btn sm" style="flex:1;text-align:center">All 127</span>
+          </div>
+          <hr class="wf-sep">
+          <div class="wf-btn">3 cards are costing you a lot · 2 suspended</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">1</span> Backlog is <em>framed</em>, never a bare number (0006 §7). Suspended cards are excluded from the count (0010 §8), or it can never reach zero.</li>
+        <li><span class="pin">2</span> Sizes capped by what is actually due, so the picker never offers work that does not exist.</li>
+        <li><span class="pin">3</span> The leech screen's <strong>durable</strong> entry (0010 §6) — it is a sub-state of Review, not a fourth destination.</li>
+      </ul>
+    </div>
+
+    <!-- worded states -->
+    <div class="screen">
+      <h4>2 · The four worded states</h4>
+      <p class="sub">Never a blank screen, never a session that silently holds zero cards.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">FRESH DECK — zero review history anywhere</p>
+          <p>A fresh deck. These cards are new.</p>
+          <span class="wf-btn sm">Start 10</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">NOTHING DUE, NEW CARDS REMAIN</p>
+          <p>Today's repeats are done.<br>There are cards you haven't met yet.</p>
+          <span class="wf-btn sm">Introduce 5</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">NOTHING DUE, NOTHING NEW</p>
+          <p>Nothing due right now.</p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">BACKLOG — screen 1</p>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">4</span> States 1 and 2 are <strong>indistinguishable from the queue alone</strong> (0011 §2). Collapsing them greets a reviewer of four years with “a fresh deck”. The only separator is whether any review exists at all.</li>
+        <li><span class="pin">5</span> State 2 states the fact and invites. It never says the user is behind — reaching it means the day's repeats are <em>done</em>.</li>
+      </ul>
+    </div>
+
+    <!-- card face down -->
+    <div class="screen">
+      <h4>3 · Card, before reveal</h4>
+      <p class="sub">The card <em>is</em> the tap target.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad" style="display:flex;gap:10px;align-items:center">
+          <div class="grow" style="flex:1">
+            <div class="wf-bar"><i style="width:35%"></i></div>
+            <span class="wf-mut">7 / 20</span>
+          </div>
+          <span class="wf-badge">6:12</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <div class="wf-card" style="align-items:center;text-align:center">
+            <div>der Hund</div>
+            <div class="wf-mut" style="margin-top:14px;font-size:10px">tap to reveal</div>
+          </div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">6</span> Persistent dashboard: progress against the chosen count, and the timer (0006 §7). The count counts <strong>gradings</strong>, so the bar always moves when the user acts (0011 §9).</li>
+        <li><span class="pin">7</span> <strong>No box badge here.</strong> It appears only after reveal (0006 §6) — before it, it would read as a claim about the queue.</li>
+        <li><span class="pin">8</span> <strong>Nothing but the card. <em>Edit note</em> is gone from this state entirely</strong> — ADR-0029 §1,
+          written and landed. The card <em>is</em> the reveal target, so a full-width control beneath it made a mis-tap spend
+          the reveal on a card nobody chose to look at. The whole state is removed rather than the control redesigned, which
+          also <strong>retires</strong> ADR-0021 §6's <em>“entering the editor counts as a reveal”</em> — that rule had exactly
+          one customer, and this was it.
+          <span class="badge badge-sm badge-outline">your call, Q5</span></li>
+      </ul>
+
+      <div class="card card-border bg-base-100 mt-4"><div class="card-body">
+        <h5 class="font-bold text-sm">“Do we have to keep it before reveal? Why not only after?”
+          <span class="badge badge-sm badge-neutral align-middle">answered — ADR-0029, landed</span></h5>
+        <p class="text-sm text-base-content/80 mt-1">
+          <strong>This was an ADR question, not a layout one</strong> — which is why the pass could not take it alone.
+          ADR-0021 §6 fixed the action “at any point in the card's life”, and its argument is ADR-0010 §7's:
+          the honest diagnosis of most leeches is a <em>defective card</em>, and routing you there only from the
+          end-of-session pointer means carrying “the note about X was wrong” across twenty more cards.
+          <em>“The moment a defective card can be diagnosed is the moment it is in front of you.”</em>
+        </p>
+        <div class="overflow-x-auto"><table class="table table-sm mt-1">
+          <thead><tr><th>For restricting it to post-reveal</th><th>For keeping it before</th></tr></thead>
+          <tbody><tr>
+            <td class="align-top text-sm">
+              <p><strong>It would delete a rule rather than add one.</strong> “Entering the editor counts as a reveal” exists
+              <em>solely</em> for the pre-reveal case — after reveal the card is already revealed and the clause has nothing
+              to do. Restrict Edit to post-reveal and ADR-0006 §3's amendment becomes dead text.</p>
+              <p class="mt-2">Most defects — asks two facts at once, ambiguous answer, typo in the back — <strong>are only
+              visible once you have seen both sides</strong>.</p>
+              <p class="mt-2">And it removes your original hazard outright rather than mitigating it: no pre-reveal control,
+              no accidental reveal.</p>
+            </td>
+            <td class="align-top text-sm">
+              <p><strong>One class of defect is judgeable only before the reveal, and the loss is one-directional.</strong>
+              “Is this prompt answerable?” — ambiguous, gives away its own answer, malformed markup — is a question you
+              <em>cannot</em> ask once you know what it wanted. After reveal you are contaminated: you can no longer tell
+              whether the prompt was findable or whether you simply now know.</p>
+              <p class="mt-2">That is the same shape as ADR-0006 §4's own reasoning about grading, one step earlier.</p>
+            </td>
+          </tr></tbody>
+        </table></div>
+        <p class="text-sm text-base-content/80 mt-2">
+          <strong>My read:</strong> the second column is the stronger argument but the rarer case, and the first column is
+          right that the reveal-counting machinery has no other customer. Either way the change amends
+          <strong>ADR-0021 §6 and ADR-0006 §3</strong>, so it wants an ADR — see <a class="link" href="#open">Q5</a>.
+        </p>
+        <div class="alert alert-soft text-sm mt-1"><span>
+          <strong>Resolved: restrict to post-reveal.</strong> Placement and this question turned out to be one question —
+          the full-width button you preferred is where the accidental-reveal cost is highest, and that cost exists
+          <em>only</em> pre-reveal. So you keep the layout and it stops costing anything.
+          <strong><a class="link" href="#adr">ADR-0029</a> is written, the two amended ADRs carry inline notes,
+          <code>review.rs</code> implements it, and a test guards it</strong> — verified by injecting the regression and
+          watching the test fail, since a guard that cannot fail guards nothing.
+        </span></div>
+      </div></div>
+    </div>
+
+    <!-- revealed -->
+    <div class="screen">
+      <h4>4 · Card, revealed</h4>
+      <p class="sub">Grades appear only now.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad" style="display:flex;gap:10px;align-items:center">
+          <div class="grow" style="flex:1"><div class="wf-bar"><i style="width:35%"></i></div><span class="wf-mut">7 / 20</span></div>
+          <span class="wf-badge">6:04</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <div class="wf-card" style="align-items:center;text-align:center">
+            <div>der Hund</div>
+            <hr class="wf-sep" style="width:60%">
+            <div>the dog</div>
+            <div style="margin-top:10px"><span class="wf-badge">Box 3</span></div>
+          </div>
+          <div class="wf-btn">Forgot &nbsp;·&nbsp; 1d</div>
+          <hr class="wf-sep">
+          <div class="wf-btn">Barely &nbsp;·&nbsp; 4d</div>
+          <div class="wf-btn">Good &nbsp;·&nbsp; 9d</div>
+          <div class="wf-btn">Easy &nbsp;·&nbsp; 21d</div>
+          <hr class="wf-sep">
+          <div class="wf-btn">Edit note</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">9</span> Four buttons, full width, stacked. Not a grid — that was revised live in round 2 (0006 §4). A rule at the break between <em>Forgot</em> and the three passes, and another between <em>Easy</em> and <em>Edit note</em>.</li>
+        <li><span class="pin">10</span> Interval preview per button, confirmed wanted once seen next to the button rather than described.</li>
+        <li><span class="pin">11</span> The badge reads <code>new</code> for a card with no history — <strong>never a box number</strong> (0006 §6 as corrected). The <em>case and face are the finish pass's</em>, so <code>Box 3</code> here is conformant, not decided.</li>
+        <li><span class="pin">·</span> <strong>This is the only state with an edit entrance</strong> (0029 §1), full width, below the grade stack. Here a mis-tap costs nothing — the answer is already on screen, so there is no reveal left to spend.</li>
+      </ul>
+    </div>
+
+    <!-- checkpoint -->
+    <div class="screen">
+      <h4>5 · Checkpoint</h4>
+      <p class="sub">Ten minutes. A courtesy check-in, not a wall.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad" style="display:flex;gap:10px;align-items:center">
+          <div class="grow" style="flex:1"><div class="wf-bar"><i style="width:60%"></i></div><span class="wf-mut">12 / 20</span></div>
+          <span class="wf-badge">0:00</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <div class="wf-warn">
+            <strong>Ten minutes.</strong><br>
+            <span class="wf-mut">Finish here, or keep going?</span>
+            <div style="margin-top:6px">
+              <span class="wf-btn sm">Finish here</span>
+              <span class="wf-btn sm">Keep going</span>
+            </div>
+          </div>
+          <div class="wf-card" style="align-items:center;text-align:center;opacity:.75">
+            <div>die Katze</div>
+            <div class="wf-mut" style="margin-top:14px;font-size:10px">tap to reveal</div>
+          </div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">12</span> <strong>The card stays visible and gradable underneath</strong> (0006 §1). The checkpoint sits above it rather than replacing it — the reviewer can grade what they are looking at while deciding.</li>
+        <li><span class="pin">13</span> “Keep going” dismisses it and the session continues <em>untimed</em>. It never returns.</li>
+      </ul>
+    </div>
+
+    <!-- session end -->
+    <div class="screen">
+      <h4>6 · Session end</h4>
+      <p class="sub">The one slot, and it is spoken for.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad">
+          <p><strong>20 reviewed.</strong></p>
+          <p class="wf-mut">107 still waiting, that's fine.</p>
+          <hr class="wf-sep">
+          <div class="wf-warn">
+            3 cards are costing you a lot.
+            <div style="margin-top:6px">
+              <span class="wf-btn sm">Show me</span>
+              <span class="wf-btn sm">Not now</span>
+            </div>
+          </div>
+          <div class="wf-btn">Back to review</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">14</span> The pointer covers only cards that crossed the floor <strong>in this sitting</strong> — held in memory, <em>zero stored state</em>: no dismissal flag, no last-seen marker (0010 §6).</li>
+        <li><span class="pin">15</span> A pointer, <strong>not a decision point</strong>. No suspend and no delete here, when the user is most frustrated and least able to choose.</li>
+        <li><span class="pin">16</span> <strong>This slot holds one speaker only.</strong> The optimisation nudge (0014 §2) and the backup nudge (0016 §6) were both refused it. A third is not arguable.</li>
+      </ul>
+    </div>
+
+    <!-- leech screen -->
+    <div class="screen" style="grid-column: 1 / -1">
+      <h4>7 · Leech screen</h4>
+      <p class="sub">The one place <em>cards</em> are listed rather than notes.</p>
+      <div class="wf wf-wide">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad">
+          <p><strong>Costing you the most</strong> <span class="wf-mut">— worst first</span></p>
+          <div class="wf-row">
+            <div class="grow"><div>l'armoire → the wardrobe</div><div class="wf-mut">22 reviews, 14 minutes, still failing</div></div>
+            <div style="flex:none"><span class="wf-btn sm primary">Edit</span><span class="wf-btn sm">Suspend</span><span class="wf-btn sm">Delete</span></div>
+          </div>
+          <div class="wf-row">
+            <div class="grow"><div>{{2}} in “…le mercredi…”</div><div class="wf-mut">17 reviews, 9 minutes, still failing</div></div>
+            <div style="flex:none"><span class="wf-btn sm primary">Edit</span><span class="wf-btn sm">Suspend</span><span class="wf-btn sm">Delete</span></div>
+          </div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p><strong>Suspended</strong> <span class="wf-mut">— 2 cards</span></p>
+          <div class="wf-row">
+            <div class="grow">der Sachverhalt → the state of affairs</div>
+            <div style="flex:none"><span class="wf-btn sm">Unsuspend</span></div>
+          </div>
+          <div class="wf-row">
+            <div class="grow wf-mut">(card no longer generated)</div>
+            <div style="flex:none"><span class="wf-btn sm">Unsuspend</span></div>
+          </div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">17</span> <strong>Ranked, never filtered</strong> (0010 §4). No sort control, no cut. The floor of four failure days in ninety is what lets the empty state say plainly that nothing is hurting.</li>
+        <li><span class="pin">18</span> Answer duration is here and nowhere else. Rejected as a <em>trigger</em> in §3, it does the one job nothing else can: “22 reviews, 14 minutes, still failing” converts an annoyance into a decision in a way “4 lapses” does not.</li>
+        <li><span class="pin">19</span> <strong>Edit is primary</strong> — the honest diagnosis of most leeches is a defective card. And <strong>never a tag</strong>: tags are content, content travels in a <code>.cdeck</code>, so a leech tag publishes a private struggle into someone else's deck (0010 §7).</li>
+        <li><span class="pin">20</span> The suspended section is <strong>permanent</strong>, present even when empty (0010 §8) — once out of the due count this is the only place those cards exist. Suspension is never a one-way door.</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- ======================= NOTES ======================= -->
+<section class="mb-10 anchor" id="notes">
+  <div class="flex items-baseline gap-3 mb-1">
+    <h2 class="text-2xl font-bold">Notes</h2>
+    <span class="text-sm text-base-content/50">ADR-0012, 0018, 0021, 0025</span>
+  </div>
+  <p class="mb-6 text-base-content/70 max-w-3xl">The browse surface, and the editor it opens — with four entrances and no Save button.</p>
+
+  <div class="screen-grid">
+
+    <!-- note list -->
+    <div class="screen" style="grid-column: 1 / -1">
+      <h4>8 · Note list</h4>
+      <p class="sub">Notes, not cards. One order, three filters, no schedule information at all.</p>
+      <div class="wf wf-wide">
+        <div class="wf-nav"><div>Review</div><div class="on">Notes</div><div>Settings</div></div>
+        <div class="wf-pad" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span class="wf-btn sm primary">+ New note</span>
+          <span class="wf-btn sm">Deck: French A1 ▾</span>
+          <span class="wf-btn sm">Tag: — ▾</span>
+          <span class="wf-field" style="flex:1;min-width:130px;margin:0">search notes</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <div class="wf-row"><span class="wf-mut">⠿</span><div class="grow"><div>bonjour · hello</div><div class="wf-mut">vocab · French A1</div></div><span class="wf-btn sm">Move</span><span class="wf-btn sm">Edit</span><span class="wf-btn sm">Delete</span></div>
+          <div class="wf-row"><span class="wf-mut">⠿</span><div class="grow"><div>merci · thank you</div><div class="wf-mut">vocab · French A1</div></div><span class="wf-btn sm">Move</span><span class="wf-btn sm">Edit</span><span class="wf-btn sm">Delete</span></div>
+          <div class="wf-row"><span class="wf-mut">⠿</span><div class="grow"><div>Le mercredi, je {{1::vais}} au {{2::marché}}.</div><div class="wf-mut">cloze · French A1</div></div><span class="wf-btn sm">Move</span><span class="wf-btn sm">Edit</span><span class="wf-btn sm">Delete</span></div>
+        </div>
+        <div class="wf-pad wf-sec"><span class="wf-mut">New deck… · Rename deck… · Delete deck…</span></div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">21</span> <strong>No box, no due count, not even aggregated</strong> (0021 §2). A note generates several cards in several boxes, so any per-note figure is boxes <em>counted</em>, which ADR-0001 §3 forbids outright. This is the line most likely to be crossed by someone adding a helpful column.</li>
+        <li><span class="pin">22</span> <strong>One order and no sort control</strong> (0021 §4). A drag inside an alphabetical view has no definable result. Filters narrow; nothing re-sorts. Text search is the answer to “find this note”, and it is load-bearing rather than a convenience.</li>
+        <li><span class="pin">23</span> <strong>No <em>Suspend</em> here.</strong> Create, edit, delete only — suspension is per-card and has its permanent home on the leech screen, and a second place to suspend splits that home in two.</li>
+        <li><span class="pin">24</span> <em>New note</em> sits at the <strong>top</strong> — see <a class="link" href="#decisions">D3</a>. Deck creation and rename live beside the deck filter (0021 §9), where decks are already visible.</li>
+        <li><span class="pin">25</span> The order key is <strong>never shown</strong>. The list's own sequence is the rendering of order, and it is the only honest one.</li>
+      </ul>
+    </div>
+
+    <!-- move mode -->
+    <div class="screen">
+      <h4>9 · Move mode <span class="badge badge-sm badge-outline">proposed</span></h4>
+      <p class="sub">The operation, rendered literally. One write.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div class="on">Notes</div><div>Settings</div></div>
+        <div class="wf-pad">
+          <div class="wf-warn">Placing <strong>“merci · thank you”</strong><br><span class="wf-btn sm" style="margin-top:5px">Cancel</span></div>
+          <div class="wf-gap">place here</div>
+          <div class="wf-row"><div class="grow">bonjour · hello</div></div>
+          <div class="wf-gap">place here</div>
+          <div class="wf-row"><div class="grow wf-mut">Le mercredi, je {{1::vais}}…</div></div>
+          <div class="wf-gap">place here</div>
+          <div class="wf-row"><div class="grow">au revoir · goodbye</div></div>
+          <div class="wf-gap">place here</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">26</span> Placing between two <strong>visible</strong> neighbours is well-defined even inside a filter — hidden notes that sat between them stay between them. That is the dividend of the order key (0021 §4), and it is precisely what renumbering could not do.</li>
+        <li><span class="pin">27</span> No long-press, no auto-scroll, no drag. Identical under touch and mouse, which is ADR-0006 §5's finding kept intact.</li>
+      </ul>
+    </div>
+
+    <!-- empty -->
+    <div class="screen">
+      <h4>10 · Empty collection</h4>
+      <p class="sub">The same words on Review and on Notes.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div class="on">Notes</div><div>Settings</div></div>
+        <div class="wf-pad" style="padding-top:26px;padding-bottom:26px">
+          <p>Nothing here yet.</p>
+          <p class="wf-mut">Create a deck, import one, or set up sync to bring in another device's collection.</p>
+          <div class="wf-btn primary">+ New note</div>
+          <div class="wf-btn">New deck</div>
+          <div class="wf-btn">Set up sync</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">28</span> ADR-0015 §7's copy, unchanged — and all three verbs now have a surface behind them (0021 §2). This is where the second-device user, whose entire reason for installing is sync, meets enrolment without a first-run prompt.</li>
+      </ul>
+    </div>
+
+    <!-- editor desktop -->
+    <div class="screen" style="grid-column: 1 / -1">
+      <h4>11 · Editor — desktop, two panes</h4>
+      <p class="sub">A form, and the cards this note generates. Not a preview of the fields.</p>
+      <div class="wf wf-wide">
+        <div class="wf-nav"><div>Review</div><div class="on">Notes</div><div>Settings</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr">
+          <div class="wf-pad" style="border-right:1.5px solid #1c1c1c">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span class="wf-btn sm">Kind: vocab ▾</span>
+              <span class="wf-btn sm">Deck: French A1 ▾</span>
+            </div>
+            <div class="wf-warn">
+              <strong>1 card will stop being asked.</strong><br>
+              <span class="wf-mut">Meaning → Term has 5 reviews. Nothing is deleted — the reviews stay in the log and reattach by themselves if the content comes back.</span>
+              <div style="margin-top:5px"><span class="wf-btn sm">Undo</span></div>
+            </div>
+            <div class="wf-field"><span class="lbl">Term</span>l'armoire</div>
+            <div class="wf-field"><span class="lbl">Meaning</span></div>
+            <div class="wf-field"><span class="lbl">Pronunciation · shown with Term, never asked</span>laʁ.mwaʁ</div>
+            <hr class="wf-sep">
+            <div class="wf-btn">+ New note <span class="wf-mut">⌘⏎</span></div>
+          </div>
+          <div class="wf-pad">
+            <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">CARDS THIS NOTE GENERATES</p>
+            <div class="wf-card">
+              <div class="wf-slot">slot 0</div>
+              <div>l'armoire</div><hr class="wf-sep"><div>—</div>
+              <div class="wf-mut" style="font-size:10px">no reviews</div>
+            </div>
+            <div class="wf-row"><span class="wf-slot">slot 1</span><div class="grow">Meaning → Term · <strong>dormant</strong> · 5 reviews kept</div></div>
+          </div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">29</span> <strong>The warning is above the fields</strong>, not after the last one (0025 §4). Below, it does not survive a soft keyboard — all that is left on screen at the moment of the edit is the <code>· 1 dormant</code> counter, which ADR-0018 §4 established does not warn.</li>
+        <li><span class="pin">30</span> A <strong>dormant entry is a single line</strong>, never a card and never a greyed card (0018 §2) — a dormant card is the <em>absence</em> of a generated card and usually has nothing left to draw. Its history reads <em>kept</em>, never <em>lost</em>.</li>
+        <li><span class="pin">31</span> Ordered by <strong>raw slot number</strong>, live and dormant alike — never grouped by dormancy, and never sorted on <code>ordinal &amp; 0x7FFF</code> (0018 §1), which would interleave cloze blanks among fixed-arity slots. A deleted blank then shows its dormant entry <em>in its own gap</em>, which is what kept the rule.</li>
+        <li><span class="pin">32</span> <code>· shown with Term, never asked</code> is stated where it is typed; the pane then demonstrates it. Label plus demonstration beat either alone (0012 §4).</li>
+        <li><span class="pin">33</span> <strong>No Save and no discard.</strong> Autosave per field on blur or short idle; a new note commits on its first non-empty field (0021 §7). Enter is inert in every single-line field, <em>the last one included</em> — “the last field” is a property of the kind definition, which is data.</li>
+      </ul>
+    </div>
+
+    <!-- editor phone -->
+    <div class="screen">
+      <h4>12 · Editor — handset, keyboard up</h4>
+      <p class="sub">923dp down to 565dp. What survives is the first screen.</p>
+      <div class="wf wf-phone">
+        <div class="wf-band">status bar — reserved</div>
+        <div class="wf-pad" style="padding-bottom:4px">
+          <div style="display:flex;gap:6px"><span class="wf-btn sm">vocab ▾</span><span class="wf-btn sm">French A1 ▾</span></div>
+          <div class="wf-toggle"><div class="on">Write</div><div>Cards · 1 dormant</div></div>
+          <div class="wf-warn">
+            <strong>1 card will stop being asked.</strong><br>
+            <span class="wf-mut">Meaning → Term, 5 reviews. Nothing is deleted.</span>
+            <div style="margin-top:5px"><span class="wf-btn sm">Undo</span></div>
+          </div>
+          <div class="wf-field"><span class="lbl">Term</span>l'armoire|</div>
+          <div class="wf-field"><span class="lbl">Meaning</span></div>
+        </div>
+        <div class="wf-kbd">soft keyboard — inset read, band reserved</div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">34</span> <strong>The nav row is gone while the keyboard is up</strong> — decision <a class="link" href="#decisions">D1</a>. It returns the moment the keyboard goes down.</li>
+        <li><span class="pin">35</span> The band is <em>reserved</em>, which gives the scroll area a real range over the covered region. Unreserved, the covered 39% is <strong>unreachable, not scrolled off</strong> (0025 §1) — and the first line of text draws under the clock.</li>
+        <li><span class="pin">36</span> Reserving is <strong>necessary and not sufficient</strong>. It makes the warning <em>reachable</em>; putting it above the fields is what makes it <em>visible at the moment of the edit</em>.</li>
+        <li><span class="pin">37</span> The toggle's <code>· 1 dormant</code> marker demonstrates; it never warns. Two speakers, not three.</li>
+      </ul>
+    </div>
+
+    <!-- editor cloze -->
+    <div class="screen">
+      <h4>13 · Editor — cloze, blank list</h4>
+      <p class="sub">Gaps are normal, and are shown as normal.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div class="on">Notes</div><div>Settings</div></div>
+        <div class="wf-pad">
+          <div style="display:flex;gap:6px"><span class="wf-btn sm">cloze ▾</span><span class="wf-btn sm">French A1 ▾</span></div>
+          <div class="wf-field" style="min-height:56px"><span class="lbl">Text</span>Le mercredi, je {{1::vais}} au {{3::marché}}.</div>
+          <span class="wf-btn sm">Blank it</span>
+          <hr class="wf-sep">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">BLANKS</p>
+          <div class="wf-row"><span class="wf-slot">1</span><div class="grow">“vais” · 1 place · 12 reviews</div></div>
+          <div class="wf-row"><span class="wf-slot">3</span><div class="grow">“marché” · 1 place · no reviews</div></div>
+          <p class="wf-mut">Blank 2 was deleted. Numbers are never reused.</p>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">38</span> A new blank is numbered <strong>one above the highest ever used</strong>, never the lowest free one (0012 §3). Filling a gap hands the new blank the deleted card's identity, so its reviews reattach to different content.</li>
+        <li><span class="pin">39</span> One line per blank — number, text hidden, how many places, history in words. A compact chip row was tried and rejected as unreadable.</li>
+        <li><span class="pin">40</span> A half-typed <code>{{1::</code> stays literal. Live preview means the parser sees every keystroke, and an inferred number is an invented identity.</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- ======================= SETTINGS ======================= -->
+<section class="mb-10 anchor" id="settings">
+  <div class="flex items-baseline gap-3 mb-1">
+    <h2 class="text-2xl font-bold">Settings</h2>
+    <span class="text-sm text-base-content/50">ADR-0011, 0014, 0015, 0016, 0019, 0022</span>
+  </div>
+  <p class="mb-6 text-base-content/70 max-w-3xl">
+    Everything file-shaped and everything sync-shaped. Four groups, in the order a user meets them.
+  </p>
+
+  <div class="screen-grid">
+
+    <div class="screen">
+      <h4>14 · Settings root</h4>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div>Notes</div><div class="on">Settings</div></div>
+        <div class="wf-pad">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">REVIEW</p>
+          <div class="wf-row"><div class="grow">New cards a day</div><span class="wf-field" style="margin:0;width:56px;text-align:right">5</span></div>
+          <p class="wf-mut">The only enforced limit. Set it to 0 to clear a backlog, then turn it back on.</p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">SCHEDULER</p>
+          <div class="wf-btn">Optimise</div>
+          <p class="wf-mut">Fitted over 1,204 reviews. You've reviewed 380 times since.</p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">FILES</p>
+          <div class="wf-btn">Export a deck</div>
+          <div class="wf-btn">Back up the collection</div>
+          <p class="wf-mut">Last backup 3 March. 1,240 reviews since.</p>
+          <div class="wf-btn">Files this application wrote</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">SYNC</p>
+          <div class="wf-btn">Set up sync</div>
+          <p class="wf-mut">Your devices catch up when you open the app.</p>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">41</span> Both nudges are <strong>facts</strong> — no threshold, no colour, no verb, no badge (0014 §2, 0016 §6). The distinction between the two optimise sentences is the <em>absence</em> of a parameter row, not a default-valued one.</li>
+        <li><span class="pin">42</span> <em>Optimise</em> is <strong>always present</strong>. A button that is sometimes absent teaches that the feature does not exist.</li>
+        <li><span class="pin">43</span> The export screen and the file list live here, beside the archive action (0022 §9) — both are <strong>file</strong> operations over whole decks, where Notes is where individual notes are authored. <strong>Import needs no home.</strong></li>
+        <li><span class="pin">44</span> The promise is <em>“your devices catch up when you open the app”</em>. Never “automatic”, never “always in sync”, never “in the background” (0015 §3). It appears here and at enrolment, nowhere else.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>15 · Optimise, running</h4>
+      <p class="sub">A worker thread the frame loop polls.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div>Notes</div><div class="on">Settings</div></div>
+        <div class="wf-pad">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">PHASE 1 — UNCANCELLABLE</p>
+          <p>Preparing…</p>
+          <div class="wf-bar"><i style="width:100%;background:repeating-linear-gradient(135deg,#1c1c1c 0 6px,#888 6px 12px)"></i></div>
+          <hr class="wf-sep">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">PHASE 2</p>
+          <p>Fitting — 340 / 800</p>
+          <div class="wf-bar"><i style="width:42%"></i></div>
+          <div class="wf-btn">Cancel</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">ON COMPLETION</p>
+          <p>Parameters updated. Due dates have been recalculated.</p>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">45</span> Two phases: an <strong>indeterminate</strong> lead-in over the corpus build, then a determinate bar. Guessing at the first would be a progress bar that lies.</li>
+        <li><span class="pin">46</span> <strong>Nothing is persisted until it completes.</strong> A backgrounded Android app is frozen, not slowed — 303 s of wall clock for 4.3 s of work — so a killed run leaves no partial state and the recovery action is to press it again. Never tell the user a started job is still progressing.</li>
+        <li><span class="pin">47</span> The completion sentence states the whole-collection due-date move and makes <strong>no quality claim</strong> (0014 §4). The application has no instrument for one.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>16 · Enrolment</h4>
+      <p class="sub">Ends by stating what it found.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div>Notes</div><div class="on">Settings</div></div>
+        <div class="wf-pad">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">STEP 1 — SCOPE, IN PLAIN WORDS</p>
+          <p>This reaches a hidden folder only this application can see. Not your files. It also sees your email address.</p>
+          <div class="wf-btn primary">Continue</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">STEP 2 — DEVICE FLOW</p>
+          <p>Go to <strong>example.com/device</strong><br>and enter <strong>KRTQ-8FMZ</strong></p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">STEP 3 — NAME THIS DEVICE</p>
+          <div class="wf-field"><span class="lbl">This device</span>Pixel</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">STEP 4 — WHAT IT FOUND</p>
+          <p><strong>Connected as you@example.com.</strong><br>Found 2 other devices: Laptop, Desk.</p>
+          <p class="wf-mut">— or —</p>
+          <p><strong>Connected as you@example.com.</strong><br>This is the first device here.</p>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">48</span> <strong>Step 4 is the load-bearing one</strong>, and it is two guards doing different jobs. The sentence <em>detects</em> a wrong-account enrolment; the address <em>diagnoses</em> it (0019 §1). Delete either and there is no replacement.</li>
+        <li><span class="pin">49</span> No code can catch this. There is no peer, no namespace and no published byte to compare against — the failure is <strong>reachability, not identity</strong>, and every collection id agrees. The only comparand that exists is the user's memory of the last enrolment.</li>
+        <li><span class="pin">50</span> The user names <strong>the device in their hand</strong>, not a stranger. No default from hostname or model — that would be a platform function, and the seam's erosion signal means what it says.</li>
+        <li><span class="pin">51</span> A <em>non-empty</em> collection meeting a different id refuses <strong>and states the way out</strong> — archive, clear data, restore, enrol. An empty one adopts silently, or a fresh install could never join.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>17 · Sync settings, enrolled</h4>
+      <p class="sub">One screen. Everything sync-shaped is on it.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div>Notes</div><div class="on">Settings</div></div>
+        <div class="wf-pad">
+          <p>Last caught up 2 hours ago.</p>
+          <p>Connected as you@example.com</p>
+          <div class="wf-btn">Sync now</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">DEVICES</p>
+          <div class="wf-row"><div class="grow">Laptop</div><span class="wf-mut">published 2h ago</span></div>
+          <div class="wf-row"><div class="grow">Desk</div><span class="wf-mut">published 3d ago</span></div>
+          <div class="wf-row"><div class="grow">Pixel <span class="wf-mut">(this device)</span></div><span class="wf-mut">published 2h ago</span></div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut">This device types Latin text only. Author other scripts on the desktop and they sync here.</p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <div class="wf-btn">Disconnect</div>
+          <p class="wf-mut">Drops this device's access. Deletes nothing, revokes nothing.</p>
+          <p class="wf-mut">To remove what is stored, or to revoke access, use your drive provider's connected-applications settings — we appear as <strong>Cairn</strong>. Revoking there signs out every device you own.</p>
+          <div class="wf-btn">History cutoff…</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">52</span> <strong>“Last caught up ⟨when⟩” is the whole resting statement.</strong> No “in sync”, no checkmark, no status icon anywhere in the chrome (0015 §4) — after a sync the app knows every writer's highest <em>published</em> sequence and never whether another device has reviewed since.</li>
+        <li><span class="pin">53</span> The account address is <strong>kept</strong>, not shown once. The failure it diagnoses surfaces months later, and two settings screens read side by side are the only cross-device account comparison that exists.</li>
+        <li><span class="pin">54</span> There is <strong>no delete-remote-data control</strong>, deliberately — the grant reaches the whole folder, so a delete from one device destroys namespaces another device has never fetched. The route the user does have must be named, along with the name we appear under, because the folder is hidden and cannot be navigated to.</li>
+        <li><span class="pin">55</span> The Android-only line rides a <strong>compile-time capability constant</strong> — the one sanctioned exception to the no-<code>cfg(target_os)</code> rule, because it makes a limitation visible rather than varying behaviour. Without it, typing Persian on the handset fails as <em>silence</em>.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>18 · Export screen → report</h4>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div>Notes</div><div class="on">Settings</div></div>
+        <div class="wf-pad">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">DECKS</p>
+          <div class="wf-row"><span>☑</span><div class="grow">French A1 · 1,240 notes</div></div>
+          <div class="wf-row"><span>☐</span><div class="grow">German · 204 notes</div></div>
+          <p class="wf-mut">38 notes are in no deck and will not be exported.</p>
+          <hr class="wf-sep">
+          <div class="wf-field"><span class="lbl">Author</span>Marjan Rahimi</div>
+          <div class="wf-field"><span class="lbl">Description</span>A1 vocabulary, first ten chapters.</div>
+          <div class="wf-field"><span class="lbl">Licence</span>CC BY-SA 4.0</div>
+          <div class="wf-btn primary">Export</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">REPORT — DESKTOP</p>
+          <p>French A1.cdeck — 1,240 notes, 12 retractions<br><span class="wf-mut">~/Documents/French A1.cdeck</span></p>
+          <span class="wf-btn sm">Show in file manager</span>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">REPORT — ANDROID</p>
+          <p>French A1.cdeck (1) — 1,240 notes, 12 retractions<br><span class="wf-mut">Saved to Downloads.</span></p>
+          <span class="wf-btn sm">Share…</span>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">56</span> <strong>Export is not gated</strong>, and the asymmetry with import is principled: an import writes irreversibly into the collection, an export writes a file. There is nothing to decline.</li>
+        <li><span class="pin">57</span> The unfiled-note count is a <strong>collection-wide fact, not a property of the selection</strong> — no selection can ever reach those notes, so the number does not move as decks are ticked.</li>
+        <li><span class="pin">58</span> <strong>The report states the name the platform actually wrote</strong>, never the one requested (0022 §10). On the handset a collision dedupes to <code>French A1.cdeck (1)</code> — suffix <em>after</em> the extension — which is exactly why echoing the request would be wrong.</li>
+        <li><span class="pin">59</span> Both lines stand and the action sits <em>beside</em> them (0023). A report that spent the location on a send button would leave everyone who declines unable to find their file. It <strong>never fires by itself</strong>.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>19 · Files this application wrote</h4>
+      <p class="sub">Described from manifests, zero payloads inflated.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div>Review</div><div>Notes</div><div class="on">Settings</div></div>
+        <div class="wf-pad">
+          <p class="wf-mut">The files this application wrote.</p>
+          <div class="wf-row"><div class="grow"><div>French A1.cdeck</div><div class="wf-mut">deck · 1,240 notes · 12 retractions</div></div></div>
+          <div class="wf-row"><div class="grow"><div>French A1 and 2 more.cdeck</div><div class="wf-mut">deck · 3 decks, 1,802 notes</div></div></div>
+          <div class="wf-row"><div class="grow"><div>backup.ccoll</div><div class="wf-mut">collection · 3 March 2026 · 812 notes, 4,200 reviews</div></div></div>
+          <div class="wf-row"><div class="grow"><div>old.cdeck</div><div class="wf-mut">unreadable</div></div></div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">60</span> The wording is <em>“the files this application wrote”</em> and never implies a folder view. On Android scoped storage gives us our own rows and nothing else — a deck another app dropped in Downloads is <strong>invisible, not unreadable</strong>, and can only arrive through an intent filter.</li>
+        <li><span class="pin">61</span> A file <em>we</em> wrote and can no longer parse is <strong>listed and marked <code>unreadable</code></strong>, never hidden — hiding it sends the user after a permissions problem that does not exist.</li>
+        <li><span class="pin">62</span> This is where the zip container's read-without-inflating property earns what it cost: N files, N manifests, <strong>zero payloads inflated</strong> — archives holding a decade of log rows included.</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- ======================= TAKEOVER ======================= -->
+<section class="mb-10 anchor" id="takeover">
+  <div class="flex items-baseline gap-3 mb-1">
+    <h2 class="text-2xl font-bold">The screen that belongs to no destination</h2>
+    <span class="text-sm text-base-content/50">ADR-0022, 0016 §11</span>
+  </div>
+  <p class="mb-6 text-base-content/70 max-w-3xl">
+    One screen, three entry points, cold-start capable — so it cannot be drawn inside a destination, because
+    there may not be one yet. No nav row.
+  </p>
+
+  <div class="screen-grid">
+
+    <div class="screen">
+      <h4>20 · Import preview</h4>
+      <p class="sub">The only gate in the specification.</p>
+      <div class="wf wf-phone">
+        <div class="wf-pad">
+          <p><strong>French A1</strong><br><span class="wf-mut">by Marjan Rahimi · CC BY-SA 4.0<br>A1 vocabulary for the first ten chapters.</span></p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p><strong>French A1</strong> — updating a deck you already have</p>
+          <p class="wf-mut">38 new notes, 1,202 already yours<br>12 notes moving in from German<br>3 of your notes will be deleted<br>Renaming your “My French” to “French A1”<br>German will be left empty</p>
+          <hr class="wf-sep">
+          <p><strong>German</strong> — new deck</p>
+          <p class="wf-mut">204 notes</p>
+          <hr class="wf-sep">
+          <p>Adds a card type this build doesn't have: cloze</p>
+          <p><strong>Your review history is untouched.</strong></p>
+          <div class="wf-btn primary">Import</div>
+          <div class="wf-btn">Cancel</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">63</span> <strong>Effects on your collection, never the manifest's counts.</strong> The manifest cannot say how many notes are genuinely new after the collision skip, how many move deck, or how many tombstones match something you hold — which are exactly the numbers the preview exists for.</li>
+        <li><span class="pin">64</span> <strong>A line that does not apply is absent, never shown as zero.</strong> A screen of zeroes buries the one line that is not.</li>
+        <li><span class="pin">65</span> The last line is <strong>always present</strong>, even when it is the only line. “Import” implies risk to a schedule and that is structurally impossible; a preview listing only damage reads as more damaging than it is.</li>
+        <li><span class="pin">66</span> <strong>The plan is derived on every read, never cached</strong> (0022 §5) — a sync landing underneath changes the numbers on screen <em>before</em> Import is pressed, so promise and effect cannot diverge. Which is why <strong>nothing is reported afterwards</strong>: the app returns to the note list, deck filter set to what arrived.</li>
+        <li><span class="pin">67</span> Every string here is a stranger's, rendered as <strong>plain text, never Markdown</strong>, length-bounded. This is the one screen showing a stranger's strings before the user has agreed to anything.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>21 · Refusals, and the restore preview</h4>
+      <div class="wf wf-phone">
+        <div class="wf-pad">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">OLDER COPY</p>
+          <p>This file is an older copy of French A1 than the one you have.</p>
+          <div class="wf-btn">Close</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">MALFORMED</p>
+          <p>This file can't be opened.</p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">NO-OP — STILL SHOWN</p>
+          <p><strong>French A1</strong><br>Nothing will change.</p>
+          <div class="wf-btn">Close</div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">RESTORE — ONE LINE, ON PURPOSE</p>
+          <p>Collection archive, 3 March 2026. 812 notes, 4,200 reviews.</p>
+          <p class="wf-mut">Nothing you already have is removed.</p>
+          <div class="wf-btn primary">Restore</div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">68</span> An older file is named as <strong>older, never as damaged</strong>. A malformed one gets one message and <strong>no detail that reads as an invitation to repair it</strong> — the message is not a diagnostic channel for whoever built the file.</li>
+        <li><span class="pin">69</span> <strong>The no-op still shows a preview.</strong> Re-opening a file someone sent you is the second-most-likely import there is, and a double-click producing no response is indistinguishable from a broken application.</li>
+        <li><span class="pin">70</span> Restore stays <strong>one line</strong> because a preview states effects in proportion to what can be lost — a restore is a merge that only ever adds. Bringing this “into line” with the import preview would be building machinery to describe consequences that cannot occur.</li>
+        <li><span class="pin">71</span> <em>“Nothing you already have is removed”</em> is the line the interface must say, because “restore” universally implies replacement and here it does not.</li>
+      </ul>
+    </div>
+
+    <div class="screen">
+      <h4>22 · The notice channel</h4>
+      <p class="sub">Two speakers. Ever.</p>
+      <div class="wf wf-phone">
+        <div class="wf-nav"><div class="on">Review</div><div>Notes</div><div>Settings</div></div>
+        <div class="wf-pad" style="padding-top:5px;padding-bottom:5px">
+          <div class="wf-notice">Sync access has expired. <span class="wf-btn sm" style="margin-left:4px">Set it up again</span></div>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut">…the destination draws normally beneath…</p>
+        </div>
+        <div class="wf-pad wf-sec">
+          <p class="wf-mut" style="font-size:9.5px;letter-spacing:.08em">THE OTHER PERMITTED SPEAKER</p>
+          <div class="wf-notice">Desk's clock looks wrong — reviews from it are stamped 3 days ahead. <span class="wf-mut">dismiss</span></div>
+        </div>
+      </div>
+      <ul class="pinlist mt-3">
+        <li><span class="pin">72</span> <strong>A network failure never speaks.</strong> Offline is normal and nagging about it is the defect. The rule keys on the <em>kind</em> of failure, not its duration — an expired grant is a specific response, not a timeout.</li>
+        <li><span class="pin">73</span> The skew warning <strong>names the device</strong> and never offers the repair inline — the cutoff discards good history alongside bad, so it lives in settings behind an explanation of what it costs.</li>
+        <li><span class="pin">74</span> It is dismissible and keyed to the rows that triggered it, so it does not re-fire on every subsequent merge of a log that still contains them.</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- ======================= FINDINGS ======================= -->
+<section class="mb-10 anchor" id="findings">
+  <h2 class="text-2xl font-bold mb-1">Three things the domain model was missing <span class="badge badge-neutral align-middle">all three fixed</span></h2>
+  <p class="mb-5 text-base-content/70 max-w-3xl">
+    Found by trying to arrange the screens, not by reading for them. All three now land in
+    <code>crates/app/src/CONTEXT.md</code> — nothing else does.
+  </p>
+
+  <div class="space-y-4">
+
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">F1</span>
+        <h3 class="card-title text-lg"><code>ui/CONTEXT.md</code> had no entry for any of ADR-0022's four surfaces</h3>
+        <span class="badge badge-outline badge-sm">fixed</span>
+      </div>
+      <p class="text-sm text-base-content/80">
+        <code>CONTEXT-MAP.md</code> says ADR-0022 “is the only ADR binding two contexts equally”, and that
+        <em>“its <code>ui</code> half is what four surfaces say: the import preview, the export screen, the export report
+        and the file list.”</em> Grepping <code>crates/app/src/CONTEXT.md</code> for any of the four returns nothing.
+        The <code>export</code> context carries the mechanism thoroughly — <strong>Preview</strong>, <strong>Import plan</strong>,
+        <strong>Gate / describe</strong>, <strong>Restore preview</strong> — so the gap is exactly the half the map says
+        belongs to <code>ui</code>: <em>where these screens live and what they are not</em>.
+      </p>
+      <p class="text-sm text-base-content/80">
+        Cost of leaving it: the preview gets filed under Settings by the next implementer, which
+        ADR-0022 §9 forbids in as many words — <em>“Import needs no home”</em>.
+      </p>
+    </div></div>
+
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">F2</span>
+        <h3 class="card-title text-lg">There was no word for a screen that belongs to no destination</h3>
+        <span class="badge badge-outline badge-sm">fixed</span>
+      </div>
+      <p class="text-sm text-base-content/80">
+        The vocabulary has <strong>top-level destination</strong> (three), and it describes the leech screen as
+        <em>“a sub-state of Review, not a fourth destination”</em>. Both are inside the shell. The import preview is
+        neither: it can precede any destination, and cancelling from a cold start lands on the count picker
+        rather than back where it came from, <em>because there is no back</em>. With no name for that category,
+        the only two available readings are both wrong — file it under Settings, or draw it as the overlay
+        ADR-0022 §6 rejects.
+      </p>
+    </div></div>
+
+    <div class="card card-border bg-base-100"><div class="card-body">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <span class="badge badge-neutral">F3</span>
+        <h3 class="card-title text-lg">“Persistent affordance” and the scrolling nav row disagreed, and nothing said so</h3>
+        <span class="badge badge-outline badge-sm">fixed</span>
+      </div>
+      <p class="text-sm text-base-content/80">
+        ADR-0021 §1 requires the three destinations to be reachable “from a persistent affordance”. The nav row
+        in <code>crates/app/src/lib.rs:461</code> is drawn <em>inside</em> the scroll area, and its comment gives a
+        good reason — pinning it would spend the form pane's first screen, which ADR-0025 made a specified
+        resource. Both are right, and the result was an affordance that is not persistent, with the
+        contradiction visible only to someone reading two files at once.
+      </p>
+      <div class="alert alert-soft text-sm mt-1"><span>
+        <strong>How it was fixed, and why not with an ADR.</strong> The <code>Top-level destination</code> entry
+        already carried the sentence F3 contradicts — <em>“how the three are rendered is the visual design pass's”</em>
+        — so the resolution belongs where the contradiction lived. That entry now records <a class="link" href="#decisions">D1</a>
+        and why both constraints survive it. <strong>The code now matches it too</strong>: the row is a pinned top panel
+        below the status-bar band, drawn only while the soft keyboard is not up. The gate is <code>keyboard_is_up</code>
+        and deliberately not <code>!is_down</code> — those are not complements, and the negation would hide the only
+        way out of a destination on desktop forever, which is ADR-0026 §5's collapse arriving through a new caller.
+        A test pins that half; the visible half needs none.
+      </span></div>
+    </div></div>
+
+  </div>
+</section>
+
+<!-- ======================= PROPOSED CONTEXT TEXT ======================= -->
+<section class="mb-10 anchor" id="context">
+  <h2 class="text-2xl font-bold mb-1">What landed in <code>CONTEXT.md</code> <span class="badge badge-neutral align-middle">written</span></h2>
+  <p class="mb-3 text-base-content/70 max-w-3xl">
+    Three entries added to <code>crates/app/src/CONTEXT.md</code>, plus one amended.
+    <strong>Nothing else landed</strong> — no ADR, no code change.
+  </p>
+  <div class="alert alert-soft text-sm mb-5"><span>
+    <strong>One departure from what you approved.</strong> The proposal had three <em>new</em> entries.
+    Fixing F3 needed a fourth edit that was not in it: <code>Top-level destination</code>'s closing sentence
+    said <em>“how the three are rendered is the visual design pass's”</em>, which is exactly the claim D1
+    overturns — so leaving it would have left the contradiction in place under a heading saying it was fixed.
+    That entry is amended rather than added. Revert it and F3 reopens.
+  </span></div>
+
+  <div class="mockup-code text-xs mb-4"><pre><code>**Top-level destination**:                                    [AMENDED — this is the F3 fix]
+... Every screen is reachable from one of the three **except the import preview**, which
+belongs to none.
+**The nav row is pinned, and yields the screen to the soft keyboard.** ADR-0021 §1's
+*persistent* affordance and ADR-0025's *"the form pane's first screen is a specified
+resource"* pull against each other, and nothing recorded which won: a row that scrolls away
+is not persistent, and a row that is always pinned spends the band the destructive-edit
+warning was moved into because nowhere else works. So it is pinned whenever the keyboard is
+**down**, and absent while it is **up** — one rule reading one fact, expressible only because
+ADR-0026 §5 made the seam distinguish *no soft keyboard on this platform* from *keyboard
+down*. On the desktop the seam says the first, so it is simply always pinned; this is **not**
+platform-conditional behaviour and client-stack rule 3 is untouched.</code></pre></div>
+
+  <div class="mockup-code text-xs"><pre><code>**Layout pass** / **Finish pass**:                                              [NEW — the split]
+The two halves of *the visual design pass* — which **fourteen ADRs name** and ADR-0006 §10
+opened — because it names two jobs with different dependencies.
+The **layout pass** settles arrangement — where a thing sits, which
+affordance carries an operation, what yields when the screen shrinks — and is constrained hard
+by reachability (ADR-0021 §1), the two-speakers rule (ADR-0015 §5) and the form pane's first
+screen (ADR-0025). The **finish pass** settles palette, typography, spacing, case and weight,
+and is a blank slate by ADR-0006 §10. What a surface *says* and *when* is neither: the ADRs
+settled that, exhaustively. ADR-0021's own Context draws this line without naming it — *"what
+an entry says, where it sits and when it appears were answerable without knowing a single
+colour."*
+_Avoid_: The visual design pass, for either half alone — it is the word that lets a settled
+arrangement read as an open colour question, and an open colour question read as settled.
+
+**Import preview**:                                                            [NEW — F1 + F2]
+The one gate in this specification (ADR-0022 §1), and **the one screen that belongs to no
+destination**. Three entry points — the file list, a desktop drop, an Android launch intent —
+produce **one** screen, which must be **cold-start capable**, because the intent can start the
+application directly into an import. So it is drawn without the nav row: there may not be a
+destination behind it. Applying returns to the **note list**, with the deck filter set to the
+imported deck when the file carried one and left unfiltered when it carried several;
+**cancelling from a cold start lands on the count picker**, the same place ADR-0006 §2's
+force-stop test lands. What it *states* is `export`'s (**import plan**, **preview**,
+**gate / describe**); what is here is that it has no home and takes the screen. The **restore
+preview** is the same screen, one line long.
+_Avoid_: Import dialog, import modal, import overlay — ADR-0022 §6 rules out all three, and
+*overlay* implies a destination underneath that a cold start does not have.
+
+**Export screen** / **Export report** / **File list**:                               [NEW — F1]
+The three outbound surfaces, all in **Settings** beside ADR-0016 §6's archive action (ADR-0022
+§9) — they are **file** operations over whole decks, where Notes is where individual notes are
+authored. They need saying rather than leaving to arrangement, because ADR-0021 §1 requires
+every specified screen to be reachable from one of the three destinations. The **export
+screen** carries the deck selection, ADR-0022 §8's three metadata fields pre-filled per deck
+id, and the **collection-wide** count of unfiled notes — which never moves as decks are ticked,
+since no selection can reach them. The **report** states the name the platform actually wrote
+and where, with ADR-0023's hand-off **beside** those lines rather than in place of them. The
+**file list** describes each file from its own manifest, inflating zero payloads, and says
+*"the files this application wrote"* — never anything implying a folder view, which on Android
+it is not (ADR-0024 §3).
+_Avoid_: An *import screen* as a fourth member — import has no home, and the list is the only
+inbound surface that needed one.</code></pre></div>
+</section>
+
+<!-- ======================= OPEN QUESTIONS ======================= -->
+<section class="mb-6 anchor" id="open">
+  <h2 class="text-2xl font-bold mb-1">Where this stands</h2>
+  <p class="mb-5 text-base-content/70 max-w-3xl">Your four answers, applied. One of them left a loose end on purpose.</p>
+
+  <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100 mb-5">
+    <table class="table table-sm">
+      <thead><tr><th>Question</th><th>Your answer</th><th>What happened</th></tr></thead>
+      <tbody>
+        <tr><td>Nav row</td><td>Pinned, hidden while the keyboard is up</td><td>D1 taken, recorded in <code>Top-level destination</code>, <strong>and implemented</strong> — <code>0ed6be40</code>.</td></tr>
+        <tr><td>Reordering</td><td>Two-tap placement</td><td>D2 taken. Screen 9 stands; <strong>still written down nowhere</strong> — no ADR was wanted, and it is not vocabulary. The one loose end left.</td></tr>
+        <tr><td>Glossary</td><td>Write all three now</td><td>Three entries added, one amended. See above.</td></tr>
+        <tr><td>Next step</td><td>Nothing lands yet</td><td>Superseded — everything below is committed and pushed to <code>main</code>.</td></tr>
+        <tr class="bg-base-200"><td>Edit before reveal</td><td>Restrict to post-reveal, write the ADR</td><td><strong>ADR-0029 written and implemented</strong> — see below.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card card-border bg-base-100 mb-5 anchor" id="adr"><div class="card-body">
+    <h3 class="card-title text-base">ADR-0029 · what landed</h3>
+    <p class="text-sm text-base-content/80">
+      <em>Editing a note from the review screen happens after the reveal.</em> Seven files, because an ADR in this repo is
+      not just a document — the amended ADRs carry inline notes, the index has to see it, and the rules that fail
+      silently live in <code>AGENTS.md</code>.
+    </p>
+    <div class="overflow-x-auto"><table class="table table-sm">
+      <tbody>
+        <tr><td><code>docs/adr/0029-…md</code></td><td>New. §1 the decision, §2 what is given up and why, §3 why it is not ADR-0010 §9's inline prompting, §4 what it does not settle.</td></tr>
+        <tr><td><code>docs/adr/0021-…md</code> §6</td><td>Inline: <em>narrowed</em>, with the existence argument explicitly not reopened. The <em>“counts as a reveal”</em> paragraph struck through rather than deleted — ADR-0029's decisive argument <em>is</em> that it had one caller.</td></tr>
+        <tr><td><code>docs/adr/0006-…md</code> §3</td><td>Inline: the ADR-0021 amendment <em>withdrawn</em>; reveal has one cause again. §4 <em>confirmed and strengthened</em>.</td></tr>
+        <tr><td><code>CONTEXT-MAP.md</code></td><td>Index row, plus a paragraph — an ADR not in the index is invisible to the agent it was written for.</td></tr>
+        <tr><td><code>AGENTS.md</code></td><td>Rule 7 rewritten. It used to state the retired rule as a live one.</td></tr>
+        <tr><td><code>crates/app/src/CONTEXT.md</code></td><td><strong>Reveal</strong> revised — one cause, and why restoring the control breaks the guarantee silently.</td></tr>
+        <tr><td><code>crates/app/src/screens/review.rs</code></td><td>Control moved inside the <code>revealed</code> branch; the <code>s.revealed = true</code> side-effect deleted. <strong>Plus a test</strong> that renders a frame and asserts the control's absence, then its presence.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="text-sm text-base-content/70 mt-2">
+      314 tests pass, clippy clean. The new test was verified by injecting the regression — hoisting the control out of
+      the branch — and confirming it fails with a message naming ADR-0029 §1.
+    </p>
+  </div></div>
+
+  <div class="alert alert-soft text-sm mb-3"><span>
+    <strong>One loose end left.</strong> <strong>D2's two-tap reorder is decided and recorded nowhere</strong> — it is
+    neither vocabulary nor an ADR, so the next agent reads ADR-0021 §4's open handoff and re-decides it from scratch.
+    The nav-row disagreement that sat beside it is closed: <code>CONTEXT.md</code> and <code>lib.rs</code> now agree.
+  </span></div>
+
+  <div class="alert alert-soft text-sm mb-3"><span>
+    <strong>Landed on <code>main</code>, four signed commits</strong>, split by concern:
+    <code>b8b5a253</code> the glossary gaps · <code>91011880</code> ADR-0029 and its amendments ·
+    <code>c7bafa81</code> the edit entrance and its guard · <code>0ed6be40</code> the pinned nav row.
+    Each was checked out and built on its own before pushing.
+  </span></div>
+
+  <div class="alert alert-soft text-sm">
+    <span>
+      <strong>One thing I did not do.</strong> The lavish guidance says to screenshot the current UI rather than
+      describe it. I did not launch the app — that would take the screen while you are at the keyboard. Say the
+      word and I will run it on the landscape monitor and put real captures beside these boxes.
+    </span>
+  </div>
+</section>
+
+<footer class="text-xs text-base-content/50 border-t border-base-content/10 pt-5 mt-8">
+  Every wireframe traces to an accepted ADR; the pins name which. Nothing here re-decides wording or
+  behaviour. Palette, typography and spacing are deliberately absent — that is the finish pass, and it
+  starts from a blank slate.
+</footer>
+
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color) {
+    paint.clearRect(0, 0, 1, 1); paint.fillStyle = "#000"; paint.fillStyle = color;
+    paint.fillRect(0, 0, 1, 1); return paint.getImageData(0, 0, 1, 1).data;
+  }
+  function compositeRgba(fg, bg) {
+    const fa = fg[3] / 255, ba = bg[3] / 255, a = fa + ba * (1 - fa);
+    if (a === 0) return [0, 0, 0, 0];
+    return [(fg[0]*fa + bg[0]*ba*(1-fa))/a, (fg[1]*fa + bg[1]*ba*(1-fa))/a, (fg[2]*fa + bg[2]*ba*(1-fa))/a, a*255];
+  }
+  function pageIsDark() {
+    const root = document.documentElement;
+    const rb = toRgba(getComputedStyle(root).backgroundColor);
+    const bb = document.body ? toRgba(getComputedStyle(document.body).backgroundColor) : [0,0,0,0];
+    const [r, g, b, a] = compositeRgba(bb, rb);
+    if (a > 0) return (0.2126*r + 0.7152*g + 0.0722*b) / 255 < 0.5;
+    const cs = getComputedStyle(root).colorScheme;
+    if (cs.includes("dark") && !cs.includes("light")) return true;
+    if (cs.includes("light") && !cs.includes("dark")) return false;
+    return darkQuery.matches;
+  }
+  const diagrams = [...document.querySelectorAll(".mermaid")].map((el) => ({ el, src: el.textContent }));
+  let applied, rendering = false, queued = false;
+  function queueRender() { queued = true; if (rendering) return; void render(); }
+  async function render() {
+    rendering = true;
+    try {
+      while (queued) {
+        queued = false;
+        const theme = pageIsDark() ? "dark" : "default";
+        if (theme === applied) continue;
+        mermaid.initialize({ startOnLoad: false, theme, securityLevel: "strict" });
+        for (const { el, src } of diagrams) { el.removeAttribute("data-processed"); el.textContent = src; }
+        try { await mermaid.run({ nodes: diagrams.map((d) => d.el) }); }
+        catch (error) { console.error("Mermaid diagram render failed:", error); return; }
+        applied = theme;
+      }
+    } finally { rendering = false; if (queued) queueRender(); }
+  }
+  if (document.readyState === "complete") queueRender();
+  else window.addEventListener("load", queueRender, { once: true });
+  const themeObserver = new MutationObserver(queueRender);
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    themeObserver.observe(el, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+  }
+  document.addEventListener("change", queueRender, true);
+  darkQuery.addEventListener("change", queueRender);
+</script>
+
+</body>
+</html>
