@@ -76,7 +76,13 @@ while IFS= read -r line || [ -n "$line" ]; do
       ;;
     sh\ *)
       echo "session: sh ${line#sh }"
-      eval "${line#sh }" 2>&1 | sed 's/^/session:   /'
+      # **Not piped.** A pipeline runs its left-hand side in a subshell, so `sh export FOO=bar`
+      # would set the variable somewhere that dies at the end of the line — and the next `restart`
+      # would relaunch the app with the *old* environment. That failure is silent in the worst way
+      # the harness has: every subsequent `shot` succeeds and photographs the previous screen under
+      # the new screen's name, which is exactly the class of fault `%CX%` was introduced to kill.
+      # The `sed` prefix on the output is not worth paying for it.
+      eval "${line#sh }" 2>&1
       ;;
     *)
       echo "session: xdotool $line"
