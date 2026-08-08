@@ -1,6 +1,8 @@
 # Research findings
 
-Point-in-time findings gathered while charting [Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1). **These are not the spec.** The spec is the accumulated set of ADRs and per-context `CONTEXT.md` files described in [`docs/agents/domain.md`](../agents/domain.md); these documents are the evidence those decisions were made against.
+Point-in-time findings gathered while charting this project's maps — most of them
+[Map: local-first Leitner app spec](https://github.com/amin-bf/cairn/issues/1), and the last row
+[Map: The Cairn Design Pass](https://github.com/amin-bf/cairn/issues/121). **These are not the spec.** The spec is the accumulated set of ADRs and per-context `CONTEXT.md` files described in [`docs/agents/domain.md`](../agents/domain.md); these documents are the evidence those decisions were made against.
 
 Most reports were produced by a `/research` subagent resolving one `wayfinder:research` ticket, and are dated by the ticket that commissioned them; the handset measurements at the foot of the table were produced while resolving a decision ticket, under `AGENTS.md` rule 9. Treat the facts as true as of that date and re-check anything load-bearing before relying on it — upstream crate health, maintenance status, and platform floors all drift.
 
@@ -15,6 +17,7 @@ Most reports were produced by a `/research` subagent resolving one `wayfinder:re
 
 | [`android-outbound-share/`](./android-outbound-share/README.md) | [#70](https://github.com/amin-bf/cairn/issues/70) | Whether a send intent works from `NativeActivity` with no dex, what the `MediaStore` put actually stores, and what the platform does to the media type and the name we ask for |
 | [`android-file-identity/`](./android-file-identity/README.md) | [#72](https://github.com/amin-bf/cairn/issues/72) | Whether an extension-matched intent filter can work when the URI carries a row id instead of a name, what a real file manager sends, whether the in-app list can see a file it did not write, and which media-type declaration makes a collision destroy the extension |
+| [`egui-expressiveness/`](./egui-expressiveness/README.md) | [#123](https://github.com/amin-bf/cairn/issues/123) | Whether the renderer the desktop build draws through can express the seven things the design pass opened — motion, elevation, corner radius, the type scale, spacing, icons and empty-state artwork — at which call site and at what cost; which of them can be ambient roles the way the palette is and which force a screen to name a value; and the measured dependency price of each icon route |
 
 **Three of these are measurements, not readings.** [`auto-backup-quota/`](./auto-backup-quota/README.md) resolves a question the documentation was already known to be silent on, so its primary evidence is an experiment run on the handset against the real cloud transport; §6 of that note reproduces it, and names two resets that must not be used. [`android-outbound-share/`](./android-outbound-share/README.md) and [`android-file-identity/`](./android-file-identity/README.md) are handset runs too, made because `AGENTS.md` rule 9 does not accept the emulator or the documentation for Android behaviour — and the second exists because the first produced a fully-formed question it had not been asked.
 
