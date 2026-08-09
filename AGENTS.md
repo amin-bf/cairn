@@ -369,6 +369,23 @@ because they are validated findings, not because a web build ships.
     covering it, because the drafted palette is dark only. Dropping system-following is a deliberate,
     recorded behaviour change, not a default to reach past: a light palette is a separate finish pass,
     and restoring following is its job, not something to re-add without one.
+15. **The page frame is named in exactly one place — the `frame` module — and a screen asks for a
+    frame, never a number.** [ADR-0031](./docs/adr/0031-the-page-frame.md) is rule 13 one layer down:
+    a literal `28.0` of horizontal padding or a hand-rolled `min(available, 640.0)` **renders fine to
+    the author and drifts the layout one screen at a time, with nothing failing** — and #123 found the
+    app already paying that for spacing at ~60 call sites. `frame::wide_column` has exactly one
+    legitimate caller, the editor; a second is the frame eroding into a per-screen preference.
+16. **Under a frame, `ui.available_width()` is the column and not the window — so an arrangement
+    threshold must say which it means.** This is the trap #131 found and it is the shape to watch for
+    rather than the one instance. The editor's side-by-side test read `available_width()` and was
+    correct only because the app had no frame; the moment one existed it measured the column, a 640
+    column is not `>= 640`, and **every desktop would have shown the phone's `Write | Cards` toggle**
+    with nothing failing and no test covering it. Arrangement decisions read
+    `ctx().viewport_rect()` — not `available_width()`, and not `content_rect()`, whose safe-area
+    insets are vertical on every device that has them, so subtracting them makes a layout decision out
+    of a notch. And `frame::cap_for` is read by **both** the nav row and the screen, because two call
+    sites naming their own number is how the nav silently drifts out of alignment with the content
+    (ADR-0031 §3).
 
 ## The local store
 

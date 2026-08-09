@@ -19,6 +19,7 @@ pub mod cards;
 pub mod deck;
 pub mod editor;
 pub mod fonts;
+pub mod frame;
 pub mod inbound;
 pub mod keyboard;
 pub mod listing;
@@ -463,9 +464,16 @@ impl eframe::App for CairnApp {
         // It sits below the status-bar band and outside the scroll area, which is what makes it
         // pinned rather than merely first.
         if !self.band.keyboard_is_up() {
+            // The row aligns to whatever column the destination beneath it is using, which on every
+            // screen but a wide editor is the measure. Both sides ask `frame::cap_for` rather than
+            // naming a number, so the nav cannot drift out of step with the content (`frame`).
+            let cap = frame::cap_for(
+                self.dest == Destination::Notes && self.editing.is_some(),
+                ui.ctx().viewport_rect().width(),
+            );
             egui::Panel::top("nav")
                 .resizable(false)
-                .show(ui, |ui| nav_bar(ui, &mut self.dest));
+                .show(ui, |ui| nav_bar(ui, &mut self.dest, cap));
         }
 
         // **Before the band is reserved, not after.** The focused field has to be inside the
@@ -494,6 +502,10 @@ impl eframe::App for CairnApp {
         let out = area.show(ui, |ui| {
             ui.add_space(4.0);
 
+            // **Every destination is drawn inside the page frame** (`frame`, #131): a 28px gutter,
+            // one column capped at the measure, centred, at every width. Notes is the one that takes
+            // its own frame rather than this one — the note list is an ordinary column but the editor
+            // earns a wider one, and only that screen knows which of the two it is showing.
             match self.dest {
                 Destination::Review => {
                     // The review screen's edit entrance, offered only on a **revealed** card
@@ -501,15 +513,18 @@ impl eframe::App for CairnApp {
                     // ADR-0021 §6's "counts as a reveal" is retired along with the pre-reveal
                     // control it existed for. The entrance is shared by the leech screen, which
                     // also hangs off Review (ADR-0010 §7) and has no reveal to spend.
-                    if let Some(note) = review(
-                        ui,
-                        coll,
-                        &mut self.sitting,
-                        &mut self.showing_leeches,
-                        &mut self.session_pointer,
-                        now_ms,
-                        today,
-                    ) {
+                    let opened = frame::column(ui, |ui| {
+                        review(
+                            ui,
+                            coll,
+                            &mut self.sitting,
+                            &mut self.showing_leeches,
+                            &mut self.session_pointer,
+                            now_ms,
+                            today,
+                        )
+                    });
+                    if let Some(note) = opened {
                         self.editing = Some(Editing::for_note(coll, note));
                         self.dest = Destination::Notes;
                     }
@@ -529,18 +544,20 @@ impl eframe::App for CairnApp {
                     // The wipe cannot happen here: `coll` is borrowed for the whole frame, and the
                     // reset closes that connection. So the control only *asks*, and the app acts once
                     // the borrow has ended, below.
-                    reset_requested = settings_screen(
-                        ui,
-                        coll,
-                        &mut self.setting_up_sync,
-                        &mut self.new_card_rate,
-                        &mut self.optimise_job,
-                        &mut self.optimise_done,
-                        &mut self.handoff,
-                        &mut self.inbound,
-                        &mut self.file_list,
-                        now_ms,
-                    );
+                    reset_requested = frame::column(ui, |ui| {
+                        settings_screen(
+                            ui,
+                            coll,
+                            &mut self.setting_up_sync,
+                            &mut self.new_card_rate,
+                            &mut self.optimise_job,
+                            &mut self.optimise_done,
+                            &mut self.handoff,
+                            &mut self.inbound,
+                            &mut self.file_list,
+                            now_ms,
+                        )
+                    });
                 }
             }
         });
@@ -556,20 +573,27 @@ impl eframe::App for CairnApp {
 /// fixes. **Where it sits is settled** — pinned above the scroll area, yielding to the soft keyboard
 /// (see the call site) — which is the *layout pass*'s half; how it **looks** is the *finish pass*'s,
 /// and a row of buttons is the honest floor.
-fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination) {
-    ui.horizontal(|ui| {
-        for (target, label) in [
-            (Destination::Review, "Review"),
-            (Destination::Notes, "Notes"),
-            (Destination::Settings, "Settings"),
-        ] {
-            if ui
-                .selectable_label(*dest == target, text(ui, label))
-                .clicked()
-            {
-                *dest = target;
+fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination, cap: f32) {
+    // **Inside the page frame, so the row starts on the same vertical line the content does.** The
+    // panel behind it still spans the window — a pinned row is a band across the top, not a floating
+    // object — but its buttons align to the column beneath them. #131 photographed the alternative:
+    // a nav left at the window edge while the card sits centred reads as two unrelated pages, and it
+    // is the single most visible defect in the frames that were rejected.
+    frame::wide_column(ui, cap, |ui| {
+        ui.horizontal(|ui| {
+            for (target, label) in [
+                (Destination::Review, "Review"),
+                (Destination::Notes, "Notes"),
+                (Destination::Settings, "Settings"),
+            ] {
+                if ui
+                    .selectable_label(*dest == target, text(ui, label))
+                    .clicked()
+                {
+                    *dest = target;
+                }
             }
-        }
+        });
     });
 }
 
@@ -644,6 +668,19 @@ pub(crate) fn badge(ui: &mut egui::Ui, s: &str) {
 pub(crate) fn full_width_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
     let job = text(ui, s);
     ui.add_sized([ui.available_width(), 36.0], egui::Button::new(job))
+}
+
+/// A button that takes only the room its own label needs, at the same touch height as
+/// [`full_width_button`].
+///
+/// **The height is the point.** The map's *one responsive design* holds hit targets and density to
+/// touch, never the pointer, so this is not "the desktop button" — it is the full-width one with the
+/// stretching taken off, for the places where full width is a width the eye has to cross rather than
+/// a target the finger has to find. #131's editor is the first: at 1120px, *Done* stretched into a
+/// button wider than the two columns of content it sits above.
+pub(crate) fn compact_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
+    let job = text(ui, s);
+    ui.add_sized([120.0, 36.0], egui::Button::new(job))
 }
 
 /// The card face — a wide, tall clickable surface. Tapping the prompt reveals; the answer face is
