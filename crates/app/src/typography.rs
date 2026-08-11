@@ -83,11 +83,20 @@ pub fn display() -> TextStyle {
 /// (ADR-0002 §8), so a size that disagreed with the prose around it would break the line it sits in.
 pub fn scale() -> BTreeMap<TextStyle, FontId> {
     [
-        (TextStyle::Small, FontId::new(SMALL, FontFamily::Proportional)),
+        (
+            TextStyle::Small,
+            FontId::new(SMALL, FontFamily::Proportional),
+        ),
         (TextStyle::Body, FontId::new(BODY, FontFamily::Proportional)),
         // The alias. Reads `BODY`, never a second literal.
-        (TextStyle::Button, FontId::new(BODY, FontFamily::Proportional)),
-        (TextStyle::Monospace, FontId::new(BODY, FontFamily::Monospace)),
+        (
+            TextStyle::Button,
+            FontId::new(BODY, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Monospace,
+            FontId::new(BODY, FontFamily::Monospace),
+        ),
         (
             TextStyle::Heading,
             FontId::new(HEADING, FontFamily::Proportional),
@@ -146,7 +155,10 @@ mod tests {
     #[test]
     fn code_is_body_sized() {
         let scale = scale();
-        assert_eq!(scale[&TextStyle::Monospace].size, scale[&TextStyle::Body].size);
+        assert_eq!(
+            scale[&TextStyle::Monospace].size,
+            scale[&TextStyle::Body].size
+        );
     }
 
     /// Four distinct sizes, strictly ascending. Catches a tier edited to collide with its neighbour —

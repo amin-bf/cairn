@@ -7,11 +7,11 @@ use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
 use cairn_store::Collection;
 
 use crate::screens::enrolment::enrolment_screen;
-use crate::{spacing, typography};
 use crate::{
     bidi, body, field_label, fonts, full_width_button, heading, inbound, listing, optimise, sync,
     text_field,
 };
+use crate::{spacing, typography};
 
 /// **Temporary, and not a specified feature.** What the hand-off specimen carries between frames.
 #[derive(Default)]
