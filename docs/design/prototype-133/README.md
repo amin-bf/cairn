@@ -1,4 +1,17 @@
-# What a card is — twenty-five captures
+# What a card is — twenty-eight captures
+
+> **Outcome.** The card is a **well** — one object, two faces divided by a hairline, on a fill darker
+> than the page, badge inside. The page is fixed to `panel_fill` first, because without that a well
+> is not drawable. The face **steps down** the type scale to fit and stops at **body**. The badge
+> takes the corner reading does *not* begin at, **mirrored by the prompt's script**. And the controls
+> are bound to end up quieter than the card — [#134](https://github.com/amin-bf/cairn/issues/134)'s
+> to draw, this ticket's to require. Recorded as [ADR-0033](../../adr/0033-the-card.md); the app is
+> photographed in [`docs/design/carded-2026-08-11/`](../carded-2026-08-11/README.md).
+>
+> **Two of the four decisions went against what these captures first suggested**, and both are worth
+> reading below: the `outline` candidate's robustness advantage turned out to be insurance against a
+> defect that had to be fixed anyway (finding 2), and the badge's corner was settled *for* mirroring
+> by the person who reads both scripts, rather than against it (finding 4).
 
 The primary source for [#133](https://github.com/amin-bf/cairn/issues/133), the third slice of the
 design pass ([#121](https://github.com/amin-bf/cairn/issues/121)): twenty-five captures of a
@@ -36,6 +49,18 @@ Six axes, all in the environment, so one one-line storyboard serves every combin
 | `PROTO_CONTENT` | `word`, `sentence`, `long`, `fa-word`, `fa-sentence`, `markdown` |
 | `PROTO_HEIGHT` | `grow`, `fixed` |
 | `PROTO_SCREEN` | `question`, `revealed`, `live` |
+| `PROTO_CONTROLS` | `solid`, `quiet` |
+
+The last two values on `PROTO_CARD` and `PROTO_CONTROLS` were **added during the judging**, because
+looking at the first set raised questions it could not answer:
+
+- **`sunk`** — a well on `STONE_1`, the rung this crate never took (the design project's ramp defines
+  it; `theme.rs` skips `STONE_0` → `STONE_2`). Proposed to keep a card from sharing a fill with a
+  text field, and **it lost on measurement**: 1.043:1 against the page where `STONE_0` manages
+  1.121:1, so it is a *fainter* well, not a cleaner one.
+- **`quiet`** — the grade row drawn as outlines rather than filled slabs, same size and same hit
+  targets. Not this ticket's decision; drawn to answer whether the card's answer *depends* on it,
+  which it does. See finding 5.
 
 `PROTO_SCREEN=live` runs a sitting with a hand on the mouse, which is the only way to see the one
 thing a still cannot show: whether the prompt **moves** underneath you at the moment of reveal.
@@ -119,6 +144,34 @@ direction — which makes it move card to card — or to put it back on the page
 direction governs and one placement serves both.
 
 `b1-well-panel-below` is the page placement for comparison.
+
+### 5. Every candidate card loses to the buttons, and that is the real finding
+
+Blur a capture until nothing on it is legible and what still stands out is what the eye reaches for
+first. It is a crude instrument and it is the only one here that measures *attention* rather than
+colour. Run it on this set and the answer is uncomfortable:
+
+| | contrast against the page |
+|---|---|
+| the grade buttons (`STONE_5`) | **1.54:1** |
+| a card as `STONE_0` — the well | 1.12:1 |
+| a card as `STONE_1` — `sunk` | 1.04:1 |
+| a card as an outline | 1.00:1 |
+
+**In every candidate, the controls are more separated from the page than the card is.** The button
+stack is the heaviest mass on the Review screen and the thing being studied is the lightest, so
+making the card quieter — which is what all of `well`, `sunk` and `outline` do — makes the problem
+*worse*, not better. `a1` and `a3` blurred are the pair that shows it.
+
+`g1-well-quiet` is the test that settles it: the same card, the same button positions, sizes and hit
+targets, with the fill taken off the controls and a 1px edge kept. The card becomes the dominant
+shape and the two brightest points on the screen are the words. **The card's answer therefore depends
+on a decision that is not this ticket's**, which is why ADR-0033 §3 records the constraint and leaves
+the treatment to #134.
+
+It also demotes the choice between `well`, `sunk` and `outline` to a small one: the dark end of this
+palette is compressed enough that all three are nearly the same picture, and what makes a card read
+as a card here is its **edge and its size**, not its fill.
 
 ## The two-object question, as photographed
 

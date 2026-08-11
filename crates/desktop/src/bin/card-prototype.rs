@@ -71,6 +71,8 @@ const PAGE_SHIPPED: Color32 = Color32::from_rgb(0x08, 0x08, 0x08);
 const PAGE_PANEL: Color32 = Color32::from_rgb(0x1a, 0x1e, 0x21);
 
 const STONE_0: Color32 = Color32::from_rgb(0x0f, 0x12, 0x14); // text-field wells
+// The rung `theme.rs` never took. The design project's ramp has it; the crate skips STONE_0 → STONE_2.
+const STONE_1: Color32 = Color32::from_rgb(0x16, 0x1a, 0x1d);
 const STONE_4: Color32 = Color32::from_rgb(0x28, 0x2e, 0x33); // separators
 const STONE_5: Color32 = Color32::from_rgb(0x2c, 0x32, 0x37); // widgets at rest — today's card
 const QUIET: Color32 = Color32::from_rgb(0x33, 0x3b, 0x40); // strokes at rest
@@ -157,6 +159,15 @@ enum Card {
     /// **Two objects, E's material.** The mirror of `Raised`: the colour question asked without the
     /// structural one. Two separate wells, one gap apart.
     Two,
+    /// **A well on its own rung.** `STONE_1` — darker than the page, so it is a hole, but *lighter*
+    /// than `STONE_0`, so it is not the same material as a text field.
+    ///
+    /// The rung exists already and the application never took it: the design project's ramp defines
+    /// `--stone-1: #161a1d` and `theme.rs` skips straight from `STONE_0` to `STONE_2`. That gap is
+    /// exactly the width of this problem. `extreme_bg_color` is `STONE_0` and is spoken for — it is
+    /// *where you type* — so a card filled with it makes a read-only card and an editable field the
+    /// same surface, and the design system would then be saying "well" for two different jobs.
+    Sunk,
 }
 
 impl Card {
@@ -167,9 +178,10 @@ impl Card {
             "raised" => Self::Raised,
             "outline" => Self::Outline,
             "two" => Self::Two,
-            other => {
-                panic!("unknown PROTO_CARD {other:?} — one of today, well, raised, outline, two")
-            }
+            "sunk" => Self::Sunk,
+            other => panic!(
+                "unknown PROTO_CARD {other:?} — one of today, well, raised, outline, two, sunk"
+            ),
         }
     }
 
@@ -181,12 +193,13 @@ impl Card {
             Self::Well | Self::Two => (STONE_0, Stroke::new(1.0, STONE_4), 8),
             Self::Raised => (STONE_5, Stroke::new(1.0, QUIET), 8),
             Self::Outline => (Color32::TRANSPARENT, Stroke::new(1.0, STONE_4), 8),
+            Self::Sunk => (STONE_1, Stroke::new(1.0, STONE_4), 8),
         }
     }
 
     /// Whether the revealed card is **one object with two halves** or two separate objects.
     fn one_object(self) -> bool {
-        matches!(self, Self::Well | Self::Raised | Self::Outline)
+        matches!(self, Self::Well | Self::Raised | Self::Outline | Self::Sunk)
     }
 }
 
@@ -272,6 +285,8 @@ struct Options {
     content: Content,
     height: Height,
     screen: Screen,
+    /// Draw the grade row as outlines rather than filled slabs. #134's question, borrowed.
+    quiet_controls: bool,
 }
 
 /// Lay one card face out at `size`, and give back both the galley and how tall it is — the height
@@ -487,7 +502,13 @@ fn badge_below(ui: &mut egui::Ui) {
 /// The grade row, exactly as variant E settled it and #134 will re-open: *Forgot* held apart from
 /// the three passes. Drawn here only so the card is judged with the screen it lives on underneath
 /// it, never on a page of its own.
-fn grades(ui: &mut egui::Ui) {
+///
+/// **`quiet` is not this ticket's to decide, and it is here to settle an argument about this
+/// ticket.** Blurred until nothing is legible, today's filled controls are the heaviest mass on the
+/// Review screen and a recessed card is the lightest — so a card that recedes only wins the eye if
+/// the controls stop shouting. Whether that is affordable is #134's; whether the card's answer
+/// *depends* on it is #133's, and it cannot be answered without drawing the pair.
+fn grades(ui: &mut egui::Ui, quiet: bool) {
     let button = |ui: &mut egui::Ui, label: &str, width: f32| {
         let mut job = egui::text::LayoutJob::default();
         job.append(
@@ -508,7 +529,13 @@ fn grades(ui: &mut egui::Ui) {
                 ..Default::default()
             },
         );
-        ui.add_sized([width, 36.0], egui::Button::new(job))
+        let mut b = egui::Button::new(job);
+        if quiet {
+            // The control keeps its size and its hit target — only its *weight* changes, so the
+            // pair differs in nothing but how loudly the buttons speak.
+            b = b.fill(Color32::TRANSPARENT).stroke(Stroke::new(1.0, QUIET));
+        }
+        ui.add_sized([width, 36.0], b)
     };
     button(ui, "Forgot", ui.available_width());
     ui.add_space(spacing::gap(3));
@@ -521,7 +548,13 @@ fn grades(ui: &mut egui::Ui) {
     });
     ui.add_space(spacing::gap(3));
     let width = ui.available_width();
-    ui.add_sized([width, 36.0], egui::Button::new("Edit note"));
+    let mut edit = egui::Button::new("Edit note");
+    if quiet {
+        edit = edit
+            .fill(Color32::TRANSPARENT)
+            .stroke(Stroke::new(1.0, QUIET));
+    }
+    ui.add_sized([width, 36.0], edit);
 }
 
 fn draw(ui: &mut egui::Ui, o: Options, revealed: &mut bool) {
@@ -558,7 +591,7 @@ fn draw(ui: &mut egui::Ui, o: Options, revealed: &mut bool) {
             badge_below(ui);
         }
         ui.add_space(spacing::gap(3));
-        grades(ui);
+        grades(ui, o.quiet_controls);
     } else {
         // E put the reveal invitation **inside** the card; that was #124's decision and is not
         // re-opened here. It is drawn as the card's own quiet footer only in the `live` screen,
@@ -622,6 +655,13 @@ fn main() -> eframe::Result<()> {
         content: Content::parse(&env("PROTO_CONTENT", "word")),
         height: Height::parse(&env("PROTO_HEIGHT", "grow")),
         screen: Screen::parse(&env("PROTO_SCREEN", "revealed")),
+        quiet_controls: matches!(
+            env("PROTO_CONTROLS", "solid")
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "quiet"
+        ),
     };
 
     let native = eframe::NativeOptions {
