@@ -418,8 +418,34 @@ because they are validated findings, not because a web build ships.
     window. A `LayoutJob` also wraps at `f32::INFINITY`, so nothing had ever been asked to fit.
     **The reason this survived so long is the fixture**: the seed collection is French, so no capture in
     this repository had ever put right-to-left text on a card face. The Persian storyboard now visits
-    the card pane for exactly that, and `a_right_to_left_card_face_is_drawn_inside_its_card` pins it.
-    Any new surface drawing note content owes the same two lines and the same capture.
+    the card pane for exactly that, and `surface`'s
+    `a_right_to_left_face_is_drawn_inside_the_card` pins it. Any new surface drawing note content owes
+    the same two lines and the same capture.
+19. **Ask `surface` for a card, and never draw note content on a rect you filled yourself.**
+    [ADR-0033](./docs/adr/0033-the-card.md) is rule 13 a fourth time, for the card: one object with two
+    faces divided by a hairline, on a fill *darker* than the page, with the box badge inside it.
+    `surface::card` is the only implementation and both callers — review and the editor's card pane —
+    go through it, which is what finally makes ADR-0012 §1's *"drawn the way review draws it"* literal
+    rather than approximate.
+    **Three things it settles are easy to get wrong again.** The face **steps down** display → heading
+    → body when the content does not fit and **stops at body**, growing instead of shrinking further —
+    a paragraph card at 40px is the whole 560×860 window with *Edit note* below the fold, and a card
+    face smaller than prose has stopped serving the reader it was sized for. The badge takes the corner
+    reading does **not** begin at — top-right in Latin, **top-left in Persian** — governed by the
+    *prompt* so it cannot change sides at the reveal; a corner that is quiet in one script is the first
+    thing seen in the other, and ADR-0030 §4 calls it a *quiet aside*. And **the controls must stay
+    quieter than the card** (ADR-0033 §3): blurred until nothing is legible, filled grade buttons
+    outweigh every candidate card, so a Review screen whose controls beat its card has failed the ADR
+    whatever #134 draws.
+20. **`clear_color` is the page, and deleting it fails silently.** `eframe::App::ui` hands you a `Ui`
+    with *"no margin or background color"* — its words — so without an override every screen is drawn
+    on eframe's own `rgba(12, 12, 12, 180)`, which is `#080808` and **below every rung of the stone
+    ramp**. That is not a darker theme: `theme::card_fill` measures **1.07:1** against it, so a card
+    drawn as a well inverts into a raised surface, and the nav strip — a real panel, so it does read
+    `panel_fill` — becomes *lighter* than the page under it. It went unnoticed through every capture
+    this repository holds. This is rule 13's blind spot rather than a breach of it: the rule governs
+    colours this crate **names**, and says nothing about ones the renderer supplies by default, where
+    nothing in the source is wrong and the screen is still a colour nobody picked (ADR-0033 §2).
 
 ## The local store
 

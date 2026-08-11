@@ -81,6 +81,33 @@ const LICHEN_PALE: Color32 = rgb(0xcfe3ec); // selection stroke and text
 const CLAY: Color32 = rgb(0xc2a37a); // warn — warm, never alarming
 const ROSE: Color32 = rgb(0xb57e79); // error — softened, never #ff0000
 
+/// The fill of a **card-like surface** — the review card, the editor's card rows (ADR-0033 §2).
+///
+/// A card is a **well**: darker than the page, so it is a hole you read into rather than a slab
+/// sitting on top of it. Until #133 the card was drawn on `widgets.inactive.bg_fill`, which is
+/// *lighter* than the page, and the whole complaint was that the thing being studied was made of
+/// the same material as the buttons under it.
+///
+/// **It is `STONE_0`, and it therefore shares a fill with a text field** (`extreme_bg_color`).
+/// That is accepted rather than overlooked: a well means *content*, not *editable*, and the two are
+/// told apart by [`crate::surface::RADIUS`] against the widget radius and by never appearing on the
+/// same screen. If they ever must diverge, this function is the one place that changes.
+pub fn card_fill() -> Color32 {
+    STONE_0
+}
+
+/// The edge of a card-like surface (ADR-0033 §2) — the separator rung, one step above the fill, so
+/// a card has a boundary without a line anyone would call a border.
+pub fn card_stroke() -> Stroke {
+    Stroke::new(1.0, STONE_4)
+}
+
+/// The hairline dividing a card's two faces (ADR-0033 §1). The same rung as the edge, because it is
+/// the same claim — *this is one object* — said on the inside.
+pub fn card_divider() -> Color32 {
+    STONE_4
+}
+
 /// Install the palette, pinning dark. Called **once** from [`crate::CairnApp::new`] — both acts of
 /// pinning, per ADR-0030 §2 and the module header: the palette into the **dark slot** (never the
 /// active slot), and the theme preference to dark so an OS theme change cannot restore stock egui.

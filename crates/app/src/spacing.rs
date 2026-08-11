@@ -170,7 +170,8 @@ mod tests {
         let drawn = each + ambient + gutter + each;
 
         assert_eq!(
-            drawn, available,
+            drawn,
+            available,
             "the split overruns its column by {}px",
             drawn - available
         );

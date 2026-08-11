@@ -121,7 +121,7 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4, 0028 §5 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -228,6 +228,22 @@ setting any text size or writing any `add_space`, and note two traps it records:
 that was never installed **panics** rather than falling back, and both modules install into *every*
 theme slot, since `Style` is per-theme exactly like `Visuals`. §3 exempts the page margin from the
 grid deliberately; §5 keeps the 7:1 contrast floor while retiring the 9px argument 0030 §3 gave for it.
+
+**[0033](./docs/adr/0033-the-card.md) is the card, and it is 0030's rule a fourth time — plus the case
+that rule cannot reach**: a card is **one** object with two faces divided by a hairline, drawn as a
+**well** (`STONE_0`, a `STONE_4` edge, an 8px corner) with the box badge **inside** it, all of it in a
+`surface` module that both review and the editor's card pane call. Read it before drawing note content
+anywhere. Four things it decides are easy to undo by accident. The page is now `panel_fill` via
+`clear_color`, and **without that override every screen sits on eframe's `#080808`**, below every rung
+of the ramp, where a well measures 1.07:1 and inverts into a raised surface — the rule about naming
+colours once cannot catch a colour the *renderer* supplies. The card face **steps down** the scale to
+fit and **stops at body**, so 0032 §1's display tier is the card's maximum rather than its size. The
+badge takes the corner reading does **not** start at, mirrored by the **prompt's** script, because
+top-right is a footnote in Latin and the first thing seen in Persian. And §3 **binds
+[#134](https://github.com/amin-bf/cairn/issues/134)**: the controls must end up quieter than the card,
+since filled buttons outweigh every candidate card and making the card recede without them makes it
+worse. It also lands 0030 §4's lower-case `box 3`, which that ADR recorded as shipped and which never
+was.
 
 0028 also carries the one item in that change that cannot be taken back, the Android package id. Its
 extension rename **is** discharged: `.cdeck` and `.ccoll` were measured on the handset at API 37 and
