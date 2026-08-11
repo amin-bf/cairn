@@ -11,6 +11,7 @@ use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
 use crate::session::{self, Offered, ReviewState};
+use crate::spacing;
 use crate::{
     Sitting, badge, body, box_badge_wording, card_face, deck, full_width_button, heading, text,
 };
@@ -54,9 +55,9 @@ pub(crate) fn review(
     if sitting.is_none() {
         if *showing_leeches {
             heading(ui, "Leeches");
-            ui.add_space(8.0);
+            ui.add_space(spacing::gap(2));
             let edit = leech_screen(ui, coll, &ranked, &suspended, &replayed);
-            ui.add_space(8.0);
+            ui.add_space(spacing::gap(2));
             if full_width_button(ui, "Back to review").clicked() {
                 *showing_leeches = false;
             }
@@ -64,14 +65,14 @@ pub(crate) fn review(
         }
 
         heading(ui, "Review");
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
 
         // The end-of-session pointer: a plain statement that N cards are costing a lot, with a way
         // through to the list where the decision is made — never a decision point itself (ADR-0010
         // §6). Dismissing it or tapping through clears it; it is shown once and never nags.
         if let Some(count) = *session_pointer {
             body(ui, &pointer_wording(count));
-            ui.add_space(8.0);
+            ui.add_space(spacing::gap(2));
             if full_width_button(ui, "Show me").clicked() {
                 *showing_leeches = true;
                 *session_pointer = None;
@@ -96,7 +97,7 @@ pub(crate) fn review(
         // this is the place to return to. Offered whenever any card is a leech or is suspended (whose
         // permanent home this is, ADR-0010 §8), below the picker so it never competes with it.
         if !ranked.is_empty() || !suspended.is_empty() {
-            ui.add_space(12.0);
+            ui.add_space(spacing::gap(3));
             if full_width_button(ui, &leech_entry_wording(ranked.len(), suspended.len())).clicked()
             {
                 *showing_leeches = true;
@@ -106,7 +107,7 @@ pub(crate) fn review(
     }
 
     heading(ui, "Review");
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // A running sitting: keep the frame ticking so the 10-minute checkpoint can surface without an
     // input event (immediate mode has nowhere to wait — client-stack rule 4).
@@ -133,7 +134,7 @@ pub(crate) fn review(
             end_sitting = true;
         } else if s.checkpoint_due() {
             body(ui, "You've been reviewing for 10 minutes.");
-            ui.add_space(8.0);
+            ui.add_space(spacing::gap(2));
             if full_width_button(ui, "Finish here").clicked() {
                 end_sitting = true;
             }
@@ -152,7 +153,7 @@ pub(crate) fn review(
             // Progress counts gradings against the chosen count (ADR-0011 §9), so the bar moves on
             // every grade press — a lapse re-show included — never freezing when the user struggles.
             body(ui, &format!("{} of {}", s.graded, s.chosen));
-            ui.add_space(8.0);
+            ui.add_space(spacing::gap(2));
 
             // Reveal is tap-the-card: the prompt is one wide button, and clicking it shows the back.
             // Identical by touch and by mouse — egui does not distinguish them.
@@ -161,17 +162,17 @@ pub(crate) fn review(
             }
 
             if s.revealed {
-                ui.add_space(4.0);
+                ui.add_space(spacing::gap(1));
                 card_face(ui, &rendered.answer);
 
                 // The box badge appears only after reveal, is non-interactive, and reports
                 // durability — never a queue (scheduling `CONTEXT.md`). A card with no review history
                 // reads `new`, never `Box 1`, which would state a durability nothing has measured
                 // (ADR-0006 §6).
-                ui.add_space(4.0);
+                ui.add_space(spacing::gap(1));
                 badge(ui, &box_badge_wording(!offered.is_new, offered.box_));
 
-                ui.add_space(12.0);
+                ui.add_space(spacing::gap(3));
                 let pressed = grade_buttons(ui, &offered, today);
 
                 // Edit this note — offered **only now the card is revealed** (ADR-0029 §1). The
@@ -189,7 +190,7 @@ pub(crate) fn review(
                 //
                 // An edit that makes the card dormant still needs no mechanism: the next frame
                 // re-derives the queue and simply does not offer it (ADR-0006 §2).
-                ui.add_space(12.0);
+                ui.add_space(spacing::gap(3));
                 if full_width_button(ui, "Edit note").clicked() {
                     edit_request = Some(offered.card.note);
                 }
@@ -310,11 +311,19 @@ fn leech_screen(
 
     if !active.is_empty() {
         body(ui, "These keep catching you out — worst first.");
-        ui.add_space(4.0);
-        for (card, preview, days, reviews) in &active {
+        ui.add_space(spacing::gap(1));
+        for (i, (card, preview, days, reviews)) in active.iter().enumerate() {
+            // Two units between leeches, one between a leech's badge and its own controls — so the
+            // entry binds to its cost rather than to the entry below it. Both were the ambient 3px
+            // until ADR-0032, which is to say neither was chosen and the pair read as one list of
+            // alternating strips.
+            if i > 0 {
+                ui.add_space(spacing::gap(2));
+            }
             // The cost, made concrete (ADR-0010 §6): failure days and how many reviews they took.
             badge(ui, &format!("{days} bad days · {reviews} reviews"));
-            ui.horizontal(|ui| {
+            ui.add_space(spacing::gap(1));
+            spacing::row(ui, 1, |ui| {
                 if ui.button(text(ui, preview)).clicked() {
                     edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
                 }
@@ -329,13 +338,16 @@ fn leech_screen(
     }
 
     if !suspended_rows.is_empty() {
-        ui.add_space(12.0);
+        ui.add_space(spacing::gap(3));
         // Suspended cards have a permanent home here (ADR-0010 §8) — their own section, always, with
         // unsuspend available. Never a one-way door.
         body(ui, "Suspended — not shown in review.");
-        ui.add_space(4.0);
-        for (card, preview) in &suspended_rows {
-            ui.horizontal(|ui| {
+        ui.add_space(spacing::gap(1));
+        for (i, (card, preview)) in suspended_rows.iter().enumerate() {
+            if i > 0 {
+                ui.add_space(spacing::gap(1));
+            }
+            spacing::row(ui, 1, |ui| {
                 if ui.button(text(ui, preview)).clicked() {
                     edit = Some(card.note);
                 }
@@ -425,8 +437,8 @@ fn picker(
 /// offers more work than exists.
 fn count_buttons(ui: &mut egui::Ui, available: usize) -> Option<usize> {
     let mut chosen = None;
-    ui.add_space(8.0);
-    ui.horizontal_wrapped(|ui| {
+    ui.add_space(spacing::gap(2));
+    spacing::row_wrapped(ui, 1, |ui| {
         for option in [5usize, 10, 20] {
             if option <= available && ui.button(text(ui, &option.to_string())).clicked() {
                 chosen = Some(option);
@@ -452,9 +464,16 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
     };
     button(ui, Grade::Forgot, "Forgot");
     // The visual break between the failure grade and the passes.
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     button(ui, Grade::Barely, "Barely");
+    // **One unit, stated.** These three were never separated by anything anyone chose: they leaned
+    // on egui's ambient 3px, and zeroing it (ADR-0032 §2) fused them into a single slab. Three units
+    // hold the passes apart from *Forgot*; one holds them apart from each other, which is the
+    // grouping the old 3-against-15 accidentally expressed and the only thing being preserved here.
+    // Whether the three become a segmented row instead is #134's, not this ticket's.
+    ui.add_space(spacing::gap(1));
     button(ui, Grade::Good, "Good");
+    ui.add_space(spacing::gap(1));
     button(ui, Grade::Easy, "Easy");
     pressed
 }
@@ -526,6 +545,13 @@ mod tests {
         let mut showing_leeches = false;
         let mut pointer = None;
         let ctx = egui::Context::default();
+        // The card face draws at the display tier, and **an unregistered `TextStyle::Name` panics
+        // rather than falling back** to a default size — so a context that draws a card must carry
+        // the scale exactly as `CairnApp::new` installs it. That is the loud failure, and it is the
+        // one this crate wants: the alternative, resolving defensively at the call site, would draw
+        // a 40px face at 13px on any path that forgot, with nothing failing.
+        crate::typography::install(&ctx);
+        crate::spacing::install(&ctx);
 
         let mut frame = |sitting: &mut Option<Sitting>, coll: &mut Collection| {
             ctx.run_ui(Default::default(), |ui| {

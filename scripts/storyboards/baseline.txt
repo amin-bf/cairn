@@ -19,8 +19,14 @@
 mousemove %CX% 600 click 1
 sleep 1
 shot 01-review-start
-# The count picker sits at the start of its line: `5` then `All 5`.
-mousemove %LX+39% 93 click 1
+# The count picker sits at the start of its line: `5` then `All 5`. `+39` reaches `All 5`, so the
+# sitting that follows holds every card.
+#
+# **These y values moved with the type scale and the rhythm (#132)** and will move again with the
+# card (#133) and the controls (#134). A storyboard cannot tell you it missed — it photographs
+# whatever is on screen under the name it was asked for — so each one here was re-measured off the
+# capture rather than adjusted by eye.
+mousemove %LX+39% 112 click 1
 sleep 1.5
 shot 02-review-question
 # Reveal is tap-the-card (review.rs: "the prompt is one wide button").
@@ -46,6 +52,6 @@ sleep 1
 # Open the first note — `chien`, which has a card — rather than *Create note*. A fresh draft has no
 # cards, so the editor's card pane would read "No cards yet" and the two-column layout this pass
 # exists to photograph would have nothing in half of it.
-mousemove %LX+19% 221 click 1
+mousemove %LX+19% 252 click 1
 sleep 1.5
 shot 05-notes-editor

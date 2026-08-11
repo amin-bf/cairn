@@ -4,22 +4,36 @@
 # is the **keymap** path — the same events an `ir(pes)` layout produces, delivered as ordinary key
 # presses. It does **not** exercise a composing input method (`zwp_text_input_v3`); Persian does not
 # need one, but see `docs/environment/desktop-capture.md` for what that leaves unproven.
+#
+# **The nav x is `%LX+86%`, not a literal 86.** It was a literal until #132, and it had been missing
+# its target since #131 put a 28px page margin in front of it — the click landed on *Review*, so this
+# storyboard photographed the Review screen three times under three editor names and said nothing.
+# `baseline.txt` was migrated to `%LX%` when the frame landed and this file was not; that is the whole
+# failure. A storyboard cannot tell you it missed (#122), so both files are now on the same token.
 mousemove %CX% 600 click 1
 sleep 1
-mousemove 86 11 click 1
+mousemove %LX+86% 11 click 1
 sleep 1.2
-mousemove %CX% 76 click 1
+mousemove %CX% 87 click 1
 sleep 1.5
-mousemove %CX% 233 click 1
+mousemove %CX% 300 click 1
 sleep 0.8
 sh xdotool type --delay 120 'سگ در خانه است.'
 sleep 1.5
 shot 08-editor-persian-front
-mousemove %CX% 268 click 1
+mousemove %CX% 335 click 1
 sleep 0.8
 sh xdotool type --delay 120 'the dog is in the house'
 sleep 1.5
 shot 09-editor-persian-and-latin
-mousemove %CX% 44 click 1
+# The **card pane**, which is the only place a storyboard can reach Persian drawn at the display tier
+# — 40px is a size no other screen in this set draws, and the card face is the one surface that uses
+# it (ADR-0032 §1). Client-stack rule 7 makes this worth a capture rather than an assumption: within
+# a family the *first* matching face wins, more than one shipped face carries the Arabic script, and
+# a glyph existing is not the same as the right face drawing it. Nothing but looking tells them apart.
+mousemove %LX+75% 250 click 1
+sleep 1.2
+shot 11-cards-persian-display
+mousemove %CX% 48 click 1
 sleep 1.5
 shot 10-notes-list-with-persian
