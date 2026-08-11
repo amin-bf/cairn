@@ -386,6 +386,40 @@ because they are validated findings, not because a web build ships.
     of a notch. And `frame::cap_for` is read by **both** the nav row and the screen, because two call
     sites naming their own number is how the nav silently drifts out of alignment with the content
     (ADR-0031 §3).
+17. **Type is named only in `typography`, spacing only in `spacing`, and a stated gap is the whole
+    gap.** [ADR-0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md) is rule 13 a third time, with
+    one deliberate break in the pattern. Type follows it: four sizes, ambient roles, and a literal
+    passed to a `FontId` outside that module is the defect — control text is an **alias** of body, so
+    diverging them means breaking a test rather than adding a constant, and `display` has exactly one
+    caller (the card face). **The rhythm breaks it, and the reason has to travel with the rule** or it
+    reads as an oversight: `item_spacing` is **zeroed** and every gap says its own size, because an
+    ambient gap cannot express a gap *smaller* than itself and would force every site to name a number
+    that is not the gap it wants. So `ui.add_space(spacing::gap(n))`, never a float, and **`gap` takes
+    an integer so a half-step will not compile** — a unit that permits halves is a four-unit wearing an
+    eight label.
+    **Three things fail silently here.** egui adds `item_spacing` *before* every stated gap — its docs
+    say so — so any width arithmetic written against the old behaviour is wrong by 8 per gap; that is
+    what left the two-column editor 8px outside its own frame, off-centre, with nothing failing.
+    **Any widget pair that relied on the ambient 3px fuses** the moment it is zeroed, and a 3px
+    separation nobody decided is not a design to preserve — state it. And **a `TextStyle::Name` that
+    was never installed panics rather than falling back**, which is the loudness this crate wants: a
+    defensive resolve would draw the 40px card face at stock's 13 on any path that skipped `install`.
+    Both modules install through `all_styles_mut` — `Style` is per-theme exactly like `Visuals`
+    (rule 14), and neither type nor spacing differs between themes, so writing every slot makes
+    ADR-0030 §2's trap inapplicable instead of merely avoided.
+    The page margin is **exempt** from the grid on purpose (ADR-0032 §3) — the frame is its own value
+    family — and the numbers are **logical pixels**, which is `dp` and `pt`, so they carry to a native
+    client unchanged.
+18. **A card face must reset `halign` and set a wrap width, and no French fixture will tell you
+    otherwise.** `bidi` sets `halign = RIGHT` as a **direction marker**, never the alignment, and says
+    every caller resets it — an RTL galley left that way spans **negative x**, so a button centring it
+    draws the text off its own face. `card_face` was the caller that never did, and at stock's 13px the
+    ~118px overhang merely looked off-centre; the display tier took it to **−455px**, clean off the
+    window. A `LayoutJob` also wraps at `f32::INFINITY`, so nothing had ever been asked to fit.
+    **The reason this survived so long is the fixture**: the seed collection is French, so no capture in
+    this repository had ever put right-to-left text on a card face. The Persian storyboard now visits
+    the card pane for exactly that, and `a_right_to_left_card_face_is_drawn_inside_its_card` pins it.
+    Any new surface drawing note content owes the same two lines and the same capture.
 
 ## The local store
 
