@@ -703,12 +703,30 @@ pub(crate) fn card_face(ui: &mut egui::Ui, s: &str) -> egui::Response {
     // `text`'s Button style with every button in the application, so the one thing on screen whose
     // job is to be read was drawn at the size of a label. `display` exists for this surface; a second
     // caller means it has stopped meaning "the text being read".
-    let job = bidi::markdown_job(
+    let mut job = bidi::markdown_job(
         s,
         typography::display().resolve(ui.style()),
         ui.visuals().text_color(),
     );
-    ui.add_sized([ui.available_width(), 96.0], egui::Button::new(job))
+
+    // **Two things the display tier exposed, both of which were already wrong.**
+    //
+    // `halign` is a *direction marker* in `bidi`, never the alignment mechanism, and that module says
+    // in as many words that every caller resets it. This one never did. An RTL galley left at
+    // `Align::RIGHT` spans **negative x** — epaint aligns its rows against the origin — so the button
+    // centres a rect that begins left of zero and draws the text off its own face. At stock's 13px the
+    // overhang was around 118px inside a 500px card and merely looked off-centre; at the display tier
+    // it measured **−455px** and ran clean off the window, which is how it was finally seen. The card
+    // centres every face it draws, Persian included, so `LEFT` here means "measure from zero" and the
+    // centring is the button's.
+    job.halign = egui::Align::LEFT;
+
+    // And a `LayoutJob` wraps at `f32::INFINITY` by default, so a face longer than the card simply ran
+    // past it. Nothing had ever been drawn at a tier large enough to make that reachable.
+    let width = ui.available_width();
+    job.wrap.max_width = (width - ui.spacing().button_padding.x * 2.0).max(1.0);
+
+    ui.add_sized([width, 96.0], egui::Button::new(job))
 }
 
 /// A small label for a field or control — a form-pane caption, weaker than body text.
@@ -808,6 +826,57 @@ mod tests {
         assert_eq!(box_badge_wording(false, 1), "new");
         assert_eq!(box_badge_wording(true, 1), "Box 1");
         assert_eq!(box_badge_wording(true, 4), "Box 4");
+    }
+
+    /// **A right-to-left card face is drawn inside its own card**, at the display tier.
+    ///
+    /// `bidi` sets `halign = RIGHT` as a *direction marker* and says every caller must reset it,
+    /// because an RTL galley left that way spans **negative x** — epaint aligns its rows against the
+    /// origin. `card_face` was the one caller that never did, so a button centring that galley drew
+    /// the text off its own face. At stock's 13px the overhang was around 118px inside a 500px card
+    /// and merely looked off-centre; the 40px display tier of ADR-0032 §1 pushed it clean off the
+    /// window, which is the only reason anyone saw it.
+    ///
+    /// Nothing failed then and nothing would fail again — the seed collection is French, so no
+    /// capture in this repo had ever put right-to-left text on a card face.
+    #[test]
+    fn a_right_to_left_card_face_is_drawn_inside_its_card() {
+        const WIDTH: f32 = 560.0;
+        let ctx = egui::Context::default();
+        typography::install(&ctx);
+        spacing::install(&ctx);
+
+        let out = ctx.run_ui(Default::default(), |ui| {
+            ui.set_width(WIDTH);
+            card_face(ui, "سگ در خانه است.");
+        });
+
+        let mut seen = 0;
+        for clipped in &out.shapes {
+            fn walk(shape: &egui::Shape, seen: &mut i32) {
+                match shape {
+                    egui::Shape::Text(t) => {
+                        let left = t.pos.x + t.galley.rect.min.x;
+                        let right = t.pos.x + t.galley.rect.max.x;
+                        assert!(
+                            left >= 0.0,
+                            "the card face starts at x={left}, outside its own card — \
+                             `halign` was not reset (bidi)"
+                        );
+                        assert!(
+                            right <= WIDTH,
+                            "the card face ends at x={right}, past the {WIDTH}px card — \
+                             the job's wrap width was not set"
+                        );
+                        *seen += 1;
+                    }
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, seen)),
+                    _ => {}
+                }
+            }
+            walk(&clipped.shape, &mut seen);
+        }
+        assert!(seen > 0, "no text was drawn, so nothing was actually asserted");
     }
 
 }
