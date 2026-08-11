@@ -7,6 +7,7 @@ use cairn_store::Collection;
 use eframe::egui::{Align, Layout, vec2};
 
 use crate::notes::{self, Filter};
+use crate::spacing;
 use crate::{
     Editing, badge, bidi, bidi_layouter, body, box_badge_wording, card_face, cards, compact_button,
     editor, field_label, frame, full_width_button, heading, raise_keyboard, sync, text, text_field,
@@ -62,7 +63,7 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
             *editing = None;
             return;
         }
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
         if let Some(ed) = editing {
             editor_pane(ui, coll, ed, two_column);
         }
@@ -81,7 +82,7 @@ fn note_list(
     moving: &mut Option<NoteId>,
 ) {
     heading(ui, "Notes");
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // Create opens a fresh draft; the note is not committed until its first non-empty field
     // (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is a plain front/back. It
@@ -97,7 +98,7 @@ fn note_list(
     // The empty state is the empty *collection* (ADR-0015 §7): shown when there is no note at all, not
     // when a filter happens to match nothing.
     if !notes::any_notes(coll).unwrap_or(false) {
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
         body(ui, notes::EMPTY_STATE);
         return;
     }
@@ -105,13 +106,13 @@ fn note_list(
     // The deck filter and the deck authoring surface (ADR-0021 §9): decks are **created where they
     // are filtered**, so the filter dropdown, *new deck*, and the delete of the filtered deck all sit
     // together here. Deletion is ADR-0005 §7's flag, deriving through to the deck's notes.
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     deck_controls(ui, coll, deck_filter, new_deck);
 
     // Text search — the load-bearing filter (ADR-0021 §2), a plain substring over field values,
     // composing with the deck filter above (deck ∩ text; the tag filter shares the vocabulary and is
     // set on notes but has no dedicated control yet).
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     field_label(ui, "Search");
     text_field(ui, search);
     let filter = Filter {
@@ -120,7 +121,7 @@ fn note_list(
         ..Filter::default()
     };
 
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     let rows = notes::list(coll, &filter).unwrap_or_default();
     if rows.is_empty() {
         // A move whose target view is now empty has no gaps to offer; drop it rather than strand it.
@@ -150,8 +151,16 @@ fn note_list(
     let mut open: Option<NoteId> = None;
     let mut delete: Option<NoteId> = None;
     let mut start_move: Option<NoteId> = None;
-    for row in &rows {
-        ui.horizontal(|ui| {
+    for (i, row) in rows.iter().enumerate() {
+        // **The gap between rows is stated, one unit, and it is the same unit that separates the
+        // controls *within* a row.** Before ADR-0032 these rows leaned on egui's ambient 3px and were
+        // fused the moment it went to zero. Stating it equal in both axes is deliberate rather than
+        // convenient: a row is a group of three controls, and a vertical gap smaller than the
+        // horizontal one would make a *column* of Deletes read as a group before the row does.
+        if i > 0 {
+            ui.add_space(spacing::gap(1));
+        }
+        spacing::row(ui, 1, |ui| {
             if ui.button(text(ui, row.preview())).clicked() {
                 open = Some(row.id);
             }
@@ -196,13 +205,13 @@ fn placement_list(
         *moving = None;
         return;
     }
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     let name = rows
         .iter()
         .find(|r| r.id == mid)
         .map_or("", |r| r.preview());
     field_label(ui, &format!("Placing: {name}"));
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // The gaps run among the *other* visible rows — the moving note removed so it is never offered a
     // place beside itself. Gap `i` sits before `visible[i]`, and the last gap (past the final row) is
@@ -252,7 +261,7 @@ fn deck_controls(
             }
         });
 
-    ui.horizontal(|ui| {
+    spacing::row(ui, 1, |ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
         text_field(ui, new_deck);
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
@@ -304,7 +313,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
         }
     }
 
-    ui.horizontal(|ui| {
+    spacing::row(ui, 1, |ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
         text_field(ui, &mut ed.new_deck);
         if created
@@ -333,7 +342,7 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_c
             "New note"
         },
     );
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // The card pane and the ambient destructive-edit warning are recomputed from current content
     // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
@@ -370,7 +379,7 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_c
 
     editor_header(ui, coll, ed);
     pane_toggle(ui, &mut ed.show_cards);
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     if ed.show_cards {
         editor_cards_body(ui, pane.as_ref());
     } else {
@@ -388,7 +397,7 @@ fn editor_header(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     // reader does not have.
     if sync::LATIN_INPUT_ONLY {
         field_label(ui, sync::DESKTOP_AUTHORING_LINE);
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
     }
 
     // The kind dropdown: the shipped kinds plus this note's own current kind when acquired, and never
@@ -412,14 +421,14 @@ fn editor_header(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
         }
     }
 
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // The deck dropdown, beside the kind one (ADR-0021 §9): the note's one deck (ADR-0005 §2), with
     // *create a new deck* right here — the moment you need a deck that does not exist is while filing
     // the note that wants it. On a draft the choice is held until the note is born, then written once.
     editor_deck_dropdown(ui, coll, ed);
 
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 }
 
 /// One of the editor's two side-by-side panes: a fixed-width, top-down child so the pane's own
@@ -438,7 +447,7 @@ fn pane_column(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) {
 /// The phone's `Write | Cards` pane toggle (ADR-0012 §1): two mutually exclusive choices, the current
 /// one marked. Which pane is showing is the only thing it changes — there is no third state.
 fn pane_toggle(ui: &mut egui::Ui, show_cards: &mut bool) {
-    ui.horizontal(|ui| {
+    spacing::row(ui, 1, |ui| {
         if ui
             .selectable_label(!*show_cards, text(ui, "Write"))
             .clicked()
@@ -469,7 +478,7 @@ fn editor_form_body(
     // offers Undo — the form pane's speaker (the card pane demonstrates), and not a bare count.
     if let Some(warning) = pane.and_then(|p| p.warning.as_ref()) {
         warning_banner(ui, warning);
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
     }
 
     // Bare Enter is inert in every single-line field, the last one included (ADR-0012 §7, ADR-0021
@@ -590,7 +599,7 @@ fn warning_banner(ui: &mut egui::Ui, warning: &cards::Warning) {
 /// §6). What each row *looks* like is the visual design pass's.
 fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
     field_label(ui, "Cards");
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
     let Some(pane) = pane else {
         body(ui, "No cards yet.");
         return;
@@ -604,17 +613,22 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
             cards::Entry::Live(card) => {
                 card_face(ui, &card.prompt);
                 if !card.answer.is_empty() {
+                    // The same unit the review screen puts between a card's two faces, so a card
+                    // reads as one object in both places. Fused at zero before this was stated, which
+                    // made the pair look like one tall face with two words in it.
+                    ui.add_space(spacing::gap(1));
                     card_face(ui, &card.answer);
                 }
+                ui.add_space(spacing::gap(1));
                 badge(ui, &box_badge_wording(card.reviews > 0, card.box_));
-                ui.add_space(8.0);
+                ui.add_space(spacing::gap(2));
             }
             // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
             cards::Entry::Dormant(dormant) => badge(ui, &dormant.history()),
         }
     }
     if pane.state == cards::State::NoLiveCards {
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
         body(ui, "This note currently generates no cards.");
     }
 }

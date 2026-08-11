@@ -29,8 +29,10 @@ pub mod optimise;
 pub mod platform;
 mod screens;
 pub mod session;
+pub mod spacing;
 pub mod sync;
 pub mod theme;
+pub mod typography;
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -287,6 +289,14 @@ impl CairnApp {
         // wrong theme (ADR-0030 §1). `install` pins dark into the dark slot and disables
         // theme-following — both acts, or an OS theme flip silently restores stock egui (§2).
         theme::install(&cc.egui_ctx);
+        // The type scale and the rhythm are installed here for the same reason and with one
+        // difference (ADR-0032 §4): neither allocates a texture, so the font hazard does not reach
+        // them either — but colour is per-theme and these are not, so they are written to *every*
+        // theme slot rather than targeted at the dark one. That makes ADR-0030 §2's active-slot trap
+        // inapplicable instead of merely avoided, and it is what lets a future light mode inherit
+        // both rather than silently falling back to stock egui's 13px body and 8×3 spacing.
+        typography::install(&cc.egui_ctx);
+        spacing::install(&cc.egui_ctx);
         let store = Self::open_store();
         Self {
             store,
@@ -500,7 +510,7 @@ impl eframe::App for CairnApp {
         let area = self.band.scroll_area();
         let mut reset_requested = false;
         let out = area.show(ui, |ui| {
-            ui.add_space(4.0);
+            ui.add_space(spacing::gap(1));
 
             // **Every destination is drawn inside the page frame** (`frame`, #131): a 28px gutter,
             // one column capped at the measure, centred, at every width. Notes is the one that takes
@@ -580,7 +590,7 @@ fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination, cap: f32) {
     // a nav left at the window edge while the card sits centred reads as two unrelated pages, and it
     // is the single most visible defect in the frames that were rejected.
     frame::wide_column(ui, cap, |ui| {
-        ui.horizontal(|ui| {
+        spacing::row(ui, 1, |ui| {
             for (target, label) in [
                 (Destination::Review, "Review"),
                 (Destination::Notes, "Notes"),
@@ -688,9 +698,14 @@ pub(crate) fn compact_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
 pub(crate) fn card_face(ui: &mut egui::Ui, s: &str) -> egui::Response {
     // Card content is the one surface that renders the restricted Markdown subset (ADR-0002 §8):
     // `**bold**` in the shipped face, never a literal `**` (issue #104).
+    //
+    // **The display tier, and this is the only caller of it** (ADR-0032 §1). Until #132 this shared
+    // `text`'s Button style with every button in the application, so the one thing on screen whose
+    // job is to be read was drawn at the size of a label. `display` exists for this surface; a second
+    // caller means it has stopped meaning "the text being read".
     let job = bidi::markdown_job(
         s,
-        egui::TextStyle::Button.resolve(ui.style()),
+        typography::display().resolve(ui.style()),
         ui.visuals().text_color(),
     );
     ui.add_sized([ui.available_width(), 96.0], egui::Button::new(job))
@@ -794,4 +809,5 @@ mod tests {
         assert_eq!(box_badge_wording(true, 1), "Box 1");
         assert_eq!(box_badge_wording(true, 4), "Box 4");
     }
+
 }

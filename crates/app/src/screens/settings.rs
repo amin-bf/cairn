@@ -7,6 +7,7 @@ use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
 use cairn_store::Collection;
 
 use crate::screens::enrolment::enrolment_screen;
+use crate::{spacing, typography};
 use crate::{
     bidi, body, field_label, fonts, full_width_button, heading, inbound, listing, optimise, sync,
     text_field,
@@ -61,7 +62,7 @@ pub(crate) fn settings_screen(
     now_ms: i64,
 ) -> bool {
     heading(ui, "Settings");
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     if *setting_up {
         enrolment_screen(ui, setting_up);
@@ -69,18 +70,18 @@ pub(crate) fn settings_screen(
     }
 
     new_card_rate_control(ui, coll, rate_buffer);
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     optimise_control(ui, coll, optimise_job, optimise_done, now_ms);
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // The promise, worded once (ADR-0015 §3) — never "automatic", never "in the background".
     body(ui, sync::PROMISE);
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     // "Set up sync" is the entry, not "login" or "pairing" (ADR-0015 §7): there is no account of ours
     // and no device-to-device step.
@@ -88,36 +89,36 @@ pub(crate) fn settings_screen(
         *setting_up = true;
     }
 
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     // The removal route and the app name, kept permanently because the folder is hidden and cannot be
     // navigated to (ADR-0015 §10, ADR-0020 §4). Disconnect is the only control this app owns.
     body(ui, &sync::revocation_and_removal());
 
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     let reset = reset_control(ui);
 
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     rendering_specimen(ui);
 
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     handoff_specimen(ui, handoff);
 
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     // The list is the other half of the inbound path: it enumerates the files this application wrote
     // and, on selection, funnels one into the very same `inbound` the specimen below reads (#108).
     file_list_specimen(ui, file_list, inbound);
 
-    ui.add_space(12.0);
+    ui.add_space(spacing::gap(3));
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
     inbound_specimen(ui, coll, inbound.as_ref());
 
     reset
@@ -161,7 +162,7 @@ fn file_list_specimen(
          the platform, not a fault. Each row is described from its own bytes; selecting one previews \
          it below through the same read an arriving file takes.",
     );
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
 
     if full_width_button(ui, "List the files (temporary)").clicked() {
         state.said.clear();
@@ -190,7 +191,7 @@ fn file_list_specimen(
         }
     }
 
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     if !state.said.is_empty() {
         body(ui, &state.said);
@@ -213,8 +214,11 @@ fn file_list_specimen(
     // The row selected this frame, re-read below the borrow so `state.rows` is not held across the
     // `get`. Only one row can be pressed per frame.
     let mut selected: Option<String> = None;
-    for row in rows {
-        ui.horizontal(|ui| {
+    for (i, row) in rows.iter().enumerate() {
+        if i > 0 {
+            ui.add_space(spacing::gap(1));
+        }
+        spacing::row(ui, 1, |ui| {
             if ui.button("Preview").clicked() {
                 selected = Some(row.name.clone());
             }
@@ -269,27 +273,38 @@ fn rendering_specimen(ui: &mut egui::Ui) {
         "Development control — every script the shipped faces exist for, in every family. Each line \
          below is the same text drawn by a different family; check it against the caption above it.",
     );
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     for (caption, specimen) in fonts::SPECIMENS {
         field_label(ui, caption);
-        for family in fonts::families() {
-            ui.horizontal(|ui| {
+        ui.add_space(spacing::gap(1));
+        for (i, family) in fonts::families().into_iter().enumerate() {
+            if i > 0 {
+                ui.add_space(spacing::gap(1));
+            }
+            spacing::row(ui, 1, |ui| {
                 // The family's own name, in the family itself: a tag drawn in some *other* face
                 // would be naming a rendering it is not part of.
+                //
+                // **These two read the scale's constants rather than a `TextStyle`** because the
+                // whole point of the control is to draw one text in a *chosen* family, which a
+                // resolved text style cannot express — it carries its own. Reaching for the
+                // constants is the sanctioned way past that (ADR-0032 §1); a literal here would not
+                // be (this is a real screen, unlike `fonts`'s coverage probe, which draws nothing a
+                // user sees).
                 ui.label(bidi::job(
                     &family_tag(&family),
-                    egui::FontId::new(11.0, family.clone()),
+                    egui::FontId::new(typography::SMALL, family.clone()),
                     ui.visuals().weak_text_color(),
                 ));
                 ui.label(bidi::job(
                     specimen,
-                    egui::FontId::new(20.0, family.clone()),
+                    egui::FontId::new(typography::HEADING, family.clone()),
                     ui.visuals().text_color(),
                 ));
             });
         }
-        ui.add_space(10.0);
+        ui.add_space(spacing::gap(2));
     }
 }
 
@@ -321,7 +336,7 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
          through the seam and states the name the platform wrote back. Hand off opens the system \
          share sheet for it, and only when pressed: writing never opens anything.",
     );
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
 
     if full_width_button(ui, "Write a deck file (temporary)").clicked() {
         state.said = match specimen_deck() {
@@ -343,7 +358,7 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
         };
     }
 
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
 
     if full_width_button(ui, "Hand it off (temporary)").clicked() {
         state.said = match &state.written {
@@ -356,7 +371,7 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
     }
 
     if !state.said.is_empty() {
-        ui.add_space(8.0);
+        ui.add_space(spacing::gap(2));
         body(ui, &state.said);
     }
 }
@@ -386,7 +401,7 @@ fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbou
          open one from a file manager or a share on the handset; this states what arrived and what \
          an import would do, derived fresh and never held.",
     );
-    ui.add_space(8.0);
+    ui.add_space(spacing::gap(2));
 
     let Some(inbound) = inbound else {
         body(ui, "Nothing has arrived yet.");
@@ -411,11 +426,20 @@ fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbou
                 ui,
                 &format!("Sniffed: {}", profile_label(report.sniffed.as_ref())),
             );
-            ui.add_space(8.0);
+            ui.add_space(spacing::gap(2));
             match &report.outcome {
                 Err(refusal) => body(ui, &refusal_wording(refusal)),
                 Ok(plan) => {
-                    for line in plan_lines(plan) {
+                    // One unit between statements. The preview is the one screen a stranger's file
+                    // writes onto (ADR-0022 §10), so its lines must not run together into a single
+                    // block a reader skims — and they did exactly that once the ambient 3px went to
+                    // zero. This screen is **not reachable by the capture harness** (it needs a file
+                    // dropped on the window, which synthetic input cannot produce), so nothing would
+                    // have photographed the regression.
+                    for (i, line) in plan_lines(plan).into_iter().enumerate() {
+                        if i > 0 {
+                            ui.add_space(spacing::gap(1));
+                        }
                         body(ui, &line);
                     }
                 }
@@ -590,7 +614,7 @@ fn reset_control(ui: &mut egui::Ui) -> bool {
         "Development control — returns this device to a first launch, seed and all. Rows other \
          devices hold come back on the next sync.",
     );
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
     full_width_button(ui, "Reset the collection (temporary)").clicked()
 }
 
@@ -627,7 +651,7 @@ fn new_card_rate_control(
             .unwrap_or(DEFAULT_NEW_CARD_RATE)
             .to_string();
     }
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
     // The consequence, stated where the choice is (ADR-0011 §3, §4): this is the only enforced limit,
     // and zero is how a backlog is cleared before turning it back on.
     body(
@@ -661,7 +685,7 @@ fn optimise_control(
         ui.ctx().request_repaint();
         match running.phase() {
             optimise::Phase::Preparing => {
-                ui.horizontal(|ui| {
+                spacing::row(ui, 1, |ui| {
                     ui.add(egui::Spinner::new());
                     body(ui, "Preparing…");
                 });
@@ -706,7 +730,7 @@ fn optimise_control(
         *job = Some(optimise::OptimiseJob::start(lines));
         ui.ctx().request_repaint();
     }
-    ui.add_space(4.0);
+    ui.add_space(spacing::gap(1));
 
     let nudge = coll
         .log_lines()
@@ -718,7 +742,7 @@ fn optimise_control(
     body(ui, &nudge);
 
     if *done {
-        ui.add_space(4.0);
+        ui.add_space(spacing::gap(1));
         body(ui, optimise::COMPLETION_MESSAGE);
     }
 }
