@@ -1,0 +1,8 @@
+# One still of the card prototype, for #133.
+#
+# The binary is launched with the whole combination already chosen through its environment
+# (PROTO_PAGE, PROTO_CARD, PROTO_BADGE, PROTO_CONTENT, PROTO_HEIGHT, PROTO_SCREEN), so there is
+# nothing to drive: the screen under the camera is the one the process started on. That is why this
+# storyboard has one line where `review-prototype.txt` had thirty — the axes moved out of the
+# storyboard and into the environment, which is what lets one storyboard serve sixty combinations.
+shot card
