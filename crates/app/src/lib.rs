@@ -30,6 +30,7 @@ pub mod platform;
 mod screens;
 pub mod session;
 pub mod spacing;
+pub mod surface;
 pub mod sync;
 pub mod theme;
 pub mod typography;
@@ -396,6 +397,29 @@ impl CairnApp {
 }
 
 impl eframe::App for CairnApp {
+    /// **The page.** Without this the application draws every screen on a colour nobody chose.
+    ///
+    /// `eframe::App::ui`'s contract says the `Ui` it hands you *"has no margin or background
+    /// color"*, and this app neither wrapped its content in a `CentralPanel` nor overrode this —
+    /// so the page was eframe's own default, a hard-coded `rgba(12, 12, 12, 180)` compositing to
+    /// `#080808`, on every screen. `panel_fill` reached only the nav strip and the inset bands,
+    /// which is why the strip was visibly *lighter* than the page under it.
+    ///
+    /// `#080808` sits **below every rung of the stone ramp**, so it was not merely unnamed but
+    /// unreachable: [`theme::card_fill`] measures 1.07:1 against it, and a card drawn as a well
+    /// was invisible — a *raised* surface on the page the application actually drew. #133 could
+    /// not answer its own question without settling this first.
+    ///
+    /// This is [ADR-0030 §1](../../../docs/adr/0030-the-first-finish-pass-decisions.md)'s
+    /// single-naming-site rule reaching a case it was not written for. The rule governs colours
+    /// this crate *names*; it is silent about ones the **renderer supplies by default**, where
+    /// nothing in the app is wrong and the screen is still a colour nobody picked. The defence is
+    /// to take the default over rather than to name a value: this returns `panel_fill`, so the page
+    /// keeps coming from `theme` and no second literal exists to drift.
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        page_color(visuals)
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // The shipped font set is installed here, on the first frame, and this frame draws nothing:
         // `set_fonts` applies at the start of the *next* pass, so the newly-named bold family is not
@@ -609,6 +633,17 @@ fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination, cap: f32) {
 
 // --- small rendering helpers, every one through the bidi layout so no screen holds a bare label ---
 
+/// The colour the window is cleared to — **the page**, on every screen (ADR-0033 §2).
+///
+/// Split out of [`CairnApp::clear_color`] so the value is nameable by a test. What a test cannot
+/// see is the override being *deleted*, which is the actual regression: eframe would then clear to
+/// its own default and every screen would sit on a colour the palette never named, looking merely
+/// like a slightly darker theme. `the_page_is_drawn_in_the_palette_not_eframes_default` pins the
+/// value and the gap between it and eframe's stock, so at least the reason survives in the suite.
+pub(crate) fn page_color(visuals: &egui::Visuals) -> [f32; 4] {
+    visuals.panel_fill.to_normalized_gamma_f32()
+}
+
 fn now_ms() -> i64 {
     // The one clock read on the review path — an edge value, never reached from `cairn-core`
     // (ADR-0009 §8). A clock before the epoch is not a real handset state; clamp rather than wrap.
@@ -657,9 +692,19 @@ pub(crate) fn body(ui: &mut egui::Ui, s: &str) {
 /// card pane both come through here, and a second `format!("Box {}")` anywhere is this defect returning.
 ///
 /// [ADR-0001 §3]: ../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md
+///
+/// **The case is lower, and #133 is where that finally landed.** [ADR-0030 §4] settled it — *"the
+/// badge is drawn … in lower case: `box 3`, and `new`"*, because capitalising `Box` makes it a
+/// label and a proper noun where the badge is a footnote, and because `box 3` and `new` are the
+/// same field in two states and must share a register. §4 records that *"#115 renders `box 3`"*;
+/// it never did, and a test pinned the capital, so the application had drawn `Box 3` against its
+/// own accepted ADR since the day this function was written. Nothing failed, and nothing would
+/// have: it took a ticket that had to touch the badge for anyone to compare the two.
+///
+/// [ADR-0030 §4]: ../../../docs/adr/0030-the-first-finish-pass-decisions.md
 pub(crate) fn box_badge_wording(reviewed: bool, box_: u8) -> String {
     if reviewed {
-        format!("Box {box_}")
+        format!("box {box_}")
     } else {
         "new".to_string()
     }
@@ -693,41 +738,11 @@ pub(crate) fn compact_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
     ui.add_sized([120.0, 36.0], egui::Button::new(job))
 }
 
-/// The card face — a wide, tall clickable surface. Tapping the prompt reveals; the answer face is
-/// drawn the same way for visual consistency, its click ignored.
-pub(crate) fn card_face(ui: &mut egui::Ui, s: &str) -> egui::Response {
-    // Card content is the one surface that renders the restricted Markdown subset (ADR-0002 §8):
-    // `**bold**` in the shipped face, never a literal `**` (issue #104).
-    //
-    // **The display tier, and this is the only caller of it** (ADR-0032 §1). Until #132 this shared
-    // `text`'s Button style with every button in the application, so the one thing on screen whose
-    // job is to be read was drawn at the size of a label. `display` exists for this surface; a second
-    // caller means it has stopped meaning "the text being read".
-    let mut job = bidi::markdown_job(
-        s,
-        typography::display().resolve(ui.style()),
-        ui.visuals().text_color(),
-    );
-
-    // **Two things the display tier exposed, both of which were already wrong.**
-    //
-    // `halign` is a *direction marker* in `bidi`, never the alignment mechanism, and that module says
-    // in as many words that every caller resets it. This one never did. An RTL galley left at
-    // `Align::RIGHT` spans **negative x** — epaint aligns its rows against the origin — so the button
-    // centres a rect that begins left of zero and draws the text off its own face. At stock's 13px the
-    // overhang was around 118px inside a 500px card and merely looked off-centre; at the display tier
-    // it measured **−455px** and ran clean off the window, which is how it was finally seen. The card
-    // centres every face it draws, Persian included, so `LEFT` here means "measure from zero" and the
-    // centring is the button's.
-    job.halign = egui::Align::LEFT;
-
-    // And a `LayoutJob` wraps at `f32::INFINITY` by default, so a face longer than the card simply ran
-    // past it. Nothing had ever been drawn at a tier large enough to make that reachable.
-    let width = ui.available_width();
-    job.wrap.max_width = (width - ui.spacing().button_padding.x * 2.0).max(1.0);
-
-    ui.add_sized([width, 96.0], egui::Button::new(job))
-}
+// The card face lived here until #133, as `card_face`: a 96px `Button` per face, drawn on the
+// `inactive` widget fill. It is now [`surface::card`] — one object with two faces, on a fill darker
+// than the page — because a card is a *surface* and not a control that happens to be large, and
+// because both of its properties that mattered (the height, the single display tier) turned out to
+// have been judged only ever against `chien`/`dog`. See `surface` for what replaced it and why.
 
 /// A small label for a field or control — a form-pane caption, weaker than body text.
 pub(crate) fn field_label(ui: &mut egui::Ui, s: &str) {
@@ -824,59 +839,42 @@ mod tests {
         // ask whether there is any history at all — otherwise a first introduction claims a durability
         // nothing measured, and reads as the bottom of a queue of boxes (ADR-0001 §3).
         assert_eq!(box_badge_wording(false, 1), "new");
-        assert_eq!(box_badge_wording(true, 1), "Box 1");
-        assert_eq!(box_badge_wording(true, 4), "Box 4");
+        // Lower case, per ADR-0030 §4 — the decision that was accepted and then never landed. The
+        // capital was pinned by this test for as long as the app drew it, which is how an ADR and
+        // a binary disagree in writing without anyone noticing.
+        assert_eq!(box_badge_wording(true, 1), "box 1");
+        assert_eq!(box_badge_wording(true, 4), "box 4");
     }
 
-    /// **A right-to-left card face is drawn inside its own card**, at the display tier.
+    /// **The page is the palette's, not the renderer's.**
     ///
-    /// `bidi` sets `halign = RIGHT` as a *direction marker* and says every caller must reset it,
-    /// because an RTL galley left that way spans **negative x** — epaint aligns its rows against the
-    /// origin. `card_face` was the one caller that never did, so a button centring that galley drew
-    /// the text off its own face. At stock's 13px the overhang was around 118px inside a 500px card
-    /// and merely looked off-centre; the 40px display tier of ADR-0032 §1 pushed it clean off the
-    /// window, which is the only reason anyone saw it.
+    /// Nothing fails when this regresses — deleting `clear_color` compiles, runs, and draws every
+    /// screen on eframe's own `rgba(12, 12, 12, 180)`, which merely looks like a slightly darker
+    /// theme. It is not: `#080808` is below every rung of the stone ramp, so a card drawn as a well
+    /// measures 1.07:1 against it and inverts into a raised surface, and the nav strip — which is a
+    /// real panel and does read `panel_fill` — becomes *lighter* than the page it sits on. The
+    /// whole of ADR-0033 §2 rests on this holding.
     ///
-    /// Nothing failed then and nothing would fail again — the seed collection is French, so no
-    /// capture in this repo had ever put right-to-left text on a card face.
+    /// The right-to-left card-face check that lived here moved to `surface`, with the surface it
+    /// was about.
     #[test]
-    fn a_right_to_left_card_face_is_drawn_inside_its_card() {
-        const WIDTH: f32 = 560.0;
-        let ctx = egui::Context::default();
-        typography::install(&ctx);
-        spacing::install(&ctx);
+    fn the_page_is_drawn_in_the_palette_not_eframes_default() {
+        let visuals = theme::cairn_dark();
+        assert_eq!(
+            page_color(&visuals),
+            visuals.panel_fill.to_normalized_gamma_f32(),
+            "the page is `panel_fill` — the palette's, so no second literal exists to drift"
+        );
 
-        let out = ctx.run_ui(Default::default(), |ui| {
-            ui.set_width(WIDTH);
-            card_face(ui, "سگ در خانه است.");
-        });
-
-        let mut seen = 0;
-        for clipped in &out.shapes {
-            fn walk(shape: &egui::Shape, seen: &mut i32) {
-                match shape {
-                    egui::Shape::Text(t) => {
-                        let left = t.pos.x + t.galley.rect.min.x;
-                        let right = t.pos.x + t.galley.rect.max.x;
-                        assert!(
-                            left >= 0.0,
-                            "the card face starts at x={left}, outside its own card — \
-                             `halign` was not reset (bidi)"
-                        );
-                        assert!(
-                            right <= WIDTH,
-                            "the card face ends at x={right}, past the {WIDTH}px card — \
-                             the job's wrap width was not set"
-                        );
-                        *seen += 1;
-                    }
-                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, seen)),
-                    _ => {}
-                }
-            }
-            walk(&clipped.shape, &mut seen);
-        }
-        assert!(seen > 0, "no text was drawn, so nothing was actually asserted");
+        // eframe's stock clear colour, from its own source: a hard-coded near-black at 70% alpha,
+        // compositing to `#080808`. The gap is the point — it is *below* every rung of the stone
+        // ramp, so `card_fill` measures 1.07:1 against it and a well inverts into a raised surface.
+        let stock = egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180);
+        assert!(
+            visuals.panel_fill.r() > stock.r()
+                && visuals.panel_fill.g() > stock.g()
+                && visuals.panel_fill.b() > stock.b(),
+            "the palette's page must be lighter than eframe's default, or a card cannot be a well"
+        );
     }
-
 }

@@ -13,7 +13,7 @@ use cairn_store::Collection;
 use crate::session::{self, Offered, ReviewState};
 use crate::spacing;
 use crate::{
-    Sitting, badge, body, box_badge_wording, card_face, deck, full_width_button, heading, text,
+    Sitting, badge, body, box_badge_wording, deck, full_width_button, heading, surface, text,
 };
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
@@ -155,23 +155,33 @@ pub(crate) fn review(
             body(ui, &format!("{} of {}", s.graded, s.chosen));
             ui.add_space(spacing::gap(2));
 
-            // Reveal is tap-the-card: the prompt is one wide button, and clicking it shows the back.
-            // Identical by touch and by mouse — egui does not distinguish them.
-            if card_face(ui, &rendered.prompt).clicked() {
+            // **One card with two faces, not two cards** (ADR-0033 §1). Reveal is tap-the-card:
+            // the whole surface is the target, and clicking it shows the back. Identical by touch
+            // and by mouse — egui does not distinguish them.
+            //
+            // The box badge rides **inside** the card, because it reports the durability of *this
+            // card* and a footnote on the page below could as easily belong to the screen. It
+            // appears only after the reveal and is non-interactive, reporting durability and never
+            // a queue (scheduling `CONTEXT.md`); a card with no history reads `new`, never `box 1`,
+            // which would state a durability nothing has measured (ADR-0006 §6). Which corner it
+            // takes follows the prompt's script — see `surface`.
+            let badge_text = s
+                .revealed
+                .then(|| box_badge_wording(!offered.is_new, offered.box_));
+            let answer = s.revealed.then_some(rendered.answer.as_str());
+            if surface::card(
+                ui,
+                &rendered.prompt,
+                answer,
+                badge_text.as_deref(),
+                surface::REVIEW_HEIGHT,
+            )
+            .clicked()
+            {
                 s.revealed = true;
             }
 
             if s.revealed {
-                ui.add_space(spacing::gap(1));
-                card_face(ui, &rendered.answer);
-
-                // The box badge appears only after reveal, is non-interactive, and reports
-                // durability — never a queue (scheduling `CONTEXT.md`). A card with no review history
-                // reads `new`, never `Box 1`, which would state a durability nothing has measured
-                // (ADR-0006 §6).
-                ui.add_space(spacing::gap(1));
-                badge(ui, &box_badge_wording(!offered.is_new, offered.box_));
-
                 ui.add_space(spacing::gap(3));
                 let pressed = grade_buttons(ui, &offered, today);
 

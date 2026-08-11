@@ -7,11 +7,11 @@ use cairn_store::Collection;
 use eframe::egui::{Align, Layout, vec2};
 
 use crate::notes::{self, Filter};
-use crate::spacing;
 use crate::{
-    Editing, badge, bidi, bidi_layouter, body, box_badge_wording, card_face, cards, compact_button,
-    editor, field_label, frame, full_width_button, heading, raise_keyboard, sync, text, text_field,
+    Editing, badge, bidi, bidi_layouter, body, box_badge_wording, cards, compact_button, editor,
+    field_label, frame, full_width_button, heading, raise_keyboard, sync, text, text_field,
 };
+use crate::{spacing, surface};
 
 /// The **Notes** destination (ADR-0021 §2): the browse surface and the app's authoring home. Shows
 /// the editor when one is open, otherwise the note list — create, the text search, and the rows,
@@ -611,16 +611,20 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
     for entry in &pane.entries {
         match entry {
             cards::Entry::Live(card) => {
-                card_face(ui, &card.prompt);
-                if !card.answer.is_empty() {
-                    // The same unit the review screen puts between a card's two faces, so a card
-                    // reads as one object in both places. Fused at zero before this was stated, which
-                    // made the pair look like one tall face with two words in it.
-                    ui.add_space(spacing::gap(1));
-                    card_face(ui, &card.answer);
-                }
-                ui.add_space(spacing::gap(1));
-                badge(ui, &box_badge_wording(card.reviews > 0, card.box_));
+                // **The same card the review screen draws** (ADR-0012 §1) — one object with two
+                // faces, the badge in its own corner — which is now literally true rather than
+                // approximately: both come through `surface::card`, so the material cannot drift
+                // between the two screens the way the old pair of `card_face` calls could.
+                //
+                // The *height* is the one thing that differs, and it is the caller's: a list of
+                // four cards at the review card's floor would be 1,200px of mostly nothing.
+                surface::card(
+                    ui,
+                    &card.prompt,
+                    (!card.answer.is_empty()).then_some(card.answer.as_str()),
+                    Some(&box_badge_wording(card.reviews > 0, card.box_)),
+                    surface::FIT,
+                );
                 ui.add_space(spacing::gap(2));
             }
             // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
