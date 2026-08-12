@@ -1,0 +1,16 @@
+# One still of the controls prototype, for #134.
+#
+# The binary is launched with the whole combination already chosen through its environment
+# (PROTO_SCREEN, PROTO_GRADES, PROTO_WEIGHT, PROTO_PREVIEW, PROTO_ENTRANCE, PROTO_EMPTY,
+# PROTO_CONTROL, PROTO_CHECKPOINT), so there is nothing to drive: the screen under the camera is the
+# one the process started on. Same shape as `card-prototype.txt` and for the same reason — the axes
+# live in the environment, which is what lets one storyboard serve every combination.
+#
+# **The pointer is parked in a corner first, and that is not tidiness.** With no `mousemove` the
+# cursor sits at the centre of the output, which at 560×860 lands squarely on the first grade
+# control — so the first run of this set photographed *Forgot* with its hover stroke lit, in every
+# 560 image, under names that claimed to be about the resting state. Caught by looking at the
+# images, which is the only thing that would have caught it.
+mousemove 4 4
+sleep 0.4
+shot controls

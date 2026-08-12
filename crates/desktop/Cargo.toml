@@ -19,3 +19,11 @@ cairn-app.workspace = true
 [[bin]]
 name = "cairn"
 path = "src/main.rs"
+
+# The throwaway prototype for #134, the controls slice of the design pass. It is declared here
+# because `src/bin/` is only auto-discovered when no explicit `[[bin]]` exists, and the shim above
+# is explicit. **This entry leaves with the prototype** — it never merges into `main`; the whole
+# thing lives on the tag `prototypes/issue-134`.
+[[bin]]
+name = "controls-prototype"
+path = "src/bin/controls-prototype.rs"
