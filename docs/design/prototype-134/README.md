@@ -1,4 +1,19 @@
-# What the controls are — fifty-five captures
+# What the controls are — fifty-nine captures
+
+> **Outcome.** An ordinary control is **`faint_bg_color`** — 1.099:1 against the page, quieter than
+> the card's 1.121:1, which discharges ADR-0033 §3 by measurement. The weight follows the **role**:
+> a screen with no card keeps its one primary at the old rung. The grades are ***Forgot* apart, three
+> passes segmented**, interval preview demoted and dimmed. The entrance is one primary way in with
+> the sizes as a second line **in the link accent**, waking ADR-0030 §5's first dormant colour. The
+> caught-up screen takes the **display** tier and keeps its leech entrance. The 10-minute checkpoint
+> is **compact and above the card**, implementing ADR-0006 §1 for the first time. Recorded as
+> [ADR-0034](../../adr/0034-the-controls.md).
+>
+> **Two of the decisions went against what these captures first suggested.** `quiet` — no fill at all
+> — is what ADR-0033 §3 photographed and what this prototype defaulted to, and it lost to the rung
+> between the two ends that §3 never drew (finding 2). And **both frameless controls were rejected on
+> a ground no measurement raises**: *it is not obvious that they are clickable*. That is finding 10,
+> it arrived in the third round of judging, and it is the reason there was a third round.
 
 The primary source for [#134](https://github.com/amin-bf/cairn/issues/134), the fourth and last
 slice of the Review vertical on the design pass map
@@ -182,6 +197,32 @@ in ADR-0033 §4 and it is not obviously the same answer.
 variants drew, with nothing failing. On a caught-up Review that entrance is the only control on the
 screen (ADR-0010 §6, §8), so this is a picture of the state losing its last affordance.
 
+### 10. Frameless is not obviously clickable — and no figure in this document would have said so
+
+The finding that produced a third round of judging, and the only one here that came from a person
+looking rather than from a pair of images being compared.
+
+Two places had a frameless control, both for the same reason — to stop a secondary action reading as
+a primary one. The checkpoint's *Finish here* / *Keep going*, and *Edit note* under the grades. The
+verdict on the first was *“compact but this is not obvious that they are clickable, are they?”*, and
+it applies to the second identically.
+
+The answer is that **a secondary control gives up its width, not its border**:
+
+- `f4-check-compact-bordered` against `f5-check-compact-frameless` — the same line, the same
+  positions, the same mass, differing only in whether the two actions have an edge. The bordered pair
+  is still a courtesy check-in; the frameless pair reads as a caption.
+- `z1-decided` is the whole decided screen, and it carries *Edit note* as a bordered compact control
+  for comparison with `h3-faint-tertiary` (frameless) and `a2-faint-row` (full width).
+
+*Edit note* then went back to **full width** anyway — between a secondary action that is unmistakably
+a control and one that is unmistakably not a grade, the first matters more, and full width is what
+the shipped screen already relied on position and separation to distinguish. So `z1-decided` is the
+decided screen *except* for that one control; `a2-faint-row` is the shipped shape.
+
+`controls::text_action` — the entrance's second line — is the one frameless control that survives,
+and it earns it by sitting **beside a primary** that has already established the row is pressed.
+
 ## One more, on the pointer
 
 `g1-pointer-quiet` and `g2-pointer-solid` draw the end-of-session pointer as it ships: two
@@ -210,6 +251,8 @@ At `1280x800` unless noted; `560x860` is the application's own window.
 | `g1`, `g2` | The end-of-session pointer |
 | `h1-edit-tertiary` / `h3-faint-tertiary` | *Edit note* as an aside. **Finding 5.** |
 | `h2-row-48` (560 only) | The row at #124's 48px control height |
+| `f4-check-compact-bordered` / `f5-check-compact-frameless` | The checkpoint's pair, with and without borders. **Finding 10.** |
+| `h4-edit-compact`, `z1-decided` | *Edit note* bordered-but-compact, and the whole decided screen |
 
 ## Reading them
 
