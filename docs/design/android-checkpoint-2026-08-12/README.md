@@ -1,7 +1,8 @@
 # The Review slice on a handset-shaped screen
 
-The **mechanical half** of [#125](https://github.com/amin-bf/cairn/issues/125), the first of the
-map's two deliberately scarce Android checkpoints. Seven captures of the shipped app — `main` at
+[#125](https://github.com/amin-bf/cairn/issues/125), the first of the map's two deliberately scarce
+Android checkpoints, in the order it was worked: the **mechanical half** first, then
+[the sitting](#the-sitting). Seven captures of the shipped app — `main` at
 `c59a070c`, the Review slice complete through the frame ([ADR-0031](../../adr/0031-the-page-frame.md)),
 the scale ([ADR-0032](../../adr/0032-the-type-scale-and-the-rhythm.md)), the card
 ([ADR-0033](../../adr/0033-the-card.md)) and the controls
@@ -10,8 +11,14 @@ the scale ([ADR-0032](../../adr/0032-the-type-scale-and-the-rhythm.md)), the car
 **These are not the checkpoint.** #125 exists for what only a hand and an eye can settle: the palette
 at low brightness in a dim room, legibility of the smallest text at arm's length, whether the desktop
 rhythm reads cramped or hollow, and whether a control is comfortable under a thumb. None of that is
-in this directory. What is here is everything that had to happen *before* that sitting, plus the
+in `pixel8pro/`. What is there is everything that had to happen *before* that sitting, plus the
 findings that turned out to be answerable without a thumb.
+
+**The sitting has since happened**, on the physical device, and it is written up in
+[The sitting](#the-sitting) at the foot of this file with two captures in `handset/`. It found the
+thing the emulator could not: the slice is arranged for a pointer even though it is *sized* for a
+thumb. Read that section before this one if you want the checkpoint's result rather than its
+preparation.
 
 ## What produced these
 
@@ -82,6 +89,13 @@ until an input event arrived. Rotation, a theme change and returning from the ba
 memory pressure all recreate an activity the same way, so the reproduction is not exotic even though
 the route used here was.
 
+> **Corrected by the sitting, and the correction is the interesting half.** Rotation does *not*
+> recreate this activity: the manifest declares `configChanges=0x4a0` —
+> `orientation | screenSize | keyboardHidden` — so the activity handles all three itself. Of the
+> three routes named above only a theme change (`uiMode`, outside that mask) would do it. On the
+> physical device the band was correct across four driven routes, **including a genuine re-creation**
+> captured with no input event at all. See [The sitting](#the-sitting).
+
 The value is read live every frame through the seam, and the seam is documented to degrade to *"no
 insets"* rather than fail loudly when the JNI read does not succeed — `getRootWindowInsets` is
 *"null until the view is attached"*. A silent zero is therefore indistinguishable from a genuine
@@ -100,6 +114,13 @@ band is short by the difference and content lands under the camera. On this devi
 Whether that is visible on the physical handset depends on whether its status bar is taller than its
 cutout, which is the ordinary case and would hide the gap entirely. **This is a handset question**,
 listed below.
+
+> **Answered on the device: there is no gap.** The physical Pixel 8 Pro reports a status bar of
+> **151px** against a cutout of **151px** — identical, so `systemBars()` and `displayCutout()`
+> coincide and the seam is invisible. The nav row's top edge sits exactly at y=151. The emulator's
+> 67px shortfall came from *its* status bar being 84px against the same cutout; real hardware sizes
+> the status bar to swallow its own cutout. The defect is a latent portability risk on some other
+> geometry, not something an eye can find here.
 
 ### The page is much taller than the slice was arranged for
 
@@ -126,17 +147,92 @@ That is the whole of what is known. It is recorded here rather than diagnosed be
 once without symbols is a lead, not a finding, and building a symbol-carrying Android profile is
 work this checkpoint was not opened to do.
 
-## What the handset still has to answer
+## The sitting
 
-Everything #125 was actually opened for, none of which is above:
+Everything above is preparation. This is the checkpoint: the same build in a hand, on the physical
+Pixel 8 Pro, screen brightness pinned low in an already-dim room, judged one question at a time.
+`handset/01-review-revealed-low-brightness.png` is the screen all four judgements were made against.
 
-1. **The palette at low brightness, in a dim room** — what #116 was opened for.
-2. **Legibility of the smallest text at arm's length** — the 12px small tier, raised from 9 by
-   ADR-0032, which is also the tier the box badge now draws in.
-3. **Density** — whether the desktop rhythm reads cramped or hollow in the hand, and what the empty
-   lower half of `03-review-revealed` should be doing.
-4. **Touch targets and one-handed reach** — the three segmented passes in particular, which are the
-   narrowest controls the slice has, and the reveal tap on the card face.
-5. **Whether the cutout gap above is visible on this device**, or hidden by a taller status bar.
-6. **Whether the nav row is ever seen under the status bar in ordinary use** — rotate the device and
-   return to the app from the background.
+**The black band at the top of both captures is a redaction, not a defect.** These come off real
+hardware rather than an emulator, so the status bar holds system chrome that is nothing to do with
+the application — see *Landing work → Rules that are easy to break silently*. It is painted over
+**in place** rather than cropped, at the exact inset height — 151px in portrait, 84px in landscape —
+so every coordinate this section measures is still true of the image as committed.
+
+### The palette holds at low brightness
+
+The card still reads as **a well cut into the page** — the edge survives. This is the answer worth
+the trip. ADR-0033 separates the card from the page by **1.121:1**, and that figure was chosen
+against a desktop monitor; an OLED panel at low brightness crushes the bottom of the ramp far harder
+than a monitor does, which made it the likeliest thing in the slice not to survive. It survived.
+
+#116's question is discharged with no change to the palette. That is the third independent result in
+this map pointing the same way — #124 found all five arrangement variants read better with ADR-0030
+unchanged, #131 found the distance from the baseline lives in the frame rather than the colour, and
+the expected supersession still has support from nowhere.
+
+### The 12px tier is legible at arm's length
+
+The box badge and the interval preview are both readable at real reading distance without leaning in.
+
+That discharges something the map was waiting on. ADR-0030 §3's **7:1 contrast floor** was reasoned
+from a 9px small tier that ADR-0032 raised to 12, and the map has been carrying the floor as a number
+that "kept its number and lost its argument". The 12px tier is now demonstrated comfortable at
+distance on the smallest screen the design targets, so nothing holds 7:1 up from the legibility side.
+Whoever reopens the palette has room to move.
+
+### The slice is arranged for a pointer, and this is the finding
+
+The screen was judged to **look** good — the empty lower half reads as calm, deliberate, not
+unfinished — and to be a **stretch one-handed**. Those are not two results. They are the same fact
+seen twice: it looks calm because everything is up top, and it is a stretch for exactly that reason.
+
+Measured off `handset/01-review-revealed-low-brightness.png`: the control cluster ends at **y=1880 of
+2992**. The card, the grades and *Edit note* occupy the top 63% of the page, and the bottom ~1100px
+— the part a thumb owns — is empty.
+
+What is out of reach, precisely: **the card's reveal tap**, and **Forgot**, the full-width bar
+sitting highest in the cluster. *Barely* and *Easy*, at the two horizontal extremes of the segmented
+row, flip between comfortable and a stretch depending on which hand holds the phone — a second and
+independent axis. **Nothing is undersized**: the centre segment is comfortable in either hand and
+nothing was mis-hit. No target needs to grow. This is placement alone.
+
+It matters more than a layout nit because it is the first time this map's own rule — **hit targets
+and density follow touch, not the pointer** — has met an actual thumb. The rule was honoured in
+*sizing*: a 36px control is still 36px, and the sitting confirms that was right. The **arrangement**
+was laid out for a pointer anyway, and nothing in the rule as written catches that. Nor could the
+desktop have caught it: at the 860px window every capture in `docs/design/controlled-2026-08-12/` was
+taken at, there is no leftover height for the content to sit above.
+
+Raised as [#141](https://github.com/amin-bf/cairn/issues/141), which frames it as the question
+ADR-0031 left unasked — it decided what the leftover **width** does, and never asked what the
+leftover **height** does, because at 860px there wasn't any.
+
+### The card must not absorb the slack
+
+Established while scoping #141, and recorded here because it is a fact about the code rather than a
+judgement. `surface::REVIEW_HEIGHT` is a **constant 300 logical px**: the card does not scale with
+the page at all today, and at a scale factor of 3.0 it draws ~900 device px to hold two words.
+Growing it to fill a 997dp page is the failure `surface.rs`'s own module header already argues
+against when it refuses that height for the note list, where it "would make a four-card note 1,200px
+of mostly nothing". ADR-0033 makes the card a well cut into the page, and a well that is mostly empty
+stops reading as an object sized to its contents. The slack belongs to the page, not the card.
+
+### Landscape, which the emulator set has no capture of
+
+`handset/02-review-landscape.png`. At 2992px of width the frame holds at **measure 640, centred**,
+with the leftover width doing nothing — ADR-0031 exactly as fixed, now photographed at more than four
+times the measure. The display cutout moves to the left edge at 151px and comes nowhere near content.
+
+### The two platform questions were struck rather than answered
+
+`systemBars()` and the nav row band are both properties of the inset seam in the winit/`NativeActivity`
+stack, and the map rules that stack out of scope — *"Android moves to a native Kotlin UI"*. No work
+was ever going to be built on either answer, so listing them as handset questions was a scope error
+the map had already foreclosed. Both were measured before that was noticed and both are recorded
+inline above, where they correct the emulator's account: **there is no cutout gap on this device**,
+and **rotation cannot lose the nav row** because the activity is not re-created by it.
+
+The four judgements above are the ones that survive the migration, because none of them is a fact
+about a renderer. They are facts about an eye and a thumb, and they transfer to a Kotlin client
+unchanged.
