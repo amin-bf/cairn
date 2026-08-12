@@ -83,6 +83,41 @@ the PR titles already use. Branch and PR then agree on which part of the system 
    This is written down because the convention lived **only in `git tag -l`**, and an agent that did
    not think to look there argued its way into a pull request that merged a prototype into `main`.
 
+4. **Anything captured from real hardware is redacted before the commit that introduces it.** This
+   repository is **public** and a push is the point of no return, so *after* is not a repair.
+
+   A capture off a physical device carries system chrome belonging to whoever owns the device rather
+   than to the application — the status bar and its notification icons above all. An emulator carries
+   none of it, which is exactly why this is easy to miss: every capture convention here was built
+   against emulated and nested-compositor screens, and the exposure appears the first time a session
+   photographs real hardware. The same holds for anything else lifted off a real machine — crash
+   tombstones, bug reports, log dumps naming unrelated applications, and absolute paths carrying a
+   username.
+
+   **The obvious remedies do not work, so do not plan to rely on them.** A commit that has been
+   pushed stays served by its SHA. Force-pushing a rewritten branch, rebasing the commit away,
+   closing the pull request and deleting the branch all leave it reachable through the pull-request
+   refs, which the host keeps independently of any branch. Only the host's support team can purge
+   those. **Redaction before `git add` is the only control that works** — treat the first `git add`
+   as the irreversible step, not the merge.
+
+   **Paint over in place; do not crop.** A write-up that measures its own image is falsified by
+   cropping and unaffected by painting. Read the band's height off the device instead of guessing,
+   and say in the prose that the band is a redaction so a later reader does not diagnose it as a
+   rendering defect:
+
+   ```sh
+   adb shell dumpsys window | grep -m1 'type=statusBars'   # frame=[0,0][1344,151] → 151
+   magick shot.png -fill black -draw "rectangle 0,0 1344,151" shot.png
+   ```
+
+   **If it happens anyway, do not write down where.** Naming the commit, branch or pull request in a
+   durable document — this file, an ADR, a design readme, a commit message — converts the record into
+   a pointer to the very thing being protected, and publishes it to a far wider audience than the
+   original slip ever reached. What is unreachable in practice is protected mostly by nobody knowing
+   where to look. Fix it forward, tell the repository owner directly, and leave the location out of
+   every artifact that persists.
+
 ## Start with the context map
 
 **[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the six crates, the
