@@ -153,6 +153,12 @@ Everything above is preparation. This is the checkpoint: the same build in a han
 Pixel 8 Pro, screen brightness pinned low in an already-dim room, judged one question at a time.
 `handset/01-review-revealed-low-brightness.png` is the screen all four judgements were made against.
 
+**The black band at the top of both captures is a redaction, not a defect.** These come off a
+personal device rather than an emulator, so the status bar carried notification icons and a carrier
+reading that are nothing to do with the application. It is painted over **in place** rather than
+cropped, at the exact inset height — 151px in portrait, 84px in landscape — so every coordinate this
+section measures is still true of the image as committed.
+
 ### The palette holds at low brightness
 
 The card still reads as **a well cut into the page** — the edge survives. This is the answer worth
