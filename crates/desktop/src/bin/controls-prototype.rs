@@ -305,9 +305,12 @@ enum Checkpoint {
     ///
     /// [ADR-0006 §1]: ../../../../docs/adr/0006-the-review-session-experience.md
     Over,
-    /// The same rule, drawn as an aside rather than as a decision: the sentence and two compact
-    /// controls on **one line**, above an unmoved card. Same guarantee, a fifth of the mass.
+    /// The same rule, drawn as an aside rather than as a decision: the sentence and two **bordered**
+    /// compact controls on one line, above an unmoved card. Same guarantee, a fifth of the mass.
     Compact,
+    /// The compact draft as it was first drawn, with the two actions **frameless** — kept only as
+    /// the other half of the pair that settled it. Rejected: it is not obvious they are clickable.
+    CompactFrameless,
 }
 
 impl Checkpoint {
@@ -316,12 +319,20 @@ impl Checkpoint {
             "replaces" => Self::Replaces,
             "over" => Self::Over,
             "compact" => Self::Compact,
-            other => panic!("unknown PROTO_CHECKPOINT {other:?} — one of replaces, over, compact"),
+            "compactframeless" => Self::CompactFrameless,
+            other => panic!(
+                "unknown PROTO_CHECKPOINT {other:?} — one of replaces, over, compact, \
+                 compactframeless"
+            ),
         }
     }
 
     fn keeps_the_card(self) -> bool {
         self != Self::Replaces
+    }
+
+    fn is_compact(self) -> bool {
+        matches!(self, Self::Compact | Self::CompactFrameless)
     }
 }
 
@@ -345,13 +356,41 @@ struct Options {
     ///
     /// [ADR-0033 §3]: ../../../../docs/adr/0033-the-card.md
     primary_filled: bool,
-    /// Whether *Edit note* is drawn as a control or as a **tertiary** frameless action.
+    /// How *Edit note* is drawn.
     ///
-    /// Also from round one: at the quiet weight *Edit note* becomes indistinguishable from a grade,
-    /// so the screen offers five identical rectangles of which four commit a grading and one does
-    /// not. Solid hid this, because the shipped screen's grades are separated from it by a gap and
+    /// Round one: at the quiet weight *Edit note* becomes indistinguishable from a grade, so the
+    /// screen offers five identical rectangles of which four commit a grading and one does not.
+    /// Solid hid this, because the shipped screen's grades are separated from it by a gap and
     /// nothing else.
-    edit_tertiary: bool,
+    ///
+    /// Round three added `Compact`, because **frameless does not read as clickable** — the
+    /// judgement that arrived against the compact checkpoint and applies here identically. So the
+    /// aside keeps its border and gives up its *width* instead: a control that is visibly not one
+    /// of the four, without ceasing to look like a control at all.
+    edit: Edit,
+}
+
+/// How *Edit note* — the one secondary action on a revealed card — is drawn.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Edit {
+    /// Today: full width, exactly like a grade.
+    Control,
+    /// Frameless. Unambiguous as an aside, and **does not read as clickable**.
+    Tertiary,
+    /// Bordered, at the same height, taking only the room its label needs. Told apart from a grade
+    /// by width rather than by the absence of a frame.
+    Compact,
+}
+
+impl Edit {
+    fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "control" => Self::Control,
+            "tertiary" => Self::Tertiary,
+            "compact" => Self::Compact,
+            other => panic!("unknown PROTO_EDIT {other:?} — one of control, tertiary, compact"),
+        }
+    }
 }
 
 // --- the controls --------------------------------------------------------------------------------
@@ -664,16 +703,26 @@ fn pointer(ui: &mut egui::Ui, o: Options) {
 
 /// The 10-minute checkpoint (ADR-0006 §1).
 fn checkpoint(ui: &mut egui::Ui, o: Options) {
-    if o.checkpoint == Checkpoint::Compact {
+    if o.checkpoint.is_compact() {
         // A courtesy check-in, drawn as one. ADR-0006 §1 calls the timer *"a courtesy check-in, not
         // an enforcement mechanism"* — and a stack of full-width controls is how an application
         // draws an enforcement.
+        //
+        // **The two actions keep their borders.** The frameless draft was rejected on the one
+        // ground a picture is good for: *it is not obvious that they are clickable*. What makes
+        // this compact is that each control takes only the room its label needs and the three sit
+        // on one line — not that the controls stopped looking like controls.
+        let compact = o.checkpoint == Checkpoint::Compact;
         spacing::row(ui, 2, |ui| {
             small(ui, "10 minutes so far.");
-            let job = grade_job(ui, o, "Finish here", "");
-            tertiary(ui, o, job, 100.0);
-            let job = grade_job(ui, o, "Keep going", "");
-            tertiary(ui, o, job, 100.0);
+            for label in ["Finish here", "Keep going"] {
+                let job = grade_job(ui, o, label, "");
+                if compact {
+                    control(ui, o, job, 110.0);
+                } else {
+                    tertiary(ui, o, job, 100.0);
+                }
+            }
         });
         return;
     }
@@ -686,16 +735,25 @@ fn checkpoint(ui: &mut egui::Ui, o: Options) {
     control(ui, o, job, ui.available_width());
 }
 
-/// *Edit note* — a control, or a tertiary action that stops reading as a fifth grade.
+/// *Edit note* — the one secondary action on a revealed card.
 fn edit_note(ui: &mut egui::Ui, o: Options) {
-    if o.edit_tertiary {
-        ui.vertical_centered(|ui| {
+    match o.edit {
+        Edit::Control => {
             let job = grade_job(ui, o, "Edit note", "");
-            tertiary(ui, o, job, 120.0);
-        });
-    } else {
-        let job = grade_job(ui, o, "Edit note", "");
-        control(ui, o, job, ui.available_width());
+            control(ui, o, job, ui.available_width());
+        }
+        Edit::Tertiary => {
+            ui.vertical_centered(|ui| {
+                let job = grade_job(ui, o, "Edit note", "");
+                tertiary(ui, o, job, 120.0);
+            });
+        }
+        Edit::Compact => {
+            ui.vertical_centered(|ui| {
+                let job = grade_job(ui, o, "Edit note", "");
+                control(ui, o, job, 130.0);
+            });
+        }
     }
 }
 
@@ -875,7 +933,7 @@ fn main() -> eframe::Result<()> {
             .expect("PROTO_CONTROL must be a number of pixels"),
         checkpoint: Checkpoint::parse(&env("PROTO_CHECKPOINT", "replaces")),
         primary_filled: env("PROTO_PRIMARY", "quiet").trim() == "filled",
-        edit_tertiary: env("PROTO_EDIT", "control").trim() == "tertiary",
+        edit: Edit::parse(&env("PROTO_EDIT", "control")),
     };
 
     let native = eframe::NativeOptions {
