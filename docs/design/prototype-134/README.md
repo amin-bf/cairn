@@ -1,4 +1,4 @@
-# What the controls are — forty captures
+# What the controls are — fifty-five captures
 
 The primary source for [#134](https://github.com/amin-bf/cairn/issues/134), the fourth and last
 slice of the Review vertical on the design pass map
