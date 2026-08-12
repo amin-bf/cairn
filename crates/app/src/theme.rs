@@ -108,6 +108,57 @@ pub fn card_divider() -> Color32 {
     STONE_4
 }
 
+/// The fill of an ordinary **control** — a grade, *Edit note*, the settings and notes buttons
+/// (ADR-0034 §1).
+///
+/// `STONE_3`, the `faint_bg_color` rung, where until #134 every control took `STONE_5`. The reason
+/// is a measurement rather than a preference: against the page the application draws, `STONE_5` is
+/// **1.293:1** and [`card_fill`] is **1.121:1**, so a control was more separated from the page than
+/// the thing being studied and [ADR-0033 §3](../../../docs/adr/0033-the-card.md) required that
+/// inverted. `STONE_3` measures **1.099:1** — quieter than the card, with a fill still there.
+///
+/// **Outline-or-slab was a false pair, and this rung is why.** ADR-0033 §3 photographed a control
+/// with no fill at all and drew the right conclusion from it, having drawn only the two ends of the
+/// ramp. A control that keeps a surface keeps looking like a control, which is the property the
+/// judging session turned out to care about most.
+pub fn control_fill() -> Color32 {
+    STONE_3
+}
+
+/// The edge of an ordinary control (ADR-0034 §1). One rung above its fill, the same relationship
+/// [`card_stroke`] has to [`card_fill`].
+pub fn control_stroke() -> Stroke {
+    Stroke::new(1.0, STONE_4)
+}
+
+/// The fill of the **one control on a screen that is the way forward** — *Start*, the durable leech
+/// entrance, the end-of-session pointer's pair (ADR-0034 §2).
+///
+/// `STONE_5`, which is what *every* control was before #134. ADR-0033 §3 is a **relationship** — the
+/// controls are quieter *than the card* — and a screen with no card on it has nothing for that
+/// comparison to be about. Drawn at [`control_fill`], the entrance is a faint rectangle on an empty
+/// page that reads as disabled; this is the rung it keeps.
+pub fn primary_fill() -> Color32 {
+    STONE_5
+}
+
+/// The edge of a primary control (ADR-0034 §2) — the stroke rung every widget already rests at.
+pub fn primary_stroke() -> Stroke {
+    Stroke::new(1.0, QUIET)
+}
+
+/// The **link** accent, and #134 is its first caller (ADR-0034 §2).
+///
+/// [ADR-0030 §5](../../../docs/adr/0030-the-first-finish-pass-decisions.md) recorded warn, error and
+/// link as *"defined-and-dormant"*, explicitly to stop a later reader finding a call site for a
+/// colour because the colour exists. Waking one is therefore a decision that has to be taken rather
+/// than a use that may be made, and ADR-0034 takes it: the entrance's second line — *"or a shorter
+/// sitting: 5 10 20"* — is a set of text actions with no surface of their own, and at weak-text
+/// weight they were very nearly invisible. §5's *rule* is unchanged and warn and error stay dormant.
+pub fn link() -> Color32 {
+    LICHEN
+}
+
 /// Install the palette, pinning dark. Called **once** from [`crate::CairnApp::new`] — both acts of
 /// pinning, per ADR-0030 §2 and the module header: the palette into the **dark slot** (never the
 /// active slot), and the theme preference to dark so an OS theme change cannot restore stock egui.
