@@ -11,9 +11,10 @@ use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
 use crate::session::{self, Offered, ReviewState};
-use crate::spacing;
+use crate::{bidi, controls, spacing, typography};
 use crate::{
-    Sitting, badge, body, box_badge_wording, deck, full_width_button, heading, surface, text,
+    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
+    text,
 };
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
@@ -70,14 +71,19 @@ pub(crate) fn review(
         // The end-of-session pointer: a plain statement that N cards are costing a lot, with a way
         // through to the list where the decision is made — never a decision point itself (ADR-0010
         // §6). Dismissing it or tapping through clears it; it is shown once and never nags.
+        //
+        // **The pair keeps the primary weight** (ADR-0034 §2). This screen has no card on it, so
+        // ADR-0033 §3's comparison is not about anything here, and the pointer is the whole of what
+        // the screen is for.
         if let Some(count) = *session_pointer {
             body(ui, &pointer_wording(count));
             ui.add_space(spacing::gap(2));
-            if full_width_button(ui, "Show me").clicked() {
+            if controls::wide_primary(ui, "Show me").clicked() {
                 *showing_leeches = true;
                 *session_pointer = None;
             }
-            if full_width_button(ui, "Not now").clicked() {
+            ui.add_space(spacing::gap(1));
+            if controls::wide_primary(ui, "Not now").clicked() {
                 *session_pointer = None;
             }
             return None;
@@ -96,9 +102,16 @@ pub(crate) fn review(
         // The durable way back to the leech screen (ADR-0010 §6): the notice is the discovery path,
         // this is the place to return to. Offered whenever any card is a leech or is suspended (whose
         // permanent home this is, ADR-0010 §8), below the picker so it never competes with it.
+        //
+        // **It takes the primary weight** (ADR-0034 §2), and the caught-up screen is why. On a
+        // Review with nothing due this is the *only control on the screen* — and three of #124's
+        // five variants dropped it entirely with nothing failing, which is how little there is to
+        // notice its absence. Drawn at the ordinary control weight it is a faint rectangle on an
+        // otherwise empty page, which is the same defect wearing a fill.
         if !ranked.is_empty() || !suspended.is_empty() {
             ui.add_space(spacing::gap(3));
-            if full_width_button(ui, &leech_entry_wording(ranked.len(), suspended.len())).clicked()
+            if controls::wide_primary(ui, &leech_entry_wording(ranked.len(), suspended.len()))
+                .clicked()
             {
                 *showing_leeches = true;
             }
@@ -132,16 +145,29 @@ pub(crate) fn review(
         if s.graded >= s.chosen {
             // Reaching the chosen count of **gradings** ends the sitting (ADR-0011 §9, issue #94).
             end_sitting = true;
-        } else if s.checkpoint_due() {
-            body(ui, "You've been reviewing for 10 minutes.");
-            ui.add_space(spacing::gap(2));
-            if full_width_button(ui, "Finish here").clicked() {
-                end_sitting = true;
-            }
-            if full_width_button(ui, "Keep going").clicked() {
-                s.checkpoint_dismissed = true;
-            }
         } else if let Some((offered, rendered)) = next {
+            // **The 10-minute checkpoint sits above the card and never replaces it**
+            // (ADR-0006 §1, discharged by ADR-0034 §4). This was an `else if` branch until #134 —
+            // the card was not drawn at all while the checkpoint was up, and §1 says in as many
+            // words that it surfaces *"without hiding the card underneath — the reviewer can still
+            // grade what they're looking at while deciding"*. The application had contradicted its
+            // own accepted ADR since the checkpoint was written, nothing failed, and no test could
+            // have noticed: `checkpoint_due` only becomes true after ten real minutes, which no
+            // capture run and no test suite ever waits for.
+            //
+            // It is drawn **compact**: the sentence and two controls on one line. §1 also calls the
+            // timer *"a courtesy check-in, not an enforcement mechanism"*, and a stack of
+            // full-width controls above the card is how an application draws an enforcement — it
+            // pushes the card 140px down the page to ask a question the reviewer did not raise.
+            if s.checkpoint_due() {
+                match checkpoint(ui) {
+                    Some(Checkpoint::Finish) => end_sitting = true,
+                    Some(Checkpoint::KeepGoing) => s.checkpoint_dismissed = true,
+                    None => {}
+                }
+                ui.add_space(spacing::gap(3));
+            }
+
             // A new card on screen resets the reveal and the answer-timer; the same card across
             // frames keeps them, so a reveal survives a repaint.
             if s.shown != Some(offered.card) {
@@ -242,6 +268,32 @@ pub(crate) fn review(
         *sitting = None;
     }
     edit_request
+}
+
+/// What the reviewer answered the 10-minute checkpoint with.
+enum Checkpoint {
+    Finish,
+    KeepGoing,
+}
+
+/// The 10-minute checkpoint (ADR-0006 §1, ADR-0034 §4): a courtesy check-in on **one line**, above a
+/// card that stays on screen and stays gradeable.
+///
+/// The two controls keep their borders. A frameless pair was drawn and rejected on the one ground a
+/// picture is good for — *it is not obvious that they are clickable* — so what makes this compact is
+/// that each takes only the room its label needs, not that it stopped looking like a control.
+fn checkpoint(ui: &mut egui::Ui) -> Option<Checkpoint> {
+    let mut answer = None;
+    spacing::row(ui, 2, |ui| {
+        field_label(ui, "10 minutes so far.");
+        if controls::snug(ui, "Finish here").clicked() {
+            answer = Some(Checkpoint::Finish);
+        }
+        if controls::snug(ui, "Keep going").clicked() {
+            answer = Some(Checkpoint::KeepGoing);
+        }
+    });
+    answer
 }
 
 /// The end-of-session pointer's wording (ADR-0010 §6): a plain statement of cost and an offer to look,
@@ -408,8 +460,13 @@ fn picker(
             body(ui, "No cards yet. Add a note to start reviewing.");
             None
         }
+        // **The floor gets the screen** (ADR-0034 §3). This is the only Review state with no card
+        // and no work in it, and it was drawn as one body sentence tucked under the heading — a
+        // state given no more room than a form label. Centred at the display tier it reads as an
+        // answer rather than as an absence, which is what it is: nothing is due because the work is
+        // done.
         ReviewState::CaughtUp => {
-            body(ui, "All caught up — nothing is due right now.");
+            caught_up(ui);
             None
         }
         ReviewState::NewDeck { new } => {
@@ -443,49 +500,121 @@ fn picker(
     }
 }
 
-/// A row of sitting-size choices, each capped by what is actually available so the picker never
-/// offers more work than exists.
+/// The entrance: **one primary way in, with the sizes as a quiet second line** (ADR-0034 §2).
+///
+/// The picker used to be a wrapped row of four equal controls — `5` `10` `20` `All n` — with no way
+/// in that was *the* way in, asking for a decision before anything had happened. The sitting size is
+/// a decision most days do not want to make, so the whole queue becomes the default and the shorter
+/// sittings stay one tap away.
+///
+/// **The second line is the link accent's first caller** (`theme::link`, ADR-0030 §5). At weak-text
+/// weight it was very nearly invisible, which would have made the sizes technically present and
+/// practically gone; that trade is what ADR-0034 §2 decides, and it is the reason the accent wakes.
+/// The line is only drawn when it offers something — a queue of three has no *shorter* sitting to
+/// pick, and a row reading `or a shorter sitting: 5 10 20` above three cards states work that does
+/// not exist.
 fn count_buttons(ui: &mut egui::Ui, available: usize) -> Option<usize> {
     let mut chosen = None;
-    ui.add_space(spacing::gap(2));
-    spacing::row_wrapped(ui, 1, |ui| {
-        for option in [5usize, 10, 20] {
-            if option <= available && ui.button(text(ui, &option.to_string())).clicked() {
-                chosen = Some(option);
+    ui.add_space(spacing::gap(3));
+
+    if controls::wide_primary(ui, &start_wording(available)).clicked() {
+        chosen = Some(available);
+    }
+
+    // Strictly *shorter* — an option equal to the queue is the primary said twice.
+    let shorter: Vec<usize> = [5usize, 10, 20]
+        .into_iter()
+        .filter(|option| *option < available)
+        .collect();
+    if !shorter.is_empty() {
+        ui.add_space(spacing::gap(2));
+        spacing::row(ui, 2, |ui| {
+            field_label(ui, "or a shorter sitting:");
+            for option in shorter {
+                if controls::text_action(ui, &option.to_string()).clicked() {
+                    chosen = Some(option);
+                }
             }
-        }
-        // "All" is always meaningful when anything is available.
-        if available > 0 && ui.button(text(ui, &format!("All {available}"))).clicked() {
-            chosen = Some(available);
-        }
-    });
+        });
+    }
     chosen
 }
 
-/// The four grade buttons: full-width, stacked, with a visual break between 1 and 2 and an
-/// illustrative interval preview on each (issue #94). Returns the grade pressed, if any.
+/// The primary's label: what pressing it actually does. Names the count so the default is stated
+/// rather than implied — `Start — all 6` is a promise about the sitting, `Start` is not.
+fn start_wording(available: usize) -> String {
+    if available == 1 {
+        "Start — the one card".to_owned()
+    } else {
+        format!("Start — all {available}")
+    }
+}
+
+/// The grade controls: ***Forgot* held apart, the three passes in one segmented row**
+/// (ADR-0034 §1). Returns the grade pressed, if any.
+///
+/// **The shape is an argument about the scale, not about space.** *Forgot* is a different kind of
+/// answer — *I did not know this* — and the three passes are degrees of one answer. Four stacked
+/// full-width controls say those are four rungs of a single ladder, which puts the failure grade at
+/// the bottom of a scale it is not on. Holding it apart and segmenting the rest says what is true,
+/// and buys back the vertical budget the card spends as a side effect rather than as the reason.
+///
+/// The row survives a **fourth pass grade** and that was measured rather than hoped: three segments
+/// are 208px at the judging width and 163px at the application's own; four are 154 and 118, and a
+/// label with its interval still fits inside 118. So a later change to
+/// [ADR-0001](../../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md)'s scale does not
+/// have to reopen this arrangement.
 fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Grade> {
-    let mut pressed = None;
-    let mut button = |ui: &mut egui::Ui, grade: Grade, label: &str| {
+    let label = |ui: &egui::Ui, grade: Grade, name: &str| {
         let days = session::interval_preview(offered, grade, today);
-        if full_width_button(ui, &format!("{label}   ·   {days}d")).clicked() {
-            pressed = Some(grade);
-        }
+        controls::grade_label(ui, name, &format!("{days}d"))
     };
-    button(ui, Grade::Forgot, "Forgot");
-    // The visual break between the failure grade and the passes.
-    ui.add_space(spacing::gap(3));
-    button(ui, Grade::Barely, "Barely");
-    // **One unit, stated.** These three were never separated by anything anyone chose: they leaned
-    // on egui's ambient 3px, and zeroing it (ADR-0032 §2) fused them into a single slab. Three units
-    // hold the passes apart from *Forgot*; one holds them apart from each other, which is the
-    // grouping the old 3-against-15 accidentally expressed and the only thing being preserved here.
-    // Whether the three become a segmented row instead is #134's, not this ticket's.
-    ui.add_space(spacing::gap(1));
-    button(ui, Grade::Good, "Good");
-    ui.add_space(spacing::gap(1));
-    button(ui, Grade::Easy, "Easy");
+
+    let forgot = label(ui, Grade::Forgot, "Forgot");
+    let mut pressed = controls::control_job(ui, forgot, ui.available_width())
+        .clicked()
+        .then_some(Grade::Forgot);
+
+    // Two units hold the passes apart from *Forgot*. Three was the old stacked break and it is more
+    // than a row needs: the row is already a different shape, so the gap only has to separate, not
+    // to carry the whole distinction on its own.
+    ui.add_space(spacing::gap(2));
+
+    const PASSES: [(Grade, &str); 3] = [
+        (Grade::Barely, "Barely"),
+        (Grade::Good, "Good"),
+        (Grade::Easy, "Easy"),
+    ];
+    let labels = PASSES
+        .iter()
+        .map(|(grade, name)| label(ui, *grade, name))
+        .collect();
+    if let Some(i) = controls::segmented(ui, labels) {
+        pressed = Some(PASSES[i].0);
+    }
     pressed
+}
+
+/// The caught-up floor: the statement, centred and given the screen (ADR-0034 §3).
+///
+/// **The display tier is used here for something that is not a card face**, which narrows
+/// [ADR-0032 §1](../../../../docs/adr/0032-the-type-scale-and-the-rhythm.md)'s *"the text actually
+/// being read"* the same way [ADR-0033 §4](../../../../docs/adr/0033-the-card.md) narrowed it for a
+/// card that will not fit. The scale has four sizes and nothing between 20 and 40; at 20 the whole
+/// content of this screen is set at the size of the word *Review* three lines above it, which reads
+/// as a caption rather than as the state. #124's variant E reached for 24 and the scale does not
+/// have it.
+fn caught_up(ui: &mut egui::Ui) {
+    ui.add_space(spacing::gap(8));
+    ui.vertical_centered(|ui| {
+        ui.label(bidi::job(
+            "All caught up.",
+            egui::FontId::proportional(typography::DISPLAY),
+            ui.visuals().text_color(),
+        ));
+        ui.add_space(spacing::gap(2));
+        field_label(ui, "Nothing is due right now.");
+    });
 }
 
 /// The picker's statement when nothing is due but cards have never been seen: the fact, then the
@@ -603,6 +732,103 @@ mod tests {
             "ADR-0021 §5: the review screen is one of the editor's four entrances, and ADR-0029 \
              narrows *when* it is offered rather than removing it — drew: {revealed}"
         );
+    }
+
+    /// **ADR-0006 §1, and the reason it went ten months unenforced.** The 10-minute checkpoint
+    /// surfaces *"without hiding the card underneath — the reviewer can still grade what they're
+    /// looking at while deciding"*.
+    ///
+    /// Until #134 the checkpoint was an `else if` arm that drew *instead of* the card, contradicting
+    /// the ADR in writing. Nothing failed and nothing could have: `checkpoint_due` needs ten real
+    /// minutes to elapse, which no capture run waits for and no test had ever forced — so the one
+    /// state that breaks the guarantee was the one state nobody had ever looked at.
+    #[test]
+    fn the_ten_minute_checkpoint_never_hides_the_card() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        coll.create_note("basic", &[("Front", "der Hund"), ("Back", "the dog")])
+            .unwrap();
+
+        const TODAY: i64 = 20_514;
+        let now_ms = TODAY * 86_400_000 + 4 * 3_600_000;
+
+        let mut sitting = Sitting::new(10, HashSet::new());
+        // Wind the clock past the checkpoint rather than waiting for it — the whole point is that
+        // waiting is what nobody ever did.
+        sitting.started = Instant::now() - Duration::from_secs(700);
+        assert!(
+            sitting.checkpoint_due(),
+            "the fixture must actually reach the checkpoint, or this test proves nothing"
+        );
+        sitting.revealed = true;
+
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::typography::install(&ctx);
+        crate::spacing::install(&ctx);
+
+        let mut sitting = Some(sitting);
+        let mut showing_leeches = false;
+        let mut pointer = None;
+        let mut frame = |sitting: &mut Option<Sitting>, coll: &mut Collection| {
+            ctx.run_ui(Default::default(), |ui| {
+                review(
+                    ui,
+                    coll,
+                    sitting,
+                    &mut showing_leeches,
+                    &mut pointer,
+                    now_ms,
+                    TODAY,
+                );
+            })
+        };
+
+        // The first frame binds the card to the sitting and clears `revealed`; the second is the one
+        // to assert on, with the card shown and the checkpoint still up.
+        let _ = frame(&mut sitting, &mut coll);
+        sitting.as_mut().unwrap().revealed = true;
+        let drawn = drawn_text(&frame(&mut sitting, &mut coll));
+
+        assert!(
+            drawn.contains("10 minutes so far."),
+            "the checkpoint should be on screen — drew: {drawn}"
+        );
+        assert!(
+            drawn.contains("der Hund"),
+            "ADR-0006 §1: the card stays visible underneath the checkpoint — drew: {drawn}"
+        );
+        assert!(
+            drawn.contains("Good"),
+            "ADR-0006 §1: the card stays *gradeable* while the checkpoint is up — drew: {drawn}"
+        );
+    }
+
+    /// The entrance never offers a sitting longer than the queue, and never offers one **equal** to
+    /// it either — that is the primary said a second time in a quieter voice.
+    ///
+    /// The shipped picker capped its options and the second line this replaced it with did not, so
+    /// a queue of six was offered `5 10 20`: two of them work that does not exist.
+    #[test]
+    fn the_entrance_offers_only_sittings_shorter_than_the_queue() {
+        for (available, expected) in [(6usize, vec![5usize]), (25, vec![5, 10, 20]), (3, vec![])] {
+            let shorter: Vec<usize> = [5usize, 10, 20]
+                .into_iter()
+                .filter(|option| *option < available)
+                .collect();
+            assert_eq!(
+                shorter, expected,
+                "with {available} available the shorter sittings should be {expected:?}"
+            );
+        }
+    }
+
+    /// The primary names the count, so the default it commits to is stated rather than implied.
+    #[test]
+    fn the_entrance_names_what_starting_commits_to() {
+        assert_eq!(start_wording(6), "Start — all 6");
+        assert_eq!(start_wording(1), "Start — the one card");
     }
 
     #[test]

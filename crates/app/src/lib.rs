@@ -16,6 +16,7 @@
 
 pub mod bidi;
 pub mod cards;
+pub mod controls;
 pub mod deck;
 pub mod editor;
 pub mod fonts;
@@ -719,10 +720,15 @@ pub(crate) fn badge(ui: &mut egui::Ui, s: &str) {
     ));
 }
 
-/// A full-width button carrying bidi-laid text.
+/// A full-width control carrying bidi-laid text.
+///
+/// **The material moved to [`controls`] in #134** and this is now a spelling of
+/// [`controls::wide`]. It used to be `ui.add_sized(…, Button::new(job))`, which took
+/// `widgets.inactive` — a rung nobody had chosen for controls specifically, and the one ADR-0033 §3
+/// found was heavier than the card it sat under. Every screen in the application changed weight by
+/// this one line changing, which is the property ADR-0030 §1 exists to buy.
 pub(crate) fn full_width_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
-    let job = text(ui, s);
-    ui.add_sized([ui.available_width(), 36.0], egui::Button::new(job))
+    controls::wide(ui, s)
 }
 
 /// A button that takes only the room its own label needs, at the same touch height as
@@ -734,8 +740,7 @@ pub(crate) fn full_width_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
 /// a target the finger has to find. #131's editor is the first: at 1120px, *Done* stretched into a
 /// button wider than the two columns of content it sits above.
 pub(crate) fn compact_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
-    let job = text(ui, s);
-    ui.add_sized([120.0, 36.0], egui::Button::new(job))
+    controls::compact(ui, s)
 }
 
 // The card face lived here until #133, as `card_face`: a 96px `Button` per face, drawn on the
