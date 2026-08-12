@@ -153,6 +153,13 @@ one state that breaks the guarantee was the one state nobody had ever looked at.
 class of defect as ADR-0030 §4's badge case, found the same way — by a ticket that had to draw the
 state for another reason.
 
+**The design project had this right before the application did, and that is the finding.** The
+click-through UI kit's `ReviewScreen.jsx` carries the comment *"the checkpoint sits ABOVE the card
+rather than replacing it"* and has drawn it that way since the layout pass. So the two artifacts the
+map's convergence rule holds together had disagreed for months, in the direction nobody was watching
+— the rule exists because the *design* drifts from the app, and here it was the app that had drifted
+from the design. Discovered only because this ticket had to open the kit to update it.
+
 **Compact, because §1 also calls the timer *"a courtesy check-in, not an enforcement mechanism"***.
 The literal fix — two full-width controls above the card — obeys §1 and pushes the card 140px down
 the page to ask a question the reviewer did not raise, which is how an application draws an
