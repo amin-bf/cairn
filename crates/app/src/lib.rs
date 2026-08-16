@@ -288,18 +288,28 @@ impl CairnApp {
         //
         // The palette is the opposite: installed here, at construction, because visuals allocate no
         // texture so the font hazard does not reach them, and setting them now avoids a frame of the
-        // wrong theme (ADR-0030 §1). `install` pins dark into the dark slot and disables
-        // theme-following — both acts, or an OS theme flip silently restores stock egui (§2).
-        theme::install(&cc.egui_ctx);
+        // wrong theme (ADR-0030 §1). `install` fills **both** slots and applies the user's stored
+        // choice (ADR-0036 §3, superseding ADR-0030 §2's pinned dark).
+        //
+        // **The store is opened first, and the order is load-bearing**: the choice is device-local
+        // and lives in the collection, so installing before the open would draw a frame of whatever
+        // the OS prefers and then correct it — a visible flash on every launch for someone whose
+        // choice differs from their desktop's. A collection that will not open falls back to
+        // following the platform, which is the same default a first launch gets.
+        let store = Self::open_store();
+        let choice = store
+            .as_ref()
+            .ok()
+            .and_then(|c| c.theme_preference().ok().flatten());
+        theme::install(&cc.egui_ctx, theme::ThemeChoice::parse(choice.as_deref()));
         // The type scale and the rhythm are installed here for the same reason and with one
         // difference (ADR-0032 §4): neither allocates a texture, so the font hazard does not reach
         // them either — but colour is per-theme and these are not, so they are written to *every*
-        // theme slot rather than targeted at the dark one. That makes ADR-0030 §2's active-slot trap
-        // inapplicable instead of merely avoided, and it is what lets a future light mode inherit
-        // both rather than silently falling back to stock egui's 13px body and 8×3 spacing.
+        // theme slot rather than targeted at one. That makes ADR-0030 §2's active-slot trap
+        // inapplicable instead of merely avoided, and it is what lets the light palette inherit both
+        // rather than silently falling back to stock egui's 13px body and 8×3 spacing.
         typography::install(&cc.egui_ctx);
         spacing::install(&cc.egui_ctx);
-        let store = Self::open_store();
         Self {
             store,
             dest: Destination::Review,
