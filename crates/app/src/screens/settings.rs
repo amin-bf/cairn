@@ -64,6 +64,14 @@ pub(crate) fn settings_screen(
     heading(ui, "Settings");
     ui.add_space(spacing::gap(2));
 
+    // **PROTOTYPE #141** — the variant switcher, first so it is reachable without scrolling on the
+    // handset. It lives here rather than on Review because a control added to the review screen
+    // changes the very arrangement the ticket is asking about. See `crate::proto`.
+    crate::proto::switcher(ui);
+    ui.add_space(spacing::gap(3));
+    ui.separator();
+    ui.add_space(spacing::gap(2));
+
     if *setting_up {
         enrolment_screen(ui, setting_up);
         return false;

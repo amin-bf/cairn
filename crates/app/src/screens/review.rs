@@ -11,7 +11,7 @@ use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
 use crate::session::{self, Offered, ReviewState};
-use crate::{bidi, controls, spacing, typography};
+use crate::{bidi, controls, proto, spacing, typography};
 use crate::{
     Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
     text,
@@ -195,60 +195,126 @@ pub(crate) fn review(
                 .revealed
                 .then(|| box_badge_wording(!offered.is_new, offered.box_));
             let answer = s.revealed.then_some(rendered.answer.as_str());
-            if surface::card(
-                ui,
-                &rendered.prompt,
-                answer,
-                badge_text.as_deref(),
-                surface::REVIEW_HEIGHT,
-            )
-            .clicked()
+
+            // ---- PROTOTYPE #141: the vertical anchor ------------------------------------------
+            //
+            // Everything from here to the grading below is varied by `proto`, and **only where
+            // things sit** — the card, the grades and *Edit note* are the shipped controls at the
+            // shipped sizes, drawn through the shipped modules. See `proto` for the five
+            // candidates and what each is a claim about. `Anchor::Today` is this block reproducing
+            // exactly what `main` draws.
+            let variant = proto::anchor();
+            let anchorable =
+                variant.anchors_low() && proto::page_room(ui) >= proto::MIN_ANCHORABLE_HEIGHT;
+            let was_revealed = s.revealed;
+            // Whether the card travels with the controls or stays where the reading order puts it.
+            let block_holds_card = anchorable && variant.card_comes_down();
+            let mut pressed = None;
+            let mut edit_pressed = false;
+
+            // *Edit note* above the card, for the two variants that answer *frequency maps to
+            // reach*. Still only after the reveal: ADR-0029 §1 fixes **when** this entrance is
+            // offered, and this ticket is about **where** — moving it up is not reopening it.
+            if anchorable && variant.edit_on_top() && was_revealed {
+                if full_width_button(ui, "Edit note").clicked() {
+                    edit_pressed = true;
+                }
+                ui.add_space(spacing::gap(3));
+            }
+
+            if !block_holds_card
+                && surface::card(
+                    ui,
+                    &rendered.prompt,
+                    answer,
+                    badge_text.as_deref(),
+                    surface::REVIEW_HEIGHT,
+                )
+                .clicked()
             {
                 s.revealed = true;
             }
 
-            if s.revealed {
-                ui.add_space(spacing::gap(3));
-                let pressed = grade_buttons(ui, &offered, today);
-
-                // Edit this note — offered **only now the card is revealed** (ADR-0029 §1). The
-                // honest diagnosis of most leeches is a defective card (ADR-0010 §7), and its three
-                // named forms — ambiguous, too large, testing two facts at once — are all judgements
-                // about the *pair*, so all three are post-reveal findings already.
-                //
-                // **Nothing flips the card here, and that absence is the decision.** ADR-0021 §6's
-                // "entering the editor counts as a reveal" is retired with the pre-reveal control it
-                // existed for: a full-width button under the card, which is itself the reveal target,
-                // made a mis-tap spend the reveal on a card nobody chose to look at. So ADR-0006 §4's
-                // "no grading before the answer is seen" now holds because there is **no route** into
-                // the editor before the reveal — put this control back outside the `revealed` branch
-                // and the guarantee is silently false again, with no rule left to catch it.
-                //
-                // An edit that makes the card dormant still needs no mechanism: the next frame
-                // re-derives the queue and simply does not offer it (ADR-0006 §2).
-                ui.add_space(spacing::gap(3));
-                if full_width_button(ui, "Edit note").clicked() {
-                    edit_request = Some(offered.card.note);
+            if was_revealed || block_holds_card {
+                // The slack, which is the whole ticket: the leftover height goes here rather than
+                // below everything. `slack` is measured from the previous frame — see `proto`.
+                if anchorable {
+                    ui.add_space(proto::slack(was_revealed, proto::page_room(ui)));
                 }
 
-                if let Some(grade) = pressed {
-                    let duration_ms = s.card_shown.elapsed().as_millis() as u64;
-                    // A failed append drops this one review rather than wedging the session: the next
-                    // frame re-derives the queue from whatever did commit. Surfacing write errors is
-                    // a later ticket.
-                    let _ = coll.append_review(
-                        offered.card,
-                        grade,
-                        now_ms,
-                        DayScale::default(),
-                        duration_ms,
-                    );
-                    // A grading advances the count whatever the grade — the re-derived queue decides
-                    // whether the card returns (a lapse) or leaves (a pass), not this counter.
-                    s.graded += 1;
-                    s.revealed = false;
-                    s.shown = None;
+                let block = ui.scope(|ui| {
+                    if block_holds_card
+                        && surface::card(
+                            ui,
+                            &rendered.prompt,
+                            answer,
+                            badge_text.as_deref(),
+                            surface::REVIEW_HEIGHT,
+                        )
+                        .clicked()
+                    {
+                        s.revealed = true;
+                    }
+
+                    if was_revealed {
+                        // With the block anchored low, the slack above it *is* the separation, so
+                        // the stated gap is only drawn where it is doing the separating.
+                        if block_holds_card || !anchorable {
+                            ui.add_space(spacing::gap(3));
+                        }
+                        pressed = grade_buttons(ui, &offered, today);
+
+                        // Edit this note — offered **only now the card is revealed** (ADR-0029 §1).
+                        // The honest diagnosis of most leeches is a defective card (ADR-0010 §7),
+                        // and its three named forms — ambiguous, too large, testing two facts at
+                        // once — are all judgements about the *pair*, so all three are post-reveal
+                        // findings already.
+                        //
+                        // **Nothing flips the card here, and that absence is the decision.**
+                        // ADR-0021 §6's "entering the editor counts as a reveal" is retired with the
+                        // pre-reveal control it existed for: a full-width button under the card,
+                        // which is itself the reveal target, made a mis-tap spend the reveal on a
+                        // card nobody chose to look at. So ADR-0006 §4's "no grading before the
+                        // answer is seen" now holds because there is **no route** into the editor
+                        // before the reveal — put this control back outside the `revealed` branch
+                        // and the guarantee is silently false again, with no rule left to catch it.
+                        //
+                        // An edit that makes the card dormant still needs no mechanism: the next
+                        // frame re-derives the queue and simply does not offer it (ADR-0006 §2).
+                        if !(anchorable && variant.edit_on_top()) {
+                            ui.add_space(spacing::gap(3));
+                            if full_width_button(ui, "Edit note").clicked() {
+                                edit_pressed = true;
+                            }
+                        }
+                    }
+                });
+                if anchorable {
+                    proto::remember(was_revealed, block.response.rect.height());
                 }
+            }
+
+            if edit_pressed {
+                edit_request = Some(offered.card.note);
+            }
+
+            if let Some(grade) = pressed {
+                let duration_ms = s.card_shown.elapsed().as_millis() as u64;
+                // A failed append drops this one review rather than wedging the session: the next
+                // frame re-derives the queue from whatever did commit. Surfacing write errors is
+                // a later ticket.
+                let _ = coll.append_review(
+                    offered.card,
+                    grade,
+                    now_ms,
+                    DayScale::default(),
+                    duration_ms,
+                );
+                // A grading advances the count whatever the grade — the re-derived queue decides
+                // whether the card returns (a lapse) or leaves (a pass), not this counter.
+                s.graded += 1;
+                s.revealed = false;
+                s.shown = None;
             }
         } else {
             // The queue emptied before the chosen count — every due card passed and the day's new
@@ -564,7 +630,40 @@ fn start_wording(available: usize) -> String {
 /// label with its interval still fits inside 118. So a later change to
 /// [ADR-0001](../../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md)'s scale does not
 /// have to reopen this arrangement.
+///
+/// **PROTOTYPE #141** wraps this in the horizontal axis: with `proto::snug` on, the whole cluster
+/// is narrowed to [`proto::SNUG_FRACTION`] of the column and centred, so *Barely* and *Easy* come
+/// in off the extremes. Both rows narrow together — narrowing only the segmented row would leave it
+/// disagreeing with the *Forgot* bar above it and with the card above that, which is a cost worth
+/// seeing rather than designing around.
 fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Grade> {
+    let column = ui.available_width();
+    let width = proto::grade_width(column);
+    if width >= column {
+        return grade_cluster(ui, offered, today);
+    }
+
+    let mut pressed = None;
+    let height = controls::HEIGHT * 2.0 + spacing::gap(2);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space((column - width) / 2.0);
+        pressed = ui
+            .allocate_ui_with_layout(
+                egui::vec2(width, height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(width);
+                    grade_cluster(ui, offered, today)
+                },
+            )
+            .inner;
+    });
+    pressed
+}
+
+/// The cluster itself, at whatever width the column it is handed is.
+fn grade_cluster(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Grade> {
     let label = |ui: &egui::Ui, grade: Grade, name: &str| {
         let days = session::interval_preview(offered, grade, today);
         controls::grade_label(ui, name, &format!("{days}d"))

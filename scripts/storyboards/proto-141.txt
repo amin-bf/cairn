@@ -1,0 +1,189 @@
+# PROTOTYPE #141 — the five vertical anchors, at the handset's own geometry (448x997 dp).
+#
+# Two passes, and the second one is why this is short: `revealed` survives a trip to Settings and
+# back, so the card is revealed **once** and every variant after that is photographed revealed.
+#
+# Switcher rows, measured off the probe run: A 101, B 120, C 138, D 156, E 174; the horizontal
+# toggle 217. Nav: Review 63, Settings 186, both at y=11.
+
+# ---- pass 1: unrevealed, which is the state the reveal tap has to be reachable in ----------------
+mousemove 224 146
+sleep 0.4
+click 1
+sleep 1.5
+shot a1-today-unrevealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 120
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot b1-bottom-unrevealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 138
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot c1-reach-unrevealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 156
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot d1-split-unrevealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 174
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot e1-splitedittop-unrevealed
+
+# ---- the one reveal: back to A, where the card is where it has always been -----------------------
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 101
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+mousemove 224 200
+sleep 0.4
+click 1
+sleep 1.5
+shot a2-today-revealed
+
+# ---- pass 2: revealed ---------------------------------------------------------------------------
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 120
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot b2-bottom-revealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 138
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot c2-reach-revealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 156
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot d2-split-revealed
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 174
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot e2-splitedittop-revealed
+
+# ---- the horizontal axis, on the two anchors that hand the bottom to the grades ------------------
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 217
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot e3-splitedittop-snug
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 138
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot c3-reach-snug
+
+mousemove 186 11
+sleep 0.4
+click 1
+sleep 1
+mousemove 224 101
+sleep 0.4
+click 1
+sleep 0.6
+mousemove 63 11
+sleep 0.4
+click 1
+sleep 1.2
+shot a3-today-snug

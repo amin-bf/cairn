@@ -28,6 +28,8 @@ pub mod markdown;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
+/// **PROTOTYPE #141** — the vertical anchor. Never merges; see the module header.
+pub mod proto;
 mod screens;
 pub mod session;
 pub mod spacing;
@@ -40,7 +42,10 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cairn_core::content::{CardRef, DeckId, NoteId};
-use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
+// **PROTOTYPE #141**: `DEFAULT_NEW_CARD_RATE` is no longer the seed's measure — see `open_store`.
+#[allow(unused_imports)]
+use cairn_core::log::DEFAULT_NEW_CARD_RATE;
+use cairn_core::log::{DayScale, day_number};
 use cairn_store::Collection;
 
 use screens::notes::notes_screen;
@@ -334,14 +339,55 @@ impl CairnApp {
     /// [`DEFAULT_NEW_CARD_RATE`] keeps the rate itself visible as the binding limit rather than the
     /// seed's size.
     fn open_store() -> Result<Collection, String> {
-        const SEED: [(&str, &str); DEFAULT_NEW_CARD_RATE as usize + 1] = [
+        // **PROTOTYPE #141 — a seed long enough to judge a thumb by.** The shipped seed is six
+        // notes and `DEFAULT_NEW_CARD_RATE` offers five of them a day, which is a sitting over in
+        // under a minute. Reach is judged by repetition — the same press, forty times, in one hand
+        // — so the throwaway build seeds forty and lifts the rate to match. Nothing else about the
+        // queue changes: these are ordinary `basic` notes going through ADR-0011's ordinary rate.
+        const SEED: [(&str, &str); 40] = [
             ("chien", "dog"),
             ("chat", "cat"),
             ("livre", "book"),
             ("eau", "water"),
             ("pain", "bread"),
             ("maison", "house"),
+            ("arbre", "tree"),
+            ("fenêtre", "window"),
+            ("porte", "door"),
+            ("table", "table"),
+            ("chaise", "chair"),
+            ("lumière", "light"),
+            ("nuage", "cloud"),
+            ("pierre", "stone"),
+            ("rivière", "river"),
+            ("montagne", "mountain"),
+            ("chemin", "path"),
+            ("forêt", "forest"),
+            ("champ", "field"),
+            ("ciel", "sky"),
+            ("neige", "snow"),
+            ("vent", "wind"),
+            ("feu", "fire"),
+            ("terre", "earth"),
+            ("mer", "sea"),
+            ("île", "island"),
+            ("pont", "bridge"),
+            ("mur", "wall"),
+            ("toit", "roof"),
+            ("clé", "key"),
+            ("papier", "paper"),
+            ("encre", "ink"),
+            ("lettre", "letter"),
+            ("mot", "word"),
+            ("phrase", "sentence"),
+            ("page", "page"),
+            ("matin", "morning"),
+            ("soir", "evening"),
+            ("nuit", "night"),
+            ("jour", "day"),
         ];
+        /// The rate the throwaway build runs at, so the whole seed is reachable in one sitting.
+        const PROTO_RATE: u32 = SEED.len() as u32;
 
         let data = cairn_store::platform::data_dir().map_err(|e| e.to_string())?;
         let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
@@ -351,6 +397,7 @@ impl CairnApp {
                 coll.create_note("basic", &[("Front", front), ("Back", back)])
                     .map_err(|e| e.to_string())?;
             }
+            coll.set_new_card_rate(PROTO_RATE).map_err(|e| e.to_string())?;
         }
         Ok(coll)
     }
