@@ -56,26 +56,61 @@ arrangement read as an open colour question, and an open colour question read as
 The app's colours, cool slate neutrals with **four desaturated accents**, named in **exactly one
 place** — a `theme` module producing an `egui::Visuals`, installed once — so every screen keeps
 reading the *ambient* visuals unchanged (ADR-0030 §1). A colour literal anywhere else is the defect.
-**Dark is pinned**, and system-following is dropped deliberately (§2): install the palette *and*
-disable following, or an OS theme change silently restores stock egui. Of the four accents only one —
-the accent egui already draws for selection and the active destination — has a call site today; **warn,
-error and link land set-and-unused** until the notice channel and links exist (§5), which is accepted,
-not overlooked, and not licence to invent callers for them.
-_Avoid_: Theme, colour scheme; a per-screen colour; a light palette treated as already following.
+**There are two of them** — `cairn_dark` and `cairn_light` — and **both slots are always filled**
+(ADR-0036 §3, superseding ADR-0030 §2's pinned dark). A slot named in one palette and left on stock
+in the other is invisible until someone switches, which is the failure mode a second palette brings.
+The role functions (`card_fill`, `control_fill`, `primary_fill`, `link`) take `&Visuals` and read the
+ambient slot; **returning a constant paints a dark card on a light page and nothing fails**. Of the
+four accents only two have a call site — selection, and link since #134; **warn and error land
+set-and-unused** until the notice channel exists (§5), in both themes, which is accepted, not
+overlooked, and not licence to invent callers for them.
+_Avoid_: Theme, colour scheme; a per-screen colour; a colour rule checked in only one theme; a light
+value picked by eye rather than re-derived (see **Ink construction**).
+
+**Ink construction**:
+How the light palette places its three fills (ADR-0036 §1, §2): **all three below the page**, at the
+**pairwise gaps** the dark palette delivers rather than at ADR-0033 §3's page-relative ratios. Dark
+puts the card *below* the page and both controls *above* it, which works only because a dark page has
+16.78:1 of range above it; a light page has **1.13:1**, so a `primary` lighter than the page **does
+not exist at any hue** and the construction has to change rather than the values. The trap it names:
+implementing §3's three stated ratios on a light page satisfies the ordering at every page position
+while the card↔ordinary separation collapses from 1.231:1 to **1.02:1** — the card and the buttons
+become one material, with nothing failing. Light's values are **outputs**, re-derived from the dark
+constants and pinned by `the_light_ramp_is_re_derived_not_re_hued`.
+_Avoid_: Mirroring or lightening the dark ramp; a warm light neutral (the palette is cool slate in
+both themes); nudging a `STONE_L_*` constant by eye.
+
+**Appearance**:
+The user's theme choice — **System, Light or Dark**, defaulting to System, on Settings (ADR-0036 §3).
+**Device-local**: it rides the `local` table, never the settings singleton, so it does *not* sync — a
+desktop under a lamp and a handset in bed want opposite answers. The store keeps the string
+uninterpreted; `theme::ThemeChoice::parse` is the only place that decides what it means, and anything
+unrecognised degrades to System. The **decision is the three options**, not `egui::ThemePreference` —
+a native client honours it against its own platform setting.
+_Avoid_: Theme setting (it is not a *setting*, which is the thing that syncs); putting it on the
+mutable surface; treating System as "obey the OS" rather than as one of three choices.
 
 **Contrast floor**:
 The minimum contrast a **text** colour must clear against the surface it is drawn on: **7:1**
-(ADR-0030 §3), chosen over WCAG AA's 4.5:1 because the small text style is 9px, where 4.5 is already
-marginal. Body-on-panel clears it at **13.34:1** (up from stock's 5.12:1), and #115's test holds
-body-on-card and body-over-selection to it too. It binds text pairs only, with one carve-out: **weak
+(ADR-0030 §3), and it binds **both themes** (ADR-0036 §4). It was chosen over WCAG AA's 4.5:1 because
+the small text style was 9px — **that premise is gone**: ADR-0032 raised small to 12px and #125
+judged that tier legible at arm's length on a handset at low brightness, so the floor kept its number
+and lost its argument, and reopening the *number* needs no permission. Body-on-page clears it at
+13.34:1 dark and 13.29:1 light (against stock's 5.12:1). **The tightest pair in the application is
+light's body-on-`primary` at 7.06:1** — over the floor by 0.06, the ink construction's price, pinned
+by *figure* in `the_light_primary_is_the_tightest_reading_pair` so the margin cannot be quietly spent.
+It binds text pairs only, with one carve-out: **weak
 text** (`weak_text_color()`, ~5.6:1) stays below the floor by design, because §4 wants the box badge
 quiet and lifting weak text makes it loud — a pre-existing weakness (stock is 5.12:1), pinned against
 stock, not the floor. The **non-text** pairs (widget fills, decorative strokes) fail even 3:1 in stock
 *and* in the palette, out of scope, so do not "fix" a decorative stroke to reach 7:1 — **except** the
 hover stroke, the lone pair the palette *regressed* (3.19:1 → 2.49:1), which #115 lifted back over
-**3:1** (`theme::install`'s `STONE_9`).
+**3:1** (`theme::install`'s `STONE_9`). Weak text is **derived in dark and named in light**: egui's
+0.6 alpha lands 60% of a near-black much closer to a light ground than 60% of a near-white is to a
+dark one, so light sets `weak_text_color` explicitly to hold the same weight (ADR-0036 §2).
 _Avoid_: A contrast rule read as binding fills and strokes; reading weak text as clearing 7:1;
-treating the lifted hover stroke as still a regression to accept.
+treating the lifted hover stroke as still a regression to accept; checking a pair in one theme only;
+citing §3's 9px premise as though it still held.
 
 **Top-level destination**:
 One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR-0021 §1). The floor
