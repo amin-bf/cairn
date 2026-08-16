@@ -85,16 +85,21 @@ pub enum Anchor {
     /// [`Anchor::Split`] with *Edit note* lifted above the card, so the bottom belongs to the
     /// grades alone.
     SplitEditTop,
+    /// **The second round's answer.** *Edit note* sits directly under the card — out of the thumb's
+    /// zone without needing a reserved row above the card — and the four grades are **stacked**
+    /// rather than segmented, because a thumb travels up and down freely and sideways badly.
+    StackedEditUnderCard,
 }
 
 impl Anchor {
     /// The cycle order, which is also the order they are judged in.
-    pub const ALL: [Anchor; 5] = [
+    pub const ALL: [Anchor; 6] = [
         Anchor::Today,
         Anchor::Bottom,
         Anchor::Reach,
         Anchor::Split,
         Anchor::SplitEditTop,
+        Anchor::StackedEditUnderCard,
     ];
 
     /// The letter the write-up and the switcher both name it by.
@@ -105,6 +110,7 @@ impl Anchor {
             Anchor::Reach => "C",
             Anchor::Split => "D",
             Anchor::SplitEditTop => "E",
+            Anchor::StackedEditUnderCard => "F",
         }
     }
 
@@ -116,12 +122,36 @@ impl Anchor {
             Anchor::Reach => "C — edit up, grades at the bottom",
             Anchor::Split => "D — card stays, controls at the bottom",
             Anchor::SplitEditTop => "E — D, with edit above the card",
+            Anchor::StackedEditUnderCard => "F — edit under the card, grades stacked",
         }
     }
 
     /// Whether *Edit note* is drawn above the card rather than under the grades.
     pub fn edit_on_top(self) -> bool {
         matches!(self, Anchor::Reach | Anchor::SplitEditTop)
+    }
+
+    /// Whether *Edit note* rides directly under the card, leaving the anchored block to the grades.
+    ///
+    /// It answers the same question [`Anchor::edit_on_top`] does — keep the rarest control out of
+    /// the zone the thumb owns — and pays less for it: above the card the control has to reserve an
+    /// empty row before the reveal or the card moves when it is tapped, and under the card it
+    /// simply appears, because nothing above it shifts.
+    pub fn edit_under_card(self) -> bool {
+        matches!(self, Anchor::StackedEditUnderCard)
+    }
+
+    /// Whether the four grades are stacked full-width rather than *Forgot* over a segmented row.
+    ///
+    /// **This reopens [ADR-0034 §1](../../../docs/adr/0034-the-controls.md)** and it is the second
+    /// round's second finding: *a thumb travels up and down freely and sideways badly*. §1 chose the
+    /// segmented row on an argument about the **scale** — four stacked controls read as four rungs
+    /// of one ladder, which puts the failure grade on a scale it is not on — and reasoned its
+    /// widths on a desktop window, where a pointer crosses 208px for nothing. Neither half of that
+    /// is wrong; what §1 never had was a thumb, and the axis it chose is the axis a thumb is worst
+    /// on. *Forgot* is still held apart, by a gap rather than by a change of shape.
+    pub fn grades_stacked(self) -> bool {
+        matches!(self, Anchor::StackedEditUnderCard)
     }
 
     /// Whether the card comes down with the controls, or stays where the reading order puts it.
@@ -135,7 +165,8 @@ impl Anchor {
     }
 }
 
-static ANCHOR: AtomicUsize = AtomicUsize::new(0);
+/// **F** — the third round opens on the arrangement the second one asked for.
+static ANCHOR: AtomicUsize = AtomicUsize::new(5);
 static SNUG: AtomicBool = AtomicBool::new(false);
 
 /// The anchor being drawn this frame.
@@ -232,16 +263,69 @@ pub fn remember(revealed: bool, height: f32) {
     MEASURED[slot(revealed)].store(height.to_bits(), Ordering::Relaxed);
 }
 
-/// The space to leave above the anchored block so it lands on the bottom of the page.
+/// The space to leave above the anchored block so it lands [`lift`] above the bottom of the page.
 ///
 /// Zero on the first frame of a variant — the block simply draws where it would have anyway, and
 /// the frame after puts it in place.
-pub fn slack(revealed: bool, available: f32) -> f32 {
+pub fn slack(revealed: bool, room: f32) -> f32 {
     let measured = f32::from_bits(MEASURED[slot(revealed)].load(Ordering::Relaxed));
     if measured <= 0.0 {
         return 0.0;
     }
-    (available - measured).max(0.0)
+    (room - measured - clamped_lift(room, measured)).max(0.0)
+}
+
+// --- the lift -------------------------------------------------------------------------------------
+//
+// **The second round's axis, and it exists because the first round's answer was "not that far".**
+// Bottom-anchoring was judged in the hand and the verdict was that the card belongs up top and the
+// grades at the very bottom are *still* a stretch — which makes the remaining question a distance,
+// and nobody has a number for it. Rather than guess three and photograph them, the cluster is
+// **dragged** into place and the number is read off afterwards.
+//
+// This is the harness half of the ticket, not a candidate: nothing shipping is draggable.
+
+/// **134** — where the second round's thumb put it, kept as the starting point so a rebuild does
+/// not throw away a placement that took a sitting to find. The lift is measured from the bottom, so
+/// a taller cluster keeps the *bottom edge* the thumb chose and grows upward into the slack.
+static LIFT: AtomicU32 = AtomicU32::new(1_124_466_688); // 134.0f32.to_bits()
+
+/// How far above the bottom margin the anchored block currently sits.
+pub fn lift() -> f32 {
+    f32::from_bits(LIFT.load(Ordering::Relaxed))
+}
+
+/// The lift actually applied, held so the block can never ride up into the card.
+fn clamped_lift(room: f32, measured: f32) -> f32 {
+    lift().clamp(0.0, (room - measured - MIN_GAP).max(0.0))
+}
+
+/// The smallest gap kept between the card and the block, so a drag cannot close the two together
+/// and make the grades read as part of the card.
+const MIN_GAP: f32 = 24.0;
+
+/// Move the block by a drag's vertical delta. Dragging **up** raises it, which is why the sign
+/// flips: a finger moving toward the top of the screen reports a negative `y`.
+pub fn drag_lift(delta_y: f32) {
+    if delta_y != 0.0 {
+        LIFT.store((lift() - delta_y).max(0.0).to_bits(), Ordering::Relaxed);
+    }
+}
+
+/// The readout, drawn **into the empty space itself** so it costs the arrangement no room.
+///
+/// It is what makes the sitting produce a number rather than an impression: the screenshot taken
+/// afterwards carries the distance the thumb chose, in the same units the ADR would name it in.
+pub fn readout(ui: &egui::Ui, rect: egui::Rect, room: f32, revealed: bool) {
+    let measured = f32::from_bits(MEASURED[slot(revealed)].load(Ordering::Relaxed));
+    let lift = clamped_lift(room, measured);
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        format!("drag to place — lift {lift:.0} of {room:.0}"),
+        egui::FontId::proportional(crate::typography::SMALL),
+        ui.visuals().weak_text_color(),
+    );
 }
 
 /// The switcher, drawn at the top of Settings.

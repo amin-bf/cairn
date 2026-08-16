@@ -215,9 +215,20 @@ pub(crate) fn review(
             // *Edit note* above the card, for the two variants that answer *frequency maps to
             // reach*. Still only after the reveal: ADR-0029 §1 fixes **when** this entrance is
             // offered, and this ticket is about **where** — moving it up is not reopening it.
-            if anchorable && variant.edit_on_top() && was_revealed {
-                if full_width_button(ui, "Edit note").clicked() {
-                    edit_pressed = true;
+            //
+            // **The row is reserved before the reveal rather than absent**, because the card must
+            // not move when it is tapped — judged in the hand, second round. Drawn the obvious way,
+            // a control that appears above the card pushes the card down by its own height at the
+            // exact moment the eye is going to the answer, which is the one moment on this screen
+            // when nothing should move. The empty row costs 36px of page and is the only honest way
+            // to keep this candidate alive.
+            if anchorable && variant.edit_on_top() {
+                if was_revealed {
+                    if full_width_button(ui, "Edit note").clicked() {
+                        edit_pressed = true;
+                    }
+                } else {
+                    ui.add_space(controls::HEIGHT);
                 }
                 ui.add_space(spacing::gap(3));
             }
@@ -235,11 +246,32 @@ pub(crate) fn review(
                 s.revealed = true;
             }
 
+            // *Edit note* directly under the card. **No reserved row is needed here** — nothing
+            // above it moves when it appears, which is the whole advantage this position has over
+            // the same control above the card.
+            if anchorable && variant.edit_under_card() && was_revealed {
+                ui.add_space(spacing::gap(3));
+                if full_width_button(ui, "Edit note").clicked() {
+                    edit_pressed = true;
+                }
+            }
+
             if was_revealed || block_holds_card {
                 // The slack, which is the whole ticket: the leftover height goes here rather than
                 // below everything. `slack` is measured from the previous frame — see `proto`.
+                // The slack is **allocated rather than spaced**, so it can be dragged: the block
+                // rides wherever the thumb puts it and the readout says how far up that is. Second
+                // round — the first found the very bottom still a stretch, which turns what is left
+                // of this ticket into a distance nobody has a number for. See `proto`.
                 if anchorable {
-                    ui.add_space(proto::slack(was_revealed, proto::page_room(ui)));
+                    let room = proto::page_room(ui);
+                    let space = proto::slack(was_revealed, room);
+                    let handle = ui.allocate_response(
+                        egui::vec2(ui.available_width(), space),
+                        egui::Sense::drag(),
+                    );
+                    proto::drag_lift(handle.drag_delta().y);
+                    proto::readout(ui, handle.rect, room, was_revealed);
                 }
 
                 let block = ui.scope(|ui| {
@@ -281,7 +313,7 @@ pub(crate) fn review(
                         //
                         // An edit that makes the card dormant still needs no mechanism: the next
                         // frame re-derives the queue and simply does not offer it (ADR-0006 §2).
-                        if !(anchorable && variant.edit_on_top()) {
+                        if !(anchorable && (variant.edit_on_top() || variant.edit_under_card())) {
                             ui.add_space(spacing::gap(3));
                             if full_width_button(ui, "Edit note").clicked() {
                                 edit_pressed = true;
@@ -291,6 +323,20 @@ pub(crate) fn review(
                 });
                 if anchorable {
                     proto::remember(was_revealed, block.response.rect.height());
+
+                    // **The other half of the handle.** Lifting the block eats the gap it is
+                    // dragged by, so at the top of the range the grab strip is 24px and the drag
+                    // becomes unusable exactly where the answer is most likely to be. The space
+                    // *below* the block grows by the same amount, so it takes the drag too and the
+                    // two together are always the full page.
+                    let below = proto::page_room(ui);
+                    if below > 0.0 {
+                        let tail = ui.allocate_response(
+                            egui::vec2(ui.available_width(), below),
+                            egui::Sense::drag(),
+                        );
+                        proto::drag_lift(tail.drag_delta().y);
+                    }
                 }
             }
 
@@ -644,7 +690,11 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
     }
 
     let mut pressed = None;
-    let height = controls::HEIGHT * 2.0 + spacing::gap(2);
+    let height = if proto::anchor().grades_stacked() {
+        controls::HEIGHT * 4.0 + spacing::gap(3) + spacing::gap(1) * 2.0
+    } else {
+        controls::HEIGHT * 2.0 + spacing::gap(2)
+    };
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.add_space((column - width) / 2.0);
@@ -673,6 +723,24 @@ fn grade_cluster(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
     let mut pressed = controls::control_job(ui, forgot, ui.available_width())
         .clicked()
         .then_some(Grade::Forgot);
+
+    // **PROTOTYPE #141, third round: the passes stacked rather than segmented.** *Forgot* keeps its
+    // place at the head of the cluster and keeps being held apart — three units, the old stacked
+    // break, because in a stack the gap is carrying the whole distinction again rather than sharing
+    // it with a change of shape. See `proto::Anchor::grades_stacked` for what this reopens.
+    if proto::anchor().grades_stacked() {
+        ui.add_space(spacing::gap(3));
+        for (i, (grade, name)) in PASSES.iter().enumerate() {
+            if i > 0 {
+                ui.add_space(spacing::gap(1));
+            }
+            let job = label(ui, *grade, name);
+            if controls::control_job(ui, job, ui.available_width()).clicked() {
+                pressed = Some(*grade);
+            }
+        }
+        return pressed;
+    }
 
     // Two units hold the passes apart from *Forgot*. Three was the old stacked break and it is more
     // than a row needs: the row is already a different shape, so the gap only has to separate, not
