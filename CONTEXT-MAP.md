@@ -121,7 +121,7 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4, 0028 §5 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -244,6 +244,30 @@ top-right is a footnote in Latin and the first thing seen in Persian. And §3 **
 since filled buttons outweigh every candidate card and making the card recede without them makes it
 worse. It also lands 0030 §4's lower-case `box 3`, which that ADR recorded as shipped and which never
 was.
+
+**[0034](./docs/adr/0034-the-controls.md) is what a control is *made of*, and the answer is a role
+rather than a treatment**: `faint_bg_color` for an ordinary control (quieter than the card, which
+discharges 0033 §3), the old heavier rung kept as `primary` for **the one way forward on a screen
+with no card**, and one frameless `text_action` beside a primary. Ask `controls` for a role, never a
+`Button` with a fill. Read it before adding any control anywhere. Applying one flat treatment
+everywhere satisfies §3 on the review screen and guts the screens with no card, where the only mass
+on the page ends up reading as disabled — that is the trap, and it is why there are three weights and
+not one. §4 also makes the 10-minute checkpoint **compact and above the card**, implementing 0006 §1
+for the first time: it had been an `else if` that replaced the card since it was written, with nothing
+failing because reaching that state needs ten real minutes no test waits for.
+
+**[0035](./docs/adr/0035-the-vertical-anchor.md) is where the controls *sit*, and it is the frame's
+first vertical number**: the last cluster on a screen ends **165px above the bottom of the page**
+whenever there is room, *Edit note* rides directly under the card, and under a **thumb** the four
+grades stack instead of taking 0034 §1's segmented row. Read it before placing anything vertically or
+touching the grade row. 165 was measured — the cluster was dragged into place by thumb twice, at two
+different heights, and its bottom edge landed within 7px both times — so the rule is a *line above the
+bottom*, never a gap below the card. Two traps it records: **`Ui::available_height` returns zero
+inside a `ScrollArea`** (the content Ui is sized to its content; use `frame::page_room`, which reads
+the clip rect), and the card **must not move on reveal**, which is what struck both arrangements the
+ticket originally proposed. The touch test is read off `platform::SoftKeyboard` rather than a new seam
+or a `#[cfg]`, and the ADR states the rule as *touch* so a native client can implement it without
+inheriting egui's way of noticing.
 
 0028 also carries the one item in that change that cannot be taken back, the Android package id. Its
 extension rename **is** discharged: `.cdeck` and `.ccoll` were measured on the handset at API 37 and
