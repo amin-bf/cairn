@@ -78,6 +78,55 @@ fn frame_of_width<R>(ui: &mut egui::Ui, cap: f32, add: impl FnOnce(&mut egui::Ui
     .inner
 }
 
+/// How far above the bottom of the page the last control on a screen sits, when the page is tall
+/// enough to place it there.
+///
+/// **The frame's third number, and the first one a thumb chose.** #131 fixed the two horizontal
+/// numbers and left the vertical unasked, because at the 860px window every capture in the design
+/// pass was taken at there is no leftover height to place. On a handset there are ~1100px of it, and
+/// [#125](https://github.com/amin-bf/cairn/issues/125) found it all pooled below the content, where
+/// it costs the reach of every control on the screen.
+///
+/// **165 is measured, not chosen.** In two sittings on a Pixel 8 Pro the control cluster was dragged
+/// into place by thumb, once at 148px tall and once at 184px, and its **bottom edge** landed at 162
+/// and 169 — a round apart, with different contents, converging within 7px. So what the thumb picks
+/// is a *line above the bottom of the page*, not a gap below the card, and the cluster grows upward
+/// from it. That is why this is one number rather than a gap plus a cluster height.
+///
+/// It is an absolute distance rather than a fraction of the page on purpose: the band it clears is
+/// where the hand **grips**, and a grip is physical. A proportion would put the line too high on a
+/// tall screen and too low on a short one.
+pub const REACH_LINE: f32 = 165.0;
+
+/// How much page is left below the cursor, measured against the **visible viewport**.
+///
+/// **`Ui::available_height` is the obvious call and it returns zero here.** Inside a `ScrollArea`
+/// the content `Ui` is sized to its *content* — that is what scrolling means — so "available" is
+/// what the widgets already drawn have claimed, never what the screen has left. The clip rect is the
+/// viewport, and the viewport is what a thumb can reach. This was found by a prototype rendering
+/// pixel-identically to the thing it was varying, with nothing failing.
+///
+/// The viewport already excludes the gesture bar: the inset band is a panel reserved *before* the
+/// scroll area (`crate::keyboard`, ADR-0025 §1), so this measures usable page and not glass.
+pub fn page_room(ui: &egui::Ui) -> f32 {
+    (ui.clip_rect().bottom() - ui.cursor().top()).max(0.0)
+}
+
+/// The space to leave above a `block` of controls so its bottom edge lands on [`REACH_LINE`] —
+/// falling back to `floor` on a page with no room to spare.
+///
+/// **The fallback is the rule's other half, not defensiveness.** A page too short to place the
+/// cluster is a page with no leftover height, which is the state in which this ticket's question
+/// does not arise: the controls simply follow the card, exactly as they did before. So one
+/// expression covers the handset, the desktop window and everything between, with no breakpoint —
+/// the gap absorbs whatever is left over and stops at the stated gap when there is nothing left.
+/// Takes the room rather than the `Ui` so the rule is arithmetic a test can state: the one thing
+/// worth pinning here is *where the bottom edge lands*, and a test that has to build a window to ask
+/// would be testing egui.
+pub fn slack_above(room: f32, block: f32, floor: f32) -> f32 {
+    (room - block - REACH_LINE).max(floor)
+}
+
 /// The **window** width at or above which the note editor draws its two panes side by side.
 ///
 /// This is measured against the window and never against a column, and the distinction is the whole
@@ -138,6 +187,42 @@ mod tests {
         assert_eq!(PAGE_MARGIN, 28.0);
         assert_eq!(MEASURE, 640.0);
         assert_eq!(TWO_COLUMN_MIN_WIDTH, 900.0);
+        assert_eq!(REACH_LINE, 165.0);
+    }
+
+    /// **ADR-0035 §1, stated as the thing a thumb actually chose.** On a page with room, the
+    /// cluster's *bottom edge* lands on the reach line — whatever the cluster contains and however
+    /// tall it is. That invariant is the whole finding: two sittings placed clusters of 148 and 184
+    /// and both put the bottom edge in the same place.
+    ///
+    /// Nothing fails when this drifts. Get the arithmetic wrong by the cluster's height and the
+    /// screen still renders, still looks deliberate, and is simply wrong by 184px on the one axis
+    /// the ADR is about.
+    #[test]
+    fn the_cluster_bottom_lands_on_the_reach_line_whatever_it_holds() {
+        const ROOM: f32 = 800.0;
+        const FLOOR: f32 = 24.0;
+        for block in [148.0_f32, 184.0, 36.0] {
+            let bottom_edge = ROOM - (slack_above(ROOM, block, FLOOR) + block);
+            assert_eq!(
+                bottom_edge, REACH_LINE,
+                "a {block}px cluster should still end {REACH_LINE}px above the page bottom"
+            );
+        }
+    }
+
+    /// **The other half of the same rule**: a page with no leftover height places nothing, and the
+    /// controls follow the card exactly as they did before this ADR.
+    ///
+    /// This is what makes it one rule rather than a breakpoint — the desktop window the design pass
+    /// judges at reaches this arm by arithmetic, not by asking what it is running on.
+    #[test]
+    fn a_page_with_no_room_falls_back_to_the_stated_gap() {
+        const FLOOR: f32 = 24.0;
+        assert_eq!(slack_above(300.0, 184.0, FLOOR), FLOOR);
+        assert_eq!(slack_above(0.0, 184.0, FLOOR), FLOOR);
+        // And the boundary: exactly enough room for the cluster, the line and the gap.
+        assert_eq!(slack_above(184.0 + REACH_LINE + FLOOR, 184.0, FLOOR), FLOOR);
     }
 
     /// **The measure must be under the two-column threshold, and by a real margin.** This is the
