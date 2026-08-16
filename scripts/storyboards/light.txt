@@ -1,0 +1,66 @@
+# The same screens as `baseline.txt`, in the **light** appearance (ADR-0036).
+#
+# It switches the theme through the real control on Settings rather than through a test hook, which
+# is deliberate: the appearance is a stored, device-local preference, so a capture that forced it
+# some other way would photograph a state the application cannot actually be put into. It also means
+# this storyboard fails loudly if `theme_control` stops working, where an env override would keep
+# producing light pictures of a broken control.
+#
+# **Settings is visited first, and that is the whole reason the order differs from `baseline.txt`.**
+# Every screen after the switch is drawn light; anything captured before it would be whatever the
+# host's System preference resolves to, which is not reproducible between machines.
+#
+# `%CX%` is the centre of the output; `%LX+n%` is `n` px inside the page frame's left edge (#131).
+#
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+# Settings. The nav row sits above the frame's content but aligns to the same left edge.
+mousemove %LX+140% 11 click 1
+sleep 1.2
+# **Appearance: Light.** `System` `Light` `Dark`, drawn with `selectable_label` the same way the nav
+# marks the current destination. `+84` is the centre of `Light`, measured off the capture rather than
+# computed — the row is frame-relative, so the same offset lands at both widths.
+#
+# **y=93 is the same at 1280 and at 560, and the control was moved to the top of Settings to make
+# that true.** The first draft of this storyboard clicked it where it sat below the new-card-rate
+# prose, which wraps to two lines at 560 — so the click landed on the right control at one width and
+# on empty page at the other, and the run produced seven perfectly valid *dark* captures with
+# nothing failing. Only the heading is above it now, and a one-word heading cannot wrap.
+mousemove %LX+84% 93 click 1
+sleep 1.5
+shot 06-settings-top
+# Settings is longer than any window this pass uses, so the specimens need scrolling to. Worth
+# capturing in light specifically: the rendering specimen is the one place the app draws every
+# family at once, and a light ground is where a wrong face is most visible.
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1.2
+shot 07-settings-scrolled
+# Wind the shared scroll area back up before leaving, or the next destination opens mid-page.
+mousemove %CX% 400 click 4 click 4 click 4 click 4 click 4 click 4 click 4 click 4
+sleep 1
+# Review, in light. This is the screen ADR-0033 §3 is about — the card must still outweigh the
+# grades, and it is the pair the ink construction was chosen to preserve.
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 01-review-start
+# The count picker sits at the start of its line: `5` then `All 5`. `+39` reaches `All 5`.
+mousemove %LX+39% 112 click 1
+sleep 1.5
+shot 02-review-question
+# Reveal is tap-the-card (review.rs: "the prompt is one wide button").
+mousemove %CX% 131 click 1
+sleep 1.5
+shot 03-review-revealed
+mousemove %LX+86% 11 click 1
+sleep 1.2
+shot 04-notes-list
+# The editor is visited last, for `baseline.txt`'s reason: on a window wide enough for two columns it
+# takes a wider frame and the nav row follows it, so any `%LX+n%` nav click after this point would
+# land on empty page.
+mousemove %CX% 400 click 4 click 4 click 4 click 4
+sleep 1
+mousemove %LX+19% 252 click 1
+sleep 1.5
+shot 05-notes-editor

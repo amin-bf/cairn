@@ -69,6 +69,21 @@ pub(crate) fn settings_screen(
         return false;
     }
 
+    // **Appearance sits first, directly under the heading**, and it is the one control here that is
+    // about *this device* rather than about the collection — everything below it (the rate, the
+    // scheduler, sync) syncs, and this deliberately does not (ADR-0036 §3). Putting the device-local
+    // item at the top is a first cut at the ordering #121 suspects this screen of lacking.
+    //
+    // It also makes the control **reachable by the capture harness at every width**, which is what
+    // made anyone look: a control placed below prose sits at a y that depends on where that prose
+    // wraps, so the storyboard clicked the right place at 1280 and empty page at 560 — producing
+    // seven perfectly valid dark captures of a light storyboard, with nothing failing. Nothing above
+    // a one-word heading can wrap, so this position is the same at both.
+    theme_control(ui, coll);
+    ui.add_space(spacing::gap(3));
+    ui.separator();
+    ui.add_space(spacing::gap(2));
+
     new_card_rate_control(ui, coll, rate_buffer);
     ui.add_space(spacing::gap(3));
     ui.separator();
@@ -623,6 +638,59 @@ fn reset_control(ui: &mut egui::Ui) -> bool {
 /// show and committed on a completed edit (blur), clamped and defaulted in the store; **zero is a
 /// legal value and the backlog answer**, so an empty or unparsable field is left for the user to
 /// finish rather than snapped to a number. It never enters the log and never exports (ADR-0011 §5).
+/// **Appearance: System, Light or Dark** (ADR-0036 §3).
+///
+/// ADR-0030 §2 removed OS-theme following because only a dark palette was drawn, and following it
+/// would have handed a light-preferring user stock egui by omission. Both palettes are drawn now, so
+/// the behaviour returns — but as a **choice** rather than as obedience, because the case the OS
+/// cannot serve is the one a reading app most needs: a dark room and a desktop set to light.
+///
+/// **Device-local, and that is the decision, not an implementation detail.** It rides the `local`
+/// table rather than the settings singleton, so it never syncs — a desktop under a lamp and a
+/// handset in bed want opposite answers, and a synced theme would have each clobber the other.
+///
+/// Selection is drawn with `selectable_label`, the same way the nav row marks the current
+/// destination — the app's one existing way of saying *this is the one you are on*.
+fn theme_control(ui: &mut egui::Ui, coll: &mut Collection) {
+    let stored = coll.theme_preference().ok().flatten();
+    let current = crate::theme::ThemeChoice::parse(stored.as_deref());
+
+    field_label(ui, "Appearance");
+    let mut chosen = None;
+    spacing::row(ui, 1, |ui| {
+        for (choice, label) in [
+            (crate::theme::ThemeChoice::System, "System"),
+            (crate::theme::ThemeChoice::Light, "Light"),
+            (crate::theme::ThemeChoice::Dark, "Dark"),
+        ] {
+            if ui
+                .selectable_label(current == choice, crate::text(ui, label))
+                .clicked()
+            {
+                chosen = Some(choice);
+            }
+        }
+    });
+
+    if let Some(choice) = chosen
+        && choice != current
+    {
+        // A failed write is dropped rather than surfaced, as at the rate site above: the re-read on
+        // the next frame then shows the choice did not take. **The install happens either way** —
+        // the palette the user just asked for is applied now, and a store that would not record it
+        // reverts on the next launch rather than refusing the click.
+        let _ = coll.set_theme_preference(choice.as_str());
+        crate::theme::install(ui.ctx(), choice);
+    }
+
+    ui.add_space(spacing::gap(1));
+    // Said where the choice is, because it is the half a user cannot see: this machine only.
+    body(
+        ui,
+        "This machine only — your appearance does not follow the collection to another device.",
+    );
+}
+
 fn new_card_rate_control(
     ui: &mut egui::Ui,
     coll: &mut Collection,
