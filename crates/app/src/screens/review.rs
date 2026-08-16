@@ -11,11 +11,11 @@ use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
 use crate::session::{self, Offered, ReviewState};
-use crate::{bidi, controls, spacing, typography};
 use crate::{
-    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
-    text,
+    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading,
+    surface, text,
 };
+use crate::{bidi, controls, frame, spacing, typography};
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
 /// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
@@ -23,6 +23,10 @@ use crate::{
 /// a revealed card** (ADR-0029 §1). Nothing is flipped on the way out: ADR-0021 §6's "counts as a
 /// reveal" is retired with the pre-reveal control that needed it, so ADR-0006 §4's guarantee holds by
 /// there being no route rather than by a side-effect.
+// Each screen threads its own `&mut` slice of `CairnApp` state plus the frame's facts — `now_ms`,
+// `today`, and now whether a thumb is driving (ADR-0035 §3). Grouping them behind a struct would
+// relocate the same fields, not reduce them; the same trade `settings_screen` makes.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn review(
     ui: &mut egui::Ui,
     coll: &mut Collection,
@@ -31,6 +35,7 @@ pub(crate) fn review(
     session_pointer: &mut Option<usize>,
     now_ms: i64,
     today: i64,
+    touch: bool,
 ) -> Option<NoteId> {
     // Everything on screen is derived from the log this frame — there is no cached session state to
     // fall out of step with it. The new-card rate and the notes' authored positions ride the mutable
@@ -208,21 +213,32 @@ pub(crate) fn review(
             }
 
             if s.revealed {
-                ui.add_space(spacing::gap(3));
-                let pressed = grade_buttons(ui, &offered, today);
-
-                // Edit this note — offered **only now the card is revealed** (ADR-0029 §1). The
-                // honest diagnosis of most leeches is a defective card (ADR-0010 §7), and its three
-                // named forms — ambiguous, too large, testing two facts at once — are all judgements
-                // about the *pair*, so all three are post-reveal findings already.
+                // **Edit note rides directly under the card, and the grades sit on the reach line**
+                // (ADR-0035 §1, §2). The order is still the reading order — prompt, answer, then
+                // the controls — but the *distance* is not: the page's leftover height falls
+                // between the card and the grades rather than below everything, so the controls
+                // pressed on every card land where the thumb already is and the one pressed rarely
+                // does not.
+                //
+                // **Above the slack rather than below the grades, and above the card was the other
+                // candidate.** Both keep it out of the thumb's zone; this one is cheaper, because
+                // nothing above it moves when it appears. Placed above the card it has to reserve
+                // an empty row before the reveal or the card jumps down at the exact moment the eye
+                // goes to the answer — judged in the hand and rejected there (ADR-0035 §2).
+                //
+                // Offered **only now the card is revealed** (ADR-0029 §1). The honest diagnosis of
+                // most leeches is a defective card (ADR-0010 §7), and its three named forms —
+                // ambiguous, too large, testing two facts at once — are all judgements about the
+                // *pair*, so all three are post-reveal findings already.
                 //
                 // **Nothing flips the card here, and that absence is the decision.** ADR-0021 §6's
-                // "entering the editor counts as a reveal" is retired with the pre-reveal control it
-                // existed for: a full-width button under the card, which is itself the reveal target,
-                // made a mis-tap spend the reveal on a card nobody chose to look at. So ADR-0006 §4's
-                // "no grading before the answer is seen" now holds because there is **no route** into
-                // the editor before the reveal — put this control back outside the `revealed` branch
-                // and the guarantee is silently false again, with no rule left to catch it.
+                // "entering the editor counts as a reveal" is retired with the pre-reveal control
+                // it existed for: a full-width button under the card, which is itself the reveal
+                // target, made a mis-tap spend the reveal on a card nobody chose to look at. So
+                // ADR-0006 §4's "no grading before the answer is seen" now holds because there is
+                // **no route** into the editor before the reveal — put this control back outside
+                // the `revealed` branch and the guarantee is silently false again, with no rule
+                // left to catch it.
                 //
                 // An edit that makes the card dormant still needs no mechanism: the next frame
                 // re-derives the queue and simply does not offer it (ADR-0006 §2).
@@ -230,6 +246,13 @@ pub(crate) fn review(
                 if full_width_button(ui, "Edit note").clicked() {
                     edit_request = Some(offered.card.note);
                 }
+
+                ui.add_space(frame::slack_above(
+                    frame::page_room(ui),
+                    grade_cluster_height(touch),
+                    spacing::gap(3),
+                ));
+                let pressed = grade_buttons(ui, &offered, today, touch);
 
                 if let Some(grade) = pressed {
                     let duration_ms = s.card_shown.elapsed().as_millis() as u64;
@@ -564,7 +587,7 @@ fn start_wording(available: usize) -> String {
 /// label with its interval still fits inside 118. So a later change to
 /// [ADR-0001](../../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md)'s scale does not
 /// have to reopen this arrangement.
-fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Grade> {
+fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64, touch: bool) -> Option<Grade> {
     let label = |ui: &egui::Ui, grade: Grade, name: &str| {
         let days = session::interval_preview(offered, grade, today);
         controls::grade_label(ui, name, &format!("{days}d"))
@@ -575,16 +598,40 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
         .clicked()
         .then_some(Grade::Forgot);
 
-    // Two units hold the passes apart from *Forgot*. Three was the old stacked break and it is more
-    // than a row needs: the row is already a different shape, so the gap only has to separate, not
-    // to carry the whole distinction on its own.
-    ui.add_space(spacing::gap(2));
-
     const PASSES: [(Grade, &str); 3] = [
         (Grade::Barely, "Barely"),
         (Grade::Good, "Good"),
         (Grade::Easy, "Easy"),
     ];
+
+    // **Under a thumb the passes stack; under a pointer they stay a row** (ADR-0035 §3). A thumb
+    // travels up and down freely and sideways badly, so the two ends of a segmented row flip
+    // between comfortable and a stretch depending on which hand holds the phone — which is not a
+    // sizing problem and cannot be fixed by a bigger target. A pointer has no such axis and crosses
+    // 208px for nothing, so it keeps the row ADR-0034 §1 chose.
+    //
+    // *Forgot* is held apart either way, which is the half of §1 that survives: **three** units
+    // here, because in a stack the gap carries the whole distinction on its own rather than sharing
+    // it with a change of shape.
+    if touch {
+        ui.add_space(spacing::gap(3));
+        for (i, (grade, name)) in PASSES.iter().enumerate() {
+            if i > 0 {
+                ui.add_space(spacing::gap(1));
+            }
+            let job = label(ui, *grade, name);
+            if controls::control_job(ui, job, ui.available_width()).clicked() {
+                pressed = Some(*grade);
+            }
+        }
+        return pressed;
+    }
+
+    // Two units hold the passes apart from *Forgot*. Three was the old stacked break and it is more
+    // than a row needs: the row is already a different shape, so the gap only has to separate, not
+    // to carry the whole distinction on its own.
+    ui.add_space(spacing::gap(2));
+
     let labels = PASSES
         .iter()
         .map(|(grade, name)| label(ui, *grade, name))
@@ -593,6 +640,21 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Gra
         pressed = Some(PASSES[i].0);
     }
     pressed
+}
+
+/// How tall the grade cluster draws, which [`frame::slack_above`] needs **before** drawing it.
+///
+/// Computed rather than measured: the cluster is a fixed composition of controls at a fixed height
+/// with stated gaps, so its height is arithmetic. A prototype that varied the composition had to
+/// remember last frame's measurement and carry a frame of lag; one composition needs neither.
+fn grade_cluster_height(touch: bool) -> f32 {
+    if touch {
+        // Forgot, the break, then three passes a unit apart.
+        controls::HEIGHT * 4.0 + spacing::gap(3) + spacing::gap(1) * 2.0
+    } else {
+        // Forgot, the break, then the segmented row.
+        controls::HEIGHT * 2.0 + spacing::gap(2)
+    }
 }
 
 /// The caught-up floor: the statement, centred and given the screen (ADR-0034 §3).
@@ -702,6 +764,7 @@ mod tests {
                     &mut pointer,
                     now_ms,
                     TODAY,
+                    false,
                 );
             })
         };
@@ -781,6 +844,7 @@ mod tests {
                     &mut pointer,
                     now_ms,
                     TODAY,
+                    false,
                 );
             })
         };
@@ -829,6 +893,96 @@ mod tests {
     fn the_entrance_names_what_starting_commits_to() {
         assert_eq!(start_wording(6), "Start — all 6");
         assert_eq!(start_wording(1), "Start — the one card");
+    }
+
+    /// **ADR-0035 §3, and the only thing that keeps the two axes apart.** Under a thumb every grade
+    /// is a full-width control; under a pointer the three passes share one row.
+    ///
+    /// Asserted on the **widths actually drawn**, not on the branch taken, because the defect this
+    /// guards against is a control that renders perfectly at the wrong width. Deleting the `touch`
+    /// argument and always drawing the row compiles, passes every other test, and silently returns
+    /// the handset to a grade row whose two ends flip between comfortable and a stretch depending on
+    /// which hand is holding the phone — the finding #141 was opened for.
+    #[test]
+    fn the_grades_stack_under_a_thumb_and_stay_a_row_under_a_pointer() {
+        const WIDTH: f32 = 392.0; // the handset's column: 448dp less two 28dp margins.
+
+        fn control_widths(width: f32, touch: bool) -> Vec<f32> {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::typography::install(&ctx);
+            crate::spacing::install(&ctx);
+
+            let offered = Offered {
+                card: CardRef {
+                    note: NoteId([0; 16]),
+                    ordinal: 0,
+                },
+                box_: 1,
+                is_new: true,
+                memory: None,
+                last_day: 0,
+            };
+            let out = ctx.run_ui(Default::default(), |ui| {
+                ui.set_width(width);
+                grade_buttons(ui, &offered, 0, touch);
+            });
+
+            fn walk(shape: &egui::Shape, fill: egui::Color32, into: &mut Vec<f32>) {
+                match shape {
+                    egui::Shape::Rect(r) if r.fill == fill => into.push(r.rect.width().round()),
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, fill, into)),
+                    _ => {}
+                }
+            }
+            let mut widths = Vec::new();
+            for clipped in &out.shapes {
+                walk(&clipped.shape, crate::theme::control_fill(), &mut widths);
+            }
+            widths
+        }
+
+        let stacked = control_widths(WIDTH, true);
+        assert_eq!(
+            stacked.len(),
+            4,
+            "a thumb gets four separate controls — drew {stacked:?}"
+        );
+        assert!(
+            stacked.iter().all(|w| *w == WIDTH.round()),
+            "every stacked grade takes the whole column — drew {stacked:?}"
+        );
+
+        let row = control_widths(WIDTH, false);
+        assert_eq!(
+            row.len(),
+            4,
+            "a pointer still gets four controls, three of them sharing a row — drew {row:?}"
+        );
+        assert!(
+            row.iter().filter(|w| **w == WIDTH.round()).count() == 1,
+            "only *Forgot* spans the column under a pointer — drew {row:?}"
+        );
+        assert!(
+            row.iter().filter(|w| **w < WIDTH.round() / 2.0).count() == 3,
+            "the three passes share one row, so each is well under half the column — drew {row:?}"
+        );
+    }
+
+    /// The cluster's height is what [`frame::slack_above`] is given, so the two must agree or the
+    /// bottom edge lands somewhere the ADR does not describe. Computed rather than measured, which
+    /// makes this checkable without a window — and worth checking, because the arithmetic is the
+    /// kind that stays plausible while being wrong by one gap.
+    #[test]
+    fn the_cluster_height_matches_what_the_cluster_draws() {
+        let stacked = controls::HEIGHT * 4.0 + spacing::gap(3) + spacing::gap(1) * 2.0;
+        let row = controls::HEIGHT * 2.0 + spacing::gap(2);
+        assert_eq!(grade_cluster_height(true), stacked);
+        assert_eq!(grade_cluster_height(false), row);
+        assert!(
+            grade_cluster_height(true) > grade_cluster_height(false),
+            "the stack is the taller of the two, which is what the slack has to absorb"
+        );
     }
 
     #[test]

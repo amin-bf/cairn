@@ -533,6 +533,10 @@ impl eframe::App for CairnApp {
         // The area is taken *before* the closure so it carries guard 1's forced offset without
         // holding a borrow of `band` across the frame the destinations are drawn in.
         let area = self.band.scroll_area();
+        // Whether a thumb is driving this (ADR-0035 §3). Read once here, from the insets this frame
+        // already took, and passed down — so the screens ask a value rather than a platform, and
+        // nothing below this line acquires a reason to know what it is running on.
+        let touch = self.band.is_touch();
         let mut reset_requested = false;
         let out = area.show(ui, |ui| {
             ui.add_space(spacing::gap(1));
@@ -557,6 +561,7 @@ impl eframe::App for CairnApp {
                             &mut self.session_pointer,
                             now_ms,
                             today,
+                            touch,
                         )
                     });
                     if let Some(note) = opened {

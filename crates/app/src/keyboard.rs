@@ -90,6 +90,17 @@ impl Band {
         self.insets.keyboard.is_up()
     }
 
+    /// Whether this device is operated by a **thumb** rather than a pointer — read off the same
+    /// stored insets, for the same reason and at the same cost as [`Band::keyboard_is_up`].
+    ///
+    /// The review screen asks it to decide the grades' axis
+    /// ([ADR-0035 §3](../../../docs/adr/0035-the-vertical-anchor.md)). See
+    /// [`crate::platform::SoftKeyboard::exists`] for why the soft keyboard is the thing being asked
+    /// about and what it is a proxy for.
+    pub(crate) fn is_touch(&self) -> bool {
+        self.insets.keyboard.exists()
+    }
+
     /// **Guard 1** — keep the focused field inside the viewport, *in the same frame it shrinks*.
     ///
     /// Not a nicety. Reserving the band clips the focused field, which stops its IME output, which

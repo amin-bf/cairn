@@ -158,6 +158,23 @@ impl SoftKeyboard {
         matches!(self, Self::Up { .. })
     }
 
+    /// Whether this platform has a soft keyboard **at all** — which is this client's way of asking
+    /// *is this thing operated by a thumb*.
+    ///
+    /// [ADR-0035 §3](../../../../docs/adr/0035-the-vertical-anchor.md) needs that question answered
+    /// and deliberately does not add a seam function for it: a platform that raises a keyboard on
+    /// screen is a platform with no pointer, and this type already carries the distinction because
+    /// ADR-0026 §5 forced it to. **The proxy is exact for the two targets that exist** — Android has
+    /// one, the desktop has none — and it is a proxy rather than a truth, which is why the ADR
+    /// states the rule as *touch* and names this only as how this client reads it. A native client
+    /// asks its own platform directly and needs none of this.
+    ///
+    /// Not a compile-time capability constant, deliberately: the existing one (ADR-0015 §9) exists
+    /// to make a limitation visible and never to vary behaviour, and this varies behaviour.
+    pub fn exists(self) -> bool {
+        !matches!(self, Self::Absent)
+    }
+
     /// What it is covering, in physical pixels — zero when it is down or does not exist.
     pub fn height(self) -> f32 {
         match self {
