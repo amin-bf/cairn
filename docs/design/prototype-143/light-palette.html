@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The light palette — three constructions and a knob</title>
+<style>
+  /* The frame (ADR-0031): margin 28, measure 640. The scale (ADR-0032): 40/20/15/12, unit 8.
+     Controls are 36px (ADR-0034/#125). Card corner 8, widget corner 2 (ADR-0033 §2). */
+  :root { --margin:28px; --measure:640px; --u:8px; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font:15px/1.45 "Ubuntu","DejaVu Sans",system-ui,sans-serif;
+    background:#101315; color:#c8cfd1; padding:20px 24px 60px;
+  }
+  h1 { font-size:20px; font-weight:400; margin-bottom:4px; }
+  .lede { font-size:12px; color:#7c898d; max-width:900px; margin-bottom:18px; }
+  .lede b { color:#b9c2c3; font-weight:400; }
+
+  /* --- the console -------------------------------------------------------- */
+  .console {
+    position:sticky; top:0; z-index:10; background:#171b1e; border:1px solid #282e33;
+    border-radius:6px; padding:14px 16px; margin-bottom:20px;
+  }
+  .row { display:flex; gap:22px; align-items:center; flex-wrap:wrap; }
+  .row + .row { margin-top:12px; }
+  label.k { font-size:12px; color:#7c898d; }
+  input[type=range] { width:300px; accent-color:#6f93a8; }
+  .seg { display:inline-flex; border:1px solid #333b40; border-radius:3px; overflow:hidden; }
+  .seg button {
+    font:inherit; font-size:12px; padding:7px 13px; background:#21262a; color:#b9c2c3;
+    border:0; border-right:1px solid #333b40; cursor:pointer;
+  }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed=true] { background:#2c3237; color:#e2e6e6; }
+  .readout { font:12px/1.6 "Hack",ui-monospace,monospace; color:#8b979b; }
+  .readout table { border-collapse:collapse; }
+  .readout td { padding:1px 12px 1px 0; white-space:nowrap; }
+  .readout .n { color:#e2e6e6; }
+  .ok   { color:#7fa88c; }
+  .bad  { color:#b57e79; }
+  .warn { color:#c2a37a; }
+  .clamped::after { content:" clamped"; color:#c2a37a; }
+
+  /* --- the screens -------------------------------------------------------- */
+  .screens { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+  .pane { flex:0 0 auto; }
+  .pane > h2 { font-size:12px; font-weight:400; color:#7c898d; margin-bottom:6px; }
+  .screen {
+    width:696px;              /* measure 640 + 2 x margin 28 */
+    height:520px;
+    padding:var(--margin);
+    background:var(--page);
+    color:var(--body);
+    overflow:hidden;
+    position:relative;
+    border:1px solid #282e33;
+    transition:filter .12s;
+  }
+  body.blurred .screen { filter:blur(7px); }
+
+  /* nav strip */
+  .nav { display:flex; gap:20px; font-size:12px; color:var(--weak); margin-bottom:20px; }
+  .nav .on { color:var(--body); }
+
+  /* the card: one object, two faces, a hairline, cut in as a well */
+  .card {
+    background:var(--card); border:1px solid var(--cardstroke); border-radius:8px;
+    position:relative; margin-bottom:var(--u);
+  }
+  .face { padding:24px 20px; text-align:center; }
+  .face.prompt { font-size:40px; line-height:1.15; }
+  .face.answer { font-size:20px; border-top:1px solid var(--divider); }
+  .badge {
+    position:absolute; top:8px; right:12px; font-size:12px; color:var(--weak);
+  }
+
+  /* controls */
+  .ctl {
+    height:36px; display:flex; align-items:center; justify-content:center;
+    background:var(--control); border:1px solid var(--controlstroke); border-radius:2px;
+    font-size:15px; color:var(--body);
+  }
+  .ctl.full { width:100%; }
+  .ctl.primary { background:var(--primary); border-color:var(--primarystroke); }
+  .grades { margin-top:16px; }
+  .grades .forgot { margin-bottom:var(--u); }
+  .segrow { display:flex; gap:2px; }
+  .segrow .ctl { flex:1; flex-direction:column; gap:1px; height:44px; justify-content:center; }
+  .segrow .iv { font-size:12px; color:var(--weak); }
+
+  /* the card-less screen */
+  .caughtup { display:flex; flex-direction:column; height:calc(100% - 32px); }
+  .caughtup .display { font-size:40px; text-align:center; margin:auto 0; }
+  .caughtup .cluster { margin-top:auto; }
+  .textaction { text-align:center; font-size:15px; color:var(--link); margin-top:var(--u); }
+
+  /* settings, the other card-less screen */
+  .setrow { display:flex; justify-content:space-between; align-items:center; padding:12px 0; }
+  .setrow + .setrow { border-top:1px solid var(--separator); }
+  .setlabel { font-size:12px; color:var(--weak); }
+  .field {
+    background:var(--extreme); border:1px solid var(--controlstroke); border-radius:2px;
+    height:36px; display:flex; align-items:center; padding:0 10px; font-size:15px; width:260px;
+  }
+  .note { font-size:12px; color:#5c686c; margin-top:8px; max-width:696px; }
+</style>
+</head>
+<body>
+
+<h1>The light palette — three constructions and a knob</h1>
+<p class="lede">
+  Prototype for <b>#143</b>. The three control weights the dark palette measured —
+  <b>1.099:1</b> ordinary, <b>1.121:1</b> the card, <b>1.293:1</b> primary — were all measured
+  against a page near the <em>bottom</em> of the ramp. A light page sits near the top, which
+  inverts which direction is scarce. Drag the page down the ramp and watch what each construction
+  can still afford. The shipped dark palette is drawn alongside, unchanged, as the reference.
+  <br><br>
+  <b>The instrument is the blur</b>, not the numbers — ADR-0033 §3 decided the card-versus-controls
+  question by blurring until nothing is legible and seeing what the eye reaches for first.
+</p>
+
+<div class="console">
+  <div class="row">
+    <label class="k" for="page">page on the ramp</label>
+    <input type="range" id="page" min="0" max="100" value="49">
+    <span class="readout"><span class="n" id="pagehex">—</span> · <span id="pagelabel">near-white</span></span>
+  </div>
+  <div class="row">
+    <label class="k">construction</label>
+    <span class="seg" id="construction">
+      <button data-v="opposite" aria-pressed="false">Opposite sides</button>
+      <button data-v="ink-ratios" aria-pressed="false">Ink · keep the ratios</button>
+      <button data-v="ink-gaps" aria-pressed="true">Ink · gaps, primary off the card</button>
+      <button data-v="ink-gaps-ord" aria-pressed="false">Ink · gaps, primary off the ordinary</button>
+    </span>
+    <label class="k">·</label>
+    <span class="seg" id="blur">
+      <button data-v="off" aria-pressed="true">sharp</button>
+      <button data-v="on" aria-pressed="false">blurred</button>
+    </span>
+  </div>
+  <div class="row">
+    <div class="readout" id="readout"></div>
+  </div>
+</div>
+
+<div class="screens" id="screens"></div>
+
+<p class="note">
+  Faces are the system sans, not Ubuntu-Light / Noto Sans Arabic — this judges colour, not type.
+  Geometry is ADR-0031's frame and ADR-0032's scale at 1:1; the 520px screens are cropped, not scaled.
+</p>
+
+<script>
+// ---- WCAG, identical to the helpers in crates/app/src/theme.rs's test module ----
+const chan = v => { const s = v/255; return s <= 0.03928 ? s/12.92 : Math.pow((s+0.055)/1.055, 2.4); };
+const lumRGB = ([r,g,b]) => 0.2126*chan(r) + 0.7152*chan(g) + 0.0722*chan(b);
+const hex2rgb = h => { const n = parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; };
+const rgb2hex = ([r,g,b]) => '#' + [r,g,b].map(v => Math.round(v).toString(16).padStart(2,'0')).join('');
+const lum = h => lumRGB(hex2rgb(h));
+const cr = (a,b) => { const x=lum(a), y=lum(b), hi=Math.max(x,y), lo=Math.min(x,y); return (hi+0.05)/(lo+0.05); };
+
+// ---- the stone hue: cool slate with a trace of blue, carried up the ramp unchanged ----
+// The ticket's instruction is *re-derive the weights, do not re-hue them*, so the tint is read
+// off the shipped ramp and interpolated rather than picked: STONE_2 #1a1e21 is (-4,0,+3) about
+// its own mean and STONE_11 #e2e6e6 is (-3,+1,+1) about its, so the spread narrows toward the
+// light end exactly as the shipped ramp's does. A fixed offset would put a blue cast on a
+// near-white page, which is a re-hue by accident — the thing this prototype must not do.
+const TINT_DARK = [-4, 0, 3], TINT_LIGHT = [-3, 1, 1];
+function tintAt(v) {                       // v is the neutral 0..255
+  const t = Math.min(1, Math.max(0, v / 255));
+  return TINT_DARK.map((d, i) => d + (TINT_LIGHT[i] - d) * t);
+}
+function stoneAt(targetL) {
+  // Binary-search the neutral value whose tinted triple hits the target luminance.
+  let lo = 0, hi = 255;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const rgb = tintAt(mid).map(t => Math.min(255, Math.max(0, mid + t)));
+    if (lumRGB(rgb) < targetL) lo = mid; else hi = mid;
+  }
+  return rgb2hex(tintAt(lo).map(t => Math.min(255, Math.max(0, lo + t))));
+}
+// Place a colour at ratio `r` from the page, in a direction. Returns [hex, clamped].
+function place(pageHex, r, dir) {
+  const Lp = lum(pageHex);
+  let target = dir === 'up' ? r * (Lp + 0.05) - 0.05 : (Lp + 0.05) / r - 0.05;
+  const clamped = target > 1 || target < 0;
+  target = Math.min(1, Math.max(0, target));
+  return [stoneAt(target), clamped];
+}
+
+// ---- the shipped dark palette, verbatim from crates/app/src/theme.rs ----
+const DARK = {
+  page:'#1a1e21', card:'#0f1214', control:'#21262a', primary:'#2c3237',
+  cardstroke:'#282e33', divider:'#282e33', controlstroke:'#282e33', primarystroke:'#333b40',
+  body:'#e2e6e6', weak:'#8b979b', link:'#6f93a8', extreme:'#0f1214', separator:'#282e33',
+};
+// The separations the dark palette actually delivers — the thing that has to survive.
+const REF = {
+  ord:  cr(DARK.control, DARK.page),
+  card: cr(DARK.card,    DARK.page),
+  prim: cr(DARK.primary, DARK.page),
+  gapCardOrd:  cr(DARK.card, DARK.control),
+  gapCardPrim: cr(DARK.card, DARK.primary),
+  gapOrdPrim:  cr(DARK.control, DARK.primary),
+  bodyOnPage:  cr(DARK.body, DARK.page),   // 13.34:1, ADR-0030 §3's headline
+  weakOnPage:  cr(DARK.weak, DARK.page),   //  5.59:1, the quiet footnote (§4)
+  linkOnPage:  cr(DARK.link, DARK.page),
+};
+
+// A hued colour re-placed at a target luminance, keeping its hue. Used for the link accent,
+// which is lichen and must stay lichen — running it through `stoneAt` would grey it out.
+function hueAt(baseHex, targetL) {
+  const base = hex2rgb(baseHex);
+  let lo = 0, hi = 4;
+  for (let i = 0; i < 40; i++) {
+    const k = (lo + hi) / 2;
+    const rgb = base.map(v => Math.min(255, Math.max(0, v * k)));
+    if (lumRGB(rgb) < targetL) lo = k; else hi = k;
+  }
+  return rgb2hex(base.map(v => Math.min(255, Math.max(0, v * lo))));
+}
+// Place a hued colour at ratio `r` from the page, in a direction.
+function placeHue(baseHex, pageHex, r, dir) {
+  const Lp = lum(pageHex);
+  const t = dir === 'up' ? r * (Lp + 0.05) - 0.05 : (Lp + 0.05) / r - 0.05;
+  return hueAt(baseHex, Math.min(1, Math.max(0, t)));
+}
+
+// ---- the three constructions ----
+function build(pageHex, construction) {
+  const out = { page: pageHex, clamped: [] };
+  const put = (name, r, dir) => {
+    const [hex, cl] = place(pageHex, r, dir);
+    out[name] = hex;
+    if (cl) out.clamped.push(name);
+  };
+  if (construction === 'opposite') {
+    // The dark structure, mirrored: the card is a well DOWN, the controls rise UP.
+    put('card',    REF.card, 'down');
+    put('control', REF.ord,  'up');
+    put('primary', REF.prim, 'up');
+  } else if (construction === 'ink-ratios') {
+    // Everything darker than the page, at the page-relative ratios ADR-0033/0034 literally state.
+    put('control', REF.ord,  'down');
+    put('card',    REF.card, 'down');
+    put('primary', REF.prim, 'down');
+  } else {
+    // Everything darker, but the PAIRWISE gaps preserved instead of the stated ratios.
+    // Anchor the ordinary control just off the page, then step down by the dark gaps — each
+    // one measured from the rung it is a gap *from*, so the card is gapCardOrd below the
+    // ordinary and the primary is gapCardPrim below the CARD, not below the ordinary.
+    // The primary is chained off whichever rung it is judged against. ADR-0034 §2 puts no
+    // primary beside a card, so card↔primary never appears on a screen and ordinary↔primary
+    // does — which makes the second chaining the defensible one and the first the inherited one.
+    const rOrd  = 1.05;
+    const rCard = rOrd * REF.gapCardOrd;
+    put('control', rOrd, 'down');
+    put('card',    rCard, 'down');
+    put('primary', construction === 'ink-gaps'
+      ? rCard * REF.gapCardPrim      // off the card — the pair that never co-occurs
+      : rOrd  * REF.gapOrdPrim,      // off the ordinary — the pair Settings actually draws
+      'down');
+  }
+  // Derived roles. Strokes sit one rung further from the page than the fill they edge.
+  const Lp = lum(pageHex), dark = Lp > 0.5;
+  const step = (hex, k) => stoneAt(Math.min(1, Math.max(0, lum(hex) + (dark ? -k : k))));
+  out.cardstroke    = step(out.card, 0.06);
+  out.divider       = out.cardstroke;
+  out.controlstroke = step(out.control, 0.05);
+  out.primarystroke = step(out.primary, 0.05);
+  out.separator     = out.controlstroke;
+  out.extreme       = out.card;
+  // Text is re-derived at the ratios the dark palette measured, not picked: body at its
+  // 13.34:1 and weak at its 5.59:1, both away from the page. Hardcoding a light body colour
+  // would be exactly the re-hue this ticket forbids, and it is how the placeholders in
+  // tokens/colors.css ended up with weak text at 3.92:1.
+  out.body = dark ? place(pageHex, REF.bodyOnPage, 'down')[0] : DARK.body;
+  out.weak = dark ? place(pageHex, REF.weakOnPage, 'down')[0] : DARK.weak;
+  out.link = dark ? placeHue(DARK.link, pageHex, REF.linkOnPage, 'down') : DARK.link;
+  return out;
+}
+
+// ---- rendering ----
+function screenHTML(p, kind) {
+  const vars = Object.entries(p).filter(([k]) => k !== 'clamped')
+    .map(([k,v]) => `--${k}:${v}`).join(';');
+  if (kind === 'review') return `
+    <div class="screen" style="${vars}">
+      <div class="nav"><span class="on">Review</span><span>Notes</span><span>Settings</span></div>
+      <div class="card">
+        <div class="badge">box 3</div>
+        <div class="face prompt">le chien</div>
+        <div class="face answer">the dog</div>
+      </div>
+      <div class="ctl full">Edit note</div>
+      <div class="grades">
+        <div class="ctl full forgot">Forgot</div>
+        <div class="segrow">
+          <div class="ctl">Hard<span class="iv">1d</span></div>
+          <div class="ctl">Good<span class="iv">3d</span></div>
+          <div class="ctl">Easy<span class="iv">7d</span></div>
+        </div>
+      </div>
+    </div>`;
+  if (kind === 'caughtup') return `
+    <div class="screen" style="${vars}">
+      <div class="nav"><span class="on">Review</span><span>Notes</span><span>Settings</span></div>
+      <div class="caughtup">
+        <div class="display">You're caught up.</div>
+        <div class="cluster">
+          <div class="ctl full primary">Review 3 leeches</div>
+          <div class="textaction">or a shorter sitting: 5 &nbsp; 10 &nbsp; 20</div>
+        </div>
+      </div>
+    </div>`;
+  return `
+    <div class="screen" style="${vars}">
+      <div class="nav"><span>Review</span><span>Notes</span><span class="on">Settings</span></div>
+      <div class="setrow"><div><div class="setlabel">new cards a day</div></div><div class="field">5</div></div>
+      <div class="setrow"><div><div class="setlabel">collection</div></div><div class="field">français</div></div>
+      <div class="setrow"><div><div class="setlabel">sync folder</div></div><div class="field">~/Sync/cairn</div></div>
+      <div class="setrow"><div><div class="setlabel">export</div></div><div class="ctl" style="width:120px">Export…</div></div>
+      <div class="setrow"><div><div class="setlabel">optimise</div></div><div class="ctl primary" style="width:120px">Optimise</div></div>
+    </div>`;
+}
+
+// Opens on what the sitting decided: the page at #dee2e3, the ink construction placed by the
+// gaps. The remaining question is which rung the primary is chained off (see `build`).
+const state = { page: 49, construction: 'ink-gaps', blur: false };
+// The knob's travel: from a near-white page down into mid-grey.
+const L_TOP = 0.955, L_BOTTOM = 0.55;
+
+function render() {
+  const L = L_TOP + (L_BOTTOM - L_TOP) * (state.page / 100);
+  const pageHex = stoneAt(L);
+  const p = build(pageHex, state.construction);
+
+  document.getElementById('pagehex').textContent = pageHex;
+  document.getElementById('pagelabel').textContent =
+    L > 0.9 ? 'near-white' : L > 0.8 ? 'paper' : L > 0.68 ? 'light grey' : 'mid grey';
+
+  const rows = [
+    ['ordinary', p.control, cr(p.control, pageHex), REF.ord],
+    ['card',     p.card,    cr(p.card,    pageHex), REF.card],
+    ['primary',  p.primary, cr(p.primary, pageHex), REF.prim],
+  ];
+  const ordering = rows[0][2] < rows[1][2] && rows[1][2] < rows[2][2];
+  const gCO = cr(p.card, p.control), gCP = cr(p.card, p.primary), gOP = cr(p.control, p.primary);
+  const bodyOnPage = cr(p.body, pageHex), weakOnPage = cr(p.weak, pageHex);
+  const bodyOnPrim = cr(p.body, p.primary);
+  const cls = (v, ref) => v >= ref * 0.92 ? 'ok' : v >= ref * 0.75 ? 'warn' : 'bad';
+
+  document.getElementById('readout').innerHTML = `
+    <table>
+      <tr><td></td><td>fill</td><td>vs page</td><td>dark had</td></tr>
+      ${rows.map(([n,hex,v,ref]) => `<tr>
+        <td>${n}</td><td class="n">${hex}</td>
+        <td class="n ${p.clamped.includes(n === 'ordinary' ? 'control' : n) ? 'clamped warn' : ''}">${v.toFixed(3)}:1</td>
+        <td>${ref.toFixed(3)}:1</td></tr>`).join('')}
+      <tr><td colspan="4" style="height:6px"></td></tr>
+      <tr><td>§3 ordering</td><td colspan="3" class="${ordering ? 'ok' : 'bad'}">
+        ordinary &lt; card &lt; primary — ${ordering ? 'holds' : 'BROKEN'}</td></tr>
+      <tr><td>card ↔ ordinary</td><td class="n ${cls(gCO, REF.gapCardOrd)}">${gCO.toFixed(3)}:1</td>
+          <td colspan="2">dark had ${REF.gapCardOrd.toFixed(3)}:1 &nbsp;— <em>what the eye actually gets</em></td></tr>
+      <tr><td>ordinary ↔ primary</td><td class="n ${cls(gOP, REF.gapOrdPrim)}">${gOP.toFixed(3)}:1</td>
+          <td colspan="2">dark had ${REF.gapOrdPrim.toFixed(3)}:1 &nbsp;— <em>Settings draws this pair</em></td></tr>
+      <tr><td>card ↔ primary</td><td class="n">${gCP.toFixed(3)}:1</td>
+          <td colspan="2">dark had ${REF.gapCardPrim.toFixed(3)}:1 &nbsp;— <em>ADR-0034 §2: never co-occur</em></td></tr>
+      <tr><td colspan="4" style="height:6px"></td></tr>
+      <tr><td>body on page</td><td class="n ${bodyOnPage >= 7 ? 'ok' : 'bad'}">${bodyOnPage.toFixed(2)}:1</td>
+          <td colspan="2">floor 7:1 (ADR-0030 §3)</td></tr>
+      <tr><td>body on primary</td><td class="n ${bodyOnPrim >= 8 ? 'ok' : bodyOnPrim >= 7 ? 'warn' : 'bad'}">${bodyOnPrim.toFixed(2)}:1</td>
+          <td colspan="2">floor 7:1 &nbsp;— <em>the tightest reading pair; dark's is ${cr(DARK.body, DARK.primary).toFixed(2)}:1</em></td></tr>
+      <tr><td>weak on page</td><td class="n ${weakOnPage >= 5.59 ? 'ok' : 'warn'}">${weakOnPage.toFixed(2)}:1</td>
+          <td colspan="2">dark's weak text is 5.59:1</td></tr>
+    </table>`;
+
+  document.getElementById('screens').innerHTML = `
+    <div class="pane"><h2>Review — revealed · the light candidate</h2>${screenHTML(p, 'review')}</div>
+    <div class="pane"><h2>Review — revealed · the shipped dark, for reference</h2>${screenHTML(DARK, 'review')}</div>
+    <div class="pane"><h2>Caught up — <em>no card on the screen</em> · light</h2>${screenHTML(p, 'caughtup')}</div>
+    <div class="pane"><h2>Caught up — dark</h2>${screenHTML(DARK, 'caughtup')}</div>
+    <div class="pane"><h2>Settings — <em>no card on the screen</em> · light</h2>${screenHTML(p, 'settings')}</div>
+    <div class="pane"><h2>Settings — dark</h2>${screenHTML(DARK, 'settings')}</div>`;
+
+  document.body.classList.toggle('blurred', state.blur);
+}
+
+document.getElementById('page').addEventListener('input', e => {
+  state.page = +e.target.value; render();
+});
+document.getElementById('construction').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.construction = b.dataset.v;
+  [...e.currentTarget.children].forEach(c => c.setAttribute('aria-pressed', c === b));
+  render();
+});
+document.getElementById('blur').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.blur = b.dataset.v === 'on';
+  [...e.currentTarget.children].forEach(c => c.setAttribute('aria-pressed', c === b));
+  render();
+});
+render();
+</script>
+</body>
+</html>
