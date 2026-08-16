@@ -164,8 +164,8 @@ pub fn card(
     };
 
     let framed = egui::Frame::new()
-        .fill(theme::card_fill())
-        .stroke(theme::card_stroke())
+        .fill(theme::card_fill(ui.visuals()))
+        .stroke(theme::card_stroke(ui.visuals()))
         .corner_radius(CornerRadius::same(RADIUS))
         .inner_margin(egui::Margin::same(pad as i8))
         .show(ui, |ui| {
@@ -232,7 +232,7 @@ fn divider(ui: &mut Ui) {
             egui::pos2(mid + half, rect.top() + 1.0),
         ),
         CornerRadius::ZERO,
-        theme::card_divider(),
+        theme::card_divider(ui.visuals()),
     );
 }
 

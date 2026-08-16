@@ -95,6 +95,11 @@ const SETTING_ID: [u8; 16] = [0u8; 16];
 /// The settings attribute holding the global new-card rate (ADR-0011 §3, §5).
 const NEW_CARD_RATE_ATTR: &str = "new_card_rate";
 
+/// The `local`-table key holding the theme preference (ADR-0036 §3). **Not** a settings attribute:
+/// settings sync between a user's own devices and a theme must not, so this is the one row in
+/// `local` that is a choice rather than sync machinery. See [`Collection::theme_preference`].
+const THEME_PREFERENCE_KEY: &str = "theme_preference";
+
 /// The mutable-surface entity holding per-card **suspension** (ADR-0010 §5). A distinct entity from
 /// `note`, `deck` and `setting`, keyed by a `CardRef`'s canonical 18-byte encoding, because
 /// suspension is **per card, not per note** — one cloze blank or one direction of a pair may be agony
@@ -606,6 +611,35 @@ impl Collection {
             NEW_CARD_RATE_ATTR,
             Some(&clamped.to_string()),
         )
+    }
+
+    /// The stored **theme preference**, as an uninterpreted string, or `None` when the user has
+    /// never chosen one (ADR-0036 §3).
+    ///
+    /// **It is device-local, and that is the whole reason it is not a setting.** Every other
+    /// preference this type exposes lives on the mutable surface and *syncs between a user's own
+    /// devices*, which is right for a new-card rate and wrong for a theme: a desktop under a lamp
+    /// and a handset in bed want opposite answers, and a synced theme would have one clobber the
+    /// other on every write. So it goes to the `local` table, which no sync path reads.
+    ///
+    /// **The store keeps no rule about what the string means**, the same division
+    /// [`Collection::new_card_rate`] makes — except that a theme is *presentation*, so the
+    /// interpretation belongs to `cairn-app` rather than to `cairn-core`. A domain crate has no
+    /// business knowing what "light" is, and `cairn-app` is the only crate that can mean anything
+    /// by it. An unrecognised value therefore reads back as written and the app falls back to
+    /// following the system, which is what an older build's value does after a downgrade.
+    ///
+    /// Worth stating because `local` has until now held only **sync machinery** — the sequence
+    /// highwater, the lamport counter, the writer and collection ids. This is the first row in it
+    /// that a person chose.
+    pub fn theme_preference(&self) -> Result<Option<String>, StoreError> {
+        read_local(&self.conn, THEME_PREFERENCE_KEY)
+    }
+
+    /// Record the theme preference (ADR-0036 §3). Device-local; never logged, never synced, never
+    /// exported. See [`Collection::theme_preference`] for why it is not on the settings singleton.
+    pub fn set_theme_preference(&mut self, choice: &str) -> Result<(), StoreError> {
+        write_local(&self.conn, THEME_PREFERENCE_KEY, choice)
     }
 
     /// The scheduler parameter vector currently in effect (ADR-0001 §6): the weights of the **latest**

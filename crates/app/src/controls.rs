@@ -74,8 +74,8 @@ pub fn control_job(ui: &mut Ui, job: egui::text::LayoutJob, width: f32) -> Respo
     ui.add_sized(
         [width, HEIGHT],
         egui::Button::new(job)
-            .fill(theme::control_fill())
-            .stroke(theme::control_stroke()),
+            .fill(theme::control_fill(ui.visuals()))
+            .stroke(theme::control_stroke(ui.visuals())),
     )
 }
 
@@ -124,8 +124,8 @@ pub fn primary(ui: &mut Ui, label: &str, width: f32) -> Response {
     ui.add_sized(
         [width, HEIGHT],
         egui::Button::new(job)
-            .fill(theme::primary_fill())
-            .stroke(theme::primary_stroke()),
+            .fill(theme::primary_fill(ui.visuals()))
+            .stroke(theme::primary_stroke(ui.visuals())),
     )
 }
 
@@ -144,7 +144,7 @@ pub fn text_action(ui: &mut Ui, label: &str) -> Response {
     let job = crate::bidi::job(
         label,
         egui::TextStyle::Small.resolve(ui.style()),
-        theme::link(),
+        theme::link(ui.visuals()),
     );
     ui.add(egui::Button::new(job).frame(false))
 }
@@ -186,8 +186,8 @@ pub fn snug(ui: &mut Ui, label: &str) -> Response {
     ui.add_sized(
         [width, HEIGHT],
         egui::Button::new(job)
-            .fill(theme::control_fill())
-            .stroke(theme::control_stroke()),
+            .fill(theme::control_fill(ui.visuals()))
+            .stroke(theme::control_stroke(ui.visuals())),
     )
 }
 
@@ -198,9 +198,11 @@ mod tests {
 
     /// Every rect a frame drew, with its fill — which is how the assertions below can be about
     /// *what is on screen* rather than about the branch the code took.
-    fn fills(width: f32, add: fn(&mut Ui)) -> Vec<egui::Color32> {
+    /// In a named theme — so the weight assertions can run against **both** palettes
+    /// rather than only the one that happens to be active (ADR-0036 §2).
+    fn fills_in(choice: theme::ThemeChoice, width: f32, add: fn(&mut Ui)) -> Vec<egui::Color32> {
         let ctx = egui::Context::default();
-        theme::install(&ctx);
+        theme::install(&ctx, choice);
         typography::install(&ctx);
         spacing::install(&ctx);
         let out = ctx.run_ui(Default::default(), |ui| {
@@ -247,21 +249,30 @@ mod tests {
             (a.max(b) + 0.05) / (a.min(b) + 0.05)
         }
 
-        let page = theme::cairn_dark().panel_fill;
-        let card = ratio(theme::card_fill(), page);
-        let ordinary = ratio(theme::control_fill(), page);
-        let primary = ratio(theme::primary_fill(), page);
+        // **Both palettes, not just the active one** (ADR-0036 §2). The light theme reaches this
+        // ordering by a different construction — all three fills sit *below* its page, where dark's
+        // card is below and its controls above — so a rule checked in one theme says nothing about
+        // the other, and the placeholder light values the design project carried failed it outright.
+        for (name, v) in [
+            ("dark", theme::cairn_dark()),
+            ("light", theme::cairn_light()),
+        ] {
+            let page = v.panel_fill;
+            let card = ratio(theme::card_fill(&v), page);
+            let ordinary = ratio(theme::control_fill(&v), page);
+            let primary = ratio(theme::primary_fill(&v), page);
 
-        assert!(
-            ordinary < card,
-            "ADR-0033 §3: a control must be quieter than the card. control {ordinary}:1, \
-             card {card}:1"
-        );
-        assert!(
-            primary > card,
-            "a primary is louder than a card by design — it only appears where there is no card. \
-             primary {primary}:1, card {card}:1"
-        );
+            assert!(
+                ordinary < card,
+                "{name}: ADR-0033 §3: a control must be quieter than the card. \
+                 control {ordinary}:1, card {card}:1"
+            );
+            assert!(
+                primary > card,
+                "{name}: a primary is louder than a card by design — it only appears where there \
+                 is no card. primary {primary}:1, card {card}:1"
+            );
+        }
     }
 
     /// A segmented row fits **inside** its column. `n` controls and `n - 1` gaps — a trailing gap
@@ -270,7 +281,7 @@ mod tests {
     fn a_segmented_row_fits_inside_its_column() {
         const WIDTH: f32 = 560.0;
         let ctx = egui::Context::default();
-        theme::install(&ctx);
+        theme::install(&ctx, theme::ThemeChoice::Dark);
         typography::install(&ctx);
         spacing::install(&ctx);
         let mut right = 0.0_f32;
@@ -293,22 +304,35 @@ mod tests {
     /// and look right.
     #[test]
     fn the_weights_are_distinct() {
-        assert_ne!(theme::control_fill(), theme::primary_fill());
-        assert_ne!(theme::control_fill(), theme::card_fill());
+        for (name, choice, v) in [
+            ("dark", theme::ThemeChoice::Dark, theme::cairn_dark()),
+            ("light", theme::ThemeChoice::Light, theme::cairn_light()),
+        ] {
+            assert_ne!(
+                theme::control_fill(&v),
+                theme::primary_fill(&v),
+                "{name}: ordinary and primary must differ"
+            );
+            assert_ne!(
+                theme::control_fill(&v),
+                theme::card_fill(&v),
+                "{name}: ordinary and the card must differ"
+            );
 
-        let ordinary = fills(400.0, |ui| {
-            wide(ui, "Good");
-        });
-        let primary_fills = fills(400.0, |ui| {
-            wide_primary(ui, "Start");
-        });
-        assert!(
-            ordinary.contains(&theme::control_fill()),
-            "an ordinary control draws control_fill"
-        );
-        assert!(
-            primary_fills.contains(&theme::primary_fill()),
-            "a primary draws primary_fill"
-        );
+            let ordinary = fills_in(choice, 400.0, |ui| {
+                wide(ui, "Good");
+            });
+            let primary_fills = fills_in(choice, 400.0, |ui| {
+                wide_primary(ui, "Start");
+            });
+            assert!(
+                ordinary.contains(&theme::control_fill(&v)),
+                "{name}: an ordinary control draws control_fill"
+            );
+            assert!(
+                primary_fills.contains(&theme::primary_fill(&v)),
+                "{name}: a primary draws primary_fill"
+            );
+        }
     }
 }

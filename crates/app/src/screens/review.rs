@@ -827,7 +827,7 @@ mod tests {
         sitting.revealed = true;
 
         let ctx = egui::Context::default();
-        crate::theme::install(&ctx);
+        crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
         crate::typography::install(&ctx);
         crate::spacing::install(&ctx);
 
@@ -909,7 +909,7 @@ mod tests {
 
         fn control_widths(width: f32, touch: bool) -> Vec<f32> {
             let ctx = egui::Context::default();
-            crate::theme::install(&ctx);
+            crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
             crate::typography::install(&ctx);
             crate::spacing::install(&ctx);
 
@@ -937,7 +937,11 @@ mod tests {
             }
             let mut widths = Vec::new();
             for clipped in &out.shapes {
-                walk(&clipped.shape, crate::theme::control_fill(), &mut widths);
+                walk(
+                    &clipped.shape,
+                    crate::theme::control_fill(&crate::theme::cairn_dark()),
+                    &mut widths,
+                );
             }
             widths
         }

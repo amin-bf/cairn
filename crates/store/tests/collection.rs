@@ -579,6 +579,56 @@ fn the_new_card_rate_never_enters_the_log() {
 }
 
 #[test]
+fn the_theme_preference_is_device_local_and_uninterpreted() {
+    // ADR-0036 §3: the theme is the one preference that must NOT follow the user to another
+    // machine, so it rides the `local` table rather than the settings singleton. The store keeps
+    // no rule about what the string means — that is `cairn-app`'s, because a theme is presentation
+    // and a domain crate has no business knowing what "light" is.
+    let (mut coll, _d, _s) = open();
+    assert_eq!(
+        coll.theme_preference().unwrap(),
+        None,
+        "unset until someone chooses"
+    );
+
+    coll.set_theme_preference("light").unwrap();
+    assert_eq!(coll.theme_preference().unwrap().as_deref(), Some("light"));
+
+    coll.set_theme_preference("dark").unwrap();
+    assert_eq!(
+        coll.theme_preference().unwrap().as_deref(),
+        Some("dark"),
+        "the choice replaces rather than accumulating"
+    );
+
+    // Uninterpreted: a value this build does not recognise round-trips unchanged rather than being
+    // rejected or normalised, which is what an older build's value looks like after a downgrade.
+    coll.set_theme_preference("sepia").unwrap();
+    assert_eq!(coll.theme_preference().unwrap().as_deref(), Some("sepia"));
+}
+
+#[test]
+fn the_theme_preference_never_enters_the_log_or_the_mutable_surface() {
+    // ADR-0036 §3: device-local means no log row *and* no mutable row — the second half is the one
+    // that matters, because a mutable row would sync and a synced theme has a desktop and a handset
+    // clobbering each other on every write.
+    let (mut coll, _d, _s) = open();
+    let before = coll.log_lines().unwrap().len();
+    coll.set_theme_preference("light").unwrap();
+    assert_eq!(
+        coll.log_lines().unwrap().len(),
+        before,
+        "the theme is not a log row"
+    );
+    assert_eq!(
+        coll.mutable_get("setting", &[0u8; 16], "theme_preference")
+            .unwrap(),
+        None,
+        "the theme is not on the settings singleton either — it would sync"
+    );
+}
+
+#[test]
 fn suspension_is_a_per_card_flag_that_toggles_and_settles_by_stamp() {
     // ADR-0010 §5: suspension is a per-`CardRef` value on the mutable surface, keyed by card so one
     // sibling's suspension never touches another's, and never a one-way door (ADR-0010 §8).
