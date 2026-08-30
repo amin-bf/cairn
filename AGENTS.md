@@ -481,6 +481,20 @@ because they are validated findings, not because a web build ships.
     this repository holds. This is rule 13's blind spot rather than a breach of it: the rule governs
     colours this crate **names**, and says nothing about ones the renderer supplies by default, where
     nothing in the source is wrong and the screen is still a colour nobody picked (ADR-0033 §2).
+21. **A screen the seed cannot reach is photographed from a *fixture*, never from a prototype and
+    never by extending the seed.** Every capture run is a first launch — the harness wipes the whole
+    data directory — so the shipping seed's six due cards were once the only collection anything was
+    ever photographed against, and #134 ended up shipping three decided states whose only pictures
+    were of something that is not the application. `crates/app/src/fixtures.rs` holds pre-made
+    collections instead, installed from outside by `cairn-fixture` on desktop and from a temporary
+    Settings block on the handset, where `getFilesDir()` is unwritable from outside and an uninstall
+    is not a first launch either (#141). **`CairnApp::open_store` stays untouched**, which is what
+    keeps every capture taken before a fixture existed a picture of the same thing. A storyboard
+    **names its own fixture** on a `fixture <name>` line, because a storyboard run without the
+    collection it needs produces a full set of valid captures of the seed under the fixture's names.
+    Adding a state means adding a fixture that **asserts what it reached** — the intervals come from
+    `fsrs`, so a fixture landing where it says is a claim about a pinned dependency rather than about
+    our code, and it has already been wrong once (store rule 6).
 
 ## The local store
 
@@ -502,6 +516,16 @@ authoritative, `derived.db` is a disposable cache attached to the same connectio
 5. **The writer marker lives outside the backup set** — `getNoBackupFilesDir()` on Android,
    `$XDG_STATE_HOME` on desktop. Move it into the data directory and a restored phone becomes a
    duplicate writer.
+6. **Backdated rows must be appended oldest-first across the *whole* collection, not per card.**
+   `append_review` guards on write and rewrites any instant at or below the highest already in the log
+   to `highest + 1` (ADR-0004 §8, so a backwards clock cannot sort into the past) — and the day number
+   is derived from the instant it actually stored, not the one you passed. The guard compares against
+   the entire log, so building one card's history and then starting the next card silently stamps
+   every later row a millisecond after the newest one already there. Nothing errors and nothing looks
+   wrong: the leech fixture's four failure days at 80, 60, 40 and 20 days ago collapsed onto one
+   recent day, leaving a card with **one** failure day and a collection that was not the state it
+   claimed. `fixtures::History` gathers every review before writing any, for exactly this. Anything
+   constructing history — a fixture, a test, an import — owes the same ordering.
 
 ## Deck export
 

@@ -38,7 +38,9 @@ point rather than a nicety:
   `XDG_DATA_HOME` and `XDG_STATE_HOME` (`crates/store/src/platform/desktop.rs`), so redirecting both
   into a temporary directory is sufficient and needs no flag in the app. The directory is wiped
   before each run, which means every run starts from a **first launch** — so the seed in
-  `CairnApp::open_store` is the fixture, and one run's grades cannot colour the next.
+  `CairnApp::open_store` is the fixture, and one run's grades cannot colour the next. Owning the
+  whole directory is also what lets a run start from a collection that is *not* a first launch: see
+  **Fixtures** below.
 
 ## The output is exactly the size asked for
 
@@ -74,6 +76,7 @@ A storyboard is a line-per-step file under `scripts/storyboards/`:
 | `sleep <n>` | wait |
 | `restart` | kill and relaunch the app on the same collection |
 | `sh <command>` | run a shell command — used for `xdotool type`, which needs its own quoting |
+| `fixture <name>` | install a pre-made collection before the app starts — see *Fixtures* below |
 | anything else | passed to `xdotool` verbatim, e.g. `mousemove 640 131 click 1` |
 
 **The first click of any storyboard is spent giving the window keyboard focus and never reaches a
@@ -118,6 +121,70 @@ is a capture-mode entry point *inside* the app, which is app code shaped by the 
 that is a decision the design pass should make deliberately if the editing ever becomes the expensive
 part. Keep storyboards short, keep coordinates commented with what they aim at, and **look at the
 images** — a storyboard cannot tell you it missed.
+
+That decision has since been taken for *state*, and it went the other way: a screen the seed cannot
+reach is expressed as **data** rather than as a mode the app knows about (see **Fixtures** below).
+Coordinates are untouched by it and the paragraph above still stands for them.
+
+## Fixtures: the states a first launch cannot reach
+
+Everything above rests on the run starting from a **first launch** — which is what makes the seed in
+`CairnApp::open_store` the fixture, and what stops one run's grades colouring the next. The cost is
+that the seed is the *only* state reachable: six fresh cards, all due. Several decided screens are
+not in that collection at all, and #134 had to photograph three of them inside a **prototype**, so
+the application shipped decided states whose only pictures were of something that is not the
+application.
+
+A storyboard can now name a **fixture** — a pre-made collection installed into the scratch profile
+before the app starts:
+
+```
+fixture caught-up
+```
+
+```
+scripts/capture-desktop.sh scripts/storyboards/caught-up.txt 1280 800
+```
+
+| fixture | what it makes reachable |
+|---|---|
+| `caught-up` | the caught-up floor, bare — no leeches, so no control under it (ADR-0034 §3) |
+| `leeches` | the same floor **with** the leech entrance, and the leech screen behind it (ADR-0010 §6, §8) |
+| `crossing` | one card one failure day short of the floor — grade it *Forgot* and the sitting ends on the end-of-session pointer |
+| `backlog` | twenty-five due: a framed backlog, and the entrance's shorter-sitting line, which is the link accent's only call site |
+
+`cargo build -p cairn-desktop` builds the installer, `cairn-fixture`, alongside the app;
+`crates/app/src/fixtures.rs` defines the states and says why they are collections rather than a seed
+change or a capture mode.
+
+**The storyboard names its own fixture, and that placement is the point.** A storyboard that needs a
+pre-made collection and is run without one produces a full set of perfectly valid captures **of the
+shipping seed, under the fixture's names** — the same silent miss `%CX%` exists to kill, arriving
+from a third side. Tying the two together in one file makes that unreachable. `CAIRN_FIXTURE=<name>`
+still overrides, for photographing one storyboard against another's state.
+
+**A fixture verifies itself, and the run is abandoned if it did not land.** `cairn-fixture`
+recomputes the review state after writing and exits non-zero unless the collection is where the
+fixture says it is; `capture-desktop.sh` stops there rather than starting the app. This is not
+belt-and-braces: the intervals come from `fsrs`, so *"graded `Easy` twice is not due"* is a claim
+about a pinned dependency rather than about our code, and it has already been wrong once — written
+per card rather than oldest-first across the collection, four backdated failure days collapsed onto
+one recent day (the store guards on write and rewrites any instant at or below the newest, ADR-0004
+§8), leaving a collection that looked entirely plausible and held no leech at all.
+
+**The 10-minute checkpoint is the one state that is not a collection.** It hangs off a sitting's
+monotonic clock rather than off the log, so no fixture reaches it — which is precisely why the
+application contradicted ADR-0006 §1 there for ten months with nothing failing.
+`CAIRN_CHECKPOINT_SECONDS=3` shortens it; the ten minutes stay written where the behaviour is, and
+the override only ever subtracts. It has to be in the environment **before** the app starts, so a
+storyboard sets it with `sh export …` followed by `restart` — see `storyboards/checkpoint.txt`.
+
+**On a handset none of this applies, and that is a platform fact rather than an omission.**
+`data_dir` is `getFilesDir()`, which nothing outside the app may write, and an uninstall is not a
+first launch either, because ADR-0007 §6 deliberately puts it in the Auto Backup set (#141). The same
+fixtures are therefore installable from *inside*, from a temporary block at the bottom of Settings —
+one definition, two ways in. `storyboards/fixture-bench.txt` drives that block here, so the handset
+is not where it is first found broken.
 
 ## Persian: what the harness proves, and what it does not
 
