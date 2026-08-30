@@ -624,6 +624,9 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
                     (!card.answer.is_empty()).then_some(card.answer.as_str()),
                     Some(&box_badge_wording(card.reviews > 0, card.box_)),
                     surface::FIT,
+                    // Fully open: the card pane shows a card, not a card being turned over. The
+                    // reveal is the review screen's event and belongs to it (ADR-0037 §3).
+                    1.0,
                 );
                 ui.add_space(spacing::gap(2));
             }
