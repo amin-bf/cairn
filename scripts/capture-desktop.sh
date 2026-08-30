@@ -43,11 +43,23 @@ export CAIRN_HEIGHT="$height"
 export CAIRN_BIN="${CAIRN_BIN:-$root/target/debug/cairn}"
 export CAIRN_STORYBOARD="$(cd "$(dirname "$storyboard")" && pwd)/$(basename "$storyboard")"
 export CAIRN_SHOTS="${CAIRN_SHOTS:-$root/target/capture/${width}x${height}}"
+fixture_bin="${CAIRN_FIXTURE_BIN:-$root/target/debug/cairn-fixture}"
 
 if [ ! -x "$CAIRN_BIN" ]; then
   echo "capture: no binary at $CAIRN_BIN — run 'cargo build -p cairn-desktop' first" >&2
   exit 1
 fi
+
+# **The storyboard names its own fixture** (issue #153), on a `fixture <name>` line read here rather
+# than by the session script — the collection has to exist before the app opens it, and by the time
+# the session is running the app holds the database open.
+#
+# Naming it *in the storyboard* rather than passing it on the command line is the whole point. A
+# storyboard that needs a pre-made collection and is run without one produces a full set of
+# perfectly valid captures of the shipping seed, under the fixture's names — the silent-miss failure
+# `%CX%` exists to kill, arriving from a third side. Tying the two together makes that unreachable.
+# `CAIRN_FIXTURE` still overrides, for photographing one storyboard against another's state.
+fixture="${CAIRN_FIXTURE:-$(sed -n 's/^[[:space:]]*fixture[[:space:]]\+\([^[:space:]]*\).*/\1/p' "$CAIRN_STORYBOARD" | head -1)}"
 
 mkdir -p "$CAIRN_SHOTS"
 
@@ -61,6 +73,22 @@ export XDG_STATE_HOME="$profile/state"
 export XDG_CONFIG_HOME="$profile/config"
 export XDG_CACHE_HOME="$profile/cache"
 mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+
+# The fixture goes in *before* the compositor starts, into the scratch profile above — so the app's
+# first launch opens a collection that is already in the wanted state and the seed never fires
+# (`crates/app/src/fixtures.rs`). `cairn-fixture` verifies what it installed and exits non-zero if it
+# did not land, and the run is abandoned here rather than producing a plausible picture of the wrong
+# screen.
+if [ -n "$fixture" ]; then
+  if [ ! -x "$fixture_bin" ]; then
+    echo "capture: '$CAIRN_STORYBOARD' asks for fixture '$fixture' but there is no binary at $fixture_bin — run 'cargo build -p cairn-desktop'" >&2
+    exit 1
+  fi
+  if ! "$fixture_bin" "$fixture"; then
+    echo "capture: fixture '$fixture' did not install — abandoning the run" >&2
+    exit 1
+  fi
+fi
 
 # Force every window in the nested session fullscreen and undecorated. `wmclassmatch=0` is
 # *unimportant*, i.e. match all windows — safe precisely because this config is only ever read by

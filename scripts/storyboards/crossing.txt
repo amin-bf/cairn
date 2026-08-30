@@ -1,0 +1,36 @@
+# The **end-of-session pointer** (ADR-0010 §6) — the notice that a card crossed the leech floor
+# during the sitting just finished.
+#
+# It is the hardest of the decided states to reach, and the fixture is why it is reachable at all.
+# The pointer's contents are `leeches now` minus a snapshot taken when the sitting began, so a card
+# that was *already* a leech never appears in it: the collection has to hold a card **one failure day
+# short** of the floor, and the sitting has to be the thing that pushes it over. Neither half exists
+# on a first launch, and no number of grades inside one run produces the four *distinct days* the
+# floor counts (ADR-0010 §2).
+#
+# One card due, so the sitting is one grading long and ends on the *Forgot* below.
+fixture crossing
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+shot 04-crossing-entrance
+# `Start — the one card`. Every control here is full width, so `%CX%` reaches it at any width; the y
+# values are measured off the captures rather than adjusted by eye.
+mousemove %CX% 129 click 1
+sleep 1.5
+shot 05-crossing-card
+# Reveal is tap-the-card (ADR-0033 §1: one object with two faces).
+mousemove %CX% 131 click 1
+sleep 1.5
+shot 06-crossing-revealed
+# *Forgot*, held apart above the three passes (ADR-0034 §1). This is the fourth failure day, so it
+# crosses the floor, and it is the sitting's only grading, so the sitting ends on it.
+#
+# **`%BY-235%`, not a literal.** Since ADR-0035 the grade cluster is anchored to a reach line measured
+# up from the bottom of the page, so its y is a function of the window height — a literal measured at
+# 800 clicks empty page at 860 and the next `shot` photographs the card again under the pointer's
+# name.
+mousemove %CX% %BY-235% click 1
+sleep 1.5
+shot 07-session-pointer

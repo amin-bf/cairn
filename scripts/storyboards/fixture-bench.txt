@@ -1,0 +1,38 @@
+# **The Settings half of the fixture bench, driven** — the half that reaches the handset.
+#
+# The desktop harness never needs this block: it installs a fixture from outside, with
+# `cairn-fixture`, before the app starts. Android has no such route — `getFilesDir()` is not writable
+# from outside the app, and #141 found that an uninstall is not a first launch there either — so a
+# thumb tapping this row is the only way in on a phone, and #126 judges every destination and
+# sub-state that way.
+#
+# **So this storyboard exists to keep the handset from being where the block is first found broken.**
+#
+# **Run it at 1280×800 and nowhere else.** It is a verification rather than a design capture, and
+# unlike every other storyboard here it is *not* width-independent: the bench sits below three
+# paragraphs of prose that wrap at one width and not the other, so both the scroll count and the y
+# are measured at that size — the exact shape of the miss #143 hit. That is tolerated here because
+# both shots are **self-evidencing**: a tap that missed leaves `10-installed-from-settings` showing
+# Settings rather than the caught-up floor, and leaves the bench with nothing to say in
+# `11-bench-verdict`. Measured at 560×860, it misses — the row is at y=625 there.
+mousemove %CX% 600 click 1
+sleep 1
+# Settings, then down to the specimens.
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1.2
+# `Nothing due`, the first of the four — the leftmost, so its x is the one in the row that survives
+# the row wrapping.
+mousemove %LX+60% 557 click 1
+sleep 1.5
+# Installing a fixture lands you on Review, because looking at the state is the whole purpose. The
+# caught-up floor here is the proof the tap did what it says.
+shot 10-installed-from-settings
+# The bench's own verdict, kept on Settings for the return trip: what the collection actually
+# reached, or why it did not. A handset has no console to print it to.
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1.2
+shot 11-bench-verdict
