@@ -19,3 +19,11 @@ cairn-app.workspace = true
 [[bin]]
 name = "cairn"
 path = "src/main.rs"
+
+# The fixture bench's outside way in (issue #153). It is a second binary rather than a flag on the
+# first because it must run **while the app is not**: it unlinks the databases and their `-wal`
+# siblings, which a live connection would be left checkpointing into. Declared here beside `cairn`
+# rather than left to autodiscovery, so the two are visible in one place.
+[[bin]]
+name = "cairn-fixture"
+path = "src/bin/fixture.rs"

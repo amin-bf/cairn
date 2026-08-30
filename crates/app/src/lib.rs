@@ -19,6 +19,7 @@ pub mod cards;
 pub mod controls;
 pub mod deck;
 pub mod editor;
+pub mod fixtures;
 pub mod fonts;
 pub mod frame;
 pub mod inbound;
@@ -45,12 +46,16 @@ use cairn_store::Collection;
 
 use screens::notes::notes_screen;
 use screens::review::review;
-use screens::settings::{FileList, HandOff, settings_screen};
+use screens::settings::{Bench, BenchRequest, FileList, HandOff, settings_screen};
 
 /// Re-exported so `cairn-desktop` needs no `eframe` dependency of its own — it cannot then
 /// resolve a different feature set from the one this crate was built with, and it has no route to
 /// grow real code unnoticed.
 pub use eframe;
+
+/// How long a sitting runs before the 10-minute checkpoint surfaces (ADR-0006 §1). Named rather than
+/// inlined so the bench's override reads as *shorter than this* rather than as a second number.
+const CHECKPOINT_AFTER: Duration = Duration::from_secs(600);
 
 /// A sitting of review, held **only in memory** (ADR-0006 §6, issue #94): nothing about it is stored,
 /// so a force-quit loses nothing — relaunch re-derives the queue from the log and every already-graded
@@ -102,8 +107,16 @@ impl Sitting {
     /// The checkpoint is due once ten minutes have passed and the user has not already waved it away.
     /// It is a **courtesy**, never an enforcement — reaching the chosen count is what ends a session
     /// (issue #94).
+    ///
+    /// **The ten minutes are ADR-0006 §1's and are written here**, where the behaviour is; the bench
+    /// only ever *shortens* what it is handed ([`fixtures::checkpoint_after`]). That direction is the
+    /// point: this is the one decided state no pre-made collection can reach — it hangs off a
+    /// monotonic clock rather than off the log — so the alternative to a lever is ten real minutes
+    /// that no capture run and nobody holding a handset ever waits for, which is precisely why the
+    /// checkpoint contradicted its own ADR for ten months without anything failing.
     pub(crate) fn checkpoint_due(&self) -> bool {
-        !self.checkpoint_dismissed && self.started.elapsed() >= Duration::from_secs(600)
+        !self.checkpoint_dismissed
+            && self.started.elapsed() >= fixtures::checkpoint_after(CHECKPOINT_AFTER)
     }
 }
 
@@ -269,6 +282,8 @@ pub struct CairnApp {
     handoff: HandOff,
     /// **Temporary** — the file-list specimen's state (see [`file_list_specimen`]).
     file_list: FileList,
+    /// **Temporary** — the fixture bench's state (see `fixtures`).
+    bench: Bench,
     /// The file the platform handed us — a launch intent read once at startup, or the last file
     /// dropped on the window — held so the inbound specimen can **re-derive** its plan every frame
     /// (ADR-0022 §5). This is the *file*, never a cached plan: `inbound::read` runs the whole
@@ -329,6 +344,7 @@ impl CairnApp {
             band: keyboard::Band::default(),
             handoff: HandOff::default(),
             file_list: FileList::default(),
+            bench: Bench::default(),
             inbound: None,
             launch_checked: false,
         }
@@ -378,15 +394,66 @@ impl CairnApp {
     /// and the settings nudge reads *"Using the standard parameters"* again, which is true. Anyone
     /// wanting a reset that spares them is asking to keep a projection of a log that no longer exists.
     ///
-    /// **The open connection is dropped first, and that ordering is the whole of the correctness here.**
-    /// SQLite holds the database plus its `-wal` and `-shm` siblings open; unlinking them underneath a
-    /// live connection leaves a checkpoint writing into inodes nothing can reach, and the reopened
-    /// collection then races the old one's flush. Assigning `store` is what closes it.
+    /// The unlink and its ordering live in [`wipe_collection`](CairnApp::wipe_collection), which the
+    /// fixture bench shares.
     ///
     /// The marker goes too, so the device **mints a fresh writer id** — correct here and the opposite of
     /// what a *restore* may do (store rule 5, [ADR-0016 §2](../../../docs/adr/0016-backup-and-restore.md):
     /// a writer id is never adopted). A reset device is a new writer, not a returning one.
     fn reset_collection(&mut self) {
+        self.wipe_collection();
+        self.store = Self::open_store();
+        self.forget_screen_state();
+    }
+
+    /// **Temporary** — the handset half of the fixture bench (`fixtures`). Replace the collection
+    /// with a pre-made one, so a person holding the device can reach a state the shipping seed never
+    /// produces without a cable and `run-as`.
+    ///
+    /// The desktop harness does this from *outside* with the `cairn-fixture` binary, because it owns
+    /// the scratch data directory already. Android has no such route: `data_dir` is `getFilesDir()`,
+    /// which nothing outside the app may write, and #141 found that even an uninstall is not a first
+    /// launch there, because ADR-0007 §6 deliberately puts it in the Auto Backup set.
+    ///
+    /// **The collection is opened directly rather than through
+    /// [`open_store`](CairnApp::open_store), and that is the decision this whole bench rests on.**
+    /// `open_store` seeds an empty collection, so routing through it would put the shipping seed and
+    /// the fixture in the same store; opening around it leaves the seed exactly as it ships, which is
+    /// what keeps every capture already in the repository a picture of the same thing.
+    ///
+    /// A failed install leaves the device on an **empty** collection — Review then says *"No cards
+    /// yet"*, which is visibly not the state that was asked for. That is deliberate: the failure mode
+    /// worth refusing is a plausible picture of the wrong screen.
+    fn install_fixture(&mut self, fixture: fixtures::Fixture) -> Result<fixtures::Reached, String> {
+        self.wipe_collection();
+        self.forget_screen_state();
+
+        let opened = cairn_store::platform::data_dir()
+            .and_then(|data| cairn_store::platform::state_dir().map(|state| (data, state)))
+            .map_err(|e| e.to_string())
+            .and_then(|(data, state)| Collection::open(&data, &state).map_err(|e| e.to_string()));
+
+        match opened {
+            Err(message) => {
+                self.store = Err(message.clone());
+                Err(message)
+            }
+            Ok(mut coll) => {
+                let outcome = fixture.install(&mut coll, now_ms());
+                self.store = Ok(coll);
+                outcome
+            }
+        }
+    }
+
+    /// Drop the open connection, then unlink both databases and the writer marker.
+    ///
+    /// **The ordering is the whole of the correctness**, and it is why this is one function rather
+    /// than two lines at each call site: SQLite holds the database plus its `-wal` and `-shm`
+    /// siblings open, so unlinking them underneath a live connection leaves a checkpoint writing into
+    /// inodes nothing can reach, and the reopened collection then races the old one's flush.
+    /// Assigning `store` is what closes it.
+    fn wipe_collection(&mut self) {
         self.store = Err("Resetting…".to_owned());
 
         let dirs = cairn_store::platform::data_dir()
@@ -394,8 +461,10 @@ impl CairnApp {
         if let Ok((data, state)) = dirs {
             cairn_store::remove_files(&data, &state);
         }
+    }
 
-        self.store = Self::open_store();
+    /// Forget every in-memory screen state, because all of it describes rows that no longer exist.
+    fn forget_screen_state(&mut self) {
         self.sitting = None;
         self.editing = None;
         self.showing_leeches = false;
@@ -547,7 +616,7 @@ impl eframe::App for CairnApp {
         // already took, and passed down — so the screens ask a value rather than a platform, and
         // nothing below this line acquires a reason to know what it is running on.
         let touch = self.band.is_touch();
-        let mut reset_requested = false;
+        let mut bench_request: Option<BenchRequest> = None;
         let out = area.show(ui, |ui| {
             ui.add_space(spacing::gap(1));
 
@@ -591,10 +660,10 @@ impl eframe::App for CairnApp {
                     );
                 }
                 Destination::Settings => {
-                    // The wipe cannot happen here: `coll` is borrowed for the whole frame, and the
-                    // reset closes that connection. So the control only *asks*, and the app acts once
-                    // the borrow has ended, below.
-                    reset_requested = frame::column(ui, |ui| {
+                    // The wipe cannot happen here: `coll` is borrowed for the whole frame, and both
+                    // a reset and a fixture install close that connection. So the controls only
+                    // *ask*, and the app acts once the borrow has ended, below.
+                    bench_request = frame::column(ui, |ui| {
                         settings_screen(
                             ui,
                             coll,
@@ -605,6 +674,7 @@ impl eframe::App for CairnApp {
                             &mut self.handoff,
                             &mut self.inbound,
                             &mut self.file_list,
+                            &mut self.bench,
                             now_ms,
                         )
                     });
@@ -613,8 +683,19 @@ impl eframe::App for CairnApp {
         });
         self.band.record(&out);
 
-        if reset_requested {
-            self.reset_collection();
+        match bench_request {
+            None => {}
+            Some(BenchRequest::Reset) => self.reset_collection(),
+            Some(BenchRequest::Install(fixture)) => {
+                // The install's own verdict is put back on the screen rather than logged: a handset
+                // has no console, and a fixture that half-installed would otherwise be a perfectly
+                // plausible picture of the wrong state.
+                let said = match self.install_fixture(fixture) {
+                    Ok(reached) => format!("{} — {reached}", fixture.key()),
+                    Err(message) => message,
+                };
+                screens::settings::bench_said(&mut self.bench, said);
+            }
         }
     }
 }
