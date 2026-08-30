@@ -1,0 +1,13 @@
+# A **framed backlog**, and the entrance's **shorter-sitting line** (ADR-0034 §2).
+#
+# That second line is the link accent's only call site (`theme::link`, ADR-0030 §5), and it is
+# invisible on a first launch: it draws only options strictly *shorter* than the queue, and a
+# first-run queue is five cards, so none of 5/10/20 qualifies. Twenty-five due lights all three, and
+# also passes `session::COMFORTABLE_SITTING`, so Review frames the pile rather than counting it
+# (issue #94, ADR-0001 §3).
+fixture backlog
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+shot 08-backlog

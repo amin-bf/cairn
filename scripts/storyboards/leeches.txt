@@ -1,0 +1,21 @@
+# The **caught-up floor with its one control**, and the **leech screen** behind it (ADR-0010 §6, §8).
+#
+# The same floor as `caught-up.txt`, with three cards over the leech floor — which is the only way
+# the screen carries a control at all, and therefore the only state in which ADR-0035 §1's reach line
+# has a second call site to be judged against (#155 owes that amendment).
+#
+# Reaching it needs a card **failed four times and then recovered**: a card whose latest grade is a
+# failure is due whatever its interval says, so a leech that merely failed its way over the floor
+# would put the screen back into the card state. That is why this is a fixture and not a storyboard
+# that grades a few cards.
+fixture leeches
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+shot 02-caught-up-with-leeches
+# The durable entrance — full width, so `%CX%` reaches it at any width. y=252 is measured off the
+# capture above: the statement takes the screen (ADR-0034 §3) and the control sits directly under it.
+mousemove %CX% 252 click 1
+sleep 1.2
+shot 03-leech-screen

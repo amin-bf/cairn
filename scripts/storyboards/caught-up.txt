@@ -1,0 +1,16 @@
+# The **caught-up floor**, bare (ADR-0034 §3) — the one Review state with no card and no work in it,
+# and the screen the mark goes above (#155).
+#
+# The `fixture` line is read by `capture-desktop.sh` before the app starts; it is what makes this
+# screen reachable at all. Every capture in this repository before #153 was a first launch, and the
+# shipping seed always leaves six cards due, so the floor could only ever be photographed inside a
+# prototype.
+#
+# **Bare is the point.** The leech entrance is the only control this screen can carry, and this
+# fixture has no leeches — see `leeches.txt` for the same screen with it.
+fixture caught-up
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+shot 01-caught-up

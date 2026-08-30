@@ -1,0 +1,666 @@
+//! **Temporary, and not a specified feature.** The fixture bench: the collection states the capture
+//! harness cannot reach on its own, defined once and installable from two directions.
+//!
+//! # Why this exists
+//!
+//! The desktop harness creates, redirects and wipes the app's entire data directory per run
+//! (`docs/environment/desktop-capture.md`), which is *why* every capture is a first launch and
+//! therefore always the same six due cards from [`CairnApp::open_store`](crate::CairnApp). Several
+//! decided screens are unreachable from that one fixture — the caught-up floor needs a collection
+//! with nothing due, the end-of-session pointer needs a card failed repeatedly, and the entrance's
+//! shorter-sitting line needs a queue longer than five. #134 had to photograph the first two inside a
+//! *prototype*, so the application shipped decided states whose only pictures were of something that
+//! is not the application.
+//!
+//! # The route, and the two it is not
+//!
+//! **A fixture is a pre-made collection, and the shipping seed is left alone.** The harness already
+//! owns the data directory, so a state is installed by *dropping in a collection already in it* —
+//! the app opens a non-empty store and the seed never fires. Two alternatives were weighed and
+//! rejected on #149: **extending the seed** changes what a real user meets on first install and
+//! changes what every capture already in the repository is a picture of, so
+//! `docs/design/baseline-2026-08-08/` would stop being comparable to anything after it; and a
+//! **capture-mode entry point** is app code shaped by the harness's needs, where a state expressed as
+//! *data* is what a state actually is.
+//!
+//! [`CairnApp::open_store`](crate::CairnApp) is therefore untouched, and that is the whole value of
+//! the route: a fixture that worked by editing the seed would have solved a different problem.
+//!
+//! # Two ways in, one definition
+//!
+//! The states are defined **here**, once. There are two ways to install them:
+//!
+//! 1. **From outside** — the `cairn-fixture` binary, run by `capture-desktop.sh` against the scratch
+//!    profile before the app launches. Desktop only, and sufficient there.
+//! 2. **From inside** — the temporary block on Settings. This is not a convenience: Android's
+//!    `data_dir` is `getFilesDir()`, which is not writable from outside the app, and #141 found that
+//!    an uninstall is not a first launch there either, because ADR-0007 §6 deliberately puts it in
+//!    the Auto Backup set. A thumb tapping a button is the only route in on a handset.
+//!
+//! # A fixture verifies itself
+//!
+//! [`Fixture::install`] does not merely write rows — it recomputes the review state afterwards and
+//! **fails if the collection did not land where the fixture says it lands**. That check is the point
+//! rather than a nicety: a storyboard that misses its target fails *silently* and has done so twice
+//! (#122, #143), and a fixture that half-installed would produce an entirely plausible picture of the
+//! wrong state. The scheduler decides the intervals here, not this module, so "graded `Easy` twice is
+//! not due" is a claim about `fsrs` that has to be checked rather than assumed.
+//!
+//! # The one state that is not data
+//!
+//! ADR-0006 §1's ten-minute checkpoint hangs off [`Sitting`](crate::Sitting)'s monotonic clock, not
+//! off the collection, so no pre-made collection can reach it — it needs ten real minutes that no
+//! capture run and no person holding a handset will ever wait for. [`checkpoint_after`] is the one
+//! lever this module offers that is not a fixture: a **shorter** checkpoint, set from the environment
+//! on desktop and from the same Settings block on the handset. It is subtractive — ADR-0006 §1's six
+//! hundred seconds stay named at the call site and this only ever returns something else when a bench
+//! override is present.
+
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+use cairn_core::content::{CardRef, NoteId};
+use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
+use cairn_core::replay::{leeches, replay};
+use cairn_core::scheduling::Grade;
+use cairn_store::Collection;
+
+use crate::deck;
+use crate::session::{self, ReviewState};
+
+/// One day in milliseconds. Day numbers are a pure shift of the epoch (`log::day_number`), so
+/// subtracting whole days from an instant decrements its day number by exactly that many — which is
+/// all the backdating below needs, at any rollover hour and any offset.
+const DAY_MS: i64 = 86_400_000;
+
+/// The state a fixture put the collection into, recomputed from the rows it wrote — what
+/// [`Fixture::install`] checks itself against and what the bench reports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reached {
+    /// Cards the current content generates.
+    pub cards: usize,
+    /// Cards due right now.
+    pub due: usize,
+    /// Cards the rate would introduce right now.
+    pub new: usize,
+    /// Cards over the leech floor (ADR-0010 §2).
+    pub leeches: usize,
+    /// What the Review destination will draw.
+    pub state: ReviewState,
+}
+
+impl std::fmt::Display for Reached {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} cards, {} due, {} new, {} leeches — {:?}",
+            self.cards, self.due, self.new, self.leeches, self.state
+        )
+    }
+}
+
+/// **Temporary, and not a specified feature.** One pre-made collection, named by the state it
+/// reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fixture {
+    /// Nothing due and nothing left to introduce: the caught-up floor, bare (ADR-0034 §3). No
+    /// leeches, so the screen carries the statement and nothing else — which is the screen
+    /// [#155](https://github.com/amin-bf/cairn/issues/155) puts the mark above.
+    CaughtUp,
+    /// Nothing due **and three cards over the leech floor**: the caught-up floor with its one
+    /// control under it, and the leech screen behind that. Distinct from [`Fixture::CaughtUp`]
+    /// because ADR-0035 §1's reach line was argued on a screen with a card and drawn on exactly one
+    /// call site — the second screen to draw a control is this one, and it is only this one when a
+    /// leech exists.
+    Leeches,
+    /// One card due, sitting **one failure day short** of the leech floor. Grading it *Forgot* takes
+    /// it over, so the sitting ends with a leech that crossed during it — which is the only way to
+    /// reach the end-of-session pointer (ADR-0010 §6), whose contents are `leeches now` minus an
+    /// in-memory snapshot taken when the sitting began.
+    Crossing,
+    /// Twenty-five cards due: past `session::COMFORTABLE_SITTING`, so Review frames a backlog, and
+    /// past every shorter sitting, so the entrance's second line offers all three of 5/10/20. That
+    /// line is the link accent's only call site (ADR-0034 §2) and is invisible on a fresh collection,
+    /// because a first-run queue is five cards and none of 5/10/20 is *shorter* than five.
+    Backlog,
+}
+
+impl Fixture {
+    /// Every fixture, in the order the Settings block draws them.
+    pub const ALL: [Fixture; 4] = [
+        Fixture::CaughtUp,
+        Fixture::Leeches,
+        Fixture::Crossing,
+        Fixture::Backlog,
+    ];
+
+    /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
+    /// renaming one silently changes what a capture is a picture of.
+    pub fn key(self) -> &'static str {
+        match self {
+            Fixture::CaughtUp => "caught-up",
+            Fixture::Leeches => "leeches",
+            Fixture::Crossing => "crossing",
+            Fixture::Backlog => "backlog",
+        }
+    }
+
+    /// The button label on Settings — what the collection will be, not what the button does.
+    pub fn label(self) -> &'static str {
+        match self {
+            Fixture::CaughtUp => "Nothing due",
+            Fixture::Leeches => "Leeches",
+            Fixture::Crossing => "About to leech",
+            Fixture::Backlog => "A backlog",
+        }
+    }
+
+    /// The screen this fixture exists to make reachable, in one line.
+    pub fn reaches(self) -> &'static str {
+        match self {
+            Fixture::CaughtUp => "the caught-up floor, with no control under it",
+            Fixture::Leeches => "the caught-up floor with the leech entrance, and the leech screen",
+            Fixture::Crossing => "the end-of-session pointer, after one Forgot",
+            Fixture::Backlog => "a framed backlog, and the entrance's shorter-sitting line",
+        }
+    }
+
+    /// The fixture a storyboard or a command line named, or `None` — an unknown key is refused
+    /// rather than guessed, so a typo aborts the capture run instead of photographing the seed.
+    pub fn parse(key: &str) -> Option<Fixture> {
+        Fixture::ALL.into_iter().find(|f| f.key() == key)
+    }
+
+    /// Write this fixture into an **empty** collection and verify it landed.
+    ///
+    /// `now_ms` is a value, as everywhere else in this workspace (ADR-0009 §8): the caller reads the
+    /// clock. The collection must be empty — the bench replaces a collection rather than adding to
+    /// one, and a fixture written on top of existing rows reaches a state nobody named.
+    ///
+    /// Returns what the collection actually reached, or the mismatch. **The verification is the
+    /// interesting half.** The rows written here are chosen so the scheduler lands them where the
+    /// fixture says, and that is a claim about `fsrs`'s intervals rather than about this code — a
+    /// pinned dependency can still move under a version bump, and the failure mode without this
+    /// check is a plausible picture of the wrong screen.
+    pub fn install(self, coll: &mut Collection, now_ms: i64) -> Result<Reached, String> {
+        if !coll.is_empty().map_err(|e| e.to_string())? {
+            return Err("the bench installs into an empty collection — reset first".to_owned());
+        }
+
+        let mut history = History::default();
+        match self {
+            Fixture::CaughtUp => caught_up(coll, &mut history, 12)?,
+            Fixture::Leeches => {
+                caught_up(coll, &mut history, 9)?;
+                // A leech that is **not due**: four failure days inside the ninety-day window, then
+                // a recovery long enough to schedule it ahead. Both halves are needed — a card whose
+                // *last* grade is a failure is due whatever its interval says (`session::compose`),
+                // so a leech that simply failed its way over the floor cannot coexist with a
+                // caught-up screen, and one that failed four times still has too little stability to
+                // leave the queue on a single pass.
+                for (front, back) in LEECH_WORDS {
+                    let card = note(coll, front, back)?;
+                    history.fails(card, [80, 60, 40, 20]);
+                    history.passes(
+                        card,
+                        [(18, Grade::Good), (10, Grade::Good), (3, Grade::Easy)],
+                    );
+                }
+            }
+            Fixture::Crossing => {
+                caught_up(coll, &mut history, 5)?;
+                // Three failure days, and the last grade a failure — so the card is due today and
+                // one more *Forgot*, on a fourth distinct day, takes it over the floor during the
+                // sitting rather than before it.
+                let card = note(coll, "l'écureuil", "the squirrel")?;
+                history.fails(card, [40, 30, 20]);
+            }
+            Fixture::Backlog => {
+                // One pass, long enough ago that the interval it bought has expired several times
+                // over. Nothing here is a leech: a backlog is a person who stopped reviewing, not a
+                // person who kept failing.
+                for (front, back) in BACKLOG_WORDS {
+                    let card = note(coll, front, back)?;
+                    history.passes(card, [(60, Grade::Good)]);
+                }
+            }
+        }
+        history.write(coll, now_ms)?;
+
+        let reached = self.check(coll, now_ms)?;
+        Ok(reached)
+    }
+
+    /// Recompute the state and hold it against what this fixture promises. Split out of
+    /// [`Fixture::install`] so a test can name the expectation it is really asserting.
+    fn check(self, coll: &Collection, now_ms: i64) -> Result<Reached, String> {
+        let reached = read(coll, now_ms)?;
+        let complaint = match self {
+            Fixture::CaughtUp => match reached {
+                Reached {
+                    state: ReviewState::CaughtUp,
+                    leeches: 0,
+                    ..
+                } => None,
+                _ => Some("nothing due and no leeches"),
+            },
+            Fixture::Leeches => match reached {
+                Reached {
+                    state: ReviewState::CaughtUp,
+                    leeches: 3,
+                    ..
+                } => None,
+                _ => Some("nothing due and exactly three leeches"),
+            },
+            Fixture::Crossing => match reached {
+                Reached {
+                    state: ReviewState::Due { due: 1, new: 0, .. },
+                    leeches: 0,
+                    ..
+                } => None,
+                _ => Some("exactly one card due and no leech yet"),
+            },
+            Fixture::Backlog => match reached {
+                Reached {
+                    state:
+                        ReviewState::Due {
+                            due,
+                            new: 0,
+                            backlog: true,
+                        },
+                    leeches: 0,
+                    ..
+                } if due > 20 => None,
+                _ => Some("a backlog of more than twenty due, no new and no leeches"),
+            },
+        };
+        match complaint {
+            None => Ok(reached),
+            Some(wanted) => Err(format!(
+                "fixture '{}' wanted {wanted}, reached {reached}",
+                self.key()
+            )),
+        }
+    }
+}
+
+/// Wipe whatever is in the platform's two directories (ADR-0007 §6) and install `fixture` there —
+/// the **outside** way in, and the whole of what the `cairn-fixture` binary does.
+///
+/// This lives here rather than in `cairn-desktop` because that crate is a shim with no logic
+/// (ADR-0003 §5): anything written there is never compiled by the Android build and never exercised
+/// on the handset, which is the same class of defect as a runtime platform check. It is not
+/// desktop-only by construction — it is simply useless on Android, where nothing outside the app can
+/// write `getFilesDir()` and the Settings block is the route instead.
+///
+/// **The application must not be running.** SQLite's `-wal` and `-shm` siblings are unlinked here,
+/// and a live connection would be left checkpointing into inodes nothing can reach. The capture
+/// harness satisfies this by installing before it starts the app.
+pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
+    let data = cairn_store::platform::data_dir().map_err(|e| e.to_string())?;
+    let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
+    cairn_store::remove_files(&data, &state);
+    let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
+    fixture.install(&mut coll, crate::now_ms())
+}
+
+/// What the Review destination would draw against this collection right now — the same four reads
+/// `screens::review` makes each frame, in one place the bench can assert on.
+pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
+    let today = cairn_core::log::day_number(now_ms, DayScale::default());
+    let current = deck::current_cards(coll).map_err(|e| e.to_string())?;
+    let positions = deck::note_positions(coll).map_err(|e| e.to_string())?;
+    let rate = coll.new_card_rate().unwrap_or(DEFAULT_NEW_CARD_RATE) as usize;
+    let suspended = coll.suspended().map_err(|e| e.to_string())?;
+    let lines = coll.log_lines().map_err(|e| e.to_string())?;
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let replayed = replay(&current, &refs);
+    let queue = session::compose(&current, &positions, &replayed, today, rate, &suspended);
+    let reviewed_ever = !replayed.cards.is_empty();
+    Ok(Reached {
+        cards: current.len(),
+        due: queue.due.len(),
+        new: queue.new.len(),
+        leeches: leeches(&replayed, today).len(),
+        state: ReviewState::of(&queue, current.len(), reviewed_ever),
+    })
+}
+
+/// The reviews a fixture wants, gathered before any of them is written.
+///
+/// **Gathering is the mechanism, not a tidiness.** The store guards on write and rewrites any
+/// instant at or below the highest already in the log (ADR-0004 §8) — a backwards clock must not sort
+/// into the past — so a row written out of order arrives at `highest + 1` and lands on the wrong
+/// **day**. A fixture that builds one card's whole history and then starts the next one therefore
+/// backdates nothing after the first card: every later row is silently stamped a millisecond after
+/// the newest one already there.
+///
+/// That is not hypothetical. Written per card, the leech fixture's four failure days at 80, 60, 40
+/// and 20 days ago all collapsed onto the same recent day, leaving a card with **one** failure day
+/// and no leech — a collection that looked entirely plausible and was not the state the fixture
+/// names. It was [`Fixture::check`] that caught it, which is the argument for that check in one line.
+#[derive(Default)]
+struct History {
+    /// `(days before now, card, grade)`, in whatever order the fixture happened to build them.
+    rows: Vec<(i64, CardRef, Grade)>,
+}
+
+impl History {
+    /// Grade this card *Forgot* on each of these days — one **failure day** apiece (ADR-0010 §2).
+    fn fails<const N: usize>(&mut self, card: CardRef, days_ago: [i64; N]) {
+        for day in days_ago {
+            self.rows.push((day, card, Grade::Forgot));
+        }
+    }
+
+    /// Grade this card at the given days and grades, oldest first.
+    fn passes<const N: usize>(&mut self, card: CardRef, reviews: [(i64, Grade); N]) {
+        for (day, grade) in reviews {
+            self.rows.push((day, card, grade));
+        }
+    }
+
+    /// Write every gathered review, **oldest first across the whole collection**, so the store's
+    /// write guard never fires and every row keeps the day it was given.
+    ///
+    /// Rows sharing a day are separated by a millisecond each — not to satisfy the guard, which would
+    /// bump them harmlessly, but so the log has a total order that does not depend on it. The offsets
+    /// run *backwards* from the anchor, so no fixture row is ever stamped in the future.
+    fn write(mut self, coll: &mut Collection, now_ms: i64) -> Result<(), String> {
+        self.rows.sort_by_key(|(days_ago, _, _)| -*days_ago);
+        let last = self.rows.len().saturating_sub(1) as i64;
+        for (index, (days_ago, card, grade)) in self.rows.into_iter().enumerate() {
+            let instant = now_ms - days_ago * DAY_MS - (last - index as i64);
+            coll.append_review(card, grade, instant, DayScale::default(), 4_200)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+}
+
+/// `count` notes, each reviewed twice and scheduled well ahead — the filler every fixture needs so a
+/// screen has a collection behind it rather than one card.
+fn caught_up(coll: &mut Collection, history: &mut History, count: usize) -> Result<(), String> {
+    for (front, back) in CAUGHT_UP_WORDS.iter().take(count) {
+        let card = note(coll, front, back)?;
+        history.passes(card, [(20, Grade::Good), (2, Grade::Easy)]);
+    }
+    Ok(())
+}
+
+/// One `basic` note and the single card it generates (`content::BASIC` declares one slot, ordinal 0).
+fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, String> {
+    let id: NoteId = coll
+        .create_note("basic", &[("Front", front), ("Back", back)])
+        .map_err(|e| e.to_string())?;
+    Ok(CardRef::new(id, 0))
+}
+
+// --- The checkpoint: the one bench state that is not a collection ------------------------------
+
+/// No override installed. `u64::MAX` rather than zero, because **zero seconds is a legal override** —
+/// a checkpoint that is due the moment a sitting starts is the cheapest way to photograph it.
+const NO_OVERRIDE: u64 = u64::MAX;
+
+static OVERRIDE_SECONDS: AtomicU64 = AtomicU64::new(NO_OVERRIDE);
+
+/// The environment override, read once. `CAIRN_CHECKPOINT_SECONDS=5` is how the desktop harness
+/// reaches ADR-0006 §1's checkpoint without waiting ten minutes for it. Unset, unparsable or absent
+/// all mean *no override*, so the shipped behaviour is what you get for doing nothing.
+fn env_seconds() -> u64 {
+    static FROM_ENV: OnceLock<u64> = OnceLock::new();
+    *FROM_ENV.get_or_init(|| {
+        std::env::var("CAIRN_CHECKPOINT_SECONDS")
+            .ok()
+            .and_then(|raw| raw.trim().parse::<u64>().ok())
+            .unwrap_or(NO_OVERRIDE)
+    })
+}
+
+/// **Temporary, and not a specified feature.** The bench's shorter checkpoint, in seconds — long
+/// enough that a capture run reaches the card and reveals it first, short enough that nobody waits.
+pub const BENCH_CHECKPOINT_SECONDS: u64 = 8;
+
+/// How long a sitting runs before the checkpoint is due: `specified` unless a bench override is in
+/// force.
+///
+/// **Subtractive on purpose.** ADR-0006 §1's ten minutes stay named at the call site and this
+/// function has no number of its own, so deleting the whole bench leaves the product behaviour where
+/// it is written rather than where it was overridden.
+pub fn checkpoint_after(specified: Duration) -> Duration {
+    let override_seconds = match OVERRIDE_SECONDS.load(Ordering::Relaxed) {
+        NO_OVERRIDE => env_seconds(),
+        set => set,
+    };
+    match override_seconds {
+        NO_OVERRIDE => specified,
+        seconds => Duration::from_secs(seconds),
+    }
+}
+
+/// **Temporary, and not a specified feature.** Shorten the checkpoint for the rest of this process —
+/// the handset half of [`checkpoint_after`], since a thumb cannot set an environment variable.
+pub fn set_checkpoint_after(seconds: u64) {
+    OVERRIDE_SECONDS.store(seconds, Ordering::Relaxed);
+}
+
+/// Whether a bench override is in force, so the Settings block can say which state its button is in
+/// rather than being a control with no readout.
+pub fn checkpoint_is_shortened() -> bool {
+    OVERRIDE_SECONDS.load(Ordering::Relaxed) != NO_OVERRIDE || env_seconds() != NO_OVERRIDE
+}
+
+// --- Content -----------------------------------------------------------------------------------
+//
+// French to English, the same shape as the shipping seed, so a capture of a fixture reads as the
+// same application rather than as a different product. **They are deliberately different words**:
+// a screen photographed against `chien`/`chat` is ambiguous between a fixture and the seed, and the
+// silent failure this bench is most exposed to is a fixture that did not install.
+
+const CAUGHT_UP_WORDS: [(&str, &str); 12] = [
+    ("la fenêtre", "the window"),
+    ("le fleuve", "the river"),
+    ("la montagne", "the mountain"),
+    ("le brouillard", "the fog"),
+    ("la clé", "the key"),
+    ("le sentier", "the path"),
+    ("la pierre", "the stone"),
+    ("le sommeil", "sleep"),
+    ("la lumière", "the light"),
+    ("le silence", "silence"),
+    ("la racine", "the root"),
+    ("le seuil", "the threshold"),
+];
+
+const LEECH_WORDS: [(&str, &str); 3] = [
+    ("néanmoins", "nevertheless"),
+    ("désormais", "from now on"),
+    ("d'ailleurs", "besides"),
+];
+
+const BACKLOG_WORDS: [(&str, &str); 25] = [
+    ("l'aube", "dawn"),
+    ("le crépuscule", "dusk"),
+    ("la marée", "the tide"),
+    ("le rivage", "the shore"),
+    ("la falaise", "the cliff"),
+    ("le nuage", "the cloud"),
+    ("la neige", "the snow"),
+    ("le givre", "the frost"),
+    ("la braise", "the ember"),
+    ("le cendrier", "the ashtray"),
+    ("la charrue", "the plough"),
+    ("le moulin", "the mill"),
+    ("la grange", "the barn"),
+    ("le puits", "the well"),
+    ("la clairière", "the clearing"),
+    ("le hêtre", "the beech"),
+    ("le bouleau", "the birch"),
+    ("la mousse", "the moss"),
+    ("le lichen", "the lichen"),
+    ("la fougère", "the fern"),
+    ("le ruisseau", "the stream"),
+    ("le gué", "the ford"),
+    ("la digue", "the dyke"),
+    ("le phare", "the lighthouse"),
+    ("la boussole", "the compass"),
+];
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::*;
+    use tempfile::TempDir;
+
+    /// A fixed instant, so a test never straddles a rollover. 4am on day 20 514 at the default
+    /// scale, which is the same anchor the review screen's own tests use.
+    const NOW_MS: i64 = 20_514 * DAY_MS + 4 * 3_600_000;
+
+    fn empty() -> (TempDir, TempDir, Collection) {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let coll = Collection::open(data.path(), state.path()).unwrap();
+        (data, state, coll)
+    }
+
+    /// **Every fixture reaches the state it names.** This is the assertion the whole bench rests on:
+    /// the rows each fixture writes are chosen so `fsrs` schedules them where the fixture says, which
+    /// is a claim about a pinned dependency rather than about this code. Without it, a fixture that
+    /// quietly stopped landing would produce a plausible picture of the wrong screen — which is the
+    /// exact failure #122 and #143 both hit from the storyboard side.
+    #[test]
+    fn every_fixture_lands_where_it_says_it_lands() {
+        for fixture in Fixture::ALL {
+            let (_d, _s, mut coll) = empty();
+            let reached = fixture
+                .install(&mut coll, NOW_MS)
+                .unwrap_or_else(|e| panic!("{}: {e}", fixture.key()));
+            assert!(
+                reached.cards > 0,
+                "{}: a fixture with no cards is not a fixture",
+                fixture.key()
+            );
+        }
+    }
+
+    /// The caught-up floor is bare: nothing due, and **no leech entrance under it**. The distinction
+    /// from [`Fixture::Leeches`] is the whole reason there are two, so it is pinned rather than left
+    /// to the reader of the word list.
+    #[test]
+    fn the_caught_up_fixture_draws_the_floor_with_nothing_under_it() {
+        let (_d, _s, mut coll) = empty();
+        let reached = Fixture::CaughtUp.install(&mut coll, NOW_MS).unwrap();
+        assert_eq!(reached.state, ReviewState::CaughtUp);
+        assert_eq!(reached.leeches, 0, "the bare floor has no control under it");
+        assert_eq!(reached.due, 0);
+        assert_eq!(reached.new, 0);
+    }
+
+    /// Caught up **and** leeched — the combination ADR-0035 §1's second call site needs, and the one
+    /// that does not fall out of either half on its own: a card whose last grade is a failure is due
+    /// whatever its interval says, so a leech has to have passed since crossing to leave the queue.
+    #[test]
+    fn the_leech_fixture_is_caught_up_with_a_control_under_it() {
+        let (_d, _s, mut coll) = empty();
+        let reached = Fixture::Leeches.install(&mut coll, NOW_MS).unwrap();
+        assert_eq!(reached.state, ReviewState::CaughtUp);
+        assert_eq!(reached.leeches, 3);
+    }
+
+    /// The crossing fixture leaves its card **one failure day short**, and one *Forgot* today takes
+    /// it over. Both halves are asserted: a fixture already over the floor would show the leech
+    /// entrance instead of the pointer, and one two days short would end the sitting with nothing.
+    #[test]
+    fn the_crossing_fixture_crosses_on_the_next_forgot_and_not_before() {
+        let (_d, _s, mut coll) = empty();
+        let reached = Fixture::Crossing.install(&mut coll, NOW_MS).unwrap();
+        assert_eq!(reached.leeches, 0, "it must not have crossed yet");
+        assert_eq!(reached.due, 1, "the storyboard grades exactly one card");
+
+        let today = cairn_core::log::day_number(NOW_MS, DayScale::default());
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let cards = deck::current_cards(&coll).unwrap();
+        let replayed = replay(&cards, &refs);
+        let positions = deck::note_positions(&coll).unwrap();
+        let queue = session::compose(
+            &cards,
+            &positions,
+            &replayed,
+            today,
+            DEFAULT_NEW_CARD_RATE as usize,
+            &HashSet::new(),
+        );
+        let due = queue.due[0].card;
+
+        coll.append_review(due, Grade::Forgot, NOW_MS, DayScale::default(), 4_200)
+            .unwrap();
+        let after = read(&coll, NOW_MS).unwrap();
+        assert_eq!(
+            after.leeches, 1,
+            "one Forgot on a fourth distinct day crosses the floor (ADR-0010 §2)"
+        );
+    }
+
+    /// A backlog is longer than **every** shorter sitting, not merely longer than a comfortable one.
+    /// The entrance draws `5 10 20` only for options strictly below the queue, and that second line
+    /// is the link accent's only call site — a fixture of twenty-one would light two thirds of it.
+    #[test]
+    fn the_backlog_fixture_is_longer_than_every_shorter_sitting() {
+        let (_d, _s, mut coll) = empty();
+        let reached = Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
+        let ReviewState::Due { due, backlog, .. } = reached.state else {
+            panic!("a backlog is due: {reached}");
+        };
+        assert!(backlog, "past a comfortable sitting, so Review frames it");
+        assert!(due > 20, "past the longest shorter sitting: {due}");
+    }
+
+    /// The bench refuses to write into a collection that already holds rows. A fixture layered on
+    /// top of the shipping seed reaches a state nobody named, and it would pass every check above by
+    /// accident on at least one fixture.
+    #[test]
+    fn a_fixture_refuses_a_collection_that_is_not_empty() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::CaughtUp.install(&mut coll, NOW_MS).unwrap();
+        let second = Fixture::Backlog.install(&mut coll, NOW_MS);
+        assert!(second.is_err(), "expected a refusal, got {second:?}");
+    }
+
+    /// An unknown key is refused rather than guessed — the property that makes a storyboard naming
+    /// its own fixture safe, because a typo aborts the run instead of photographing the seed.
+    #[test]
+    fn an_unknown_fixture_key_is_refused() {
+        assert_eq!(Fixture::parse("caught-up"), Some(Fixture::CaughtUp));
+        assert_eq!(Fixture::parse("caught_up"), None);
+        assert_eq!(Fixture::parse(""), None);
+    }
+
+    /// The checkpoint lever is **subtractive**: with no override the caller's own number comes back,
+    /// which is what keeps ADR-0006 §1's ten minutes written at the call site rather than here.
+    ///
+    /// **The override is process-global and the suite runs threaded**, so this test briefly changes
+    /// what every other test sees. That is safe only because the one test that reaches
+    /// `checkpoint_due` — `the_ten_minute_checkpoint_never_hides_the_card` — winds its sitting back
+    /// 700 seconds and asserts the checkpoint *is* due, which every value this sets keeps true. A
+    /// test asserting the checkpoint is **not** due would flake against it, and would need the lever
+    /// threaded through rather than stored.
+    #[test]
+    fn the_checkpoint_lever_returns_the_specified_duration_until_it_is_set() {
+        let specified = Duration::from_secs(600);
+        assert_eq!(checkpoint_after(specified), specified);
+        set_checkpoint_after(3);
+        assert_eq!(checkpoint_after(specified), Duration::from_secs(3));
+        assert!(checkpoint_is_shortened());
+        set_checkpoint_after(0);
+        assert_eq!(
+            checkpoint_after(specified),
+            Duration::ZERO,
+            "zero is a legal override, not the absence of one"
+        );
+        OVERRIDE_SECONDS.store(NO_OVERRIDE, Ordering::Relaxed);
+        assert_eq!(checkpoint_after(specified), specified);
+    }
+}

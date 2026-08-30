@@ -265,6 +265,24 @@ or delete in the moment, when the user is most frustrated and least able to choo
 never a nag — a card ignored here stays on the leech screen, the durable recourse.
 _Avoid_: Leech notification, session summary, a per-session dismissal marker.
 
+**Fixture** / **The fixture bench**:
+A **pre-made collection**, named by the screen it makes reachable — `caught-up`, `leeches`,
+`crossing`, `backlog` — and the module that defines them (`fixtures`). Test scaffolding, not a
+feature, and marked so wherever it appears. It exists because every capture this repository holds is
+a **first launch**: the harness wipes the whole data directory per run, so the seed is the only
+collection anything is ever photographed against, and the caught-up floor, the leech screen and the
+end-of-session pointer are simply not in it. A fixture is **data, never a mode** — the seed and
+`open_store` are untouched, so no capture taken before one existed changes meaning — with **two ways
+in from one definition**: the `cairn-fixture` binary from outside on desktop, and a temporary block on
+Settings for the handset, where `getFilesDir()` is unwritable from outside and an uninstall is not a
+first launch either. A fixture **verifies itself** and refuses a collection that is not empty, because
+the failure it exists to prevent is a plausible picture of the wrong screen. The **10-minute
+checkpoint is not a fixture** and cannot be: it hangs off a sitting's monotonic clock, so the bench
+offers one lever that only ever *shortens* what ADR-0006 §1 names.
+_Avoid_: Seed, for a fixture — the seed is the six cards a real first install meets, and conflating
+the two is how "just extend the seed" gets proposed again; capture mode, which is the route this
+deliberately is not.
+
 **Card pane**:
 The authoring editor's second pane: **the cards this note currently generates**, answering "what will
 I be asked" (ADR-0012 §1). Ordered by **raw slot number**, live and dormant alike — never grouped by
@@ -530,3 +548,9 @@ surface that needed one.
 
 `cargo-apk` panics after signing when one crate has both a cdylib and a bin. The desktop binary is
 `cairn-desktop`. Adding a `[[bin]]` here breaks the Android release build (ADR-0003 §5).
+
+`cairn-desktop` carries **two** binaries — `cairn` and `cairn-fixture`, the bench's outside way in —
+and both are shims of the same shape. The rule that keeps them so is unchanged and is the reason
+`fixtures::install_into_platform_dirs` lives in *this* crate: logic written in `cairn-desktop` is
+never compiled by the Android build and never exercised on the handset, which is the same class of
+defect as a runtime platform check.

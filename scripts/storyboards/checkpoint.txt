@@ -1,0 +1,30 @@
+# The **10-minute checkpoint** (ADR-0006 §1, ADR-0034 §4), above a card that stays on screen and
+# stays gradeable.
+#
+# **This is the one bench state that is not a collection.** The checkpoint hangs off a sitting's
+# monotonic clock rather than off the log, so no pre-made collection reaches it — which is exactly
+# why the application contradicted its own accepted ADR here for ten months with nothing failing and
+# no test able to notice. `CAIRN_CHECKPOINT_SECONDS` shortens it; the *ten minutes* stay written where
+# the behaviour is, and the bench only ever subtracts (`crates/app/src/fixtures.rs`).
+#
+# The sentence the app draws is fixed copy and still reads *"10 minutes so far."* — the elapsed time
+# is not in the picture, and the arrangement is what this photographs.
+fixture backlog
+# The override has to be in the environment **before** the app starts, and the session script starts
+# it before reading a line of this file — so it is exported and the app relaunched onto the same
+# collection. `sh` is evaluated in this shell rather than a subshell precisely so that works.
+sh export CAIRN_CHECKPOINT_SECONDS=3
+restart
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+# `Start — all 25`. The checkpoint's clock starts here.
+mousemove %CX% 129 click 1
+sleep 1.5
+# Reveal is tap-the-card, so the capture shows the checkpoint over the state a reviewer is actually
+# in when ten minutes pass — answer on screen, grades under it (ADR-0006 §1: the card stays
+# *gradeable* while the checkpoint is up).
+mousemove %CX% 131 click 1
+sleep 4
+shot 09-checkpoint

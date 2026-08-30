@@ -8,6 +8,7 @@
 #   sleep <n>       wait n seconds
 #   restart         kill the app and start it again, on the same collection
 #   sh <command>    run a shell command (used for `xdotool type`, which needs its own quoting)
+#   fixture <name>  read by capture-desktop.sh before this script runs; ignored here
 #   <anything else> passed to xdotool verbatim, e.g. `mousemove %CX% 131 click 1`
 #   # <comment>     ignored
 #
@@ -88,8 +89,26 @@ while IFS= read -r line || [ -n "$line" ]; do
     line="$pre$(( lx + off ))$post"
   done
   line="${line//%LX%/$lx}"
+  # `%BY-n%` — `n` px **above the bottom of the output**, the vertical twin of `%LX+n%`.
+  #
+  # Since ADR-0035 the last control cluster on a screen is anchored to a reach line measured up from
+  # the bottom of the page, not down from the content above it. So a grade button's y is a function
+  # of the window *height*, and a literal measured at 800 lands in empty page at 860 — the same
+  # silent miss `%CX%` and `%LX+n%` exist to kill, arriving from the third axis. Rebuilt from the
+  # capture groups for the reason spelled out above: an unquoted `-` is harmless in a glob but the
+  # `+` next door was not, and writing the two forms differently is how one of them rots.
+  while [[ "$line" =~ (.*)%BY-([0-9]+)%(.*) ]]; do
+    pre="${BASH_REMATCH[1]}"
+    off="${BASH_REMATCH[2]}"
+    post="${BASH_REMATCH[3]}"
+    line="$pre$(( ${CAIRN_HEIGHT:-800} - off ))$post"
+  done
   case "$line" in
     \#*) continue ;;
+    # Read by `capture-desktop.sh` before this script exists — the pre-made collection has to be in
+    # place before the app opens it, and by now the app holds the database. Skipped rather than
+    # passed to xdotool, which would otherwise report an unknown command and carry on.
+    fixture\ *) continue ;;
     shot\ *)
       name="${line#shot }"
       sleep 0.8

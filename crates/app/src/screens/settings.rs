@@ -8,8 +8,8 @@ use cairn_store::Collection;
 
 use crate::screens::enrolment::enrolment_screen;
 use crate::{
-    bidi, body, field_label, fonts, full_width_button, heading, inbound, listing, optimise, sync,
-    text_field,
+    bidi, body, compact_button, field_label, fixtures, fonts, full_width_button, heading, inbound,
+    listing, optimise, sync, text_field,
 };
 use crate::{spacing, typography};
 
@@ -38,6 +38,28 @@ pub(crate) struct FileList {
     said: String,
 }
 
+/// **Temporary, and not a specified feature.** What the fixture bench carries between frames — the
+/// last thing an install had to say, verbatim. Held rather than logged because a handset run has no
+/// console the person holding it can read (as [`HandOff`]), and this is the one control here whose
+/// silent failure would be a *plausible* screen rather than a blank one.
+#[derive(Default)]
+pub(crate) struct Bench {
+    said: String,
+}
+
+/// **Temporary, and not a specified feature.** What the development controls at the bottom of
+/// Settings asked the application to do, once the collection borrow has ended.
+///
+/// Both arms close the open connection and unlink the databases, which cannot happen while
+/// [`settings_screen`] holds `&mut Collection` — so the controls only *ask*, exactly as the reset
+/// control has always done, and [`CairnApp`](crate::CairnApp) acts on the way out.
+pub(crate) enum BenchRequest {
+    /// Return this device to a first launch — the collection deleted and reseeded.
+    Reset,
+    /// Replace the collection with a pre-made one (`fixtures`).
+    Install(fixtures::Fixture),
+}
+
 /// The **Settings** destination (ADR-0021 §1), holding the sync surface (ADR-0015 §12, ADR-0019 §1).
 ///
 /// This renders the *surface* — the words and the refusals — for the not-yet-enrolled device: the
@@ -59,14 +81,15 @@ pub(crate) fn settings_screen(
     handoff: &mut HandOff,
     inbound: &mut Option<inbound::Inbound>,
     file_list: &mut FileList,
+    bench: &mut Bench,
     now_ms: i64,
-) -> bool {
+) -> Option<BenchRequest> {
     heading(ui, "Settings");
     ui.add_space(spacing::gap(2));
 
     if *setting_up {
         enrolment_screen(ui, setting_up);
-        return false;
+        return None;
     }
 
     // **Appearance sits first, directly under the heading**, and it is the one control here that is
@@ -112,7 +135,14 @@ pub(crate) fn settings_screen(
     ui.add_space(spacing::gap(3));
     ui.separator();
     ui.add_space(spacing::gap(2));
-    let reset = reset_control(ui);
+    let mut request = reset_control(ui).then_some(BenchRequest::Reset);
+
+    ui.add_space(spacing::gap(3));
+    ui.separator();
+    ui.add_space(spacing::gap(2));
+    if let Some(chosen) = fixture_bench(ui, bench) {
+        request = Some(chosen);
+    }
 
     ui.add_space(spacing::gap(3));
     ui.separator();
@@ -136,7 +166,65 @@ pub(crate) fn settings_screen(
     ui.add_space(spacing::gap(2));
     inbound_specimen(ui, coll, inbound.as_ref());
 
-    reset
+    request
+}
+
+/// **Temporary, and not a specified feature.** The fixture bench: the collection states the shipping
+/// seed never produces, one tap each (`fixtures`).
+///
+/// **This is the handset half of a bench whose other half is a binary.** The desktop harness installs
+/// a fixture from *outside*, into the scratch data directory it already owns; Android has no such
+/// route, because `data_dir` is `getFilesDir()` and nothing outside the app may write it — and #141
+/// found that even an uninstall does not clear it, because ADR-0007 §6 deliberately puts it in the
+/// Auto Backup set. A thumb tapping a button is the only way in, which is why this block exists
+/// rather than a flag.
+///
+/// The **checkpoint** is the one control here that installs no rows. ADR-0006 §1's ten-minute
+/// check-in hangs off a sitting's monotonic clock rather than off the log, so no pre-made collection
+/// reaches it; this shortens it for the rest of the process, which is the difference between a
+/// decided state that gets looked at and one that does not.
+///
+/// Returns what the person asked for; the caller acts once the collection borrow has ended.
+fn fixture_bench(ui: &mut egui::Ui, bench: &mut Bench) -> Option<BenchRequest> {
+    let mut request = None;
+
+    field_label(ui, "Fixtures (temporary)");
+    ui.add_space(spacing::gap(1));
+    body(
+        ui,
+        "Development control — replaces the collection with a pre-made one, to reach a screen the \
+         shipping seed cannot. Rows other devices hold come back on the next sync.",
+    );
+    ui.add_space(spacing::gap(1));
+
+    spacing::row_wrapped(ui, 1, |ui| {
+        for fixture in fixtures::Fixture::ALL {
+            if compact_button(ui, fixture.label()).clicked() {
+                bench.said = format!("Installing {} — {}…", fixture.key(), fixture.reaches());
+                request = Some(BenchRequest::Install(fixture));
+            }
+        }
+    });
+
+    ui.add_space(spacing::gap(2));
+    if fixtures::checkpoint_is_shortened() {
+        body(ui, "The 10-minute checkpoint is shortened for this run.");
+    } else if full_width_button(ui, "Shorten the checkpoint (temporary)").clicked() {
+        fixtures::set_checkpoint_after(fixtures::BENCH_CHECKPOINT_SECONDS);
+    }
+
+    if !bench.said.is_empty() {
+        ui.add_space(spacing::gap(1));
+        body(ui, &bench.said);
+    }
+    request
+}
+
+/// **Temporary, and not a specified feature.** What the last fixture install had to say — the state
+/// it reached, or why it did not. Called by [`CairnApp`](crate::CairnApp) after it has acted, because
+/// the install needs the collection this screen was holding.
+pub(crate) fn bench_said(bench: &mut Bench, said: String) {
+    bench.said = said;
 }
 
 /// **Temporary, and not a specified feature.** The file-list specimen: the first call site of
