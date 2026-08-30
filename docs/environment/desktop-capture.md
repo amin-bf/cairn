@@ -152,6 +152,7 @@ scripts/capture-desktop.sh scripts/storyboards/caught-up.txt 1280 800
 | `leeches` | the same floor **with** the leech entrance, and the leech screen behind it (ADR-0010 §6, §8) |
 | `crossing` | one card one failure day short of the floor — grade it *Forgot* and the sitting ends on the end-of-session pointer |
 | `backlog` | twenty-five due: a framed backlog, and the entrance's shorter-sitting line, which is the link accent's only call site |
+| `cloze` | a card whose two faces **overflow** the budget while the prompt alone does not — the only shape that makes ADR-0033 §4's step-down fire, and one the seed's six French words cannot produce at any width |
 
 `cargo build -p cairn-desktop` builds the installer, `cairn-fixture`, alongside the app;
 `crates/app/src/fixtures.rs` defines the states and says why they are collections rather than a seed
