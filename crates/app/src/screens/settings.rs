@@ -79,6 +79,13 @@ pub(crate) fn settings_screen(
     // wraps, so the storyboard clicked the right place at 1280 and empty page at 560 — producing
     // seven perfectly valid dark captures of a light storyboard, with nothing failing. Nothing above
     // a one-word heading can wrap, so this position is the same at both.
+    // **PROTOTYPE #154**, directly under the heading and above Appearance — every row it draws has
+    // to be clickable at both judging widths, and Appearance's sentence wraps at 560. Never merges.
+    crate::proto::switcher(ui);
+    ui.add_space(spacing::gap(3));
+    ui.separator();
+    ui.add_space(spacing::gap(2));
+
     theme_control(ui, coll);
     ui.add_space(spacing::gap(3));
     ui.separator();
@@ -135,6 +142,12 @@ pub(crate) fn settings_screen(
     ui.separator();
     ui.add_space(spacing::gap(2));
     inbound_specimen(ui, coll, inbound.as_ref());
+
+    // **PROTOTYPE #154.** The frame-cost readout goes last because its height varies. Never merges.
+    ui.add_space(spacing::gap(3));
+    ui.separator();
+    ui.add_space(spacing::gap(2));
+    crate::proto::cpu_readout(ui);
 
     reset
 }

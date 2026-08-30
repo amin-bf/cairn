@@ -624,6 +624,9 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
                     (!card.answer.is_empty()).then_some(card.answer.as_str()),
                     Some(&box_badge_wording(card.reviews > 0, card.box_)),
                     surface::FIT,
+                    // **PROTOTYPE #154.** A card in the editor's pane is never in the middle of a
+                    // reveal — both faces are the subject of the screen — so it is fully open.
+                    1.0,
                 );
                 ui.add_space(spacing::gap(2));
             }

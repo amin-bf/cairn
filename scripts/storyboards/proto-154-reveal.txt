@@ -1,0 +1,164 @@
+# PROTOTYPE #154 — the reveal, five candidates at three points in the transition.
+#
+# **A still cannot photograph a jump**, which is why the reveal is judged as a running sitting and
+# not from these. What these are for is the write-up: the middle frame of a transition is the thing
+# the argument is about, and a settled capture — four seconds after the tap — can never reach it. So
+# the prototype can *hold* `t` at a fraction, and this walks the grid.
+#
+# Fifteen shots: hold 0%, 50% and 100% × candidates A, B, C, D and E. At 0% the card is drawn as it
+# looks *before* the tap, with `revealed` already true — which is how the reserved candidates' empty
+# lower half becomes photographable at all.
+#
+# **Every coordinate here is frame-relative and identical at 1280x800 and 560x860**, which was
+# measured rather than assumed: the switcher sits directly under the one-word heading, above
+# Appearance's sentence, and that sentence is the thing that wraps at 560 and moves everything under
+# it by 17px.
+#
+# The switcher's rows, all at `%LX+80%` except the hold row:
+#   A 101   B 119   C 137   D 156   E 174
+#   hold:  running %LX+29%   0% %LX+81%   25% %LX+120%   50% %LX+164%   75% %LX+207%   100% %LX+254%
+#   at y=283
+# The nav row is y=11: Review %LX+27%, Notes %LX+86%, Settings %LX+140%.
+#
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+
+# --- Review once, to get a card on screen and revealed -------------------------------------------
+# The count picker sits at the start of its line: `5` then `All 5`. `+39` reaches `All 5`.
+mousemove %LX+39% 112 click 1
+sleep 1.2
+# Reveal is tap-the-card. From here on `revealed` stays true for this card, so the grid below never
+# has to tap it again — only to change what `t` is held at.
+mousemove %CX% 131 click 1
+sleep 1.2
+
+# --- hold 0%: what each candidate draws *before* the answer arrives -------------------------------
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+81% 283 click 1
+sleep 0.6
+mousemove %LX+80% 101 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 10-A-hold000
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 119 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 11-B-hold000
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 137 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 12-C-hold000
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 156 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 13-D-hold000
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 174 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 14-E-hold000
+
+# --- hold 50%: the middle frame, which is the whole argument --------------------------------------
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+164% 283 click 1
+sleep 0.6
+mousemove %LX+80% 101 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 20-A-hold050
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 119 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 21-B-hold050
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 137 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 22-C-hold050
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 156 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 23-D-hold050
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 174 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 24-E-hold050
+
+# --- hold 100%: the settled state, which is where the candidates must agree ------------------------
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+254% 283 click 1
+sleep 0.6
+mousemove %LX+80% 101 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 30-A-hold100
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 119 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 31-B-hold100
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 137 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 32-C-hold100
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 156 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 33-D-hold100
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 174 click 1
+sleep 0.6
+mousemove %LX+27% 11 click 1
+sleep 1.2
+shot 34-E-hold100

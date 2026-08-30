@@ -1,0 +1,159 @@
+# PROTOTYPE #154 — the overlay's material, five candidates in both themes.
+#
+# The app's only overlay is the three combo boxes on Notes, and this photographs the deck filter's.
+# Two decks are created first so the popup has three rows: a one-row popup is too small a thing to
+# judge a shadow against, and the seed ships no decks at all.
+#
+# **This is the half of the ticket a still *can* answer.** The reveal needs a running sitting; the
+# material does not, and #143's instrument — blur it until nothing is legible — works on a PNG.
+#
+# Coordinates, frame-relative and identical at 1280x800 and 560x860:
+#   nav y=11: Review %LX+27%, Notes %LX+86%, Settings %LX+140%
+#   the overlay rows, at %LX+80%: 1 y=494, 2 y=512, 3 y=530, 4 y=548, 5 y=566
+#   Appearance y=698: System %LX+27%, Light %LX+84%, Dark %LX+130%
+#   the deck filter's combo box: %LX+50% y=145
+#
+# A popup swallows the click that closes it, so every cycle spends one click on empty page before
+# reaching for the nav row.
+mousemove %CX% 600 click 1
+sleep 1
+
+# --- two decks, once ------------------------------------------------------------------------------
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+300% 165 click 1
+sleep 0.5
+sh xdotool type --delay 40 'Cuisine'
+sleep 0.5
+mousemove %LX+36% 165 click 1
+sleep 1
+mousemove %LX+300% 165 click 1
+sleep 0.5
+sh xdotool type --delay 40 'Voyage'
+sleep 0.5
+mousemove %LX+36% 165 click 1
+sleep 1
+
+# --- dark ------------------------------------------------------------------------------------------
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+130% 698 click 1
+sleep 1.2
+mousemove %LX+80% 494 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 40-dark-1-today
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 512 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 41-dark-2-edge
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 530 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 42-dark-3-shadow
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 548 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 43-dark-4-rise
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 566 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 44-dark-5-rise-and-shadow
+mousemove %CX% 600 click 1
+sleep 0.6
+
+# --- light -------------------------------------------------------------------------------------
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+84% 698 click 1
+sleep 1.5
+mousemove %LX+80% 494 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 50-light-1-today
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 512 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 51-light-2-edge
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 530 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 52-light-3-shadow
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 548 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 53-light-4-rise
+mousemove %CX% 600 click 1
+sleep 0.6
+
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+80% 566 click 1
+sleep 0.6
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 54-light-5-rise-and-shadow

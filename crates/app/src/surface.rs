@@ -131,11 +131,24 @@ pub fn card(
     answer: Option<&str>,
     badge: Option<&str>,
     min_height: f32,
+    t: f32,
 ) -> Response {
+    // **PROTOTYPE #154.** `t` is how far through the reveal this frame is, and `answer`/`badge` are
+    // now what the card *has* rather than what is currently shown — the card decides visibility, so
+    // the layout can reserve room for a face that has not arrived yet. `crate::proto` says which
+    // candidate is being drawn; see its module header for the table.
+    let candidate = crate::proto::reveal();
+    let t = t.clamp(0.0, 1.0);
+    // Room is reserved either because the candidate reserves it, or because the answer is already
+    // on its way in — which is candidate A and B's layout, the one the application draws today.
+    let laid_out = candidate.reserves_room() || t > 0.0;
+    let answer = answer.filter(|_| laid_out);
+    let badge_room = badge.filter(|_| laid_out);
+
     let pad = padding();
     let inner_width = (ui.available_width() - pad * 2.0).max(1.0);
     let budget = (min_height - pad * 2.0).max(0.0);
-    let badge_line = if badge.is_some() {
+    let badge_line = if badge_room.is_some() {
         typography::SMALL * 1.4
     } else {
         0.0
@@ -170,13 +183,17 @@ pub fn card(
         .inner_margin(egui::Margin::same(pad as i8))
         .show(ui, |ui| {
             ui.set_min_size(vec2(inner_width, height));
-            if let Some(badge) = badge {
+            if let Some(badge) = badge_room {
                 let layout = if badge_side == Align::LEFT {
                     Layout::left_to_right(Align::Min)
                 } else {
                     Layout::right_to_left(Align::Min)
                 };
                 ui.with_layout(layout, |ui| {
+                    // **PROTOTYPE #154.** The badge's *arrival* is its whole craft change (#149):
+                    // it fades up with the answer and gains nothing else. Its room is already
+                    // reserved above, so this only decides how visible it is.
+                    ui.multiply_opacity(t);
                     ui.label(
                         egui::RichText::new(badge)
                             .font(FontId::proportional(typography::SMALL))
@@ -188,17 +205,89 @@ pub fn card(
             // computed this from `display * 1.3 * 2` — an *assumption* that both faces are one
             // line each — so any card that wrapped was centred against a number with nothing to do
             // with its contents.
-            ui.add_space(((height - content) / 2.0).max(0.0));
+            // **PROTOTYPE #154.** The leading space is what re-places the prompt at the reveal, and
+            // it is the whole of the 42px jump: with the answer laid out, `content` grows and the
+            // space above it shrinks. A candidate that reserves room computes it once and never
+            // moves it; the wipe interpolates it, which is precisely the movement #149 §2 forbids
+            // and the reason the wipe is the rule's opponent rather than a variant of it.
+            let lead = if candidate.wipes() {
+                let shut = content_height(ui, prompt, None, 0.0, size, inner_width);
+                let open = (height - content) / 2.0;
+                let closed = (height - shut) / 2.0;
+                closed + (open - closed) * t
+            } else {
+                (height - content) / 2.0
+            };
+            ui.add_space(lead.max(0.0));
             centred(ui, face(ui, prompt, size, inner_width));
             if let Some(answer) = answer {
-                ui.add_space(face_gap());
-                divider(ui);
-                ui.add_space(face_gap());
-                centred(ui, face(ui, answer, size, inner_width));
+                let galley = face(ui, answer, size, inner_width);
+                let block = face_gap() + 1.0 + face_gap() + galley.size().y;
+                if candidate.wipes() {
+                    wipe(ui, galley, block, t);
+                } else {
+                    // The hairline stands from the first frame only on **D**, where it is a claim
+                    // about the card rather than a part of the answer (ADR-0033 §1).
+                    if candidate.standing_rule() {
+                        ui.add_space(face_gap());
+                        divider(ui);
+                        ui.add_space(face_gap());
+                    } else {
+                        ui.scope(|ui| {
+                            ui.multiply_opacity(t);
+                            ui.add_space(face_gap());
+                            divider(ui);
+                            ui.add_space(face_gap());
+                        });
+                    }
+                    ui.scope(|ui| {
+                        ui.multiply_opacity(t);
+                        centred(ui, galley);
+                    });
+                }
             }
         });
 
     ui.interact(framed.response.rect, ui.id().with("card"), Sense::click())
+}
+
+/// **PROTOTYPE #154, candidate E.** The answer half opens rather than fading.
+///
+/// The block — gap, hairline, gap, answer — is laid out at its full size and then *clipped* to the
+/// fraction of it that has opened, anchored at the top, so the hairline enters first and the answer
+/// is uncovered from its own top edge downward. The room it takes grows with `t`, which is what
+/// pushes the prompt up over the transition rather than between two frames.
+///
+/// **This is the rule's opponent and it is drawn to be beaten or to win.** #149 §2 says motion may
+/// never change where a thing is; this moves the prompt 42px and travels the boundary the whole
+/// way. If the sitting prefers it, §2 is superseded rather than quietly ignored.
+fn wipe(ui: &mut Ui, galley: std::sync::Arc<egui::Galley>, block: f32, t: f32) {
+    let opened = (block * t).max(0.0);
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), opened), Sense::hover());
+    if opened <= 0.0 {
+        return;
+    }
+    let clip = rect.intersect(ui.clip_rect());
+    let painter = ui.painter().with_clip_rect(clip);
+
+    let rule_y = rect.top() + face_gap();
+    let half = rect.width() * 0.125;
+    let mid = rect.center().x;
+    painter.rect_filled(
+        egui::Rect::from_min_max(
+            egui::pos2(mid - half, rule_y),
+            egui::pos2(mid + half, rule_y + 1.0),
+        ),
+        CornerRadius::ZERO,
+        theme::card_divider(ui.visuals()),
+    );
+
+    let x = rect.left() + (rect.width() - galley.size().x).max(0.0) / 2.0;
+    painter.galley(
+        egui::pos2(x, rect.top() + face_gap() + 1.0 + face_gap()),
+        galley,
+        Color32::WHITE,
+    );
 }
 
 /// Draw a galley centred in the column and advance the cursor by its height.
@@ -255,7 +344,9 @@ mod tests {
         spacing::install(&ctx);
         let out = ctx.run_ui(Default::default(), |ui| {
             ui.set_width(width);
-            card(ui, prompt, answer, badge, min_height);
+            // **PROTOTYPE #154.** Fully revealed: these tests are about what a finished card draws,
+            // and the transition is judged in a sitting rather than asserted here.
+            card(ui, prompt, answer, badge, min_height, 1.0);
         });
 
         fn walk(shape: &egui::Shape, into: &mut Vec<(String, egui::Pos2, f32)>) {

@@ -277,6 +277,53 @@ pub fn link(visuals: &Visuals) -> Color32 {
     visuals.hyperlink_color
 }
 
+// --- PROTOTYPE #154: the overlay's material ------------------------------------------------------
+//
+// **Never merges.** These are the candidates `crate::proto` switches between, and they are named
+// here rather than in `proto` because this module is the only one in the crate that names a colour
+// and a prototype is not a reason to start a second naming site.
+
+/// The fill of a surface that is **temporarily on top of the page** — the risen candidate.
+///
+/// **It rises by exactly as much as a card sinks, and that is the whole construction.** ADR-0033
+/// cuts a card *into* the page, so depth is subtractive everywhere permanent; the one surface #149
+/// says is temporary is therefore the one surface that goes the other way, by the same amount. Dark
+/// delivers **1.121:1** between the page and the card, so the popup is 1.121:1 above the page in
+/// both themes — placed by the gap dark delivers rather than by each theme's own page-relative
+/// ratio, which is [ADR-0036 §2](../../../docs/adr/0036-the-light-palette.md)'s method and the thing
+/// it was written to stop anyone mirroring.
+///
+/// **Two facts the arithmetic hands over, both worth the sitting knowing.** In dark the risen
+/// direction is *fully occupied*: `STONE_3` is the ordinary control at 1.099, `STONE_4` the
+/// separator at 1.222, `STONE_5` the primary at 1.293 — every rung above the page already means
+/// something, so this lands between two of them rather than on one. In light the risen direction is
+/// *empty and nearly exhausted*: there is **1.305:1** in total between the page and pure white, no
+/// role occupies any of it, and this rise spends 1.125 of it. So light can afford exactly one risen
+/// surface, which is the strongest argument there is that only a popup gets one.
+const POPUP_RISEN_DARK: Color32 = rgb(0x22282b); // 1.124:1 above the dark page
+const POPUP_RISEN_LIGHT: Color32 = rgb(0xeaeff0); // 1.125:1 above the light page
+
+/// **PROTOTYPE #154.** The fill of an open popup, risen or left on the page's own colour.
+pub fn popup_fill(visuals: &Visuals, risen: bool) -> Color32 {
+    if !risen {
+        visuals.panel_fill
+    } else if visuals.dark_mode {
+        POPUP_RISEN_DARK
+    } else {
+        POPUP_RISEN_LIGHT
+    }
+}
+
+/// **PROTOTYPE #154.** The edge of an open popup: the **separator** rung, which is the line this
+/// application already draws between one thing and another, and which exists in both themes.
+///
+/// The alternative was a rung of its own, and it is not obviously better: a popup's edge makes the
+/// same claim a separator does — *this is a boundary* — and stock's unassigned grey (60 in dark, 190
+/// in light) is off the ramp in both, so anything on it is an improvement over what ships.
+pub fn popup_stroke(visuals: &Visuals) -> Stroke {
+    Stroke::new(1.0, visuals.widgets.noninteractive.bg_stroke.color)
+}
+
 /// **Which theme the user asked for** (ADR-0036 §3). The decision, as distinct from
 /// `egui::ThemePreference`, which is one renderer's way of carrying it — a native client honours
 /// the same three options against its own platform setting.

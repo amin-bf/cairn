@@ -175,7 +175,11 @@ pub(crate) fn review(
 
             // A new card on screen resets the reveal and the answer-timer; the same card across
             // frames keeps them, so a reveal survives a repaint.
-            if s.shown != Some(offered.card) {
+            // **PROTOTYPE #154** binds its animation reset to this same test — see
+            // `proto::progress`. The two traps #123 named both live in the choice of animation id,
+            // and this is the frame on which one of them has to be discharged.
+            let card_changed = s.shown != Some(offered.card);
+            if card_changed {
                 s.shown = Some(offered.card);
                 s.revealed = false;
                 s.card_shown = Instant::now();
@@ -196,16 +200,21 @@ pub(crate) fn review(
             // a queue (scheduling `CONTEXT.md`); a card with no history reads `new`, never `box 1`,
             // which would state a durability nothing has measured (ADR-0006 §6). Which corner it
             // takes follows the prompt's script — see `surface`.
-            let badge_text = s
-                .revealed
-                .then(|| box_badge_wording(!offered.is_new, offered.box_));
-            let answer = s.revealed.then_some(rendered.answer.as_str());
+            // **PROTOTYPE #154.** The card is now handed both faces and *how far through the
+            // reveal* the frame is, rather than being handed the answer only once it is due. That
+            // is the change the reserved candidates need: room can only be kept for a face the
+            // card knows about. `progress` returns 0 or 1 exactly for candidate A, so today's
+            // behaviour is still reachable rather than approximated.
+            let badge_text = box_badge_wording(!offered.is_new, offered.box_);
+            let t = crate::proto::progress(ui, card_changed, s.revealed);
+            crate::proto::note_frame(t > 0.0 && t < 1.0);
             if surface::card(
                 ui,
                 &rendered.prompt,
-                answer,
-                badge_text.as_deref(),
+                Some(rendered.answer.as_str()),
+                Some(badge_text.as_str()),
                 surface::REVIEW_HEIGHT,
+                t,
             )
             .clicked()
             {

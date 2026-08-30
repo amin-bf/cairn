@@ -28,6 +28,8 @@ pub mod markdown;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
+/// **PROTOTYPE #154** — motion and elevation. Never merges; see the module header.
+pub mod proto;
 mod screens;
 pub mod session;
 pub mod spacing;
@@ -432,6 +434,12 @@ impl eframe::App for CairnApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // **PROTOTYPE #154.** The overlay's material is written per frame because the candidate is
+        // switched at runtime, and the previous frame's own CPU cost is folded into the running
+        // still/animating split. Both go first so a frame that returns early is still counted.
+        proto::apply_overlay(ui.ctx());
+        proto::report_frame(_frame.info().cpu_usage);
+
         // The shipped font set is installed here, on the first frame, and this frame draws nothing:
         // `set_fonts` applies at the start of the *next* pass, so the newly-named bold family is not
         // referenceable yet and any text drawn now would use the stock faces (ADR-0012 §8, ADR-0003

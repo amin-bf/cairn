@@ -1,0 +1,45 @@
+# PROTOTYPE #154 — the frame-cost measurement.
+#
+# #123 computed that tessellation is not cached between frames, so a 0.2s transition is roughly
+# twelve full layout-and-tessellation passes over the whole viewport — and said in as many words that
+# nothing was run. This runs it.
+#
+# Five reveals with the transition **running** (candidate C at its opening 200ms / cubic_out), each
+# followed by a grade so the next card comes up unrevealed. `eframe`'s own `cpu_usage` for each frame
+# is folded into a still/animating split and printed to stdout every 120 frames of either kind, so
+# the numbers come off the harness's log rather than out of a screenshot.
+#
+# Nothing is shot. The output is the stdout lines.
+mousemove %CX% 600 click 1
+sleep 1
+# All 5.
+mousemove %LX+39% 112 click 1
+sleep 2
+# Reveal, wait for the transition to finish and for the still count to accumulate, grade with *Good*.
+mousemove %CX% 131 click 1
+sleep 3
+mousemove %CX% 618 click 1
+sleep 3
+mousemove %CX% 131 click 1
+sleep 3
+mousemove %CX% 618 click 1
+sleep 3
+mousemove %CX% 131 click 1
+sleep 3
+mousemove %CX% 618 click 1
+sleep 3
+mousemove %CX% 131 click 1
+sleep 3
+mousemove %CX% 618 click 1
+sleep 3
+mousemove %CX% 131 click 1
+sleep 3
+mousemove %CX% 618 click 1
+sleep 3
+# The readout is at the very bottom of Settings, so it is scrolled to and pressed — which prints the
+# split even if neither counter has crossed a multiple of 120.
+mousemove %LX+140% 11 click 1
+sleep 1.5
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 2
+shot 60-settings-bottom
