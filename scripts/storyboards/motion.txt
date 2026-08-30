@@ -1,0 +1,78 @@
+# **Motion and elevation** (ADR-0037) — the reveal and the one surface that floats, in **dark**.
+#
+# Runs on the `cloze` fixture rather than the seed, and that is the whole point of the storyboard.
+# A vocabulary card grows by a *word* at the reveal; a cloze card grows by a whole *face*, because
+# its two faces are the same sentence differing by one masked word. Only the second shape reaches
+# ADR-0033 §4's step-down, and until ADR-0037 §5 the step-down fired **at the reveal** — the prompt
+# drawn at display before the tap and at heading after it. No capture in this repository could ever
+# have shown that: every one is of six French words, and no card in that seed is long enough.
+#
+# Coordinates, frame-relative and identical at 1280x800 and 560x860:
+#   nav y=11: Review %LX+27%, Notes %LX+86%, Settings %LX+140%
+#   the entrance's one primary: %CX% y=129 — full width, so the centre reaches it at either width
+#   the card: %CX% y=254 — the whole face is the reveal target (ADR-0006 §3)
+#   the grades: %CX% %BY-183% reaches *Good*
+#   the deck filter's combo box: %LX+50% y=145; the new-deck field %LX+300% y=165, its button %LX+36%
+#
+# **The grade row is the one click here that a literal y cannot reach**, and this storyboard was
+# written wrong before it was written right. ADR-0035 §1 anchors the last control cluster to a line
+# above the **bottom of the page**, so its y is a function of the window height: *Good* is at 677 in
+# an 860-tall window and 617 in an 800-tall one. A literal 677 lands on it at 560x860 and on empty
+# page at 1280x800 — and the run still produces five perfectly valid images, of the previous card,
+# under the next card's names. That is the silent miss `%CX%` and `%LX+n%` were introduced to kill,
+# arriving from the third axis, which is what `%BY-n%` is for. 183 is the same at both because the
+# reach line is the same at both.
+#
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+fixture cloze
+mousemove %CX% 600 click 1
+sleep 1
+
+# --- the reveal, on a card that fits ---------------------------------------------------------------
+mousemove %CX% 129 click 1
+sleep 1.5
+# **Shut.** The prompt sits on the card's own centre line — no badge, no hairline, no empty half.
+# This is the frame the wipe opens from, and it is pixel-identical to what the card drew before
+# ADR-0037: if it ever drifts one badge row low again, that is the closed lead failing to pay for
+# the row it draws (ADR-0037's consequences), and it is visible here and nowhere else.
+shot 01-reveal-shut
+mousemove %CX% 254 click 1
+sleep 1.5
+# **Open.** Both faces, the hairline between them, the badge arrived. The card's own rect is
+# unchanged between these two frames; what moved is the boundary inside it.
+shot 02-reveal-open
+
+# --- the reveal, on a card that steps down ---------------------------------------------------------
+# Grade *Good* to reach the second card, whose faces overflow the budget at 560. **This pair is the
+# evidence for ADR-0037 §5**: the prompt must be at the same tier and the same wrap in both shots.
+mousemove %CX% %BY-183% click 1
+sleep 1.5
+shot 03-stepdown-shut
+mousemove %CX% 254 click 1
+sleep 1.5
+shot 04-stepdown-open
+
+# --- the overlay ------------------------------------------------------------------------------------
+# Two decks first, so the popup has three rows: a one-row popup is too small a thing to judge a
+# shadow against, and no fixture ships a deck.
+mousemove %LX+86% 11 click 1
+sleep 1.5
+mousemove %LX+300% 165 click 1
+sleep 0.5
+sh xdotool type --delay 40 'Cuisine'
+sleep 0.5
+mousemove %LX+36% 165 click 1
+sleep 1
+mousemove %LX+300% 165 click 1
+sleep 0.5
+sh xdotool type --delay 40 'Voyage'
+sleep 0.5
+mousemove %LX+36% 165 click 1
+sleep 1
+# **The only thing in the application that floats** (ADR-0037 §1). Before this it was drawn in
+# *exactly* the page colour inside stock egui's unassigned grey hairline with no shadow, in every
+# capture this repository holds. It should now read as a slab sitting on top of the page.
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 05-overlay

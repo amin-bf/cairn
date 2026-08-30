@@ -201,7 +201,24 @@ the editor — is retired along with the pre-reveal edit that needed it, so *edi
 ADR-0006 §4's *"self-grading can't happen before the answer is seen"* now holds because **no route
 into the editor precedes the reveal**, rather than because a rule about the editor's side-effect
 holds — which is why restoring a pre-reveal edit control breaks the guarantee with nothing failing.
-_Avoid_: Show answer, flip — and never *a second cause*, which is the thing ADR-0029 removed.
+**It is an *opening*, not a swap** (ADR-0037 §3). The card is one object with two faces (ADR-0033
+§1), so turning it over is that object opening: the answer's room is kept from the first frame and
+uncovered by a clip that grows, the prompt rides the boundary, and the card's own rect never changes.
+That makes the reveal the **one** place in the product where something moves — everything that
+*arrives* still fades in, and nothing anywhere slides, scales, springs or grows on arrival.
+_Avoid_: Show answer, flip, transition — and never *a second cause*, which is the thing ADR-0029
+removed.
+
+**Elevation**:
+That a surface is **temporarily on top of the page and will go away** (ADR-0037 §1). Only what the
+renderer already calls a popup, a menu or a window has it; nothing permanent lifts off the page,
+because a card is cut *into* it (ADR-0033 §1) and depth here is subtractive everywhere else. It is
+three values at once — a **rise** 1.12:1 above the page, the **separator** rung as an edge, and a
+**shadow** — and *one material in both themes*, differing only in the alpha, which is 8× apart
+precisely so the weight it buys is the same. The notice channel is persistent and non-modal
+(ADR-0015 §5) and casts none.
+_Avoid_: Depth, layer, z-index, *raised card* — and never *a shadow on a control*, which no widget
+in egui can carry and no permanent surface here may claim.
 
 **Box badge**:
 The small, non-interactive indicator shown **only after reveal**. Reports durability. Never sorted,
@@ -267,7 +284,10 @@ _Avoid_: Leech notification, session summary, a per-session dismissal marker.
 
 **Fixture** / **The fixture bench**:
 A **pre-made collection**, named by the screen it makes reachable — `caught-up`, `leeches`,
-`crossing`, `backlog` — and the module that defines them (`fixtures`). Test scaffolding, not a
+`crossing`, `backlog`, `cloze` — and the module that defines them (`fixtures`). The fifth names a
+card *shape* rather than a queue state, and it is the one that shows the bench is not only about
+scheduling: ADR-0033 §4's step-down needs a card whose two faces overflow the budget, which the
+seed's six French words cannot produce at any width. Test scaffolding, not a
 feature, and marked so wherever it appears. It exists because every capture this repository holds is
 a **first launch**: the harness wipes the whole data directory per run, so the seed is the only
 collection anything is ever photographed against, and the caught-up floor, the leech screen and the

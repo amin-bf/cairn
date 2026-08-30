@@ -198,6 +198,24 @@ should be read as the intent it states.
 - **The lower-case badge is a visible change to shipped copy** that no ticket asked for. It discharges
   ADR-0030 §4 rather than deciding anything new.
 
+### What §4 did not know it had decided
+
+**[ADR-0037 §5](0037-motion-and-elevation.md) corrects the step-down, and the defect was shipped from
+the day this ADR landed.** The tier is chosen against the card's content, and until 0037 the content
+*changed at the reveal* — so on a card whose two faces together overflow the 300px budget while the
+prompt alone does not, the prompt was drawn at **display before the tap and at heading after it**.
+Measured at 560 on ordinary cloze notes: `La Tour Eiffel … de […]` and `Le Traité de Versailles …
+les […]` both go 40 → 20, and the sentence being read halves in size at the moment the reader is
+looking hardest at it.
+
+Three things about it are worth keeping. It is **invisible at 1280**, where nothing steps down, so it
+existed only at the application's own window. It went unseen through every capture in this repository
+because the seed is six French words and **no card in it can trigger the step-down at all** — the
+tier that this ADR added is the tier the seed cannot reach, which is the same shape as #133's own
+finding that 40px had only ever been judged against `chien`/`dog`, one layer deeper. And the fix is
+not a change to §4: the step-down is right, and what was wrong is that it was evaluated twice against
+two different contents. 0037 computes it once, against the full card, and holds it across the reveal.
+
 ### What this does not settle
 
 | Question | Whose |

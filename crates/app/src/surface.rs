@@ -124,14 +124,31 @@ fn content_height(
 /// a *surface* rather than a control that happens to be large.
 ///
 /// `badge` is the box badge's wording (`crate::box_badge_wording`), or `None` where a card carries
-/// no durability to report — before the reveal, since the badge appears only after it.
+/// no durability to report.
+///
+/// # `answer` is what the card **has**, and `t` is how far open it is (ADR-0037 §3)
+///
+/// The reveal is the answer half **opening**, so the card must know about a face it is not yet
+/// showing: `t` runs 0 (shut) to 1 (fully turned over), and at 0 the answer occupies its room
+/// without being drawn. Pass `1.0` for a card that is simply both faces, which is what the editor's
+/// card pane wants.
+///
+/// **Two things fall out of laying the answer out from the first frame, and both are decisions.**
+/// The prompt is placed once and rides the opening rather than being re-placed by it — which is what
+/// stopped the 41.9px jump the reveal used to make. And the **tier is chosen once, against the full
+/// card**, so a wrapping face no longer steps down *at the reveal*: before ADR-0037 §5 the prompt was
+/// drawn at display before the tap and at heading after it, on any card whose two faces overflow the
+/// budget while the prompt alone does not. Every cloze note longer than a line did that, at 560, in
+/// every capture this repository held.
 pub fn card(
     ui: &mut Ui,
     prompt: &str,
     answer: Option<&str>,
     badge: Option<&str>,
     min_height: f32,
+    t: f32,
 ) -> Response {
+    let t = t.clamp(0.0, 1.0);
     let pad = padding();
     let inner_width = (ui.available_width() - pad * 2.0).max(1.0);
     let budget = (min_height - pad * 2.0).max(0.0);
@@ -170,6 +187,13 @@ pub fn card(
         .inner_margin(egui::Margin::same(pad as i8))
         .show(ui, |ui| {
             ui.set_min_size(vec2(inner_width, height));
+            // What the badge row *actually* consumes, as against the `badge_line` allowance
+            // reserved for it above. **The two are not the same number** — 16.8 budgeted, 14.0
+            // drawn — and the lead below is measured from the galleys, so it has to subtract what
+            // was drawn. Getting this wrong is not subtle in its effect and is invisible in its
+            // cause: it started the card one badge row low and made the reveal travel 56px to fix
+            // a 42px jump (ADR-0037's consequences).
+            let before_badge = ui.cursor().top();
             if let Some(badge) = badge {
                 let layout = if badge_side == Align::LEFT {
                     Layout::left_to_right(Align::Min)
@@ -177,6 +201,10 @@ pub fn card(
                     Layout::right_to_left(Align::Min)
                 };
                 ui.with_layout(layout, |ui| {
+                    // **The badge's arrival is its whole craft change** (#149 §7): it fades up with
+                    // the answer and gains no picture, no fill, no colour and no count. Its room is
+                    // reserved above, so this only decides how visible it is.
+                    ui.multiply_opacity(t);
                     ui.label(
                         egui::RichText::new(badge)
                             .font(FontId::proportional(typography::SMALL))
@@ -184,17 +212,30 @@ pub fn card(
                     );
                 });
             }
-            // Both faces sit on the card's centre line, measured from the galleys. Variant E
-            // computed this from `display * 1.3 * 2` — an *assumption* that both faces are one
-            // line each — so any card that wrapped was centred against a number with nothing to do
-            // with its contents.
-            ui.add_space(((height - content) / 2.0).max(0.0));
+            // Both faces sit on the card's centre line, measured from the galleys. An earlier
+            // version computed this from `display * 1.3 * 2` — an *assumption* that both faces are
+            // one line each — so any card that wrapped was centred against a number with nothing to
+            // do with its contents.
+            //
+            // **The leading space is what the reveal interpolates** (ADR-0037 §3). Shut, the prompt
+            // is centred as though it were alone, which is where today's unrevealed card puts it;
+            // open, it sits above the answer. The card is one object and this is the object opening
+            // — the one place in the product where something is allowed to move.
+            let lead = if answer.is_some() {
+                let shut = content_height(ui, prompt, None, 0.0, size, inner_width);
+                let drawn_badge = ui.cursor().top() - before_badge;
+                let closed = ((height - shut) / 2.0 - drawn_badge).max(0.0);
+                let open = (height - content) / 2.0;
+                closed + (open - closed) * t
+            } else {
+                (height - content) / 2.0
+            };
+            ui.add_space(lead.max(0.0));
             centred(ui, face(ui, prompt, size, inner_width));
             if let Some(answer) = answer {
-                ui.add_space(face_gap());
-                divider(ui);
-                ui.add_space(face_gap());
-                centred(ui, face(ui, answer, size, inner_width));
+                let galley = face(ui, answer, size, inner_width);
+                let block = face_gap() + 1.0 + face_gap() + galley.size().y;
+                wipe(ui, galley, block, t);
             }
         });
 
@@ -216,23 +257,45 @@ fn centred(ui: &mut Ui, galley: std::sync::Arc<egui::Galley>) {
         .galley(egui::pos2(x, rect.top()), galley, Color32::WHITE);
 }
 
-/// The hairline between a card's two faces: a quarter of the card's width, centred.
+/// The answer half, **opened** by `t` — the hairline, the gaps and the face, revealed together
+/// under a clip that grows (ADR-0037 §3).
 ///
-/// Wide enough to say *these are two halves*, short enough not to say *these are two things* — the
-/// distinction the whole one-object decision rests on. A full-width rule reads as a division
-/// between two stacked objects, which is the arrangement ADR-0033 §1 rejected.
-fn divider(ui: &mut Ui) {
-    let width = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(vec2(width, 1.0), Sense::hover());
-    let half = width * 0.125;
+/// The whole block is allocated at `block * t`, so the space the answer occupies grows with it and
+/// the card's own height never changes: what moves is the boundary between the two halves, and the
+/// prompt rides it because the lead above is interpolated to match. **Everything inside is drawn at
+/// its final position from the first frame** and clipped, rather than being drawn at an interpolated
+/// one — which is what makes this an opening rather than a slide, and is why the hairline appears to
+/// travel while never being asked to move.
+///
+/// The hairline itself is a quarter of the card's width, centred: wide enough to say *these are two
+/// halves*, short enough not to say *these are two things* — the distinction the whole one-object
+/// decision rests on (ADR-0033 §1). A full-width rule reads as a division between two stacked
+/// objects, which is the arrangement that ADR rejected.
+fn wipe(ui: &mut Ui, galley: std::sync::Arc<egui::Galley>, block: f32, t: f32) {
+    let opened = (block * t).max(0.0);
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), opened), Sense::hover());
+    if opened <= 0.0 {
+        return;
+    }
+    let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
+
+    let rule_y = rect.top() + face_gap();
+    let half = rect.width() * 0.125;
     let mid = rect.center().x;
-    ui.painter().rect_filled(
+    painter.rect_filled(
         egui::Rect::from_min_max(
-            egui::pos2(mid - half, rect.top()),
-            egui::pos2(mid + half, rect.top() + 1.0),
+            egui::pos2(mid - half, rule_y),
+            egui::pos2(mid + half, rule_y + 1.0),
         ),
         CornerRadius::ZERO,
         theme::card_divider(ui.visuals()),
+    );
+
+    let x = rect.left() + (rect.width() - galley.size().x).max(0.0) / 2.0;
+    painter.galley(
+        egui::pos2(x, rect.top() + face_gap() + 1.0 + face_gap()),
+        galley,
+        Color32::WHITE,
     );
 }
 
@@ -250,12 +313,28 @@ mod tests {
         badge: Option<&str>,
         min_height: f32,
     ) -> Vec<(String, egui::Pos2, f32)> {
+        drawn_at(width, prompt, answer, badge, min_height, 1.0).0
+    }
+
+    /// [`drawn`], at a chosen point in the reveal, and with the card's own rect — which the
+    /// ADR-0037 tests need in order to say *where the prompt is relative to the card* rather than
+    /// relative to the window.
+    #[allow(clippy::type_complexity)]
+    fn drawn_at(
+        width: f32,
+        prompt: &str,
+        answer: Option<&str>,
+        badge: Option<&str>,
+        min_height: f32,
+        t: f32,
+    ) -> (Vec<(String, egui::Pos2, f32)>, egui::Rect) {
         let ctx = egui::Context::default();
         typography::install(&ctx);
         spacing::install(&ctx);
+        let mut card_rect = egui::Rect::NOTHING;
         let out = ctx.run_ui(Default::default(), |ui| {
             ui.set_width(width);
-            card(ui, prompt, answer, badge, min_height);
+            card_rect = card(ui, prompt, answer, badge, min_height, t).rect;
         });
 
         fn walk(shape: &egui::Shape, into: &mut Vec<(String, egui::Pos2, f32)>) {
@@ -277,7 +356,7 @@ mod tests {
         for clipped in &out.shapes {
             walk(&clipped.shape, &mut found);
         }
-        found
+        (found, card_rect)
     }
 
     /// **The floor, and the reason it exists.** A paragraph card steps down off the display tier so
@@ -418,6 +497,90 @@ mod tests {
         assert!(
             lowest(&short) < lowest(&tall),
             "a FIT card should be shorter than a REVIEW_HEIGHT one"
+        );
+    }
+
+    /// **The answer is not on screen before the reveal** (ADR-0006 §4).
+    ///
+    /// This is the test the motion change most owes, and it is not a test about motion. The card is
+    /// now handed the answer from the first frame so its room can be kept — which is exactly the
+    /// shape of change that could put the one thing the application exists to withhold on screen by
+    /// accident, with nothing failing. It asserts on the **drawn shapes**, so a face that is laid
+    /// out, allocated and clipped away passes while a face that is merely faint does not.
+    #[test]
+    fn the_answer_is_not_drawn_before_the_reveal() {
+        let (shapes, _) = drawn_at(560.0, "chien", Some("dog"), Some("new"), REVIEW_HEIGHT, 0.0);
+        assert!(
+            shapes.iter().any(|(text, _, _)| text == "chien"),
+            "the prompt must be drawn shut — otherwise this test passes for the wrong reason"
+        );
+        assert!(
+            !shapes.iter().any(|(text, _, _)| text == "dog"),
+            "the answer was drawn at t=0: {shapes:?}"
+        );
+    }
+
+    /// **Shut, the card is where today's unrevealed card is** (ADR-0037 §3) — the prompt on the
+    /// card's own centre line, not one badge row below it.
+    ///
+    /// The defect this pins had no symptom in the source and a large one on screen: the badge row is
+    /// reserved and drawn from the first frame, and the closed lead was computed from a `shut`
+    /// height that passed a **zero** badge allowance, so the card opened 14px low and the reveal
+    /// travelled 56px to correct a 42px jump.
+    #[test]
+    fn the_shut_card_centres_the_prompt_on_the_cards_own_centre_line() {
+        let (shapes, rect) = drawn_at(560.0, "chien", Some("dog"), Some("new"), REVIEW_HEIGHT, 0.0);
+        let (_, pos, _) = shapes
+            .iter()
+            .find(|(text, _, _)| text == "chien")
+            .expect("the prompt is drawn");
+        // The galley's own height, so the comparison is centre against centre.
+        let ctx = egui::Context::default();
+        typography::install(&ctx);
+        let mut height = 0.0;
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            height = face(ui, "chien", TIERS[0], 560.0).size().y;
+        });
+        let offset = (pos.y + height / 2.0) - rect.center().y;
+        assert!(
+            offset.abs() < 1.0,
+            "a shut card must centre its prompt like an unrevealed card does; off by {offset:.2}px"
+        );
+    }
+
+    /// **The tier does not change at the reveal** (ADR-0037 §5).
+    ///
+    /// Before this, the tier was chosen against content that grew when the answer arrived, so a
+    /// card whose two faces overflow the budget while the prompt alone does not was drawn at
+    /// **display before the tap and heading after it** — the sentence halving in size at the moment
+    /// it is being read. Every cloze note longer than a line did it, at 560 only, and no capture in
+    /// this repository could show it because the seed is six French words.
+    #[test]
+    fn the_reveal_does_not_resize_the_prompt() {
+        // Long enough that prompt + answer overflow 300px at 560 while the prompt alone does not —
+        // which is exactly the ordinary cloze card, where prompt and answer are the same sentence.
+        let prompt = "La Tour Eiffel a été construite pour l'Exposition universelle de […]";
+        let answer = "La Tour Eiffel a été construite pour l'Exposition universelle de 1889";
+
+        let tier_at = |t: f32| {
+            let (shapes, _) = drawn_at(560.0, prompt, Some(answer), Some("new"), REVIEW_HEIGHT, t);
+            shapes
+                .iter()
+                .find(|(text, _, _)| text == prompt)
+                .map(|(_, _, size)| *size)
+                .expect("the prompt is drawn at every point in the reveal")
+        };
+
+        let shut = tier_at(0.0);
+        let open = tier_at(1.0);
+        assert_eq!(
+            shut, open,
+            "the prompt was drawn at {shut} shut and {open} open — the step-down fired at the reveal"
+        );
+        // And it is the tier the *whole card* fits in, not the one the prompt alone would take.
+        assert!(
+            shut < TIERS[0],
+            "this fixture must actually step down, or the test proves nothing; got {shut}"
         );
     }
 }

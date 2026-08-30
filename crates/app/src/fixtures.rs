@@ -124,15 +124,34 @@ pub enum Fixture {
     /// line is the link accent's only call site (ADR-0034 §2) and is invisible on a fresh collection,
     /// because a first-run queue is five cards and none of 5/10/20 is *shorter* than five.
     Backlog,
+    /// Cloze cards due, whose two faces together **overflow** the review card's budget while the
+    /// prompt alone does not — the one shape that makes ADR-0033 §4's step-down fire, and the one
+    /// the shipping seed cannot produce at all.
+    ///
+    /// It earns its place the way the other four do: it reaches a decided state nothing else can. A
+    /// cloze prompt and its answer are the *same sentence* differing by one masked word, so the card
+    /// grows by a whole face at the reveal where a vocabulary card grows by a word — and until
+    /// [ADR-0037 §5](../../../docs/adr/0037-motion-and-elevation.md) the tier was recomputed on that
+    /// larger content, so the prompt was drawn at **display before the tap and heading after it**.
+    /// That shipped from the day ADR-0033 landed, at 560 only, and no capture in this repository
+    /// could have shown it: every one of them is of six French words, and no card in that seed is
+    /// long enough to step down.
+    ///
+    /// **The four notes are chosen to span the outcomes, not to look plausible.** One fits on a line
+    /// at both judging widths; two wrap at 560 and not at 1280, so the two widths disagree about the
+    /// card's height; one has two blanks, so a single note generates two cards and the second card's
+    /// prompt shows the first blank already filled.
+    Cloze,
 }
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 4] = [
+    pub const ALL: [Fixture; 5] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
         Fixture::Backlog,
+        Fixture::Cloze,
     ];
 
     /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
@@ -143,6 +162,7 @@ impl Fixture {
             Fixture::Leeches => "leeches",
             Fixture::Crossing => "crossing",
             Fixture::Backlog => "backlog",
+            Fixture::Cloze => "cloze",
         }
     }
 
@@ -153,6 +173,7 @@ impl Fixture {
             Fixture::Leeches => "Leeches",
             Fixture::Crossing => "About to leech",
             Fixture::Backlog => "A backlog",
+            Fixture::Cloze => "Cloze cards",
         }
     }
 
@@ -163,6 +184,7 @@ impl Fixture {
             Fixture::Leeches => "the caught-up floor with the leech entrance, and the leech screen",
             Fixture::Crossing => "the end-of-session pointer, after one Forgot",
             Fixture::Backlog => "a framed backlog, and the entrance's shorter-sitting line",
+            Fixture::Cloze => "a card that steps down, and a reveal that grows by a whole face",
         }
     }
 
@@ -225,6 +247,15 @@ impl Fixture {
                     history.passes(card, [(60, Grade::Good)]);
                 }
             }
+            Fixture::Cloze => {
+                // **No history at all.** The state this fixture exists for is a card's *shape*, not
+                // its scheduling, and a new card is the cheapest way to put one on screen: the rate
+                // introduces all five, so Review draws a cloze card on the first frame of a capture
+                // run. Backdating them would add a claim about `fsrs` that this fixture is not about.
+                for text in CLOZE_TEXTS {
+                    cloze_note(coll, text)?;
+                }
+            }
         }
         history.write(coll, now_ms)?;
 
@@ -273,6 +304,30 @@ impl Fixture {
                     ..
                 } if due > 20 => None,
                 _ => Some("a backlog of more than twenty due, no new and no leeches"),
+            },
+            // **Five cards, four offered**, and the gap is the specification rather than a
+            // shortfall: ADR-0011 §7 introduces at most **one card per note per day**, so the
+            // two-blank note's second card is held back until tomorrow. Both numbers are checked
+            // because each pins something different — `cards` pins that cloze generated what its
+            // text says it generates (they are computed from content rather than declared, ADR-0002
+            // §5, so a change to the blank parser hands this fixture a different collection), and
+            // `new` pins the introduction rule that made 5 into 4.
+            //
+            // Nothing has ever been reviewed here, so the screen is `NewDeck` and not `Due` — the
+            // two are indistinguishable from the queue alone (`session`), and this fixture is the
+            // one in the bench that reaches the first.
+            Fixture::Cloze => match reached {
+                Reached {
+                    cards: 5,
+                    due: 0,
+                    new: 4,
+                    leeches: 0,
+                    state: ReviewState::NewDeck { new: 4 },
+                } => None,
+                _ => Some(
+                    "five cloze cards from four notes, four of them offered under the \
+                     one-per-note rule, on a deck nothing has been reviewed on",
+                ),
             },
         };
         match complaint {
@@ -397,6 +452,15 @@ fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, Strin
     Ok(CardRef::new(id, 0))
 }
 
+/// One `cloze` note. **No `CardRef` comes back**, and that is the kind's own shape rather than a
+/// shortcut: a cloze note's cards are not fixed, being one per numbered blank at `cloze_slot(n)`
+/// (ADR-0002 §5, ADR-0017 §3), so the ordinals depend on the text and this helper would have to
+/// re-parse it to name them. Nothing in [`Fixture::Cloze`] needs one — it writes no history.
+fn cloze_note(coll: &mut Collection, text: &str) -> Result<NoteId, String> {
+    coll.create_note("cloze", &[("Text", text)])
+        .map_err(|e| e.to_string())
+}
+
 // --- The checkpoint: the one bench state that is not a collection ------------------------------
 
 /// No override installed. `u64::MAX` rather than zero, because **zero seconds is a legal override** —
@@ -457,6 +521,26 @@ pub fn checkpoint_is_shortened() -> bool {
 // same application rather than as a different product. **They are deliberately different words**:
 // a screen photographed against `chien`/`chat` is ambiguous between a fixture and the seed, and the
 // silent failure this bench is most exposed to is a fixture that did not install.
+
+/// The cloze notes, chosen to span the **outcomes** rather than to look plausible.
+///
+/// Each line is annotated with what it is for, because a later reader trimming this list to three
+/// tidy sentences would remove the coverage without removing anything that looks like coverage —
+/// which is the whole failure mode this bench exists downstream of.
+const CLOZE_TEXTS: [&str; 4] = [
+    // One line at both judging widths: the closest cloze comes to the seed's short card, and the
+    // control that shows the step-down below is not simply *what cloze does*.
+    "Le chat {{1::mange}} la souris",
+    // Wraps at 560 and not at 1280, so the two widths disagree about the card's height — and it is
+    // therefore the note that shows ADR-0037 §5's defect at one width and hides it at the other.
+    "La Tour Eiffel a été construite pour l'Exposition universelle de {{1::1889}}",
+    // Two blanks: one note, two cards, and the second card's prompt shows the first blank filled.
+    "{{1::Bonjour}}, je m'appelle Amin et je {{2::travaille}} à Berlin",
+    // Long enough to overflow the budget at both widths, so the step-down fires everywhere and the
+    // face lands on its floor rather than merely one tier down.
+    "Le Traité de Versailles, signé le 28 juin 1919 dans la galerie des Glaces, mit fin à l'état \
+     de guerre entre l'Allemagne et les {{1::Alliés}}",
+];
 
 const CAUGHT_UP_WORDS: [(&str, &str); 12] = [
     ("la fenêtre", "the window"),

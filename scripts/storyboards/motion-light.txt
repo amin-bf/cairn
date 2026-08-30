@@ -1,0 +1,69 @@
+# The same five screens as `motion.txt`, in the **light** appearance (ADR-0036, ADR-0037).
+#
+# **Both themes or it is not judged.** #143's finding is that a rule can pass while its values fail,
+# and elevation is the most exposed thing on ADR-0037 to exactly that: a shadow is a darkening, and
+# a darkening is not one gesture across two grounds. The two alphas here differ by 8× — 200 dark, 25
+# light — precisely so the thing they buy is the same, and only a pair of captures shows it.
+#
+# **Settings is visited first, for `light.txt`'s reason.** Every screen after the switch is drawn
+# light; anything captured before it would be whatever the host's System preference resolves to,
+# which is not reproducible between machines.
+#
+# The theme is switched through the real control rather than an override, also for `light.txt`'s
+# reason: the appearance is a stored, device-local preference, so forcing it another way would
+# photograph a state the application cannot be put into — and this fails loudly if that control
+# stops working.
+#
+# y=93 for Appearance is the same at both widths, and it is that way on purpose: only the one-word
+# heading is above it, and a one-word heading cannot wrap. The control was moved there after a run
+# produced seven perfectly valid *dark* captures because prose above it wrapped at one width and not
+# the other (#143).
+fixture cloze
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+84% 93 click 1
+sleep 1.5
+
+# --- the reveal, on a card that fits ---------------------------------------------------------------
+mousemove %LX+27% 11 click 1
+sleep 1.2
+mousemove %CX% 129 click 1
+sleep 1.5
+shot 01-reveal-shut
+mousemove %CX% 254 click 1
+sleep 1.5
+shot 02-reveal-open
+
+# --- the reveal, on a card that steps down ---------------------------------------------------------
+# `%BY-183%`, never a literal — see `motion.txt`'s header. The grades ride ADR-0035 §1's reach line,
+# so their y is a function of the window height and a literal reaches them at one judging width only.
+mousemove %CX% %BY-183% click 1
+sleep 1.5
+shot 03-stepdown-shut
+mousemove %CX% 254 click 1
+sleep 1.5
+shot 04-stepdown-open
+
+# --- the overlay ------------------------------------------------------------------------------------
+# The pair to `motion.txt`'s last shot, and the one this storyboard exists for. Light is where the
+# rise is *nearly unaffordable* — 1.305:1 of headroom above the page in total, of which this spends
+# 1.125 — so it is also where a wrong value has nowhere to hide.
+mousemove %LX+86% 11 click 1
+sleep 1.5
+mousemove %LX+300% 165 click 1
+sleep 0.5
+sh xdotool type --delay 40 'Cuisine'
+sleep 0.5
+mousemove %LX+36% 165 click 1
+sleep 1
+mousemove %LX+300% 165 click 1
+sleep 0.5
+sh xdotool type --delay 40 'Voyage'
+sleep 0.5
+mousemove %LX+36% 165 click 1
+sleep 1
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 05-overlay

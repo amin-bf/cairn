@@ -175,7 +175,12 @@ pub(crate) fn review(
 
             // A new card on screen resets the reveal and the answer-timer; the same card across
             // frames keeps them, so a reveal survives a repaint.
-            if s.shown != Some(offered.card) {
+            // The reveal's animation resets on this same test (ADR-0037 §4): one id, snapped when
+            // the card changes. Keyed on the card instead, egui's animation map — which is never
+            // evicted — would retain an entry per card for the life of the process; left unreset,
+            // the next card's answer is drawn fading out for the whole duration.
+            let card_changed = s.shown != Some(offered.card);
+            if card_changed {
                 s.shown = Some(offered.card);
                 s.revealed = false;
                 s.card_shown = Instant::now();
@@ -196,16 +201,21 @@ pub(crate) fn review(
             // a queue (scheduling `CONTEXT.md`); a card with no history reads `new`, never `box 1`,
             // which would state a durability nothing has measured (ADR-0006 §6). Which corner it
             // takes follows the prompt's script — see `surface`.
-            let badge_text = s
-                .revealed
-                .then(|| box_badge_wording(!offered.is_new, offered.box_));
-            let answer = s.revealed.then_some(rendered.answer.as_str());
+            //
+            // **The card is handed both faces and how far open it is** (ADR-0037 §3), rather than
+            // being handed the answer only once it is due. Room can only be kept for a face the card
+            // knows about, and keeping it is what stops the prompt jumping and what holds the type
+            // tier across the reveal (§5). `t` is 0 until the tap, so nothing of the answer is on
+            // screen before it — ADR-0006 §4, pinned by test.
+            let badge_text = box_badge_wording(!offered.is_new, offered.box_);
+            let t = crate::motion::reveal_progress(ui, card_changed, s.revealed);
             if surface::card(
                 ui,
                 &rendered.prompt,
-                answer,
-                badge_text.as_deref(),
+                Some(rendered.answer.as_str()),
+                Some(badge_text.as_str()),
                 surface::REVIEW_HEIGHT,
+                t,
             )
             .clicked()
             {
