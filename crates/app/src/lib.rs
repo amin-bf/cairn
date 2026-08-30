@@ -26,6 +26,7 @@ pub mod inbound;
 pub mod keyboard;
 pub mod listing;
 pub mod markdown;
+pub mod motion;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
@@ -325,6 +326,10 @@ impl CairnApp {
         // rather than silently falling back to stock egui's 13px body and 8×3 spacing.
         typography::install(&cc.egui_ctx);
         spacing::install(&cc.egui_ctx);
+        // And motion, for the same reason again (ADR-0037 §2): `animation_time` is per-theme in
+        // egui and the duration is not, so a slot left unwritten is stock's 0.2 waiting for a theme
+        // switch — the same shape as the two above, a third value family on.
+        motion::install(&cc.egui_ctx);
         Self {
             store,
             dest: Destination::Review,
