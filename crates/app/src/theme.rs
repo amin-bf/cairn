@@ -277,6 +277,52 @@ pub fn link(visuals: &Visuals) -> Color32 {
     visuals.hyperlink_color
 }
 
+/// The fill of a surface that is **temporarily on top of the page** (ADR-0037 §1).
+///
+/// **It rises by exactly as much as a card sinks, and that is the whole construction.** ADR-0033 §1
+/// cuts a card *into* the page, so depth here is subtractive everywhere permanent; the one surface
+/// #149 calls temporary is therefore the one surface that goes the other way, by the same amount.
+/// Dark delivers **1.121:1** between page and card, so the popup sits 1.12:1 *above* the page in
+/// both themes — placed by the gap dark delivers rather than by each theme's own page-relative
+/// ratio, which is [ADR-0036 §2](../../../docs/adr/0036-the-light-palette.md)'s method and the thing
+/// that ADR exists to stop anyone mirroring.
+///
+/// **The two directions are not equally affordable, and it decides how far this can ever go.** In
+/// dark the risen direction is fully occupied — `STONE_3` the ordinary control at 1.099, `STONE_4`
+/// the separator at 1.222, `STONE_5` the primary at 1.293 — so this lands *between* rungs rather
+/// than on one. In light it is empty and nearly exhausted: **1.305:1** in total between the page and
+/// pure white, no role occupying any of it, and this rise spends 1.125. **Light can afford exactly
+/// one risen surface**, which is the argument to quote at whoever next proposes a raised card.
+const POPUP_RISEN: Color32 = rgb(0x22282b); // 1.124:1 above the dark page
+const POPUP_RISEN_L: Color32 = rgb(0xeaeff0); // 1.125:1 above the light page
+
+/// The shadow a floating surface casts (ADR-0037 §1).
+///
+/// **Stock's geometry, and a darkening that was chosen.** Nothing in #154 disputed the offset or the
+/// blur, so they are stock's; only the alpha was ever in question, and it was judged in both themes
+/// at once or not at all.
+///
+/// **The two alphas differ by 8× and buy the same thing.** Dark's 200 measures **1.159:1** against
+/// its page, light's 25 measures **1.156:1** against its own. Stock's own defaults — 96 and 25 at
+/// identical offset and blur — measure 1.083 and 1.156, an **1.88× disagreement in the very
+/// quantity being set**, which is `weak_text_alpha`'s shape (module header) arriving from the
+/// renderer's side. A shadow is a darkening, and a darkening is not one gesture across two grounds.
+///
+/// **Why the mechanism did not split, when the arithmetic invited it.** At stock's alpha a dark
+/// shadow is *quieter than the card's own well* — 1.083:1 against ADR-0033's 1.121:1 — so dark could
+/// have leaned on the rise alone while light, where the rise is nearly unaffordable, leaned on the
+/// shadow alone. Judged blurred, which is ADR-0033 §3's own instrument, **one material won in both
+/// themes**. So the asymmetry lives in these two numbers rather than in a rule, which is the smaller
+/// place for it to live.
+fn popup_shadow(alpha: u8) -> egui::epaint::Shadow {
+    egui::epaint::Shadow {
+        offset: [6, 10],
+        blur: 8,
+        spread: 0,
+        color: Color32::from_black_alpha(alpha),
+    }
+}
+
 /// **Which theme the user asked for** (ADR-0036 §3). The decision, as distinct from
 /// `egui::ThemePreference`, which is one renderer's way of carrying it — a native client honours
 /// the same three options against its own platform setting.
@@ -344,7 +390,11 @@ pub fn cairn_dark() -> Visuals {
     let mut v = Visuals::dark();
 
     v.panel_fill = STONE_2;
-    v.window_fill = STONE_2;
+    // The popup **rises**; it is no longer the page's own colour (ADR-0037 §1). Assigning
+    // `panel_fill` here is what drew every open combo box in exactly the page colour, in every
+    // capture this repository held before #154.
+    v.window_fill = POPUP_RISEN;
+    v.window_stroke = Stroke::new(1.0, STONE_4); // the separator rung, never stock's off-ramp grey
     v.extreme_bg_color = STONE_0;
     v.faint_bg_color = STONE_3;
     v.override_text_color = None; // body colour rides fg_stroke, per widget state
@@ -387,9 +437,12 @@ pub fn cairn_dark() -> Visuals {
     v.warn_fg_color = CLAY;
     v.error_fg_color = ROSE;
 
-    // No shadow anywhere: a Cairn surface is a fill and a 2px corner, and nothing floats.
+    // **One thing floats** (ADR-0037 §1). A shadow means *this surface is temporarily on top of the
+    // page and will go away*, so only what the renderer already calls a popup, a menu or a window
+    // casts one. `window_shadow` stays `NONE` because this application draws no egui window; the
+    // day it does, that is a decision and not a default.
     v.window_shadow = egui::epaint::Shadow::NONE;
-    v.popup_shadow = egui::epaint::Shadow::NONE;
+    v.popup_shadow = popup_shadow(200);
 
     v
 }
@@ -406,7 +459,9 @@ pub fn cairn_light() -> Visuals {
     let mut v = Visuals::light();
 
     v.panel_fill = STONE_L_PAGE;
-    v.window_fill = STONE_L_PAGE;
+    // As in dark, and by dark's gap rather than by a light-relative ratio (ADR-0037 §1).
+    v.window_fill = POPUP_RISEN_L;
+    v.window_stroke = Stroke::new(1.0, STONE_L_EDGE); // the separator rung
     v.extreme_bg_color = STONE_L_CARD;
     v.faint_bg_color = STONE_L_CONTROL;
     v.override_text_color = None; // body colour rides fg_stroke, per widget state
@@ -458,9 +513,9 @@ pub fn cairn_light() -> Visuals {
     // ground and would make the badge quieter than dark's by accident (module header).
     v.weak_text_color = Some(STONE_L_WEAK);
 
-    // No shadow anywhere: a Cairn surface is a fill and a 2px corner, and nothing floats.
+    // As in dark, at an eighth of the alpha for the same measured weight (ADR-0037 §1).
     v.window_shadow = egui::epaint::Shadow::NONE;
-    v.popup_shadow = egui::epaint::Shadow::NONE;
+    v.popup_shadow = popup_shadow(25);
 
     v
 }
@@ -865,14 +920,81 @@ mod tests {
             }
         }
 
-        // Both refuse shadow, and a light theme is where a stock shadow would be most visible.
+        // **Both cast on the popup and neither casts on a window** (ADR-0037 §1). This replaces the
+        // earlier *both refuse shadow*, which was true until #154 chose the value and is exactly the
+        // kind of claim that should fail loudly when it stops being true rather than be edited away.
+        assert_eq!(d.window_shadow, egui::epaint::Shadow::NONE);
         assert_eq!(l.window_shadow, egui::epaint::Shadow::NONE);
-        assert_eq!(l.popup_shadow, egui::epaint::Shadow::NONE);
+        assert_ne!(
+            d.popup_shadow,
+            egui::epaint::Shadow::NONE,
+            "the one surface that floats casts in dark"
+        );
+        assert_ne!(
+            l.popup_shadow,
+            egui::epaint::Shadow::NONE,
+            "and in light — a slot filled in one theme only is this test's whole subject"
+        );
         // Both keep the 2px widget corner.
         assert_eq!(
             l.widgets.noninteractive.corner_radius,
             d.widgets.noninteractive.corner_radius
         );
+    }
+
+    /// **The elevation numbers are a decision and ADR-0037 quotes them** (§1). The geometry is
+    /// stock's and shared; the alphas are ours and differ by 8×.
+    ///
+    /// **The weights they buy — 1.159:1 dark, 1.156:1 light — cannot be asserted here**, and that is
+    /// worth stating rather than leaving as an omission. A shadow's contribution at a given pixel is
+    /// the *blur profile* evaluated there, which is epaint's and not ours, so the figures in the ADR
+    /// were measured off shipped pixels in `docs/design/prototype-154/overlay-1280x800/`. What this
+    /// test can hold is that nobody changes 200 or 25 without going back to those captures.
+    #[test]
+    fn the_two_shadow_alphas_are_the_measured_pair() {
+        let d = cairn_dark().popup_shadow;
+        let l = cairn_light().popup_shadow;
+
+        assert_eq!(
+            d.color.a(),
+            200,
+            "dark's alpha, back-solved to match light's weight"
+        );
+        assert_eq!(
+            l.color.a(),
+            25,
+            "light's alpha — stock's, which measured correct"
+        );
+        assert_eq!(
+            (d.offset, d.blur, d.spread),
+            (l.offset, l.blur, l.spread),
+            "one material in both themes: only the darkening differs (ADR-0037 §1)"
+        );
+        assert_eq!(
+            (d.offset, d.blur, d.spread),
+            ([6, 10], 8, 0),
+            "stock's geometry, which #154 did not dispute"
+        );
+    }
+
+    /// **The popup rises, and by dark's gap in both themes** (ADR-0037 §1, ADR-0036 §2's method).
+    ///
+    /// The defect this pins is the one that shipped: `window_fill` assigned `panel_fill`, so the
+    /// application's only overlay was drawn in *exactly* the page colour, in both themes, in every
+    /// capture this repository held before #154.
+    #[test]
+    fn the_popup_is_never_the_page_and_rises_by_the_same_gap() {
+        for (name, v) in [("dark", cairn_dark()), ("light", cairn_light())] {
+            assert_ne!(
+                v.window_fill, v.panel_fill,
+                "{name}: a popup drawn in the page's own colour is the #154 defect returning"
+            );
+            let rise = contrast(v.window_fill, v.panel_fill);
+            assert!(
+                (rise - 1.12).abs() < 0.01,
+                "{name}: the rise mirrors ADR-0033's 1.121:1 well; got {rise:.3}"
+            );
+        }
     }
 
     /// **The badge weighs the same in both themes** (ADR-0030 §4, ADR-0036 §2). Dark gets that from
