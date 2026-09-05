@@ -10,17 +10,25 @@
 //! ([§3](../../../docs/adr/0022-the-import-preview-and-export-report.md)): how many notes are
 //! genuinely new after the collision skip, how many move deck, how many tombstones match a note held.
 //!
-//! The whole read is one function, [`preview`], because the plan is **derived on every read and never
+//! The whole read is one function, [`read`], because the plan is **derived on every read and never
 //! cached** (§5): a stored plan is a stored projection of the log, and a sync landing while the
 //! preview is on screen would falsify it. A file is **identified by sniffing its `mimetype` member**,
 //! never by its extension (ADR-0024 §1) — on Android both profiles store as `application/octet-stream`
 //! so the member is the sole authority.
+//!
+//! **Applying an import is that same derivation run again, never the [`Plan`] the screen computed**
+//! (§5). [`read`] returns the plan *and* the [`Write`]s that realise it from **one pass**, so the
+//! numbers the preview stated and the values the apply writes are the same branches — the
+//! *"1,202 already yours"* line and the notes apply skips agree **by construction** rather than by
+//! two implementations happening to match. The caller executes the writes against the store and
+//! **restamps only values whose content actually differs** (ADR-0008 §3), which is what makes
+//! re-importing an unchanged file a genuine no-op.
 
 use crate::container::{
     self, COLLECTION_MEDIA_TYPE, DECK_MEDIA_TYPE, FORMAT, KINDS_PREFIX, MANIFEST_MEMBER,
     NOTES_MEMBER,
 };
-use cairn_core::content::{DeckId, NoteId, SHIPPED_KINDS};
+use cairn_core::content::{DeckId, NoteId, SHIPPED_KINDS, order};
 use cairn_core::log::Json;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Cursor;
@@ -121,6 +129,11 @@ pub struct Collection {
     note_deck: HashMap<NoteId, DeckId>,
     /// Kind ids acquired from earlier imports (ADR-0008 §7), beyond the shipped set.
     acquired_kinds: HashSet<String>,
+    /// The largest `position` order key the collection holds, or `None` for a collection with no
+    /// positioned note. An imported note is placed **at the end of the authored order**
+    /// (ADR-0021 §3), and the file carries line order rather than the key itself (ADR-0008 §12 as
+    /// amended by ADR-0021 §3) — so the keys are minted here, chained from this one.
+    last_position: Option<String>,
 }
 
 impl Collection {
@@ -145,6 +158,14 @@ impl Collection {
 
     pub fn with_acquired_kind(mut self, id: &str) -> Collection {
         self.acquired_kinds.insert(id.to_owned());
+        self
+    }
+
+    /// The collection's current largest `position` key, which imported notes are chained after
+    /// (ADR-0021 §3). Left unset for an empty collection, where the first imported note takes the
+    /// first key.
+    pub fn with_last_position(mut self, key: &str) -> Collection {
+        self.last_position = Some(key.to_owned());
         self
     }
 
@@ -211,6 +232,9 @@ pub struct MovingIn {
 /// a screen of zeroes buries the one line that is not zero.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeckPlan {
+    /// The deck's identity, which is what authority follows (ADR-0008 §11) and what the note list's
+    /// deck filter is set to after a single-deck import (ADR-0022 §5). Never shown.
+    pub id: DeckId,
     /// The deck's name as the file declares it, bounded plain text (ADR-0022 §7).
     pub name: String,
     pub path: Path,
@@ -226,8 +250,17 @@ pub struct DeckPlan {
     /// The user's own deck name about to be overwritten by the update (ADR-0005 §9). `None` when the
     /// name is unchanged or the deck is newly created.
     pub renamed_from: Option<String>,
-    /// The file carries the same revision and the same content digest as the held deck: importing it
-    /// changes nothing (ADR-0008 §3). The preview still appears, stating exactly that (ADR-0022 §4).
+    /// The file carries the same revision, the same content digest **and the same name** as the held
+    /// deck: importing it changes nothing (ADR-0008 §3). The preview still appears, stating exactly
+    /// that (ADR-0022 §4).
+    ///
+    /// **The name is part of this test although it is deliberately outside the digest.**
+    /// [`crate::deck_digest`] excludes the deck name so that *"a rename is metadata, not content"*
+    /// and does not bump the revision (ADR-0008 §4) — but a rename **is** an effect on the user's
+    /// collection, is the one ADR-0005 §9 concedes *"will feel lost"*, and is a line ADR-0022 §3
+    /// requires the preview to state. Judged on the digest alone, a file that renames a deck and
+    /// changes nothing else reads as *"nothing will change"* while the apply renames it — promise
+    /// and effect diverging in the one place ADR-0022 §5 exists to make impossible.
     pub no_change: bool,
     /// The file carries the same revision as the held deck but a **different** digest — the one
     /// revision fact the user sees, reportable rather than silent (ADR-0008 §4, ADR-0022 §4).
@@ -249,6 +282,93 @@ pub struct Plan {
     pub emptied_decks: Vec<String>,
 }
 
+/// One assignment an import makes on the mutable surface (ADR-0004 §7) — the whole of what applying
+/// an import does, because everything ADR-0022's plan describes reduces to
+/// `Collection::mutable_set(entity, entity_id, attr, value)`: a deck's name and its authoring values,
+/// a note's `kind`, `position` and fields, membership (a note attribute, so a note moving deck is one
+/// write) and a tombstone (a `deleted` flag, never a row removal, ADR-0007 §4).
+///
+/// **A `None` value is a clear, not a skip** — a value change settling by stamp like any other
+/// (ADR-0007 §4). It is how a deck or a note the file carries **live** loses a `deleted` flag it was
+/// carrying, which is what makes ADR-0016 §4's *"a deleted deck is fully recoverable by re-import"*
+/// literally true rather than aspirational.
+///
+/// The caller writes these **only where the value differs from the one already settled**
+/// (ADR-0008 §3): restamping everything would put a 5,000-note deck's worth of stamped values onto
+/// the surface and propagate them to the user's own devices as a wall of edits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Write {
+    /// The mutable-surface entity — `"deck"` or `"note"`.
+    pub entity: &'static str,
+    /// The entity's id as the sixteen canonical bytes the surface keys on (ADR-0002 §6).
+    pub entity_id: [u8; 16],
+    pub attr: String,
+    pub value: Option<String>,
+}
+
+impl Write {
+    fn set(entity: &'static str, entity_id: [u8; 16], attr: &str, value: &str) -> Write {
+        Write {
+            entity,
+            entity_id,
+            attr: attr.to_owned(),
+            value: Some(value.to_owned()),
+        }
+    }
+
+    fn clear(entity: &'static str, entity_id: [u8; 16], attr: &str) -> Write {
+        Write {
+            entity,
+            entity_id,
+            attr: attr.to_owned(),
+            value: None,
+        }
+    }
+}
+
+/// One read of a file: what it **would** do, and the writes that do it — derived together in one
+/// pass so the two cannot disagree (ADR-0022 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Import {
+    pub plan: Plan,
+    pub writes: Vec<Write>,
+}
+
+/// Attribute names on a note that the mutable surface gives its own meaning, and which a **field**
+/// arriving in a stranger's file may therefore never take.
+///
+/// A field name in the payload becomes an attribute name verbatim, so without this a file could
+/// declare a field called `deck` and refile the note it is importing, or one called `deleted` and
+/// retract a note without a tombstone — reaching past ADR-0008 §11's branches from inside the
+/// payload. `kind` and `position` are the same hazard one step quieter. The `tag:` prefix is
+/// ADR-0002 §10's set-union storage, so a field named `tag:x` would silently tag the note. A field
+/// with one of these names is **dropped**, matching [`parse_notes`]'s posture that a malformed
+/// payload diffs to fewer effects rather than to a panic.
+const RESERVED_NOTE_ATTRS: [&str; 4] = ["deck", "deleted", "kind", "position"];
+const TAG_ATTR_PREFIX: &str = "tag:";
+
+/// The two mutable-surface entity names an import writes under (ADR-0004 §7).
+const DECK_ENTITY: &str = "deck";
+const NOTE_ENTITY: &str = "note";
+
+/// The **authoring** half of the deck-id-keyed slot (ADR-0005 §5 as amended): `{revision, digest}`
+/// (ADR-0008 §9) and the author, description and licence beside them (ADR-0022 §8). Named here
+/// because an import writes them and the snapshot the next import is diffed against reads them —
+/// two sites for one set of names is how a written revision quietly stops being the one the gate
+/// consults, which is a gate that never fires and nothing failing.
+///
+/// All five **sync and none of them export**: they are never deck content and never appear in the
+/// review log.
+pub const DECK_REVISION_ATTR: &str = "revision";
+pub const DECK_DIGEST_ATTR: &str = "digest";
+pub const DECK_AUTHOR_ATTR: &str = "author";
+pub const DECK_DESCRIPTION_ATTR: &str = "description";
+pub const DECK_LICENCE_ATTR: &str = "licence";
+
+fn field_name_is_writable(name: &str) -> bool {
+    !RESERVED_NOTE_ATTRS.contains(&name) && !name.starts_with(TAG_ATTR_PREFIX)
+}
+
 /// One deck as the manifest declares it, read from the central directory alone.
 struct ManifestDeck {
     id: DeckId,
@@ -257,18 +377,38 @@ struct ManifestDeck {
     digest: String,
 }
 
-/// One live note the payload carries: its id and the deck its `deck` reference names.
+/// One live note the payload carries: its id, the deck its `deck` reference names, and — for the
+/// notes an import actually creates — the content that becomes its mutable-surface values.
+///
+/// A tombstone parses into the same shape with empty content: it carries an id and a deck reference
+/// and nothing else (ADR-0008 §5).
 struct FileNote {
     id: NoteId,
     deck: DeckId,
+    kind: String,
+    /// Field name → value, in the file's own key order, with the names of [`RESERVED_NOTE_ATTRS`]
+    /// already dropped.
+    fields: Vec<(String, String)>,
 }
 
-/// Read a received file and derive the [`Plan`] the preview shows, or the [`Refusal`] shown in its
-/// place — the whole of the import read, gate then describe, in one derivation (ADR-0022 §5).
+/// The [`Plan`] a received file's preview shows, or the [`Refusal`] shown in its place — [`read`]
+/// with the writes discarded, for the surface that only states what would happen.
+pub fn preview(bytes: &[u8], collection: &Collection) -> Result<Plan, Refusal> {
+    read(bytes, collection).map(|import| import.plan)
+}
+
+/// Read a received file and derive both what it **would** do and the [`Write`]s that do it, or the
+/// [`Refusal`] shown in place of a preview — the whole of the import, gate then describe, in one
+/// derivation (ADR-0022 §5).
 ///
 /// A refusal returns **before** `notes.jsonl` is inflated (ADR-0022 §2): the gate consults the
 /// `mimetype` member, the member-name list and the small `manifest.json` only.
-pub fn preview(bytes: &[u8], collection: &Collection) -> Result<Plan, Refusal> {
+///
+/// **Applying calls this, never a plan held from a previous call.** A plan computed while the
+/// preview was on screen is a stored projection of the log (ADR-0004), and a sync landing underneath
+/// it turns a note it called *new* into one the collection holds. ADR-0022 §5 accepts the cost of
+/// computing the import twice for exactly this.
+pub fn read(bytes: &[u8], collection: &Collection) -> Result<Import, Refusal> {
     // Sniff: identity is in the bytes, never the name (ADR-0024 §1). A `collection` archive is the
     // wrong profile for deck import — its stamps travel byte for byte and must never restamp here.
     match sniff(bytes) {
@@ -389,25 +529,57 @@ fn parse_notes(text: &str) -> (Vec<FileNote>, Vec<FileNote>) {
         ) else {
             continue;
         };
-        let record = FileNote { id, deck };
         if obj.get("deleted").is_some() {
-            tombstones.push(record);
-        } else {
-            notes.push(record);
+            tombstones.push(FileNote {
+                id,
+                deck,
+                kind: String::new(),
+                fields: Vec::new(),
+            });
+            continue;
         }
+        notes.push(FileNote {
+            id,
+            deck,
+            kind: obj
+                .get("kind")
+                .and_then(Json::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            fields: note_fields(&obj),
+        });
     }
     (notes, tombstones)
 }
 
-/// Diff the file against the collection to build the plan — the describe stage (ADR-0022 §3). This is
-/// where "effects on this collection" are computed, which are not the manifest's counts.
+/// A note line's `fields` object as `(name, value)` pairs in the file's own key order, dropping any
+/// name the mutable surface reserves ([`field_name_is_writable`]) and any value that is not a string.
+fn note_fields(obj: &Json) -> Vec<(String, String)> {
+    let Some(Json::Obj(entries)) = obj.get("fields") else {
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .filter(|(name, _)| field_name_is_writable(name))
+        .filter_map(|(name, value)| Some((name.clone(), value.as_str()?.to_owned())))
+        .collect()
+}
+
+/// Diff the file against the collection to build the plan **and the writes that realise it** — the
+/// describe stage (ADR-0022 §3). This is where "effects on this collection" are computed, which are
+/// not the manifest's counts.
+///
+/// Every count the plan states and every write the apply makes come off the **same** branch of the
+/// same `match`, which is what makes *"1,202 already yours"* and the notes apply skips agree by
+/// construction rather than by two implementations happening to keep step.
 fn describe(
     decks: &[ManifestDeck],
     notes: &[FileNote],
     tombstones: &[FileNote],
     manifest: &Json,
     collection: &Collection,
-) -> Plan {
+) -> Import {
+    let header = header(manifest);
     let held_ids: HashSet<DeckId> = decks
         .iter()
         .filter(|d| collection.deck(&d.id).is_some())
@@ -425,6 +597,16 @@ fn describe(
     }
 
     let mut deck_plans = Vec::new();
+    let mut deck_writes = Vec::new();
+    // The note ids the file creates, and the ones it merely refiles — decided in the loop below and
+    // realised after it, so the decision is made in exactly one place.
+    let mut created: HashMap<NoteId, DeckId> = HashMap::new();
+    let mut moved: Vec<(NoteId, DeckId)> = Vec::new();
+    let mut retracted: Vec<NoteId> = Vec::new();
+    // A note id the file states twice is malformed input; the repeat is dropped whole rather than
+    // counted twice and written once, which would put the plan's numbers out of step with the writes.
+    let mut seen: HashSet<NoteId> = HashSet::new();
+
     for d in decks {
         let update = held_ids.contains(&d.id);
         let path = if update { Path::Update } else { Path::Create };
@@ -434,14 +616,23 @@ fn describe(
         let mut moving: BTreeMap<Option<String>, usize> = BTreeMap::new();
 
         for note in notes.iter().filter(|n| n.deck == d.id) {
+            if !seen.insert(note.id) {
+                continue;
+            }
             match collection.note_deck.get(&note.id) {
-                None => new_notes += 1,
+                None => {
+                    new_notes += 1;
+                    created.insert(note.id, d.id);
+                }
                 Some(current) if *current == d.id => already_yours += 1,
                 Some(current) => {
                     if update {
-                        // The file relocates a held note into this deck (ADR-0008 §11).
+                        // The file relocates a held note into this deck (ADR-0008 §11). Membership is
+                        // a `deck` reference on the note (ADR-0005 §8), so the move is one write and
+                        // the note's own content is left exactly as the user holds it.
                         let from = collection.deck(current).map(|h| h.name.clone());
                         *moving.entry(from).or_default() += 1;
+                        moved.push((note.id, d.id));
                     } else {
                         // Create path: a held id is skipped and never moved (ADR-0005 §2).
                         already_yours += 1;
@@ -452,22 +643,30 @@ fn describe(
 
         // Tombstones bite only on the update path, and only where they match a note held
         // (ADR-0008 §5) — a create-path file has no authority over notes held elsewhere.
-        let deleted = if update {
-            tombstones
+        let mut deleted = 0;
+        if update {
+            for t in tombstones
                 .iter()
                 .filter(|t| t.deck == d.id && collection.holds_note(&t.id))
-                .count()
-        } else {
-            0
-        };
+            {
+                if seen.insert(t.id) {
+                    deleted += 1;
+                    retracted.push(t.id);
+                }
+            }
+        }
 
         let held = collection.deck(&d.id);
         let renamed_from = held.filter(|h| h.name != d.name).map(|h| h.name.clone());
-        let no_change = held.is_some_and(|h| h.revision == d.revision && h.digest == d.digest);
+        let no_change = held
+            .is_some_and(|h| h.revision == d.revision && h.digest == d.digest && h.name == d.name);
         let revision_conflict =
             held.is_some_and(|h| h.revision == d.revision && h.digest != d.digest);
 
+        deck_writes.extend(deck_values(d, &header, update, no_change));
+
         deck_plans.push(DeckPlan {
+            id: d.id,
             name: d.name.clone(),
             path,
             new_notes,
@@ -483,12 +682,126 @@ fn describe(
         });
     }
 
-    Plan {
-        header: header(manifest),
-        decks: deck_plans,
-        adopted_kinds: adopted_kinds(manifest, collection),
-        emptied_decks: emptied_decks(collection, &relocated),
+    let mut writes = deck_writes;
+    writes.extend(note_writes(
+        notes,
+        &created,
+        &moved,
+        &retracted,
+        collection.last_position.as_deref(),
+    ));
+
+    Import {
+        plan: Plan {
+            header,
+            decks: deck_plans,
+            adopted_kinds: adopted_kinds(manifest, collection),
+            emptied_decks: emptied_decks(collection, &relocated),
+        },
+        writes,
     }
+}
+
+/// The values one deck in the file writes onto the mutable surface.
+///
+/// The **name** is authored content and the file wins for it, over the user's own rename
+/// (ADR-0005 §9) — and it is the *bounded* name the preview showed, never the raw string, so what is
+/// written is what the user agreed to (ADR-0022 §7). The **authoring values** — `{revision, digest}`
+/// (ADR-0008 §9) and the author, description and licence beside them (ADR-0022 §8) — are adopted on
+/// both paths, which is what lets an unmodified relay re-emit the byte-identical file at the same
+/// revision instead of inflating the counter.
+///
+/// **A `no_change` deck writes nothing at all.** ADR-0008 §3 makes re-importing an unchanged file
+/// *"a genuine no-op: silent, idempotent, and producing nothing to sync"*, and ADR-0022 §4 reads
+/// *silent* as *"it writes nothing and syncs nothing"* — a stronger claim than restamping-only-what-
+/// differs alone would give, because the file's metadata sits outside the digest and could otherwise
+/// differ while its content did not.
+fn deck_values(d: &ManifestDeck, header: &Header, update: bool, no_change: bool) -> Vec<Write> {
+    if no_change {
+        return Vec::new();
+    }
+    let id = d.id.0;
+    let mut writes = vec![
+        Write::set(DECK_ENTITY, id, "name", &d.name),
+        Write::set(DECK_ENTITY, id, DECK_REVISION_ATTR, &d.revision.to_string()),
+        Write::set(DECK_ENTITY, id, DECK_DIGEST_ATTR, &d.digest),
+        Write::set(DECK_ENTITY, id, DECK_AUTHOR_ATTR, &header.author),
+        Write::set(DECK_ENTITY, id, DECK_DESCRIPTION_ATTR, &header.description),
+        Write::set(DECK_ENTITY, id, DECK_LICENCE_ATTR, &header.licence),
+    ];
+    if !update {
+        // A deck the collection does not hold **live** is created by this file (ADR-0005 §9), and one
+        // it holds only as a `deleted` flag is exactly that case: deletion is a flag, never a row
+        // removal (ADR-0005 §7), so creating the deck means clearing it. This is what discharges
+        // ADR-0016 §4's *"a deleted deck is fully recoverable by re-import"* — without it the deck
+        // and every note in it derive deleted (ADR-0005 §7) and the import is invisible.
+        writes.push(Write::clear(DECK_ENTITY, id, "deleted"));
+    }
+    writes
+}
+
+/// The values the notes write: the created notes in the file's own line order, then the refilings,
+/// then the retractions.
+///
+/// **Order carries meaning for exactly one attribute.** A created note is placed at the end of the
+/// collection's authored order (ADR-0021 §3), and the file carries **line order rather than the key**
+/// (ADR-0008 §12 as amended), so the keys are minted here by chaining
+/// [`cairn_core::content::order::between`] after the collection's current last — one write per note
+/// and never a renumber.
+fn note_writes(
+    notes: &[FileNote],
+    created: &HashMap<NoteId, DeckId>,
+    moved: &[(NoteId, DeckId)],
+    retracted: &[NoteId],
+    last_position: Option<&str>,
+) -> Vec<Write> {
+    let mut writes = Vec::new();
+    let mut last = last_position.map(str::to_owned);
+    // The deck loop already dropped a repeated note id from the *counts*; this drops it from the
+    // writes, which is the same guard at the other end. Without it a file stating one note twice
+    // reads as one new note and mints two order keys for it — the plan's numbers and the writes
+    // parting company over malformed input, which is the one thing deriving them together is for.
+    let mut done: HashSet<NoteId> = HashSet::new();
+
+    for note in notes {
+        let Some(deck) = created.get(&note.id) else {
+            continue;
+        };
+        if !done.insert(note.id) {
+            continue;
+        }
+        let position = order::between(last.as_deref(), None);
+        let id = note.id.0;
+        writes.push(Write::set(NOTE_ENTITY, id, "kind", &note.kind));
+        writes.push(Write::set(NOTE_ENTITY, id, "position", &position));
+        writes.push(Write::set(NOTE_ENTITY, id, "deck", &deck.to_canonical()));
+        // A note the file carries **live** is live: an id held only as a tombstone reads as unheld
+        // (a deleted note is not in the collection's note list), so the plan called it new and the
+        // apply must make it visible again rather than write content nobody can reach.
+        writes.push(Write::clear(NOTE_ENTITY, id, "deleted"));
+        for (name, value) in &note.fields {
+            writes.push(Write::set(NOTE_ENTITY, id, name, value));
+        }
+        last = Some(position);
+    }
+
+    for (note, deck) in moved {
+        writes.push(Write::set(
+            NOTE_ENTITY,
+            note.0,
+            "deck",
+            &deck.to_canonical(),
+        ));
+    }
+
+    // A retraction is a flag, never a row removal (ADR-0004 §7), and the note keeps its `deck`
+    // reference so a deck-scoped export can still select its tombstone (ADR-0008's amendment to
+    // ADR-0004 §7).
+    for note in retracted {
+        writes.push(Write::set(NOTE_ENTITY, note.0, "deleted", "true"));
+    }
+
+    writes
 }
 
 /// The file's header claims, each bounded plain text (ADR-0022 §7).
@@ -877,5 +1190,207 @@ mod tests {
         members.push(Member::deflated("media/hello.mp3", b"audio".to_vec()));
         let with_media = container::build(&members);
         assert!(preview(&with_media, &Collection::new()).is_ok());
+    }
+
+    // ---- The writes -----------------------------------------------------------------------------
+
+    /// Every write for one entity and attribute, as the derivation emits it.
+    fn written(import: &Import, entity: &str, id: [u8; 16], attr: &str) -> Vec<Option<String>> {
+        import
+            .writes
+            .iter()
+            .filter(|w| w.entity == entity && w.entity_id == id && w.attr == attr)
+            .map(|w| w.value.clone())
+            .collect()
+    }
+
+    /// **A field arriving in a file may never take a name the mutable surface reserves.** A field
+    /// called `deck` would otherwise refile the note it arrives on, reaching past ADR-0008 §11's
+    /// branches from inside the payload; `deleted` would retract a note with no tombstone.
+    #[test]
+    fn a_field_may_not_take_an_attribute_name_the_surface_reserves() {
+        let deck = did(1);
+        let elsewhere = did(9);
+        let content = DeckContent {
+            id: deck,
+            name: "D".to_owned(),
+            notes: vec![NoteContent {
+                id: nid(1),
+                position: "a".to_owned(),
+                kind: "basic".to_owned(),
+                fields: vec![
+                    ("Front".into(), "q".into()),
+                    ("deck".into(), elsewhere.to_canonical()),
+                    ("deleted".into(), "true".into()),
+                    ("position".into(), "zzz".into()),
+                    ("tag:leech".into(), "true".into()),
+                ],
+            }],
+            tombstones: Vec::new(),
+        };
+        let bytes = crate::deck::build_deck(
+            &Default::default(),
+            &[DeckExport {
+                content,
+                revision: DeckRevision {
+                    revision: 1,
+                    digest: "d".to_owned(),
+                },
+            }],
+        )
+        .unwrap();
+
+        let import = read(&bytes, &Collection::new()).unwrap();
+
+        // The note is filed where the *file's own deck reference* says, never where a field claims.
+        assert_eq!(
+            written(&import, "note", nid(1).0, "deck"),
+            vec![Some(deck.to_canonical())]
+        );
+        // The `deleted` write is the create path's clear, not the field's "true".
+        assert_eq!(written(&import, "note", nid(1).0, "deleted"), vec![None]);
+        // `position` is the key **minted here** — the first key in an empty collection — never the
+        // file's own string and never the field's "zzz" (ADR-0008 §12 as amended by ADR-0021 §3).
+        assert_eq!(
+            written(&import, "note", nid(1).0, "position"),
+            vec![Some(order::between(None, None))]
+        );
+        assert!(
+            !import.writes.iter().any(|w| w.attr.starts_with("tag:")),
+            "a field may not tag the note it arrives on"
+        );
+        // The genuine field still lands.
+        assert_eq!(
+            written(&import, "note", nid(1).0, "Front"),
+            vec![Some("q".to_owned())]
+        );
+    }
+
+    /// **A rename alone is a change**, although the digest cannot see it: [`crate::deck_digest`]
+    /// excludes the deck name on purpose (ADR-0008 §4), so judged on the digest alone a renaming
+    /// file reads as *"nothing will change"* while the apply renames the deck — promise and effect
+    /// diverging in the one place ADR-0022 §5 exists to make impossible.
+    #[test]
+    fn a_rename_alone_is_not_a_no_change() {
+        let held = Collection::new().with_deck(did(1), "My French", 4, "same");
+        let bytes = real_deck(did(1), "French A1", &[(nid(1), "a")], &[], 4, "same");
+
+        let import = read(&bytes, &held).unwrap();
+        let d = &import.plan.decks[0];
+        assert!(!d.no_change);
+        assert_eq!(d.renamed_from.as_deref(), Some("My French"));
+        assert_eq!(
+            written(&import, "deck", did(1).0, "name"),
+            vec![Some("French A1".to_owned())]
+        );
+    }
+
+    /// The no-op writes **nothing at all** — ADR-0022 §4 reads ADR-0008 §3's *silent* as *"it writes
+    /// nothing and syncs nothing"*, which is stronger than restamping-only-what-differs alone would
+    /// give: the file's metadata sits outside the digest and could otherwise differ while the
+    /// content did not.
+    #[test]
+    fn an_unchanged_file_derives_no_writes_at_all() {
+        let held = Collection::new()
+            .with_deck(did(1), "French", 4, "same")
+            .with_note(nid(1), did(1));
+        let bytes = real_deck(did(1), "French", &[(nid(1), "a")], &[], 4, "same");
+
+        let import = read(&bytes, &held).unwrap();
+        assert!(import.plan.decks[0].no_change);
+        assert!(import.writes.is_empty(), "{:?}", import.writes);
+    }
+
+    /// The counts and the writes come off one pass, so a note the plan calls *already yours* is a
+    /// note nothing is written for (ADR-0005 §2) — the agreement ADR-0022 §5 needs is structural,
+    /// not two implementations keeping step.
+    #[test]
+    fn an_already_yours_note_produces_no_write() {
+        let held = Collection::new()
+            .with_deck(did(1), "French", 1, "d")
+            .with_note(nid(1), did(1));
+        let bytes = real_deck(
+            did(1),
+            "French",
+            &[(nid(1), "a"), (nid(2), "b")],
+            &[],
+            2,
+            "new",
+        );
+
+        let import = read(&bytes, &held).unwrap();
+        assert_eq!(
+            (
+                import.plan.decks[0].new_notes,
+                import.plan.decks[0].already_yours
+            ),
+            (1, 1)
+        );
+        assert!(
+            !import
+                .writes
+                .iter()
+                .any(|w| w.entity == "note" && w.entity_id == nid(1).0),
+            "the colliding note is skipped, not re-imported"
+        );
+        assert_eq!(
+            written(&import, "note", nid(2).0, "kind"),
+            vec![Some("basic".to_owned())]
+        );
+    }
+
+    /// A note the file states twice is malformed input: the repeat is dropped **whole**, so it is
+    /// not counted twice and written once — which would put the plan's numbers out of step with the
+    /// writes the user agreed to.
+    #[test]
+    fn a_note_stated_twice_is_counted_once_and_written_once() {
+        let manifest = manifest_json(1, "deck", &[(did(1), "D", 1)], &["basic"]);
+        let line = format!(
+            r#"{{"deck":"{}","fields":{{"Front":"q"}},"kind":"basic","n":"{}"}}"#,
+            did(1).to_canonical(),
+            nid(1).to_canonical()
+        );
+        let bytes = craft(
+            DECK_MEDIA_TYPE,
+            vec![
+                Member::deflated(MANIFEST_MEMBER, manifest.into_bytes()),
+                Member::deflated(NOTES_MEMBER, format!("{line}\n{line}\n").into_bytes()),
+            ],
+        );
+
+        let import = read(&bytes, &Collection::new()).unwrap();
+        assert_eq!(import.plan.decks[0].new_notes, 1);
+        assert_eq!(
+            written(&import, "note", nid(1).0, "position").len(),
+            1,
+            "one note, one position write — never a renumber (ADR-0021 §3)"
+        );
+    }
+
+    /// Imported notes take **minted** order keys chained after the collection's current last
+    /// (ADR-0021 §3), in the file's own line order — the file carries line order, not the key
+    /// (ADR-0008 §12 as amended).
+    #[test]
+    fn imported_positions_are_minted_after_the_collections_last_and_strictly_increase() {
+        let held = Collection::new().with_last_position("m");
+        let bytes = real_deck(
+            did(1),
+            "D",
+            &[(nid(1), "a"), (nid(2), "b"), (nid(3), "c")],
+            &[],
+            1,
+            "d",
+        );
+
+        let import = read(&bytes, &held).unwrap();
+        let keys: Vec<String> = import
+            .writes
+            .iter()
+            .filter(|w| w.entity == "note" && w.attr == "position")
+            .map(|w| w.value.clone().unwrap())
+            .collect();
+        assert_eq!(keys.len(), 3);
+        assert!(keys[0].as_str() > "m", "{keys:?}");
+        assert!(keys[0] < keys[1] && keys[1] < keys[2], "{keys:?}");
     }
 }
