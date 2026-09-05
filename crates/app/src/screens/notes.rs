@@ -747,12 +747,41 @@ fn byte_index(s: &str, char_index: usize) -> usize {
 
 /// The ambient destructive-edit warning, above the fields (ADR-0012 §5, ADR-0025 §4). It names each
 /// dormant card and its **kept** history and states Undo — it is not the counter ADR-0018 §4 forbids.
+/// **The weight was upside down, and that was the bug.** ADR-0018 §4's whole argument is that *a
+/// count is not a warning* and the **names** are — and the shipped drawing put the names at the small
+/// tier in weak ink while the lead-in and the reassurance took body. So the quietest thing in the
+/// block was the only part that said which cards had gone dormant, and the loudest was the sentence
+/// telling you not to worry. #163 turned it back up the right way: the names take body, the
+/// reassurance takes the aside weight it is.
+///
+/// **The boundary is the second half.** The block ran out of the deck row and into the *Text* label
+/// with one gap either side, so it read as three paragraphs of loose prose inside a form rather than
+/// an ambient statement about it — the only such statement in the app with nothing around it. A
+/// **left rule** at the separator rung is the cheapest boundary available: it adds no fill and no new
+/// value, where a filled block would read as a control the size of a paragraph and #149 left
+/// elevation to popups.
 fn warning_banner(ui: &mut egui::Ui, warning: &cards::Warning) {
-    body(ui, "This edit made cards dormant:");
-    for entry in &warning.dormant {
-        badge(ui, &entry.history());
-    }
-    body(ui, cards::UNDO_COPY);
+    let rule = ui.visuals().widgets.noninteractive.bg_stroke;
+    egui::Frame::new()
+        .inner_margin(egui::Margin {
+            left: spacing::gap(2) as i8,
+            ..Default::default()
+        })
+        .show(ui, |ui| {
+            let top = ui.cursor().top();
+            body(ui, "This edit made cards dormant:");
+            ui.add_space(spacing::gap(1));
+            for entry in &warning.dormant {
+                // **The names take body**, which is what ADR-0018 §4 says the warning *is*.
+                body(ui, &entry.history());
+            }
+            ui.add_space(spacing::gap(1));
+            // The reassurance is the aside, so it takes the aside's weight.
+            badge(ui, cards::UNDO_COPY);
+            let bottom = ui.min_rect().bottom();
+            let x = ui.min_rect().left() - spacing::gap(2);
+            ui.painter().vline(x, top..=bottom, rule);
+        });
 }
 
 /// The editor's **card body**: the cards this note currently generates, in raw-slot order, live and
@@ -793,13 +822,47 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
                 ui.add_space(spacing::gap(2));
             }
             // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
-            cards::Entry::Dormant(dormant) => badge(ui, &dormant.history()),
+            cards::Entry::Dormant(dormant) => dormant_entry(ui, &dormant.history()),
         }
     }
     if pane.state == cards::State::NoLiveCards {
         ui.add_space(spacing::gap(2));
-        body(ui, "This note currently generates no cards.");
+        // **ADR-0018 §6's statement is a fact about the pane, not an error** (#163). At body over two
+        // entries in weak small it was the loudest thing in a column headed *Cards* that has none —
+        // so it read as a complaint where §6 specified a statement. It takes the same aside weight
+        // the entries above it carry.
+        badge(ui, "This note currently generates no cards.");
     }
+}
+
+/// A dormant entry, drawn as a **peer of the card** rather than as a caption under it (#163).
+///
+/// ADR-0018 §4 gives the pane's entry the job of **demonstration** — *"which card and how much
+/// history, in the place the pane already puts that card"* — and the position is the demonstration.
+/// Drawn as a bare line under a card it does not read as a position: it reads as a caption belonging
+/// to the card above, which is why the shipped screen shows the identical sentence twice, 500px
+/// apart, and reads as a duplication defect rather than as ADR-0012 §5's deliberate second speaker.
+///
+/// So it takes the card's **footprint and corner** with no fill — an outline where a card is a well.
+/// A card is a specimen; this is the empty place a specimen used to be, which is what a dormant slot
+/// is. Nothing new is named: the stroke is `card_stroke`, the corner `surface::RADIUS`.
+///
+/// **The shape is doing the work, and that was checked rather than asserted.** Whether an outline at
+/// the card's footprint reads as *a card that is not there* or merely as a box is not a thing a
+/// measurement can answer and not a thing the author of it can judge — it was put in front of the
+/// repo owner beside a real card at 2× and came back as an absence. It also depends on #163's answer
+/// to what the pane **is**: in a *preview*, a specimen case, an entry that is not a specimen has to
+/// look like one missing. In a listing it would only have been a row.
+fn dormant_entry(ui: &mut egui::Ui, line: &str) {
+    egui::Frame::new()
+        .stroke(crate::theme::card_stroke(ui.visuals()))
+        .corner_radius(egui::CornerRadius::same(surface::RADIUS))
+        .inner_margin(spacing::gap(2) as i8)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width() - spacing::gap(4));
+            badge(ui, line);
+        });
+    ui.add_space(spacing::gap(2));
 }
 
 /// The `cloze` Text field rendered through the bidi layouter, returning the full [`egui::text_edit::
@@ -850,6 +913,75 @@ mod tests {
             walk(&clipped.shape, &mut text);
         }
         text
+    }
+
+    /// **The warning names the dormant cards louder than it reassures** (#163, ADR-0018 §4).
+    ///
+    /// §4's argument is that *a count is not a warning* and the **names** are. The shipped drawing
+    /// inverted exactly that: the lead-in and the *"nothing is deleted"* reassurance took body while
+    /// the names — the only part that says *which* card went dormant — took the small tier in weak
+    /// ink. So the block said the true thing quietly and the comforting thing loudly.
+    ///
+    /// Asserted from the **galleys that came out**, by size, because that is the claim: no branch is
+    /// wrong when this drifts, no test of a call site would see it, and the screen renders perfectly
+    /// either way. The number is the count of glyph runs at each tier, which is coarse on purpose —
+    /// what matters is that the names are not the quietest thing in the block.
+    #[test]
+    fn the_warning_names_the_cards_at_the_louder_tier() {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
+        crate::typography::install(&ctx);
+        spacing::install(&ctx);
+
+        let warning = cards::Warning {
+            dormant: vec![cards::DormantEntry {
+                slot: 7,
+                name: "card 7".to_owned(),
+                reviews: 2,
+            }],
+        };
+        let out = ctx.run_ui(Default::default(), |ui| {
+            ui.set_width(500.0);
+            warning_banner(ui, &warning);
+        });
+
+        // Every galley the frame drew, as (text, font size).
+        let mut drawn: Vec<(String, f32)> = Vec::new();
+        fn walk(shape: &egui::Shape, into: &mut Vec<(String, f32)>) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    let size = t
+                        .galley
+                        .job
+                        .sections
+                        .first()
+                        .map_or(0.0, |s| s.format.font_id.size);
+                    into.push((t.galley.text().to_owned(), size));
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, into)),
+                _ => {}
+            }
+        }
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut drawn);
+        }
+
+        let size_of = |needle: &str| {
+            drawn
+                .iter()
+                .find(|(t, _)| t.contains(needle))
+                .unwrap_or_else(|| panic!("the warning never drew {needle:?}; it drew {drawn:?}"))
+                .1
+        };
+        let names = size_of("card 7");
+        let reassurance = size_of("Nothing is deleted");
+        assert!(
+            names > reassurance,
+            "the names of the dormant cards are drawn at {names}px and the reassurance at \
+             {reassurance}px — ADR-0018 §4 says the names are the warning"
+        );
+        assert_eq!(names, crate::typography::BODY);
+        assert_eq!(reassurance, crate::typography::SMALL);
     }
 
     /// **ADR-0035 §1 on the editor, asserted from where the pixels landed** (#163).

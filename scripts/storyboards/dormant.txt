@@ -9,28 +9,50 @@
 # Three notes, one per naming case (ADR-0018 §3): the pruned cloze note keeps a live card beside a
 # `blank 2` line, the emptied vocab note has nothing live and two lines naming field **roles**, and
 # the returned note carries `card 7` — the slot no shipped kind declares.
+#
+# **Each note is reached through Search rather than by counting rows.** #162 made a row a 44px
+# full-width band and moved *Create note* to the foot of the list, so every literal row y in this
+# file was wrong the moment that landed — and the ninth note fell below the fold at 800 besides. A
+# filter names the note; an offset counts the furniture.
+#
+# **The row click aims past the preview text, and that is deliberate.** A row's preview is drawn as an
+# egui label, labels are *selectable* by default, and a selectable label senses click and drag — so a
+# press landing on the words was swallowed and the row simply did not open, while the same row opened
+# from the bare band beside them. That made it look like particular *notes* were dead rather than
+# particular *pixels*: the long cloze preview reaches under the middle of its band and `le hêtre` two
+# rows down does not. Fixed in #177; aiming past the text is correct either way and costs nothing.
 fixture dormant
-mousemove %CX% 600 click 1
+mousemove %CX% 750 click 1
 sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
 shot 1-list
-# The six filler notes come first (authored order, ADR-0021 §3), so the three notes this fixture is
-# about are rows seven, eight and nine — at y=252 + 27 per row.
-#
-# Leaving the editor is `%BY-184%`, not a literal: #163 put *Done* on ADR-0035 §1's reach line, so its
-# y is a function of the window height. A literal clicked the heading and the next shot was the same
-# note under the next note's name.
-mousemove %LX+24% 414 click 1
+# Search, then the single row it leaves at the top of the list (y=257).
+mousemove %LX+200% 195 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 40 'renard'
+sleep 1.2
+mousemove %LX+500% 257 click 1
 sleep 1.5
 shot 2-pruned-cloze
 mousemove %EX+60% %BY-184% click 1
 sleep 1.2
-mousemove %LX+24% 441 click 1
+mousemove %LX+200% 195 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 40 'cliff'
+sleep 1.2
+mousemove %LX+500% 257 click 1
 sleep 1.5
 shot 3-nothing-live
 mousemove %EX+60% %BY-184% click 1
 sleep 1.2
-mousemove %LX+24% 468 click 1
+mousemove %LX+200% 195 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 40 'beech'
+sleep 1.2
+mousemove %LX+500% 257 click 1
 sleep 1.5
 shot 4-unnameable-slot
