@@ -1,0 +1,32 @@
+# The card pane's other two entry shapes, and the warning above the fields.
+#
+# ADR-0018 gives the pane three shapes — a card, a **dormant line** (§2), and a statement for a note
+# that generates none (§6) — and ADR-0025 §4 puts the destructive-edit warning above the form's
+# fields. Two of the three and the warning had never been drawn by anything, because reaching
+# dormancy needs a slot with kept reviews that content stopped generating and no fixture asked for
+# one. `dormant` is that fixture.
+#
+# Three notes, one per naming case (ADR-0018 §3): the pruned cloze note keeps a live card beside a
+# `blank 2` line, the emptied vocab note has nothing live and two lines naming field **roles**, and
+# the returned note carries `card 7` — the slot no shipped kind declares.
+fixture dormant
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.2
+shot 1-list
+# The six filler notes come first (authored order, ADR-0021 §3), so the three notes this fixture is
+# about are rows seven, eight and nine — at y=252 + 27 per row.
+mousemove %LX+24% 414 click 1
+sleep 1.5
+shot 2-pruned-cloze
+mousemove %EX+60% 49 click 1
+sleep 1.2
+mousemove %LX+24% 441 click 1
+sleep 1.5
+shot 3-nothing-live
+mousemove %EX+60% 49 click 1
+sleep 1.2
+mousemove %LX+24% 468 click 1
+sleep 1.5
+shot 4-unnameable-slot

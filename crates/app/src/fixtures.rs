@@ -69,7 +69,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use cairn_core::content::{CardRef, DeckId, NoteId};
+use cairn_core::content::{CardRef, DeckId, NoteId, cloze_slot};
 use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
 use cairn_core::replay::{leeches, replay};
 use cairn_core::scheduling::Grade;
@@ -109,6 +109,23 @@ pub struct Reached {
     /// naming no deck the collection currently holds. Both are legal and still reviewable, and the
     /// note list cannot tell them apart, so neither can this.
     pub unfiled: usize,
+    /// **Dormant entries across every note** — slots the log holds with kept reviews that current
+    /// content no longer generates (ADR-0018 §2). Each one is a line in some note's card pane and a
+    /// row in that note's destructive-edit warning (ADR-0025 §4).
+    ///
+    /// Counted here because a fixture that reaches dormancy cannot check itself any other way: a
+    /// dormant entry is derived per note from the log against the content, so it does not appear in
+    /// the card count, the queue, or the note list. Without this number a fixture whose content edit
+    /// silently failed would install a perfectly ordinary collection and photograph a pane with
+    /// nothing dormant in it — the plausible picture of the wrong state this module exists to refuse.
+    pub dormant: usize,
+    /// Notes whose pane holds dormant entries and **no live card** — ADR-0018 §6's own state, which
+    /// is distinct from the empty note and says so in words.
+    ///
+    /// Separate from `dormant` because the two can move independently: one note losing a second
+    /// blank raises `dormant` and leaves this at zero, and only a note losing *everything* reaches
+    /// §6. A fixture promising both has to name both.
+    pub no_live_cards: usize,
 }
 
 impl std::fmt::Display for Reached {
@@ -127,6 +144,16 @@ impl std::fmt::Display for Reached {
                 f,
                 ", {} decks, {} of {} notes unfiled",
                 self.decks, self.unfiled, self.notes
+            )?;
+        }
+        // Written only by a fixture that reached dormancy, for the same reason the deck clause is:
+        // "0 dormant" is true of every other fixture and reads as a shortfall in one that was never
+        // about the card pane.
+        if self.dormant > 0 {
+            write!(
+                f,
+                ", {} dormant across {} notes, {} of them with nothing live",
+                self.dormant, self.notes, self.no_live_cards
             )?;
         }
         Ok(())
@@ -216,11 +243,37 @@ pub enum Fixture {
     /// [`SCHEDULED_AHEAD`], the pair [`Fixture::CaughtUp`] already asserts lands, so Review draws the
     /// caught-up floor and the list is what there is to look at.
     Decks,
+    /// **Cards with kept history that current content no longer generates** — the card pane's other
+    /// two entry shapes, and the destructive-edit warning above the fields.
+    ///
+    /// ADR-0018 gives the pane **three** entry shapes where ADR-0012 §1 described one: a card, a
+    /// dormant line (§2), and a statement for a note that currently generates none (§6). Two of the
+    /// three had never been drawn by anything, and neither had ADR-0025 §4's warning — because
+    /// dormancy needs a slot with **kept reviews** that content stopped generating, and every fixture
+    /// in the bench was built for a queue state or a card *shape*. `cloze` comes closest and misses:
+    /// its cards are new, and `cards::card_pane` skips a logged slot whose kept reviews are zero,
+    /// *"there is no history to warn about"*. So switching a `cloze` fixture note's kind produces no
+    /// dormant entry, correctly, and photographs nothing.
+    ///
+    /// That is the bench's own gap rather than a screen's: the state is a collection state, reachable
+    /// in principle, and no fixture asked for it. Same shape as
+    /// [#153](https://github.com/amin-bf/cairn/issues/153)'s ten-minute checkpoint and the opposite
+    /// answer — that one *could* not be a collection, this one simply was not.
+    ///
+    /// **The three notes span ADR-0018 §3's three naming cases, not a plausible collection.** A cloze
+    /// note reviewed on two blanks and edited down to one reaches §2's line beside a live card and
+    /// §3's case 2, *"blank 2"*. A `vocab` note reviewed on both directions and switched to an empty
+    /// `cloze` reaches §6 — nothing live, everything dormant — and §3's case 1, the field **roles**
+    /// *"Term → Meaning"*, which are named rather than shown because the content is exactly what is
+    /// gone. And a note carrying history at a slot no shipped kind declares reaches §3's case 3,
+    /// *"card 7"* — the unnameable one the ADR says is **shown, never hidden**, which is what a note
+    /// switched back out of an acquired kind leaves behind (ADR-0017 §6).
+    Dormant,
 }
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 7] = [
+    pub const ALL: [Fixture; 8] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
@@ -228,6 +281,7 @@ impl Fixture {
         Fixture::Cloze,
         Fixture::DueWithLeeches,
         Fixture::Decks,
+        Fixture::Dormant,
     ];
 
     /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
@@ -241,6 +295,7 @@ impl Fixture {
             Fixture::Cloze => "cloze",
             Fixture::DueWithLeeches => "due-with-leeches",
             Fixture::Decks => "decks",
+            Fixture::Dormant => "dormant",
         }
     }
 
@@ -254,6 +309,7 @@ impl Fixture {
             Fixture::Cloze => "Cloze cards",
             Fixture::DueWithLeeches => "Due, with leeches",
             Fixture::Decks => "Decks, and Persian",
+            Fixture::Dormant => "Dormant cards",
         }
     }
 
@@ -267,6 +323,7 @@ impl Fixture {
             Fixture::Cloze => "a card that steps down, and a reveal that grows by a whole face",
             Fixture::DueWithLeeches => "the picker with the leech entrance on the reach line",
             Fixture::Decks => "the deck filter with decks in it, and a right-to-left row",
+            Fixture::Dormant => "a dormant line, a pane with nothing live, and the edit warning",
         }
     }
 
@@ -374,6 +431,51 @@ impl Fixture {
                     history.passes(card, &SCHEDULED_AHEAD);
                 }
             }
+            // **The history is written against the content that generated it, and the content is
+            // then changed** — which is the whole mechanism, and the reason this fixture cannot be
+            // expressed as rows the way the others can. A dormant slot is not a value anybody
+            // stores: it is the *difference* between what the log holds and what the note currently
+            // says, recomputed per frame (ADR-0012 §5), so reaching one means writing both sides and
+            // letting them disagree.
+            //
+            // The edits below reach past `editor::commit_field` to `mutable_set` for the same reason
+            // `deck` reaches past `create_deck`: the editor is what a person uses and a fixture must
+            // not need one. What is written is byte-identical to what the editor writes.
+            Fixture::Dormant => {
+                // Filler, so the collection is a collection and Review has a screen to draw.
+                caught_up(coll, &mut history, 6)?;
+
+                // 1. Two blanks reviewed, then the second one taken out of the text. Blank 1 stays
+                //    live and blank 2 becomes a line beside it — ADR-0018 §1's interleaving in raw
+                //    slot order, with the live card first because 0x8001 sorts below 0x8002.
+                let pruned = cloze_note(coll, DORMANT_CLOZE_BEFORE)?;
+                history.passes(blank(pruned, 1), &SCHEDULED_AHEAD);
+                history.passes(blank(pruned, 2), &SCHEDULED_AHEAD);
+                set_field(coll, pruned, "Text", DORMANT_CLOZE_AFTER)?;
+
+                // 2. ADR-0018 §6's own worked example, verbatim: *"switch a reviewed `vocab` note to
+                //    `cloze` and type nothing, and every entry is dormant"*. Both directions carry
+                //    history, `cloze` with no text generates nothing, so the pane has two lines and
+                //    no card. Its `Term` and `Meaning` values stay on the surface untouched — the
+                //    fields simply stop being the ones the kind declares, which is what makes the
+                //    roles rather than the content the only thing left to name it by.
+                let emptied = vocab_note(coll, "la falaise", "the cliff")?;
+                history.passes(CardRef::new(emptied, VOCAB_TERM_SLOT), &SCHEDULED_AHEAD);
+                history.passes(CardRef::new(emptied, VOCAB_MEANING_SLOT), &SCHEDULED_AHEAD);
+                set_field(coll, emptied, "kind", "cloze")?;
+                set_field(coll, emptied, "Text", "")?;
+
+                // 3. History at a slot **no shipped kind declares**, which is what a note switched
+                //    back out of an acquired kind leaves behind (ADR-0017 §6): the stranger's slot
+                //    numbering is not ours, so nothing can name the question it asked. ADR-0018 §3
+                //    case 3 says show it anyway — an unnameable dormant card is still history
+                //    attached to this note, and dropping it is the header-counter failure at its
+                //    limit. The note itself is an ordinary `basic` one, so its own card stays live
+                //    beside the line.
+                let returned = note(coll, "le hêtre", "the beech")?;
+                history.passes(returned, &SCHEDULED_AHEAD);
+                history.passes(CardRef::new(returned.note, STRANGER_SLOT), &SCHEDULED_AHEAD);
+            }
         }
         history.write(coll, now_ms)?;
 
@@ -448,6 +550,12 @@ impl Fixture {
                     decks: 0,
                     notes: 4,
                     unfiled: 4,
+                    // Nothing has been reviewed, so no slot can keep history and nothing can be
+                    // dormant. Stated rather than elided with `..` because this pattern is
+                    // deliberately exhaustive: a field added to `Reached` should have to be answered
+                    // here, and that is exactly how `Fixture::Dormant` got these two answered.
+                    dormant: 0,
+                    no_live_cards: 0,
                 } => None,
                 _ => Some(
                     "five cloze cards from four notes, four of them offered under the \
@@ -504,6 +612,33 @@ impl Fixture {
                     ),
                 }
             }
+            // **Four dormant entries across three notes, one of them with nothing live.** Both
+            // numbers are load-bearing and they fail in different directions, which is why neither
+            // is implied by the other.
+            //
+            // `dormant: 4` pins that all three content edits actually took: the pruned blank, the
+            // two vocab directions, and the stranger slot. Any one of them silently not landing —
+            // a `mutable_set` that wrote to the wrong attribute, a blank parser that stopped seeing
+            // `{{2::…}}`, a kind change that did not re-derive live slots — leaves a collection that
+            // installs cleanly and photographs a pane with fewer lines than the fixture is named for.
+            //
+            // `no_live_cards: 1` pins the one thing a count cannot say: that ADR-0018 §6's state was
+            // actually reached rather than approximated. Emptying the vocab note's *fields* instead
+            // of its kind would leave a `vocab` note generating two cards with empty faces — four
+            // dormant entries collection-wide, `dormant` satisfied, and §6 nowhere on screen. That is
+            // the exact shape #163 walked into by hand before this fixture existed.
+            Fixture::Dormant => match reached {
+                Reached {
+                    dormant: 4,
+                    no_live_cards: 1,
+                    leeches: 0,
+                    ..
+                } => None,
+                _ => Some(
+                    "four dormant entries across three notes, one of them a note with \
+                     nothing live, and no leeches",
+                ),
+            },
         };
         match complaint {
             None => Ok(reached),
@@ -566,6 +701,20 @@ pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
         .filter(|row| !row.deck.as_deref().is_some_and(|d| held.contains(d)))
         .count();
 
+    // Dormancy is read the way the **card pane** reads it, per note, for the same reason the deck
+    // half is read the way the note list reads it: a fixture is checked against the screen's own
+    // definition or against nothing useful. `card_pane` is the one place that holds the log against
+    // the content, and it is what the editor draws.
+    let mut dormant = 0;
+    let mut no_live_cards = 0;
+    for row in &rows {
+        let pane = crate::cards::card_pane(coll, row.id).map_err(|e| e.to_string())?;
+        dormant += pane.warning.as_ref().map_or(0, |w| w.dormant.len());
+        if pane.state == crate::cards::State::NoLiveCards {
+            no_live_cards += 1;
+        }
+    }
+
     Ok(Reached {
         cards: current.len(),
         due: queue.due.len(),
@@ -575,6 +724,8 @@ pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
         decks: decks.len(),
         notes: rows.len(),
         unfiled,
+        dormant,
+        no_live_cards,
     })
 }
 
@@ -639,6 +790,38 @@ impl History {
 /// reusing this pair inherits an assertion rather than adding a second one to keep true.
 const SCHEDULED_AHEAD: [(i64, Grade); 2] = [(20, Grade::Good), (2, Grade::Easy)];
 
+/// The cloze text [`Fixture::Dormant`] reviews, and the text it is edited down to. **Two constants
+/// rather than one and an edit**, so the diff between them is readable as the thing the fixture is
+/// about: blank 2 stops being a blank and stays in the sentence as ordinary words, which is the
+/// commonest way a card really goes dormant — a person tidying a note, not deleting one.
+const DORMANT_CLOZE_BEFORE: &str = "Le renard {{1::traverse}} le {{2::pré}} au crépuscule";
+/// The same sentence with the second blank unwrapped. Blank 1 is untouched and stays live, so the
+/// pane holds a card and a line at once — ADR-0018 §2's cost, *"two dormant lines above a live card
+/// do not cost the pane its job"*, with something to look at rather than an argument.
+const DORMANT_CLOZE_AFTER: &str = "Le renard {{1::traverse}} le pré au crépuscule";
+
+/// `vocab`'s two card slots (`content::VOCAB`): Term → Meaning, and Meaning → Term. Named here
+/// because [`Fixture::Dormant`] logs history against them *before* the note stops being a `vocab`,
+/// and a bare `2` and `3` at that call site would be two numbers with no way to tell they came from
+/// a kind definition rather than from nowhere.
+const VOCAB_TERM_SLOT: u16 = 2;
+/// The reverse direction. See [`VOCAB_TERM_SLOT`].
+const VOCAB_MEANING_SLOT: u16 = 3;
+
+/// A fixed-arity slot **no shipped kind declares**, so `cards::dormant_name` can find no roles for
+/// it and falls to ADR-0018 §3's case 3, *"card 7"*.
+///
+/// It stands for an **acquired** kind's slot — a note imported under a stranger's kind definition,
+/// reviewed, then switched back to a shipped one (ADR-0017 §6, which permits exactly that and
+/// forbids switching *into* a stranger's kind). The slot numbering that produced it was never ours,
+/// which is the whole reason nothing can name the question it asked.
+///
+/// **Below [`CLOZE_SLOT_BIT`], deliberately.** ADR-0017 §3 partitions on the high bit, so a value
+/// with it set would be read as a cloze blank and named *"blank 7"* — a picture of case 2 filed
+/// under case 3, with nothing failing. 7 is not in `SHIPPED_KINDS`; the test below is what keeps
+/// that true when a kind gains a card.
+const STRANGER_SLOT: u16 = 7;
+
 /// `count` notes, each reviewed twice and scheduled well ahead — the filler every fixture needs so a
 /// screen has a collection behind it rather than one card.
 fn caught_up(coll: &mut Collection, history: &mut History, count: usize) -> Result<(), String> {
@@ -663,6 +846,36 @@ fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, Strin
 /// re-parse it to name them. Nothing in [`Fixture::Cloze`] needs one — it writes no history.
 fn cloze_note(coll: &mut Collection, text: &str) -> Result<NoteId, String> {
     coll.create_note("cloze", &[("Text", text)])
+        .map_err(|e| e.to_string())
+}
+
+/// The card a `cloze` note's blank numbered `n` occupies — `cloze_slot(n)`, the high bit set
+/// (ADR-0017 §3). Written out rather than left at the call site because a fixture naming a blank's
+/// slot by hand is naming the partition, and the partition is the one thing that must not be
+/// restated (ADR-0018 §1: the mask is a name, never a sort key).
+fn blank(note: NoteId, n: u16) -> CardRef {
+    CardRef::new(note, cloze_slot(n))
+}
+
+/// One `vocab` note and the two directions it generates (slots 2 and 3, `content::VOCAB`). The two
+/// `shown-with` fields are left empty: they follow `Term` wherever it lands (ADR-0002 §3) and add
+/// nothing to a note that exists to lose its cards.
+fn vocab_note(coll: &mut Collection, term: &str, meaning: &str) -> Result<NoteId, String> {
+    coll.create_note("vocab", &[("Term", term), ("Meaning", meaning)])
+        .map_err(|e| e.to_string())
+}
+
+/// Write one value onto a note's mutable surface — **the same row the editor writes** through
+/// `editor::commit_field` (ADR-0004 §7, ADR-0021 §7), reached directly for the reason [`deck`]
+/// reaches past `create_deck`: a fixture must not need the screen it exists to photograph.
+///
+/// `kind` is an ordinary attribute here and that is not a shortcut — ADR-0017 §5 makes a kind change
+/// an ordinary edit rather than a special mechanism, and the editor's own dropdown writes exactly
+/// this row. An empty `value` is written as a **SQL NULL**, matching `commit_field`'s clearing arm,
+/// so a field emptied by a fixture and a field emptied by a person are the same row.
+fn set_field(coll: &mut Collection, note: NoteId, attr: &str, value: &str) -> Result<(), String> {
+    let stored = (!value.is_empty()).then_some(value);
+    coll.mutable_set("note", &note.0, attr, stored)
         .map_err(|e| e.to_string())
 }
 
@@ -1056,6 +1269,95 @@ mod tests {
                 fixture.key()
             );
         }
+    }
+
+    /// **The three ways ADR-0018 §3 names a dormant entry, all reached by one fixture.** The install
+    /// check counts them; only this can say they are *the three cases*, and the cases are the reason
+    /// the fixture holds three notes rather than one with three dead slots.
+    ///
+    /// Nothing fails when this drifts. A stranger slot that a kind later declares still counts as
+    /// dormant, still draws a line, and quietly becomes a picture of case 1 filed under case 3 —
+    /// which is the same shape as photographing the wrong screen under the right name.
+    #[test]
+    fn the_dormant_fixture_reaches_all_three_of_adr_0018_s_naming_cases() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Dormant.install(&mut coll, NOW_MS).unwrap();
+
+        let rows = crate::notes::list(&coll, &crate::notes::Filter::default()).unwrap();
+        let mut names: Vec<String> = Vec::new();
+        for row in &rows {
+            let pane = crate::cards::card_pane(&coll, row.id).unwrap();
+            if let Some(warning) = &pane.warning {
+                names.extend(warning.dormant.iter().map(|d| d.name.clone()));
+            }
+        }
+        names.sort();
+
+        assert_eq!(
+            names,
+            vec![
+                // Case 1 — the field **roles** of a slot a held definition declares, twice, because
+                // `vocab` asks in both directions. Roles and not content: the content is what is gone.
+                "Meaning → Term".to_owned(),
+                "Term → Meaning".to_owned(),
+                // Case 2 — the high bit set, so a cloze blank in no definition at all.
+                "blank 2".to_owned(),
+                // Case 3 — neither, so the bare slot. Shown, never hidden (ADR-0018 §3).
+                "card 7".to_owned(),
+            ],
+            "the fixture exists to reach these three cases and nothing else reaches case 3"
+        );
+    }
+
+    /// **The pruned cloze note keeps a card beside its line.** ADR-0018 §1 interleaves live and
+    /// dormant in raw slot order rather than grouping by dormancy, and §2 accepts dormant lines on
+    /// the ground that *"two dormant lines above a live card do not cost the pane its job"* — which
+    /// is an argument about a pane that still has a card in it. A fixture where every dormant entry
+    /// sat on a note with nothing live would photograph the concession and never the case it was
+    /// made for.
+    #[test]
+    fn the_pruned_note_still_generates_the_blank_it_kept() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Dormant.install(&mut coll, NOW_MS).unwrap();
+
+        let rows = crate::notes::list(&coll, &crate::notes::Filter::default()).unwrap();
+        let pruned = rows
+            .iter()
+            .find(|r| r.fields.iter().any(|(_, v)| v == DORMANT_CLOZE_AFTER))
+            .expect("the edited cloze note is in the list under its new text");
+        let pane = crate::cards::card_pane(&coll, pruned.id).unwrap();
+
+        assert_eq!(
+            pane.state,
+            crate::cards::State::Cards,
+            "a note that lost one of two blanks still has one"
+        );
+        let live = pane
+            .entries
+            .iter()
+            .filter(|e| matches!(e, crate::cards::Entry::Live(_)))
+            .count();
+        let dormant = pane.entries.len() - live;
+        assert_eq!(
+            (live, dormant),
+            (1, 1),
+            "one card and one line, on one note"
+        );
+    }
+
+    /// [`STRANGER_SLOT`] stands for a slot **no shipped kind declares**, and that is what makes it
+    /// case 3 rather than case 1. A kind gaining a card at 7 would move it without touching this file.
+    #[test]
+    fn the_stranger_slot_is_declared_by_no_shipped_kind() {
+        use cairn_core::content::{CLOZE_SLOT_BIT, SHIPPED_KINDS};
+        assert!(
+            !SHIPPED_KINDS
+                .iter()
+                .any(|k| k.cards.iter().any(|c| c.slot == STRANGER_SLOT)),
+            "slot {STRANGER_SLOT} is declared now, so it names a question and is no longer case 3"
+        );
+        // And below the partition, or it would be read as a cloze blank and named "blank 7".
+        assert_eq!(STRANGER_SLOT & CLOZE_SLOT_BIT, 0);
     }
 
     /// The caught-up floor is bare: nothing due, and **no leech entrance under it**. The distinction
