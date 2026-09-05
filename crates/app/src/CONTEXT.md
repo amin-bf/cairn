@@ -301,9 +301,11 @@ checkpoint is not a fixture** and cannot be: it hangs off a sitting's monotonic 
 offers one lever that only ever *shortens* what ADR-0006 §1 names. A fixture is also **reproducible
 or it is not a fixture**: the bench exists so a re-run is comparable to the run before it, so nothing
 a fixture photographs may depend on the card *identity*, which is `uuid_v4` and therefore fresh on
-every build. Two things read it — `replay::leeches`' rank tie-break and `scheduling`'s interval fuzz
-— and #160 found the `leeches` fixture landing on the first, so two widths of one run ranked the
-same three cards differently (AGENTS.md, capture rule 22).
+every build. Four things read it on the way to a screen — the leech rank tie-break, the **due
+queue's** tie-break, the interval fuzz and the suspended section — and #160 found the `leeches`
+fixture landing on the first, so two widths of one run ranked the same three cards differently. The
+second is still live in `backlog`, whose twenty-five cards share one history (AGENTS.md, capture
+rule 22).
 _Avoid_: Seed, for a fixture — the seed is the six cards a real first install meets, and conflating
 the two is how "just extend the seed" gets proposed again; capture mode, which is the route this
 deliberately is not.
