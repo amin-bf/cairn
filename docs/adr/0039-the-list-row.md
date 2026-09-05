@@ -292,6 +292,38 @@ clause; `the_mark_is_a_cap_height_of_stones_and_no_wider_than_it_draws` still pi
 
 ## Consequences
 
+**A row's text is not selectable, and that is a decision rather than a side effect.** The band is a
+control, and a control's label is not a document. The place to select and copy a note's words is the
+editor, which the row opens in one tap and whose fields are real text fields; offering a second,
+weaker selection surface on the row buys nothing and costs the row its own press. `#163` asked
+whether selection was wanted anywhere here once the band was fixed, which is the right question and
+is why this is written down instead of living as a `.selectable(false)` nobody can account for.
+
+**And the rule underneath it, which is not about rows at all:**
+
+> A clickable surface must register its own interaction **after** the text drawn on it, or draw that
+> text as a galley rather than as a widget. A selectable label inside a click target wins the press.
+
+egui's `Label` is selectable by default and a selectable label senses **click and drag**, so it can
+put a text cursor in itself. Whether it steals the surface's press is decided by *registration
+order*, which is invisible at the call site and is not what either piece of code appears to be about.
+
+**The card is the worked counter-example, and it was checked rather than assumed.**
+[`surface::card`](../../crates/app/src/surface.rs) draws its faces and *then* calls `ui.interact` on
+the whole rect, so the card wins — clicking the prompt word reveals the card, verified by driving a
+click onto the word `chien` and watching it open. `controls::row` allocated its band **before**
+drawing the text into it, so the label won, and the row opened everywhere except on the note's own
+words. Two surfaces, one rule, opposite outcomes, and nothing in either call site says which.
+
+That is this map's recurring family again — *answers the renderer gives that do not mean what they
+are named* — with a new member: **a default that decides an interaction by construction order.** It
+is invisible to a capture (the screen is identical), invisible to a storyboard that happens to aim
+past short text, and invisible to a reading. `controls::a_row_opens_when_clicked_on_its_own_text`
+drives real pointer events for that reason, and its first frame exists because egui resolves
+interaction against the *previous* frame's rects — a widget drawn for the first time in the same
+frame as the press is not there to be pressed.
+
+
 **The leech screen answered the same question first and answered it differently, and that has to
 be recorded rather than reconciled away.** [#156](https://github.com/amin-bf/cairn/issues/156) landed
 in [#174](https://github.com/amin-bf/cairn/pull/174) while this ticket was in the sitting, and its
