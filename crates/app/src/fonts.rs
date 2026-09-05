@@ -12,12 +12,18 @@
 //! - **`DejaVu Sans`** — covers the IPA extensions the bundled Latin faces do not. Latin and
 //!   Cyrillic still come from egui's own Hack / Ubuntu-Light wherever they have the glyph, because
 //!   the added faces are appended as **fallbacks**.
-//! - **`Cairn Icons`** — the application's own pictures, currently one: [`MARK`], the four stones.
+//! - **`Cairn Icons`** — the application's own pictures: [`MARK`], the four stones, plus [`MOVE`]
+//!   and [`DELETE`], the note-list row's two controls (#162).
 //!   [ADR-0038 §1](../../../docs/adr/0038-the-mark-and-the-icon-rule.md) routes icons through the
 //!   font stack rather than through images, and this is what that costs: a fourth face, appended as
-//!   a fallback exactly like the other two, carrying no script. It is generated from the drawable
-//!   the Android build already ships — `scripts/build-icon-face.py`, whose `--check` mode is the
-//!   claim that the glyph really *is* the launcher's stones.
+//!   a fallback exactly like the other two, carrying no script. It is generated from sources this
+//!   repository keeps — the drawable the Android build already ships, and two SVGs under
+//!   `crates/app/res/icons/` — by `scripts/build-icon-face.py`, whose `--check` mode is the claim
+//!   that the glyphs really *are* those drawings.
+//!
+//!   **Adding to it cost no call site anything**, which is the property the route was chosen for:
+//!   the code points are private use and the face is last in every family, so an icon is reached by
+//!   falling through and inherits the tier and the ink of whatever it sits beside.
 //!
 //! Both are registered into **every family in use**, because a face missing from one renders as
 //! boxes there silently (ADR-0003 §4, client-stack rule 7). That is now **three** families, not the
@@ -50,6 +56,24 @@ use egui::{FontData, FontDefinitions, FontFamily};
 ///
 /// [ADR-0038 §1]: ../../../docs/adr/0038-the-mark-and-the-icon-rule.md
 pub const MARK: char = '\u{E000}';
+
+/// **Move** — a vertical double-headed arrow, the note-list row's placement control (#162).
+///
+/// The first icon in the product that is an *icon* in [ADR-0038 §1]'s sense rather than the mark:
+/// it stands for a word, and on this one screen it stands there **alone**, which is the exception
+/// the icon rule reserves for a control repeated down every row of a list. Twenty-five repetitions
+/// is what pays for the learning.
+///
+/// Its source is `crates/app/res/icons/move.svg`, and it is the one picture in the set drawn here
+/// rather than in the design project — the sixteen icons there were authored before the screen that
+/// needed a *move*, so there was none to take.
+///
+/// [ADR-0038 §1]: ../../../docs/adr/0038-the-mark-and-the-icon-rule.md
+pub const MOVE: char = '\u{E001}';
+
+/// **Delete** — the note-list row's other control (#162), from the design project's own
+/// `assets/icons/delete.svg`, redrawn as a filled outline because a glyph has no strokes.
+pub const DELETE: char = '\u{E002}';
 
 /// The font family that carries **bold**, registered by [`install`] and drawn by whatever renders
 /// the Markdown `**bold**` subset (ADR-0002 §8).
@@ -110,7 +134,7 @@ pub(crate) fn families() -> [FontFamily; 3] {
 /// So it is one row like any other. What being scriptless changes is only what the caption asks of
 /// the reader: not *are these words in the right order* but *are these four stones, stacked, the
 /// right way up*.
-pub(crate) const SPECIMENS: [(&str, &str); 8] = [
+pub(crate) const SPECIMENS: [(&str, &str); 9] = [
     (
         "Persian — the dog is in the house; the full stop belongs at the far left",
         "سگ در خانه است.",
@@ -141,6 +165,11 @@ pub(crate) const SPECIMENS: [(&str, &str); 8] = [
     (
         "The mark — four stones, stacked largest at the bottom, solid the whole way through",
         "\u{E000}",
+    ),
+    (
+        "The row icons — an arrow with a head at each end, then a bin with its lid: both closed \
+         outlines, neither holed through the middle where two contours met",
+        "\u{E001} \u{E002}",
     ),
 ];
 
@@ -404,5 +433,44 @@ mod tests {
             bold > normal * 1.05,
             "bold ({bold}px) must be visibly heavier than normal ({normal}px)"
         );
+    }
+
+    /// **Two icons in a set lay out to the same width, and that is what makes a column a column**
+    /// (ADR-0038 §1's set clause, ADR-0039 §1).
+    ///
+    /// The stated quantity checked against the one that came out, which is
+    /// [#155](https://github.com/amin-bf/cairn/issues/155)'s third instrument. It is worth a test
+    /// rather than a reading because the failure is **silent and pretty**: `move` draws 255 units of
+    /// ink and `delete` 465, so under §1's original *advance = ink width* the two row controls come
+    /// out different widths, the action column goes ragged, and every screen still renders. That
+    /// raggedness is the exact defect the column was introduced to fix, so it would have been
+    /// reintroduced by a metric nobody thought of as a layout decision.
+    #[test]
+    fn the_row_icons_lay_out_to_one_width() {
+        let ctx = installed();
+        let advance = |glyph: char| {
+            ctx.fonts_mut(|f| {
+                f.layout_no_wrap(
+                    glyph.to_string(),
+                    FontId::proportional(crate::typography::BODY),
+                    Color32::WHITE,
+                )
+            })
+            .rect
+            .width()
+        };
+        let (mv, del) = (advance(MOVE), advance(DELETE));
+        assert!(
+            (mv - del).abs() < 0.5,
+            "a set's glyphs share an advance so an icon-only column lines up: \
+             move is {mv}px and delete is {del}px"
+        );
+        // **The mark keeps §1's original rule and is deliberately not asserted here.** It stands
+        // alone, so its advance is its own ink — which
+        // `the_mark_is_a_cap_height_of_stones_and_no_wider_than_it_draws` already pins, and which is
+        // where that claim belongs. Asserting it *by contrast with the set* was tried and is a bad
+        // test: the mark is 706 units of ink against the set's 720-unit square, so the two rules
+        // land 0.2px apart at body size and the difference under test would be the coincidence that
+        // the stones are nearly square rather than the rule that they are measured differently.
     }
 }

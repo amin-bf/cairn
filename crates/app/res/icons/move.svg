@@ -1,0 +1,12 @@
+<!-- **Drawn for this screen, not taken from the sixteen.** The design project's icon set holds add,
+     back, cairn, deck, delete, edit, leech, notes, optimise, reveal, review, search, settings,
+     suspend, sync and unsuspend — and no picture for `move`, because the set was authored before
+     the screen that needed one. So this is the one icon in the product whose source starts here
+     rather than there, and the design project takes it from this file rather than the other way
+     round.
+
+     A vertical double-headed arrow, in the set's own language: the same 24px grid, the same 1.5
+     stroke, the same round caps and joins. It says *up or down*, which is what a two-tap placement
+     between neighbours does (ADR-0021 §4) — and deliberately not a drag handle, because a handle
+     is an affordance you operate and this is an icon standing for a word. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="move"><path d="M12 4.75v14.5M12 4.75l-3.5 3.5M12 4.75l3.5 3.5M12 19.25l-3.5-3.5M12 19.25l3.5-3.5"></path></svg>
