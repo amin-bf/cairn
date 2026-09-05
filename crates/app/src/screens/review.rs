@@ -12,8 +12,7 @@ use cairn_store::Collection;
 
 use crate::session::{self, Offered, ReviewState};
 use crate::{
-    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading,
-    surface,
+    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
 };
 use crate::{bidi, controls, fonts, frame, spacing, theme, typography};
 
@@ -453,17 +452,22 @@ fn leech_screen(
             // sitting chose ADR-0010 §6's duration sentence to replace it and made a bench that can
             // produce a real duration its precondition, because every fixture writes a constant
             // 4,200ms and §6's own example draws as `0 minutes`.
-            leech_row(ui, preview, Some(&format!("{days} bad days · {reviews} reviews")), |ui| {
-                if controls::snug(ui, "Edit").clicked() {
-                    edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
-                }
-                if controls::snug(ui, "Suspend").clicked() {
-                    suspend = Some(*card);
-                }
-                if controls::snug(ui, "Delete").clicked() {
-                    delete = Some(card.note);
-                }
-            });
+            leech_row(
+                ui,
+                preview,
+                Some(&format!("{days} bad days · {reviews} reviews")),
+                |ui| {
+                    if controls::snug(ui, "Edit").clicked() {
+                        edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
+                    }
+                    if controls::snug(ui, "Suspend").clicked() {
+                        suspend = Some(*card);
+                    }
+                    if controls::snug(ui, "Delete").clicked() {
+                        delete = Some(card.note);
+                    }
+                },
+            );
         }
     }
 
@@ -550,7 +554,12 @@ const BETWEEN_ROWS: f32 = spacing::gap(4);
 /// the word is text and **`Edit` is named** — a third control per row is the price, paid visibly.
 /// ADR-0010 §7 keeps edit the *primary action* in the sense of being the right one to reach for; that
 /// is about which action the design recommends, not about ADR-0034 §2's fill.
-fn leech_row(ui: &mut egui::Ui, preview: &str, cost: Option<&str>, actions: impl FnOnce(&mut egui::Ui)) {
+fn leech_row(
+    ui: &mut egui::Ui,
+    preview: &str,
+    cost: Option<&str>,
+    actions: impl FnOnce(&mut egui::Ui),
+) {
     egui::Frame::new()
         .fill(theme::card_fill(ui.visuals()))
         .stroke(theme::card_stroke(ui.visuals()))
@@ -939,10 +948,8 @@ mod tests {
                  it, so it may have none — a bare `ui.button` draws exactly this fill. drew {drawn:?}"
             );
 
-            let controls_drawn: Vec<_> = drawn
-                .iter()
-                .filter(|(_, fill)| *fill == ordinary)
-                .collect();
+            let controls_drawn: Vec<_> =
+                drawn.iter().filter(|(_, fill)| *fill == ordinary).collect();
             assert_eq!(
                 controls_drawn.len(),
                 3,
