@@ -1,0 +1,34 @@
+# The note list's **deck surface**, which nothing had photographed until #161 built the fixture:
+# the filter holding five entries, a long deck name in the closed control, *Delete deck* appearing
+# only when a deck is filtered to, and the placement state over a list that has decks in it.
+#
+# This is #162's *before*. `notes.txt` cannot be reused for it: its `Move` coordinate is measured off
+# `backlog`'s first row and `decks` has a wider one, so the click lands on the row and opens the
+# editor — a full set of valid captures of the wrong screen. That is not a defect of that file. It
+# is the row's own finding arriving in the harness: **every row is sized to its own preview, so no
+# coordinate aimed at a row control survives a change of content.**
+fixture decks
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.2
+shot 01-list
+# The filter, open. Five entries where every capture before #161 held one, and there is no *Unfiled*
+# among them — `notes::Filter::deck` is an `Option`, whose `None` means *narrow nothing*.
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 02-deck-open
+# The longest deck name, chosen for what the **closed** control does with it.
+mousemove %LX+130% 245 click 1
+sleep 1.2
+shot 03-deck-filtered
+# Back to all decks, so the placement state runs over the whole list.
+mousemove %LX+50% 145 click 1
+sleep 1
+mousemove %LX+40% 171 click 1
+sleep 1.2
+# *Move* on the first row — 414→458 measured off `01-list`, not adjusted by eye.
+mousemove %LX+116% 252 click 1
+sleep 1.2
+shot 04-placement
