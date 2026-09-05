@@ -1,0 +1,17 @@
+# **The leech screen prototype** ([#156](https://github.com/amin-bf/cairn/issues/156)).
+#
+# The same route as `leeches.txt` — the caught-up floor with three cards over the leech floor, then
+# through the durable entrance — but it shoots **one** frame under whatever `CAIRN_PROTO` names, so a
+# ladder is a loop over knob positions rather than a storyboard per candidate.
+#
+# The fixture is #160's: six failure days, then four and four split by which failed more recently.
+# The middle pair is the whole point — it ties on the caption and has a real order — so a candidate
+# that cannot express that order is visibly failing rather than arguably failing.
+fixture leeches
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 600 click 1
+sleep 1
+# The durable entrance, on ADR-0035 §1's reach line (ADR-0038 §5) — `%BY-183%`, never a literal y.
+mousemove %CX% %BY-183% click 1
+sleep 1.2
+shot proto

@@ -1,7 +1,7 @@
 //! The **Review** destination: the count picker, the running sitting, the leech screen it hangs off
 //! (ADR-0010 §6), and the wording helpers each of those needs.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use cairn_core::content::{CardRef, NoteId};
@@ -15,7 +15,7 @@ use crate::{
     Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading,
     surface, text,
 };
-use crate::{bidi, controls, fonts, frame, spacing, typography};
+use crate::{bidi, controls, fonts, frame, proto, spacing, typography};
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
 /// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
@@ -62,10 +62,26 @@ pub(crate) fn review(
         if *showing_leeches {
             heading(ui, "Leeches");
             ui.add_space(spacing::gap(2));
-            let edit = leech_screen(ui, coll, &ranked, &suspended, &replayed);
-            ui.add_space(spacing::gap(2));
+            let edit = leech_screen(ui, coll, &ranked, &suspended, &replayed, today);
+            // **ADR-0035 §1's third call site, and the prototype's `reach` knob.** #155 promoted §1
+            // from Review to a *page* rule and moved the entrance that leads *into* this screen onto
+            // the reach line — and this screen, directly behind it, kept drawing its own last control
+            // hard under the list with the rest of the page empty. `frame::slack_above` has two
+            // callers on `main` and neither is here.
+            if proto_active() && proto::on_reach_line() {
+                ui.add_space(frame::slack_above(
+                    frame::page_room(ui),
+                    controls::HEIGHT,
+                    spacing::gap(2),
+                ));
+            } else {
+                ui.add_space(spacing::gap(2));
+            }
             if full_width_button(ui, "Back to review").clicked() {
                 *showing_leeches = false;
+            }
+            if proto_active() {
+                proto::knobs(ui);
             }
             return edit;
         }
@@ -383,6 +399,9 @@ fn leech_screen(
     ranked: &[Leech],
     suspended: &HashSet<CardRef>,
     replayed: &Replayed,
+    // **Throwaway (#156)** — the device-local day, so the prototype's caption can say how long ago a
+    // card last failed. That is `leeches`' second rank key, and the shipped screen draws it nowhere.
+    today: i64,
 ) -> Option<NoteId> {
     // Render each card's preview text up front, while the collection is only read; the owned strings
     // then outlive the immutable borrow so the action writes below are free to take `&mut coll`.
@@ -419,6 +438,48 @@ fn leech_screen(
     if active.is_empty() && suspended_rows.is_empty() {
         body(ui, "Nothing is costing you a lot right now.");
         return None;
+    }
+
+    // **The prototype's rows** (#156), when `CAIRN_PROTO` is set. Everything above this point is the
+    // shipped screen's own derivation — the prototype varies how a row is *drawn* and nothing about
+    // what a row is.
+    if proto_active() && !active.is_empty() {
+        let durations = total_durations(coll);
+        body(ui, "These keep catching you out — worst first.");
+        ui.add_space(spacing::gap(1));
+        for (i, (card, preview, days, reviews)) in active.iter().enumerate() {
+            if i > 0 {
+                ui.add_space(spacing::gap(proto::outer()));
+            }
+            let last = ranked
+                .iter()
+                .find(|l| l.card == *card)
+                .map_or(0, |l| l.last_failure_day);
+            let row = proto::Row {
+                preview: preview.clone(),
+                failure_days: *days,
+                reviews: *reviews,
+                failed_days_ago: (today - last).max(0),
+                minutes: durations.get(card).copied().unwrap_or(0) / 60_000,
+            };
+            let hit = proto::leech_row(ui, &row, i + 1);
+            if hit.edit {
+                edit = Some(card.note);
+            }
+            if hit.suspend {
+                suspend = Some(*card);
+            }
+            if hit.delete {
+                delete = Some(card.note);
+            }
+        }
+        if let Some(card) = suspend {
+            let _ = coll.suspend(card);
+        }
+        if let Some(note) = delete {
+            let _ = coll.mutable_set("note", &note.0, "deleted", Some("true"));
+        }
+        return edit;
     }
 
     if !active.is_empty() {
@@ -482,6 +543,31 @@ fn leech_screen(
         let _ = coll.mutable_set("note", &note.0, "deleted", Some("true"));
     }
     edit
+}
+
+/// **Throwaway (#156)** — whether the leech-screen prototype's knobs are in play.
+fn proto_active() -> bool {
+    std::env::var("CAIRN_PROTO").is_ok()
+}
+
+/// **Throwaway (#156)** — total answer time per card, in milliseconds, straight off the log.
+///
+/// ADR-0010 §6 names this as the fact that makes a leech's cost concrete — *"22 reviews, 14 minutes,
+/// still failing"* — and **no surface can reach it**: `duration_ms` is on every `reviewed` row and
+/// the running application writes a real one, but `replay::CardState` does not aggregate it, so the
+/// screen the ADR wrote that sentence for has never had the number. Computed here rather than in
+/// `replay` because a prototype may not widen the domain crate; if the sitting keeps it, that is
+/// where it belongs.
+fn total_durations(coll: &Collection) -> HashMap<CardRef, u64> {
+    let mut out: HashMap<CardRef, u64> = HashMap::new();
+    for line in coll.log_lines().unwrap_or_default() {
+        if let cairn_core::log::ParsedLine::Row(cairn_core::log::Row::Reviewed(r)) =
+            cairn_core::log::parse_line(&line)
+        {
+            *out.entry(r.card).or_default() += r.duration_ms;
+        }
+    }
+    out
 }
 
 /// One card's prompt, for a leech row — the card the user will recognise. A dormant card (its content

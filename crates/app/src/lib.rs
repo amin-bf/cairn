@@ -30,6 +30,9 @@ pub mod motion;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
+/// **Throwaway** — the leech-screen prototype for #156. Never merges; preserved as
+/// `prototypes/issue-156`. See its module docs.
+pub mod proto;
 mod screens;
 pub mod session;
 pub mod spacing;
