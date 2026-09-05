@@ -102,12 +102,27 @@ latin   row  button 320→414   Move 423→468   Delete 477→528
 persian row  glyphs 274→292   button 318→378 (empty)   Move 387→431   Delete 440→492
 ```
 
-The frame's column starts at 320. The button is allocated 61px and the word needs about 105, so 44px
-of it is drawn outside the button and 46px outside ADR-0031's left margin, and the button itself
-renders empty. It is on `main`, nothing fails, and it is the note-list relative of
+The frame's column starts at 320. The button is allocated 61px and the word needs more, so 44px of it
+is drawn outside the button and 46px outside ADR-0031's left margin, and the button itself renders
+empty. Nothing failed, and it is the note-list relative of
 [#132](https://github.com/amin-bf/cairn/issues/132)'s card face drawing Persian 455px off the
-window. It belongs to [#162](https://github.com/amin-bf/cairn/issues/162), because whatever the row
-becomes has to be built against a correct measurement.
+window.
+
+**This one is fixed** — `fc4e129c` on `main`, ahead of
+[#162](https://github.com/amin-bf/cairn/issues/162) rather than inside it, because the cause was not
+the row. `bidi::job` set `halign = Align::RIGHT` on a right-to-left paragraph, and epaint aligns a
+galley's rows against the **origin** rather than the wrap width, so the row laid out into negative
+x — to the left of wherever the widget drew it. It was documented as a *direction marker* that every
+caller must undo, and two of eleven did: `surface::face`, after #132 found this on the card face,
+and `bidi_layouter`, because a `TextEdit` clips at a fixed origin and visibly ate the last character
+of every Persian line. The note that told the other nine not to bother was wrong — it said a label
+is not clipped because it allocates from `galley.size()` and reserves the space the text hangs into,
+and it reserves the *width* while the ink hangs to the **left** of it.
+
+So `07-list-persian.png` is the one capture in this set that is a picture of a **fixed** defect
+rather than a live one. It is kept as taken: the *before* is the point of the set, and every other
+screen here is pixel-identical across that fix — the change touches right-to-left text and nothing
+else, which is the first thing it was checked for.
 
 ## What the reach line does here
 
