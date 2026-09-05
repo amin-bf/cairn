@@ -838,6 +838,46 @@ fn an_optimisation_run_writes_a_parameter_row_only_when_the_vector_changes() {
     assert_eq!(again, None, "the same vector a second time writes nothing");
 }
 
+/// **Restamping only what differs is a stamp rule, not a convenience** (ADR-0008 §3). Writing a
+/// value with the content it already has takes a fresh Lamport counter, so it is a new edit that
+/// propagates — importing a 5,000-note deck would send 5,000 of them and re-importing the same file
+/// would send them all again. The differing-only write is what makes the re-import silent.
+#[test]
+fn a_write_of_the_value_already_settled_takes_no_new_stamp() {
+    let (mut coll, _d, _s) = open();
+    let id = note(1);
+
+    assert!(
+        coll.mutable_set_if_changed("note", &id.0, "Front", Some("bonjour"))
+            .unwrap(),
+        "the first write lands"
+    );
+
+    assert!(
+        !coll
+            .mutable_set_if_changed("note", &id.0, "Front", Some("bonjour"))
+            .unwrap(),
+        "the same content a second time writes nothing"
+    );
+
+    // A genuine change still lands, and clearing a value that was never set is itself a no-op —
+    // absent and SQL NULL are the same value (ADR-0007 §4).
+    assert!(
+        coll.mutable_set_if_changed("note", &id.0, "Front", Some("salut"))
+            .unwrap()
+    );
+    assert!(
+        !coll
+            .mutable_set_if_changed("note", &id.0, "Back", None)
+            .unwrap(),
+        "clearing an attribute that was never set writes nothing"
+    );
+    assert_eq!(
+        coll.mutable_get("note", &id.0, "Front").unwrap().as_deref(),
+        Some("salut")
+    );
+}
+
 /// Copy `collection.db` (and any WAL sidecars) from one data dir to another — a restore.
 fn copy_collection(from: &std::path::Path, to: &std::path::Path) {
     for name in ["collection.db", "collection.db-wal", "collection.db-shm"] {

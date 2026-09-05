@@ -42,8 +42,9 @@ pub use deck::{
 };
 pub use files::{COLLECTION_EXTENSION, is_recognised};
 pub use import::{
-    Collection, DeckPlan, Header, HeldDeck, MovingIn, Path, Plan, Profile, Refusal, plain, preview,
-    sniff,
+    Collection, DECK_AUTHOR_ATTR, DECK_DESCRIPTION_ATTR, DECK_DIGEST_ATTR, DECK_LICENCE_ATTR,
+    DECK_REVISION_ATTR, DeckPlan, Header, HeldDeck, Import, MovingIn, Path, Plan, Profile, Refusal,
+    Write, plain, preview, read, sniff,
 };
 pub use name::{DECK_EXTENSION, export_filename, sanitise};
 pub use platform::{PlatformError, Written};
