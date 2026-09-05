@@ -1,0 +1,43 @@
+# The same screens as `notes.txt`, in the **light** appearance (ADR-0036).
+#
+# It switches the theme through the real control on Settings rather than through a test hook, for
+# `light.txt`'s reason: the appearance is a stored, device-local preference, so a capture that forced
+# it some other way would photograph a state the application cannot be put into.
+#
+# **Settings is visited first**, and that is why the order differs from `notes.txt`. Anything
+# captured before the switch is whatever the host's System preference resolves to, which is not
+# reproducible between machines.
+#
+# Two of #150's three questions are about **material** rather than arrangement — whether a card and
+# a text field may share a fill, and what the Cards pane is — and #143 found that ADR-0033 §3's rule
+# passes in both themes while its *values* collapse in one of them. So the light set is evidence
+# here rather than a completeness exercise.
+fixture backlog
+mousemove %CX% 600 click 1
+sleep 1
+# Settings, then **Appearance: Light** — `%LX+84%` at y=93, the same at both widths because the
+# control sits directly under a one-word heading that cannot wrap (#143).
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %LX+84% 93 click 1
+sleep 1.5
+# Wind the shared scroll area back up before leaving, or Notes opens mid-page.
+mousemove %CX% 400 click 4 click 4 click 4 click 4 click 4 click 4 click 4 click 4
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.2
+shot 01-list
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 02-list-deck-open
+key Escape
+sleep 0.8
+mousemove %LX+79% 252 click 1
+sleep 1.2
+shot 03-placement
+mousemove %CX% 261 click 1
+sleep 1.2
+# The editor last — above 900 it takes its own wider frame and the nav row follows it.
+mousemove %LX+24% 252 click 1
+sleep 1.5
+shot 04-editor

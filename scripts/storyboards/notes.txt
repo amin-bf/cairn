@@ -1,0 +1,45 @@
+# The **Notes** destination end to end — the list, the deck overlay, the placement state, and the
+# editor. The *before* for the Notes slice (#150) and its two children.
+#
+# Runs unchanged at any width, and is meant to be run at more than one: the editor's arrangement
+# flips at `frame::TWO_COLUMN_MIN_WIDTH` (900), so 880 and 920 photograph the threshold from either
+# side while 1280 and 560 photograph the two ends.
+#
+# `%CX%` is the centre of the output; `%LX+n%` is `n` px inside the **page frame's** left edge
+# (#131). Every y below was measured off a capture rather than adjusted by eye, and every one of
+# them will move when either child ticket lands.
+#
+# **The editor is visited last**, for `baseline.txt`'s reason: above 900 it takes its own wider
+# frame and the nav row follows it, so any `%LX+n%` nav click after this point lands on empty page.
+# That same frame is why this file never aims at a control *inside* the editor — see
+# `notes-persian.txt`, which has to, and pins itself to one width to do it.
+fixture backlog
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.2
+shot 01-list
+# The deck filter — the app's only overlay, and since ADR-0037 the one surface that floats. With no
+# fixture that creates a deck it holds exactly one entry, *All decks*, which is the value that
+# exists when no deck does; #161 is the fixture that gives this shot something to show.
+mousemove %LX+50% 145 click 1
+sleep 1
+shot 02-list-deck-open
+key Escape
+sleep 0.8
+# *Move* on the first row enters the two-tap placement state (ADR-0021 §4). The row is sized to its
+# own preview, so `+79` is the first row's *Move* and no other row's — which is the finding this
+# capture exists to show rather than an inconvenience of driving it.
+mousemove %LX+79% 252 click 1
+sleep 1.2
+shot 03-placement
+# *Cancel move* is full-width at y=261 — below the search field, where the rows would otherwise be.
+mousemove %CX% 261 click 1
+sleep 1.2
+# The editor, opened from the first row. `chien` in the shipping seed; `l'aube` under `backlog`.
+# Either way it is a note that **has a card**, so the Cards pane has something in it — a fresh draft
+# would read "No cards yet" and leave half the two-column layout empty.
+mousemove %LX+24% 252 click 1
+sleep 1.5
+shot 04-editor
