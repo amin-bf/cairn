@@ -5,9 +5,21 @@
 //! decisions rather than pixels:
 //!
 //! - **Autosave, per field** (ADR-0021 §7): there is no Save button and no discard. A field settles
-//!   on blur or a short idle as one row on ADR-0004 §7's mutable surface, and a **new note is
-//!   committed on its first non-empty field** — before that there is nothing for a kill to lose,
-//!   which is the whole point of the rule on a frozen Android app.
+//!   as one row on ADR-0004 §7's mutable surface, and a **new note is committed on its first
+//!   non-empty field** — before that there is nothing for a kill to lose, which is the whole point
+//!   of the rule on a frozen Android app.
+//!
+//!   §7 names **two** triggers, *"on blur or a short idle"*, and this line used to state both as
+//!   though both were built. **Only the blur exists.** The idle trigger was deferred in
+//!   [#82](https://github.com/amin-bf/cairn/issues/82)'s closing comment — *"for the
+//!   verify-on-handset pass — a container cannot judge them"* — against an acceptance criterion
+//!   that was never ticked, and has been owned by nothing since. Say so here rather than restating
+//!   the rule, because a doc comment that describes an unbuilt half is how it stayed unnoticed.
+//!
+//!   The blur half is observed through a widget's own response, so it cannot see a field the editor
+//!   stops drawing while the user is still inside it. [`settle_all`] closes that at the exits; the
+//!   idle trigger is still the answer for the case with no exit at all — a phone put down mid-note,
+//!   which is §7's third recorded ground.
 //! - **The kind dropdown** (ADR-0012 §2, ADR-0017 §6): the shipped kinds, plus the note's *own*
 //!   current kind when that kind was acquired — and **never another acquired one**, because no note
 //!   may be switched *into* a kind whose slot namespace this build did not mint.
@@ -119,10 +131,10 @@ pub fn settle_all(
 ) -> Option<NoteId> {
     let born_before = existing.is_some();
     let mut note = existing;
+    // Re-asked per field rather than computed once: the first non-empty field of a draft *creates*
+    // the note, so what counts as unsettled changes underneath the loop.
     for (field, value) in fields {
-        if let Some(id) = note
-            && stored_value(coll, id, field).as_deref() == Some(value.as_str())
-        {
+        if !is_unsettled(coll, note, field, value) {
             continue;
         }
         if let Ok(committed) = commit_field(coll, note, kind, field, value) {
@@ -138,14 +150,25 @@ pub fn settle_all(
     note
 }
 
-/// What the store holds for `field`, with a cleared field reading as the empty string so it compares
-/// equal to an empty buffer. A read that fails reads as `None`, which settles rather than skips —
-/// the safe direction, since the cost of a redundant write is a stamp and the cost of a wrong skip
-/// is the edit.
-fn stored_value(coll: &Collection, note: NoteId, field: &str) -> Option<String> {
-    coll.mutable_get("note", &note.0, field)
-        .ok()
-        .map(Option::unwrap_or_default)
+/// Whether this field's buffer holds an edit the store has not settled — the predicate that makes
+/// [`settle_all`] a settle rather than a save.
+///
+/// On a **stored** note, unsettled means the buffer and the stored value disagree; a cleared field
+/// reads back absent ([`Collection::mutable_get`]) and so compares equal to an empty buffer. On an
+/// **unborn draft** there is nothing to compare against, and ADR-0021 §7's birth rule is exactly this
+/// predicate: a non-empty field is unsettled and commits the note, an empty one is not and leaves the
+/// draft out of the store.
+///
+/// A read that fails reads as unsettled, which settles rather than skips — the safe direction, since
+/// the cost of a redundant write is a stamp and the cost of a wrong skip is the edit itself.
+pub fn is_unsettled(coll: &Collection, existing: Option<NoteId>, field: &str, value: &str) -> bool {
+    match existing {
+        Some(id) => match coll.mutable_get("note", &id.0, field) {
+            Ok(stored) => stored.unwrap_or_default() != value,
+            Err(_) => true,
+        },
+        None => !value.is_empty(),
+    }
 }
 
 /// File a note under a deck, or clear its deck reference (ADR-0005 §8, ADR-0021 §9). A note belongs to
@@ -286,5 +309,116 @@ mod tests {
         // Clearing a field is an ordinary edit, not a special discard (ADR-0012 §5's Undo shape).
         commit_field(&mut coll, Some(id), "basic", "Back", "").unwrap();
         assert!(coll.mutable_get("note", &id.0, "Back").unwrap().is_none());
+    }
+
+    fn buffers(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(f, v)| ((*f).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn the_field_you_are_still_inside_settles_when_the_editor_stops_drawing_it() {
+        // ADR-0021 §7 settles on blur, and the blur is observed through the widget's own response —
+        // so a field the user never leaves never produces one. Pressing *Done* used to drop that
+        // edit with the buffers: type Front, type Back, press Done, and Back was gone from the store
+        // while the screen had shown it the whole time. Nothing failed and nothing warned.
+        let (mut coll, _d, _s) = open();
+        let id = commit_field(&mut coll, None, "basic", "Front", "l'aube")
+            .unwrap()
+            .unwrap();
+
+        // Back was typed and never blurred — it exists only in the buffer.
+        assert!(coll.mutable_get("note", &id.0, "Back").unwrap().is_none());
+        settle_all(
+            &mut coll,
+            Some(id),
+            "basic",
+            &buffers(&[("Front", "l'aube"), ("Back", "dawn")]),
+            None,
+        );
+        assert_eq!(
+            coll.mutable_get("note", &id.0, "Back").unwrap().as_deref(),
+            Some("dawn"),
+            "the field the editor closed on has to land"
+        );
+    }
+
+    #[test]
+    fn settling_is_not_a_save_button_because_an_unchanged_field_is_not_written() {
+        // The distinction ADR-0021 §7 turns on. A Save button gathers every field and writes them as
+        // one act at a moment the user picks; this asks each field the same question its own blur
+        // would have asked — *is what I hold already what is stored* — and touches only those that
+        // disagree. So opening a note and leaving writes no row, no stamp and no sync traffic, and
+        // pressing *Done* twice is indistinguishable from pressing it once.
+        let (mut coll, _d, _s) = open();
+        let id = commit_field(&mut coll, None, "basic", "Front", "l'aube")
+            .unwrap()
+            .unwrap();
+        commit_field(&mut coll, Some(id), "basic", "Back", "dawn").unwrap();
+
+        for (field, value) in [("Front", "l'aube"), ("Back", "dawn")] {
+            assert!(
+                !is_unsettled(&coll, Some(id), field, value),
+                "{field} matches the store and must not be rewritten"
+            );
+        }
+        // Only the field that actually changed, including a clearing edit, which is a change.
+        assert!(is_unsettled(&coll, Some(id), "Back", "daybreak"));
+        assert!(is_unsettled(&coll, Some(id), "Back", ""));
+        // A cleared field reads back absent, so an empty buffer over it is settled, not a rewrite.
+        commit_field(&mut coll, Some(id), "basic", "Back", "").unwrap();
+        assert!(!is_unsettled(&coll, Some(id), "Back", ""));
+    }
+
+    #[test]
+    fn settling_an_untouched_draft_still_commits_nothing() {
+        // §7's birth rule survives the exit path: closing an empty new note leaves the store empty,
+        // exactly as blurring out of an empty first field does. The draft is the one thing a kill may
+        // lose and it stays as small as possible.
+        let (mut coll, _d, _s) = open();
+        let born = settle_all(
+            &mut coll,
+            None,
+            "basic",
+            &buffers(&[("Front", ""), ("Back", "")]),
+            None,
+        );
+        assert!(born.is_none(), "an empty draft is not born by being closed");
+        assert!(!crate::notes::any_notes(&coll).unwrap());
+    }
+
+    #[test]
+    fn a_draft_born_on_the_way_out_lands_under_the_deck_it_was_filed_to() {
+        // ADR-0021 §9: a draft carries the deck chosen before it existed, applied once on the
+        // None→Some transition. The blur path did this and the *New note* chord's own commit loop did
+        // not, so a note created by the chord under an active deck filter landed unfiled. Both go
+        // through here now, so there is one answer rather than two.
+        let (mut coll, _d, _s) = open();
+        let deck = coll.create_deck("Français").unwrap();
+        let born = settle_all(
+            &mut coll,
+            None,
+            "basic",
+            &buffers(&[("Front", "l'aube"), ("Back", "dawn")]),
+            Some(deck),
+        )
+        .expect("a non-empty draft is born on the way out");
+
+        assert_eq!(
+            coll.mutable_get("note", &born.0, "Back")
+                .unwrap()
+                .as_deref(),
+            Some("dawn"),
+            "every field of a draft born here lands, not just the first"
+        );
+        assert_eq!(
+            coll.mutable_get("note", &born.0, "deck")
+                .unwrap()
+                .as_deref(),
+            Some(deck.to_canonical().as_str()),
+            "the deck chosen before the note existed is applied when it is born"
+        );
     }
 }
