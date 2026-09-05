@@ -15,7 +15,7 @@ use crate::{
     Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading,
     surface, text,
 };
-use crate::{bidi, controls, frame, spacing, typography};
+use crate::{bidi, controls, fonts, frame, spacing, typography};
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
 /// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
@@ -113,8 +113,25 @@ pub(crate) fn review(
         // five variants dropped it entirely with nothing failing, which is how little there is to
         // notice its absence. Drawn at the ordinary control weight it is a faint rectangle on an
         // otherwise empty page, which is the same defect wearing a fill.
+        //
+        // **And it sits on the reach line** — [ADR-0035 §1]'s second call site, and the first
+        // anywhere but the grade cluster (ADR-0038 §5). §1 was argued from a thumb on Review and
+        // written about *a screen*, but `frame::slack_above` had one caller, so until #155 nothing
+        // had had cause to apply it or ignore it elsewhere. This screen is the only state in the
+        // application where Review carries a control with an empty page under it, and it was
+        // drawing the entrance directly under the statement — §1 standing as written while the app
+        // did otherwise. #155 made it a page rule rather than narrowing it to Review.
+        //
+        // The fallback arm needs no branch here: `slack_above` returns the stated gap on a page
+        // with no room, so the 560×860 window and the handset reach the two arms by arithmetic.
+        //
+        // [ADR-0035 §1]: ../../../../docs/adr/0035-the-vertical-anchor.md
         if !ranked.is_empty() || !suspended.is_empty() {
-            ui.add_space(spacing::gap(3));
+            ui.add_space(frame::slack_above(
+                frame::page_room(ui),
+                controls::HEIGHT,
+                spacing::gap(3),
+            ));
             if controls::wide_primary(ui, &leech_entry_wording(ranked.len(), suspended.len()))
                 .clicked()
             {
@@ -667,7 +684,8 @@ fn grade_cluster_height(touch: bool) -> f32 {
     }
 }
 
-/// The caught-up floor: the statement, centred and given the screen (ADR-0034 §3).
+/// The caught-up floor: **the mark, then the statement**, centred and given the screen
+/// (ADR-0034 §3, [ADR-0038 §3](../../../../docs/adr/0038-the-mark-and-the-icon-rule.md)).
 ///
 /// **The display tier is used here for something that is not a card face**, which narrows
 /// [ADR-0032 §1](../../../../docs/adr/0032-the-type-scale-and-the-rhythm.md)'s *"the text actually
@@ -676,9 +694,29 @@ fn grade_cluster_height(touch: bool) -> f32 {
 /// content of this screen is set at the size of the word *Review* three lines above it, which reads
 /// as a caption rather than as the state. #124's variant E reached for 24 and the scale does not
 /// have it.
+///
+/// **The mark's first appearance anywhere inside the application**, and the only one. Three other
+/// homes were weighed and rejected on [The Craft](https://github.com/amin-bf/cairn/issues/149): a
+/// nav strip is chrome seen four hundred times a sitting, a splash is a delay added on purpose, and
+/// Settings is where you go to change things. This is the app's one *you are done* moment.
+///
+/// **It appears whenever nothing is due — including on a fresh install, where nothing has been
+/// earned**, and that is what keeps it clear of ADR-0001 §3's quiet constraint. A picture that shows
+/// up when you have done nothing cannot be a reward for doing something.
 fn caught_up(ui: &mut egui::Ui) {
     ui.add_space(spacing::gap(8));
     ui.vertical_centered(|ui| {
+        crate::icon(
+            ui,
+            fonts::MARK,
+            typography::MARK,
+            ui.visuals().weak_text_color(),
+        );
+        // **`gap(8)` is the second one on this screen**, the lead above being the first, and that is
+        // rhythm rather than a copy-paste: the mark and the sentence are two objects, where the
+        // sentence and its footnote are one thing said twice. Recorded because equal gaps at the top
+        // of a hierarchy are exactly what a later reader tidies away.
+        ui.add_space(spacing::gap(8));
         ui.label(bidi::job(
             "All caught up.",
             egui::FontId::proportional(typography::DISPLAY),

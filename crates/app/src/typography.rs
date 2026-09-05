@@ -63,6 +63,32 @@ pub const BODY: f32 = 15.0;
 /// The footnote tier: the box badge, the interval preview, a field's caption.
 pub const SMALL: f32 = 12.0;
 
+/// **The mark, drawn large.** A font size, and *not a fifth tier of the scale* —
+/// [ADR-0038 §3](../../../docs/adr/0038-the-mark-and-the-icon-rule.md).
+///
+/// It is here because [ADR-0038 §1](../../../docs/adr/0038-the-mark-and-the-icon-rule.md) makes an
+/// icon a **glyph**, so an icon's size *is* a font size, and this module's header says font sizes
+/// are named here and nowhere else. The rule did not get an exception for pictures.
+///
+/// **It is not a tier**, and the tests below still say four. The four tiers are a *scale*: they
+/// relate to one another by ratio, they meet inside a sentence, and `the_scale_accelerates` is a
+/// claim about the shape they make together. This number is in none of that. It is one picture's
+/// dimension on one screen, and the four sizes it is not between were the whole reason the ticket
+/// had to ask — a mark set at `DISPLAY` is the size of a word, which is what the app's only *you
+/// are done* moment was never going to be able to say.
+///
+/// **What it draws is 0.72 of it.** The glyph's ink is one cap height, so this is the size to *ask*
+/// for and not the height that appears — `fonts::the_mark_is_a_cap_height_of_stones` pins the
+/// ratio. That indirection is the honest cost of the route: an icon that inherits the type scale
+/// inherits the way type is measured too. **104 draws 75px of stones**, which is the number the eye
+/// chose; the one recorded here is the one the code has to ask for.
+///
+/// **It is measured, not chosen**, in [#141](https://github.com/amin-bf/cairn/issues/141)'s sense —
+/// dragged to a stop on a live knob with a readout, and left where it stopped rather than rounded to
+/// something that looks like a decision. 104 is not a round number and rounding it would be
+/// inventing a precision the sitting did not produce.
+pub const MARK: f32 = 104.0;
+
 /// The name egui knows the display tier by. Private on purpose: [`display`] is how a caller reaches
 /// it, so the string is written once.
 const DISPLAY_SLOT: &str = "display";
@@ -134,6 +160,30 @@ mod tests {
         assert_eq!(HEADING, 20.0);
         assert_eq!(BODY, 15.0);
         assert_eq!(SMALL, 12.0);
+    }
+
+    /// The mark's size is a decision ADR-0038 §3 quotes, and it was **measured off a knob** rather
+    /// than picked — so it is exactly the kind of number a later reader tidies into something
+    /// rounder without noticing that the rounding has no authority behind it.
+    #[test]
+    fn the_mark_is_the_number_the_adr_records() {
+        assert_eq!(MARK, 104.0);
+    }
+
+    /// **The mark is a font size and not a fifth tier**, which is the distinction ADR-0038 §3 rests
+    /// on and the reason the four tests above still say four.
+    ///
+    /// A tier is a *role a screen resolves* — installed into `text_styles`, reachable by name,
+    /// related to its neighbours by the ratio `the_scale_accelerates` pins. The mark is none of
+    /// that: it is one picture's dimension, passed to one call site. Installing it as a tier would
+    /// make it available to any screen wanting something between heading and display, and the scale
+    /// would have grown a size through the back door — which is precisely how a scale drifts.
+    #[test]
+    fn the_mark_is_not_a_tier_of_the_scale() {
+        assert!(
+            scale().values().all(|font| font.size != MARK),
+            "the mark's size is installed as a text style — it is a picture's dimension, not a tier"
+        );
     }
 
     /// **The alias.** Control text is prose-sized, and that is a decision rather than a coincidence

@@ -1,0 +1,20 @@
+# **The picker with the durable leech entrance under it** — the second screen
+# [ADR-0038 §5](../../docs/adr/0038-the-mark-and-the-icon-rule.md) moved, and the one it moved
+# without anybody looking.
+#
+# Making ADR-0035 §1 a page rule sends *every* screen's last control to the reach line, and the
+# entrance draws in **both** Review states rather than only the caught-up one. `leeches.txt` cannot
+# reach this: its leeches are deliberately not due, because a due card would put the screen into the
+# card state instead of the picker. So the state existed, was decided by §5, and had no picture —
+# which is #134's defect exactly, and the bench exists downstream of it.
+fixture due-with-leeches
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 400 click 1
+sleep 1
+shot 04-due-with-leeches
+# The entrance, on the reach line: 165 for the line plus half of `controls::HEIGHT`. Never a literal
+# y — see `leeches.txt` for what that costs now that the position depends on the window height.
+mousemove %CX% %BY-183% click 1
+sleep 1.2
+shot 05-leech-screen-from-picker

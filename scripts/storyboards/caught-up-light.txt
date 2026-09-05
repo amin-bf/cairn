@@ -1,0 +1,30 @@
+# The **caught-up floor in the light appearance** (ADR-0036, ADR-0038 §3) — `caught-up.txt`'s screen
+# with the theme switched through the real control on Settings.
+#
+# It exists because the mark's whole colour claim is that **one construction serves both themes**:
+# `weak_text_color()`, read off the ambient visuals, with no per-theme value anywhere. #143's finding
+# is that a rule can pass while its values fail, so that claim needs a picture in each theme rather
+# than an argument — and `light.txt` cannot supply it, because it runs the seed and the seed always
+# leaves six cards due, which is the state this screen is defined by not being in.
+#
+# The theme is switched through `theme_control` rather than an override, for `light.txt`'s reason:
+# the appearance is a stored, device-local preference, so forcing it another way would photograph a
+# state the application cannot be put into.
+fixture caught-up
+# The first click is spent giving the window keyboard focus and never reaches a widget, so it is
+# aimed at empty space.
+mousemove %CX% 600 click 1
+sleep 1
+# Settings. The nav row sits above the frame's content but aligns to the same left edge.
+mousemove %LX+140% 11 click 1
+sleep 1.2
+# **Appearance: Light**, at y=93 — the same at both judging widths because only the one-word heading
+# is above it, and a one-word heading cannot wrap. `+84` is the centre of `Light` in the
+# `System Light Dark` row, frame-relative so the offset lands at either width.
+mousemove %LX+84% 93 click 1
+sleep 1.2
+shot 20-settings-light
+# Back to Review, which is now drawn light.
+mousemove %LX+20% 11 click 1
+sleep 1.2
+shot 21-caught-up-light

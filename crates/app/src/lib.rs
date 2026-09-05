@@ -850,6 +850,48 @@ pub(crate) fn compact_button(ui: &mut egui::Ui, s: &str) -> egui::Response {
 // because both of its properties that mattered (the height, the single display tier) turned out to
 // have been judged only ever against `chien`/`dog`. See `surface` for what replaced it and why.
 
+/// Draw an icon **standing on its own** — as tall as the ink it draws and no taller.
+///
+/// [ADR-0038 §4](../../../docs/adr/0038-the-mark-and-the-icon-rule.md), and the reason it needed
+/// deciding is a measurement.
+///
+/// # A glyph's line box is the family's, not the glyph's
+///
+/// `ui.label` allocates a row of `Fonts::row_height`, which is the **tallest face in the family** at
+/// that size, not the height of the character being drawn. The icon face declares a cap-height
+/// ascent and gets no say: at [`typography::MARK`] the stones are 109px inside a **172px** row, so
+/// the row carries 10px of air above them and **53px below**, and every one of those pixels arrives
+/// before the stated gap to whatever comes next.
+///
+/// That is [ADR-0032 §2](../../../docs/adr/0032-the-type-scale-and-the-rhythm.md)'s *a stated gap is
+/// the whole gap* broken by a value nobody wrote down, in the family the map keeps finding: a
+/// quantity the renderer supplies that does not mean what its name says. It scales with the size, so
+/// the knob that sets the mark would have been dragging two distances at once and only one of them
+/// visible.
+///
+/// **Inline, the line box is exactly right** — an icon beside a word wants to sit on that word's
+/// line, which is the whole argument for glyphs. So this is not a fix to the route; it is the one
+/// case the route does not cover, and it is the case with no word beside it.
+///
+/// The ink's offset inside the galley is read from the laid-out glyph rather than derived from the
+/// face's metrics, because the row's baseline moves with whatever else is in the family.
+pub(crate) fn icon(ui: &mut egui::Ui, glyph: char, size: f32, colour: egui::Color32) {
+    let galley = ui.ctx().fonts_mut(|f| {
+        f.layout_no_wrap(glyph.to_string(), egui::FontId::proportional(size), colour)
+    });
+    // The ink's rectangle within the galley. A glyph the face does not carry lays out as the
+    // **replacement box**, which has ink of its own — so a missing icon is drawn at the box's size
+    // and is visible, rather than collapsing to nothing and leaving the screen looking deliberate.
+    let Some(drawn) = galley.rows.first().and_then(|row| row.glyphs.first()) else {
+        return;
+    };
+    let ink = egui::vec2(drawn.uv_rect.size[0], drawn.uv_rect.size[1]);
+    let top_left = drawn.pos + egui::vec2(drawn.uv_rect.offset[0], drawn.uv_rect.offset[1]);
+    let (rect, _) = ui.allocate_exact_size(ink, egui::Sense::hover());
+    ui.painter()
+        .galley(rect.min - top_left.to_vec2(), galley, colour);
+}
+
 /// A small label for a field or control — a form-pane caption, weaker than body text.
 pub(crate) fn field_label(ui: &mut egui::Ui, s: &str) {
     ui.label(bidi::job(

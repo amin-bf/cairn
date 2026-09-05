@@ -14,8 +14,15 @@ fixture leeches
 mousemove %CX% 600 click 1
 sleep 1
 shot 02-caught-up-with-leeches
-# The durable entrance — full width, so `%CX%` reaches it at any width. y=252 is measured off the
-# capture above: the statement takes the screen (ADR-0034 §3) and the control sits directly under it.
-mousemove %CX% 252 click 1
+# The durable entrance — full width, so `%CX%` reaches it at any width.
+#
+# **`%BY-183%`, not a literal y, and #155 is why.** This line read `252` — measured off the capture
+# above, back when the entrance sat directly under the statement. ADR-0038 §5 put it on ADR-0035
+# §1's reach line instead, which makes its position **height-dependent**: 165px for the reach line
+# plus half of `controls::HEIGHT`. A literal y then reaches empty page at every window size, and the
+# run produces a perfectly valid capture of the *caught-up* screen under the leech screen's name —
+# the silent miss arriving for the fourth time, from the axis
+# [#154](https://github.com/amin-bf/cairn/issues/154) added `%BY-n%` to close.
+mousemove %CX% %BY-183% click 1
 sleep 1.2
 shot 03-leech-screen

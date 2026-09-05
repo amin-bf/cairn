@@ -142,16 +142,33 @@ pub enum Fixture {
     /// card's height; one has two blanks, so a single note generates two cards and the second card's
     /// prompt shows the first blank already filled.
     Cloze,
+    /// Cards **due** *and* leeches at the same time — the picker with the durable entrance under it,
+    /// which is the second screen [ADR-0038 §5](../../../docs/adr/0038-the-mark-and-the-icon-rule.md)
+    /// moved and the only one it moved without anybody looking.
+    ///
+    /// **It exists because a decision made a state decided.** Making ADR-0035 §1 a page rule sends
+    /// *every* screen's last control to the reach line, and the leech entrance draws in both Review
+    /// states, not only the caught-up one. `leeches` cannot reach this — a leech there is
+    /// deliberately not due, because a card whose latest grade is a failure is due whatever its
+    /// interval says, and a due card would put the screen back into the card state rather than the
+    /// picker.
+    ///
+    /// So it is `Leeches`'s three recovered leeches over `Backlog`'s pile of due cards: the two
+    /// halves already exist and neither is re-tuned, which keeps this fixture a *composition* rather
+    /// than a third set of intervals to keep true. It is the ordinary case in real use — leeches
+    /// earned months ago, cards due today — and it had no picture at all.
+    DueWithLeeches,
 }
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 5] = [
+    pub const ALL: [Fixture; 6] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
         Fixture::Backlog,
         Fixture::Cloze,
+        Fixture::DueWithLeeches,
     ];
 
     /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
@@ -163,6 +180,7 @@ impl Fixture {
             Fixture::Crossing => "crossing",
             Fixture::Backlog => "backlog",
             Fixture::Cloze => "cloze",
+            Fixture::DueWithLeeches => "due-with-leeches",
         }
     }
 
@@ -174,6 +192,7 @@ impl Fixture {
             Fixture::Crossing => "About to leech",
             Fixture::Backlog => "A backlog",
             Fixture::Cloze => "Cloze cards",
+            Fixture::DueWithLeeches => "Due, with leeches",
         }
     }
 
@@ -185,6 +204,7 @@ impl Fixture {
             Fixture::Crossing => "the end-of-session pointer, after one Forgot",
             Fixture::Backlog => "a framed backlog, and the entrance's shorter-sitting line",
             Fixture::Cloze => "a card that steps down, and a reveal that grows by a whole face",
+            Fixture::DueWithLeeches => "the picker with the leech entrance on the reach line",
         }
     }
 
@@ -245,6 +265,26 @@ impl Fixture {
                 for (front, back) in BACKLOG_WORDS {
                     let card = note(coll, front, back)?;
                     history.passes(card, [(60, Grade::Good)]);
+                }
+            }
+            // **A composition of the two above, deliberately re-tuning neither.** The leeches are
+            // `Leeches`'s exactly — four failure days inside the window, then a recovery long
+            // enough to schedule them ahead — so they are leeches *and not due*, which is what lets
+            // due cards decide the screen. The due half is `Backlog`'s expired pass. Both sets of
+            // intervals are already asserted by their own fixtures, so this one adds no third claim
+            // about `fsrs` to keep true.
+            Fixture::DueWithLeeches => {
+                for (front, back) in BACKLOG_WORDS {
+                    let card = note(coll, front, back)?;
+                    history.passes(card, [(60, Grade::Good)]);
+                }
+                for (front, back) in LEECH_WORDS {
+                    let card = note(coll, front, back)?;
+                    history.fails(card, [80, 60, 40, 20]);
+                    history.passes(
+                        card,
+                        [(18, Grade::Good), (10, Grade::Good), (3, Grade::Easy)],
+                    );
                 }
             }
             Fixture::Cloze => {
@@ -328,6 +368,18 @@ impl Fixture {
                     "five cloze cards from four notes, four of them offered under the \
                      one-per-note rule, on a deck nothing has been reviewed on",
                 ),
+            },
+            // **Both halves are asserted, and the leech count is the load-bearing one.** A leech
+            // that drifted back into the queue would make this `Due` with the right number of cards
+            // and no entrance under the picker — the screen this fixture exists for, missing the
+            // only thing it exists to show, looking entirely plausible.
+            Fixture::DueWithLeeches => match reached {
+                Reached {
+                    state: ReviewState::Due { due, new: 0, .. },
+                    leeches: 3,
+                    ..
+                } if due > 20 => None,
+                _ => Some("more than twenty due, no new, and exactly three leeches beside them"),
             },
         };
         match complaint {
