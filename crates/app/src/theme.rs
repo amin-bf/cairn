@@ -117,7 +117,20 @@ const fn rgb(hex: u32) -> Color32 {
 }
 
 // --- stone: the neutral ramp, cool slate with a trace of blue ---
-const STONE_0: Color32 = rgb(0x0f1214); // text-field wells
+const STONE_0: Color32 = rgb(0x0f1214); // card faces
+// **The rung the ramp had numbered and never filled** (#163). `STONE_0` → `STONE_2` was the only
+// double step in the whole ramp — a delta of (11, 12, 13) where its neighbours move (7, 8, 9) and
+// (4, 4, 4) — because until now nothing had ever needed a value between the well and the page. A
+// text field does: ADR-0033 §2 accepted a card and a field sharing `extreme_bg_color` partly on the
+// grounds that the two never appear on the same screen, the editor has drawn them side by side in
+// both themes since the card landed, and #150 measured the separation at **1.000:1**.
+//
+// **Placed by thumb, not by arithmetic.** A knob moved the field from the card's fill toward the
+// page with a live readout, and it stopped here — one unit per channel off a true midpoint of the
+// gap. That the gap was already there, and already numbered, is the finding: #143 had recorded the
+// cost of giving a field its own fill as *"it spends a rung of a ramp that had none to spare in
+// dark"*, and nothing is spent.
+const STONE_1: Color32 = rgb(0x15191b); // text-field wells
 const STONE_2: Color32 = rgb(0x1a1e21); // panels and windows
 const STONE_3: Color32 = rgb(0x21262a); // faint fills
 const STONE_4: Color32 = rgb(0x282e33); // pressed widgets, separators
@@ -154,7 +167,23 @@ const ROSE: Color32 = rgb(0xb57e79); // error — softened, never #ff0000
 const STONE_L_PAGE: Color32 = rgb(0xdee2e3); // panels and windows — 1.000
 const STONE_L_CONTROL: Color32 = rgb(0xd9dddd); // faint fills, an ordinary control — 1.049
 const STONE_L_EDGE: Color32 = rgb(0xced2d3); // separators, pressed widgets, a control's edge — 1.168
-const STONE_L_CARD: Color32 = rgb(0xc4c8c9); // card faces and text-field wells — 1.292
+const STONE_L_CARD: Color32 = rgb(0xc4c8c9); // card faces — 1.292
+// **Light mints its own rather than reusing the edge rung, and that was a decision** (#163). The
+// same knob position that found dark's `STONE_1` lands here, **four of 255 per channel** from
+// `STONE_L_CARD_EDGE`'s neighbour `STONE_L_EDGE` (`#ced2d3`) — near enough that #155's precedent
+// applied, where a thumb stopped six away from an existing role and the existing role served.
+//
+// It was refused here because the two cases differ in *meaning* rather than in distance. #155's
+// candidates both meant **quiet ink**, so one of them serving cost nothing. `STONE_L_EDGE` means
+// separators, pressed widgets and a control's edge — so reusing it would paint a **resting** text
+// field the value of a **pressed** control, which is the category error ADR-0033 §2 already made
+// once, arriving one rung over.
+//
+// **The cost is stated rather than hidden**: light now carries two rungs four units apart, where
+// dark's field rung sits alone in a two-step gap. Light's ramp is simply denser here — it has a
+// control rung and an edge rung between its page and its card where dark has nothing at all — so
+// the same decision is a gap being filled in one theme and a thread being passed in the other.
+const STONE_L_FIELD: Color32 = rgb(0xd2d6d7); // text-field wells — 1.122
 const STONE_L_HOVER: Color32 = rgb(0xb9bdbe); // widgets hovered — 1.452
 const STONE_L_CARD_EDGE: Color32 = rgb(0xa7abac); // a card's edge and divider — 1.776
 const STONE_L_PRIMARY: Color32 = rgb(0xa2a6a7); // widgets at rest, the primary — 1.883
@@ -181,20 +210,35 @@ const ROSE_L: Color32 = rgb(0x7a5551); // error — still dormant (ADR-0030 §5)
 /// *lighter* than the page, and the whole complaint was that the thing being studied was made of
 /// the same material as the buttons under it.
 ///
-/// **It is the `extreme_bg_color` rung, and it therefore shares a fill with a text field.**
-/// That is accepted rather than overlooked: a well means *content*, not *editable*, and the two are
-/// told apart by [`crate::surface::RADIUS`] against the widget radius and by never appearing on the
-/// same screen. If they ever must diverge, this function is the one place that changes.
+/// **It no longer shares a fill with a text field, and this function is where that happened**
+/// (#163). ADR-0033 §2 accepted the sharing on two grounds — an 8px corner against the widget's 2px,
+/// **and** that the two never appear on the same screen — and said that *"if they ever must diverge,
+/// this function is the one place that changes"*. The second ground was untrue from the day the card
+/// landed: the editor draws the Front and Back fields in one column and the card faces in the other,
+/// in both themes. #150 put the number on it — **1.000:1**, not similar but identical — leaving the
+/// corner carrying the whole distinction alone. So the function changed, exactly where §2 said it
+/// would.
 ///
-/// **It reads the ambient visuals rather than naming a constant, and that is what makes it
-/// theme-correct** (ADR-0036 §1). All four role families already ride an ambient slot — the card on
-/// `extreme_bg_color`, an ordinary control on `faint_bg_color`, the primary on
-/// `widgets.inactive.bg_fill`, the link on `hyperlink_color` — so reading the slot is both closer to
-/// ADR-0030 §1's *"every screen keeps reading the ambient visuals"* and the only version that draws
-/// the right colour in two themes. Returning `STONE_0` here would silently paint a dark card on a
-/// light page, with nothing failing.
+/// **The card kept its value and the field moved**, which is the half worth stating. The card's fill
+/// is ADR-0033's decided well and #125 banked a result on it — 1.121:1 still reading as cut into the
+/// page on an OLED panel at low brightness — so moving it would have spent evidence already in hand.
+/// The field's fill had no argument behind it at all; it was the rung egui happens to put text edits
+/// on. The field is therefore what a knob moved, and where it stopped is `STONE_1` / `STONE_L_FIELD`.
+///
+/// **It names a constant per theme now instead of reading `extreme_bg_color`, and that is a real
+/// loss.** Riding the ambient slot was what made this theme-correct for free (ADR-0036 §1), and a
+/// branch is the narrow case that ADR accepts rather than the pattern it prefers — the same shape
+/// [`card_divider`] already had to take, for the same reason: egui has no "card" slot, only a
+/// deepest-background one, and once the card and the deepest background are different colours, one
+/// of them has to be named. `extreme_bg_color` keeps its own meaning and goes to the **field**,
+/// which is what egui means by it, so every text edit in the app still gets its fill ambiently and
+/// no call site names a colour.
 pub fn card_fill(visuals: &Visuals) -> Color32 {
-    visuals.extreme_bg_color
+    if visuals.dark_mode {
+        STONE_0
+    } else {
+        STONE_L_CARD
+    }
 }
 
 /// The edge of a card-like surface (ADR-0033 §2) — one rung further from the page than the fill, so
@@ -395,7 +439,11 @@ pub fn cairn_dark() -> Visuals {
     // capture this repository held before #154.
     v.window_fill = POPUP_RISEN;
     v.window_stroke = Stroke::new(1.0, STONE_4); // the separator rung, never stock's off-ramp grey
-    v.extreme_bg_color = STONE_0;
+    // The **field's** rung, not the card's (#163). `extreme_bg_color` is egui's deepest-background
+    // slot and what a `TextEdit` draws itself on, so leaving it to the field is what it means; the
+    // card names `STONE_0` through `theme::card_fill` now that the two are different colours. Every
+    // text edit in the app therefore still gets its fill ambiently and no call site names a colour.
+    v.extreme_bg_color = STONE_1;
     v.faint_bg_color = STONE_3;
     v.override_text_color = None; // body colour rides fg_stroke, per widget state
 
@@ -462,7 +510,9 @@ pub fn cairn_light() -> Visuals {
     // As in dark, and by dark's gap rather than by a light-relative ratio (ADR-0037 §1).
     v.window_fill = POPUP_RISEN_L;
     v.window_stroke = Stroke::new(1.0, STONE_L_EDGE); // the separator rung
-    v.extreme_bg_color = STONE_L_CARD;
+    // The field's own rung (#163), minted rather than reusing `STONE_L_EDGE` four units away — see
+    // `STONE_L_FIELD` for why the distance was not the argument.
+    v.extreme_bg_color = STONE_L_FIELD;
     v.faint_bg_color = STONE_L_CONTROL;
     v.override_text_color = None; // body colour rides fg_stroke, per widget state
 
@@ -747,6 +797,68 @@ mod tests {
     ///
     /// This is the test that makes the constants outputs rather than choices. Nothing else stops a
     /// later reader nudging `STONE_L_CARD` a shade because it looked better on their monitor, which
+    /// **A card and a text field are not the same material, in either theme** (#163, amending
+    /// ADR-0033 §2).
+    ///
+    /// §2 accepted them sharing `extreme_bg_color` on two grounds — an 8px corner against the
+    /// widget's 2px, **and** that the two never appear on the same screen. The second was untrue from
+    /// the day the card landed: the editor draws the fields in one column and the card faces in the
+    /// other. #150 measured the separation at **1.000:1** — the same colour, in both themes — and
+    /// nothing failed, because a shared value is not a defect any test was looking for.
+    ///
+    /// Pinned as a **floor plus the two figures**, not as an inequality alone. An inequality passes
+    /// at 1.001:1, which is the state this fixes wearing a different number.
+    #[test]
+    fn a_card_and_a_text_field_are_different_materials() {
+        for (name, v) in [("dark", cairn_dark()), ("light", cairn_light())] {
+            let card = card_fill(&v);
+            let field = v.extreme_bg_color;
+            assert_ne!(
+                card, field,
+                "{name}: the card and the field are one colour again"
+            );
+            let separation = contrast(card, field);
+            assert!(
+                separation > 1.05,
+                "{name}: card↔field is {separation:.3}:1, back within rounding of the 1.000:1 \
+                 #150 measured"
+            );
+        }
+        // The figures a thumb chose, so a nudge to either rung fails loudly rather than drifting.
+        assert!((contrast(STONE_0, STONE_1) - 1.063).abs() < 0.005);
+        assert!((contrast(STONE_L_CARD, STONE_L_FIELD) - 1.152).abs() < 0.005);
+    }
+
+    /// **The field sits between the page and the card, in both themes** — the structural half of the
+    /// same decision, and the one that keeps ADR-0033 §3 true.
+    ///
+    /// §3 as ADR-0036 restated it says that on a screen with a card, every control is quieter than
+    /// it. A text field is a control, and the editor is the screen. Moving the field *away* from the
+    /// page instead — deeper than the card — would buy the same separation, read as a second well,
+    /// and make the card no longer the deepest thing on the screen it is the subject of.
+    #[test]
+    fn the_field_rung_lies_between_the_page_and_the_card() {
+        for (name, v) in [("dark", cairn_dark()), ("light", cairn_light())] {
+            let page = v.panel_fill;
+            let field = contrast(v.extreme_bg_color, page);
+            let card = contrast(card_fill(&v), page);
+            assert!(
+                field < card,
+                "{name}: the field is {field:.3}:1 from the page and the card {card:.3}:1 — the \
+                 card has to stay the deepest surface on a screen that has one"
+            );
+        }
+        // Dark's rung fills the ramp's own gap: `STONE_0` → `STONE_2` was its only double step, so
+        // nothing is spent to seat a field between them. #143 had recorded the opposite as the cost.
+        let below = contrast(STONE_0, STONE_1);
+        let above = contrast(STONE_1, STONE_2);
+        assert!(
+            (below - above).abs() < 0.02,
+            "STONE_1 should sit near the middle of the gap it fills: {below:.3}:1 below, \
+             {above:.3}:1 above"
+        );
+    }
+
     /// is exactly how the design project's placeholders drifted warm and broke §3 without failing.
     #[test]
     fn the_light_ramp_is_re_derived_not_re_hued() {
