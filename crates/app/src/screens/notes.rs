@@ -319,6 +319,11 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
         }
     }
 
+    // **The gap the rest of the form has.** Every other pair in this column is one `gap(2)` apart and
+    // this one was zero, so *New deck* sat welded to the deck dropdown and the two read as one
+    // control with a stray label between them. Nothing failed; it is the rhythm ADR-0032 states,
+    // missing at one call site.
+    ui.add_space(spacing::gap(2));
     spacing::row(ui, 1, |ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
         text_field(ui, &mut ed.new_deck);
