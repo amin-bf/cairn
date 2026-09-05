@@ -1,0 +1,29 @@
+# **PROTOTYPE #156** — the leech screen in the **light** appearance. Never merges.
+#
+# Settings, the theme, back to Review, then through the entrance.
+#
+# **The y is 93, and the first draft of this file said 435 — which is how the silent miss arrives for
+# the sixth time.** 435 is #155's number and it is correct *for #155*: that prototype's knobs sat
+# above `theme_control` and pushed Appearance down the page. This prototype's knobs draw only on the
+# leech screen, so Settings is the **shipped** layout and Appearance is back where `light.txt` clicks
+# it. The first draft reasoned that dependency backwards — same premise, opposite conclusion — and
+# produced a full set of perfectly valid **dark** captures under light names.
+#
+# `10-settings` is shot and **kept** because it is the only thing that catches that. Nothing fails
+# when the click lands on empty page: the theme simply does not change, and every later shot is a
+# valid picture of the wrong thing.
+fixture leeches
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+shot 10-settings
+mousemove %LX+84% 93 click 1
+sleep 1.2
+shot 11-settings-light
+mousemove %LX+27% 11 click 1
+sleep 1.2
+# The durable entrance, on ADR-0035 §1's reach line — `%BY-183%`, never a literal y.
+mousemove %CX% %BY-183% click 1
+sleep 1.2
+shot 12-leech-screen-light
