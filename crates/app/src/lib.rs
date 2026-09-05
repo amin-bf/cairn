@@ -924,6 +924,9 @@ pub(crate) fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Respon
     let response = ui.add(
         egui::TextEdit::singleline(buffer)
             .desired_width(f32::INFINITY)
+            // PROTOTYPE #163: the field-fill knob. At knob 0 this is `extreme_bg_color`, which is
+            // what ships — so the prototype's floor is the real app rather than a copy of it.
+            .background_color(theme::field_fill(ui.visuals()))
             .horizontal_align(if rtl {
                 egui::Align::RIGHT
             } else {

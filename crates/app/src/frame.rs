@@ -139,7 +139,13 @@ pub fn slack_above(room: f32, block: f32, floor: f32) -> f32 {
 /// 900 is [#124](https://github.com/amin-bf/cairn/issues/124)'s number for the same shape of
 /// question — the width at which a two-column arrangement stops being cramped — reused rather than
 /// invented, and it leaves each pane around 430px inside a 1280 window.
-pub const TWO_COLUMN_MIN_WIDTH: f32 = 900.0;
+/// PROTOTYPE #163: **320, so the arrangement never switches while the window is dragged.**
+///
+/// The shipped value is 900. Lowering it below any width a window reaches is what turns the window
+/// edge itself into the knob: two columns are drawn all the way down, so a person can drag until
+/// they stop working and read the number off. Setting it to 700 first gave the still sweep at
+/// 720/760/800/840/880/920; 320 gave the live sitting.
+pub const TWO_COLUMN_MIN_WIDTH: f32 = 320.0;
 
 /// The widest the editor's two-column frame is drawn. Two columns of a full [`MEASURE`] each would
 /// want 1308px including the gutter, which does not fit the 1280 the design pass judges at — so the

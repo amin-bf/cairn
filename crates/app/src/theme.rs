@@ -110,6 +110,8 @@
 //! both_themes` pins the agreement. Dark is deliberately left derived: naming it there would change
 //! shipped pixels for no reason.
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use egui::{Color32, CornerRadius, Stroke, Theme, ThemePreference, Visuals};
 
 const fn rgb(hex: u32) -> Color32 {
@@ -195,6 +197,81 @@ const ROSE_L: Color32 = rgb(0x7a5551); // error — still dormant (ADR-0030 §5)
 /// light page, with nothing failing.
 pub fn card_fill(visuals: &Visuals) -> Color32 {
     visuals.extreme_bg_color
+}
+
+// --- PROTOTYPE #163: the field-fill knob -------------------------------------------------------
+//
+// ADR-0033 §2 accepts a card and a text field sharing `extreme_bg_color` on two grounds — an 8px
+// corner against the widget's 2px, **and** that the two never appear on the same screen. #143 found
+// the second untrue and untrue since the card landed: the editor draws the Front and Back fields in
+// one column and the card faces in the other, in both themes, and #150 put the number on it —
+// **1.000:1**, the same colour, so the corner is carrying the whole distinction alone.
+//
+// This knob is the instrument for deciding whether that is enough. It moves the **field** and holds
+// the card still, deliberately: the card's value is ADR-0033's decided well and #125 confirmed it
+// still reads as cut into the page on an OLED panel at low brightness, so moving it would spend a
+// result already banked. The field's fill has no argument behind it at all — it is the rung egui
+// happened to put text fields on.
+//
+// 0.0 is today (identical). 1.0 is the page itself. Everything between keeps the card the deepest
+// thing on the screen, which is what ADR-0033 §3's ordering wants: on a screen with a card, every
+// control is quieter than it.
+static FIELD_KNOB: AtomicU32 = AtomicU32::new(0);
+
+/// Read the knob, 0.0–1.0. Seeded once from `CAIRN_FIELD_KNOB` so the capture harness can photograph
+/// a position a thumb chose — a knob whose value cannot be handed to a screenshot is only half an
+/// instrument.
+pub fn field_knob() -> f32 {
+    static SEEDED: std::sync::Once = std::sync::Once::new();
+    SEEDED.call_once(|| {
+        if let Ok(v) = std::env::var("CAIRN_FIELD_KNOB")
+            && let Ok(t) = v.parse::<f32>()
+        {
+            set_field_knob(t);
+        }
+    });
+    f32::from_bits(FIELD_KNOB.load(Ordering::Relaxed))
+}
+
+/// Set the knob, 0.0–1.0.
+pub fn set_field_knob(t: f32) {
+    FIELD_KNOB.store(t.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+}
+
+/// The fill a **text field** is drawn on — [`card_fill`] at knob 0, the page at knob 1.
+///
+/// At knob 0 this is exactly what shipped, so the prototype's floor is the real app rather than an
+/// approximation of it — the thing #143's knob got right and worth repeating.
+pub fn field_fill(visuals: &Visuals) -> Color32 {
+    lerp_srgb(card_fill(visuals), visuals.panel_fill, field_knob())
+}
+
+/// Component-wise blend in sRGB. Not perceptually uniform, and it does not need to be: the knob is
+/// dragged until a person says stop and the **readout** is what carries the number, so the only
+/// property required of the path is that it is monotone between the two ends.
+fn lerp_srgb(a: Color32, b: Color32, t: f32) -> Color32 {
+    let mix = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round() as u8;
+    Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+}
+
+/// WCAG 2.1 relative luminance, for the knob's readout.
+pub fn luminance(c: Color32) -> f64 {
+    let channel = |v: u8| {
+        let s = f64::from(v) / 255.0;
+        if s <= 0.039_28 {
+            s / 12.92
+        } else {
+            ((s + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+}
+
+/// The contrast ratio between two opaque colours, for the knob's readout.
+pub fn contrast(a: Color32, b: Color32) -> f64 {
+    let (x, y) = (luminance(a), luminance(b));
+    let (hi, lo) = if x > y { (x, y) } else { (y, x) };
+    (hi + 0.05) / (lo + 0.05)
 }
 
 /// The edge of a card-like surface (ADR-0033 §2) — one rung further from the page than the fill, so

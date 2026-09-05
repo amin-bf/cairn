@@ -70,11 +70,84 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
             *editing = None;
             return;
         }
+        // PROTOTYPE #163: the two readouts. The width one turns the window edge into a knob — drag
+        // and read the pane width off it; the fill one is a knob proper. Both are here rather than on
+        // a debug screen because a knob you have to leave the screen to reach is not a knob.
+        width_readout(ui, cap);
+        field_fill_knob(ui);
         ui.add_space(spacing::gap(2));
         if let Some(ed) = editing {
             editor_pane(ui, coll, ed, two_column);
         }
     });
+}
+
+/// PROTOTYPE #163. The width readout — **window, frame and each pane**, so a person dragging the
+/// window edge can say where two columns stop working *in numbers* rather than in gestures.
+///
+/// The knob here is the window itself, which is why there is no slider: the variable being judged is
+/// the thing the user is already holding. What was missing was only the readout.
+///
+/// **What it found is that there is nothing to find.** Dragged down by hand, two columns held at
+/// 398px per pane (an 880 window), then 151, then **118** — a third of the narrowest case the ticket
+/// had argued about — with the card face wrapping to four lines and staying perfectly readable.
+/// Narrowness is a *gradient* here, not a failure, and a gradient has no threshold in it. So the
+/// answer was to delete `TWO_COLUMN_MIN_WIDTH` rather than move it, and to fold the panes on the
+/// platform's soft keyboard, which is the axis ADR-0025 §4 always said the toggle was about.
+fn width_readout(ui: &mut egui::Ui, cap: f32) {
+    let window = ui.ctx().viewport_rect().width();
+    let frame_width = cap.min(window - frame::PAGE_MARGIN * 2.0);
+    let pane = (frame_width - frame::PANE_GUTTER) / 2.0;
+    badge(
+        ui,
+        &format!("window {window:.0}  ·  frame {frame_width:.0}  ·  each pane {pane:.0}"),
+    );
+}
+
+/// PROTOTYPE #163. The field-fill knob: one slider and a readout, on the one screen that draws a
+/// card and a text field side by side.
+///
+/// **A knob rather than a menu**, which is the map's standing lesson from #141 and #155: the question
+/// is a *distance* — how far a field's material has to move before it stops reading as the same thing
+/// as the card — and a menu of three candidate rungs answers a question nobody asked. #155's ink knob
+/// stopped six of 255 away from a role that already existed, which a menu would have hidden.
+///
+/// **It moves the field and holds the card still**, deliberately. The card's fill is ADR-0033's
+/// decided well and #125 banked a result on it; the field's fill has no argument behind it at all.
+///
+/// The readout carries the numbers so the screenshot does not have to. **field : card** is the one
+/// that matters and it starts at 1.000:1; the other two are there so a move that buys separation by
+/// spending the card's own well against the page is visible while it is being made.
+///
+/// **What it found**: both themes stopped at **0.55** and gave different answers. Dark landed on
+/// `#15191b`, one unit per channel off the middle of the ramp's only double step — the `STONE_1` the
+/// ramp had numbered and never filled, so #143's recorded cost of *"a rung the dark ramp had none to
+/// spare of"* was not paid. Light landed on `#d2d6d7`, four of 255 from `STONE_L_EDGE`, and minted
+/// its own rather than reusing a rung that means *pressed widget*.
+fn field_fill_knob(ui: &mut egui::Ui) {
+    let mut t = crate::theme::field_knob();
+    let card = crate::theme::card_fill(ui.visuals());
+    let field = crate::theme::field_fill(ui.visuals());
+    let page = ui.visuals().panel_fill;
+    let hex = |c: egui::Color32| format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b());
+    if ui
+        .add(egui::Slider::new(&mut t, 0.0..=1.0).text("field fill → page"))
+        .changed()
+    {
+        crate::theme::set_field_knob(t);
+    }
+    badge(
+        ui,
+        &format!(
+            "knob {t:.3}   field {}  card {}  page {}   ·   field:card {:.3}:1   field:page {:.3}:1   card:page {:.3}:1",
+            hex(field),
+            hex(card),
+            hex(page),
+            crate::theme::contrast(field, card),
+            crate::theme::contrast(field, page),
+            crate::theme::contrast(card, page),
+        ),
+    );
 }
 
 /// The note list: create, the deck controls, the text search, and the rows.
@@ -678,6 +751,9 @@ fn multiline_field_output(
     let mut layouter = bidi_layouter;
     let out = egui::TextEdit::multiline(buffer)
         .desired_width(f32::INFINITY)
+        // PROTOTYPE #163: the field-fill knob, on the multiline field too — `cloze`'s Text is the
+        // largest field in the app and the one where a fill has the most area to be judged on.
+        .background_color(crate::theme::field_fill(ui.visuals()))
         .horizontal_align(if rtl {
             egui::Align::RIGHT
         } else {
