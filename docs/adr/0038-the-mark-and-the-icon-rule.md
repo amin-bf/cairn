@@ -56,20 +56,36 @@ anywhere else.
 > exactly like the other two. An icon is reached the way a missing glyph is reached — by falling
 > through — so **no call site selects a family**, and an icon at `BODY` *is* `BODY`.
 
-`crates/app/assets/CairnIcons-Regular.ttf` is 952 bytes and carries one glyph, `fonts::MARK` at
-`U+E000`. **Private use is what makes the route safe**: nothing else can claim that code point, so
+`crates/app/assets/CairnIcons-Regular.ttf` carried one glyph when this was written, `fonts::MARK` at
+`U+E000`; it now carries three, `fonts::MOVE` and `fonts::DELETE` having joined it for the note
+list's row (**ADR-0039 §1**). **Private use is what makes the route safe**: nothing else can claim that code point, so
 the face can be appended **last** in every family, shadows nothing, and is shadowed by nothing. The
 ordering hazard `fonts.rs` exists to document — *first match wins, and DejaVu ahead of Noto means
 Noto is never reached* — cannot arise for an icon.
 
 **The face is generated, not drawn.** `scripts/build-icon-face.py` reads
 `crates/app/res/drawable/ic_launcher_monochrome.xml` — the monochrome launcher icon the Android build
-already ships, *"the same four stones as one flat shape"* — and emits the glyph from its paths. So
+already ships, *"the same four stones as one flat shape"* — and emits the glyph from its paths. Since
+ADR-0039 it also reads `crates/app/res/icons/*.svg`, the row icons' own sources, and **converts**
+rather than exports them: those are a 24px grid of 1.5 strokes with `fill: none`, and a glyph has no
+strokes, so each segment becomes a closed stadium wound the same way as every other and non-zero
+winding merges them into one filled shape. Wound against each other they would cancel where they
+overlap, which is the same hazard the mark's four overlapping stones already carry. So
 *the mark in the app is the mark on the home screen* is a claim `--check` answers by rebuilding and
 diffing, rather than a sentence in this file that decays the first time either is touched. The script
 is **not** part of any build: it needs `fonttools`, it runs when the drawable changes, and a Rust
 workspace that needed a Python interpreter to compile would be a far worse trade than a 952-byte
 asset with its recipe beside it.
+
+**Amended by [ADR-0039 §9](0039-the-list-row.md): the advance rule holds for a glyph standing
+alone and gains a clause for a glyph in a set.** *Advance = ink width, left side bearing zero*
+centres one picture rather than a box with unequal air in it, and that is right for the mark. It does
+not survive a **set**: `move` draws 255 units of ink and `delete` 465, so two icon-only controls come
+out two different widths and a right-aligned action column drawn from them is ragged in exactly the
+way the words it replaced were. A glyph belonging to a set therefore takes a **square advance of one
+cap height** with its ink centred in it. The mark is not in that set and keeps this section as
+written. The clause is pinned by `fonts::the_row_icons_lay_out_to_one_width`, because the failure is
+silent: every screen still renders, the column is just no longer a column.
 
 **A consequence that is easy to miss: an icon's size is now a *font* size.** `typography` says font
 sizes are named there and nowhere else, and a picture gets no exception — see §3. It also means the

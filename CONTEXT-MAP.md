@@ -121,7 +121,7 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4, 0028 §5, 0036 §3 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md), [0036](./docs/adr/0036-the-light-palette.md), [0037](./docs/adr/0037-motion-and-elevation.md), [0038](./docs/adr/0038-the-mark-and-the-icon-rule.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md), [0036](./docs/adr/0036-the-light-palette.md), [0037](./docs/adr/0037-motion-and-elevation.md), [0038](./docs/adr/0038-the-mark-and-the-icon-rule.md), [0039](./docs/adr/0039-the-list-row.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -323,6 +323,26 @@ and the icon face joins `SPECIMENS` as an ordinary row. 0038 also carries two am
 holds within a renderer** (the gesture belongs to the platform, which the native clients need), and
 **0035 §1 is a page rule** with a second call site — the leech entrance on the caught-up floor, whose
 y is now window-dependent and reached by `%BY-183%` rather than a literal.
+
+**[0039](./docs/adr/0039-the-list-row.md) is the list row. Read it before drawing any list.** A row
+is a **band** carrying its text with a right-aligned **column** of icon actions, each allocated a
+square of `controls::HEIGHT` — `controls::row`, which lives in `controls` and not in a screen
+because **every bare `ui.button` left in the crate is a list row**: the note list never received
+0034, drawing seventy-five controls at `widgets.inactive` and 19px against the 36px slab six pixels
+above them, and the leech screen still does. The pictures **stand alone**, which is #149's icon-rule
+exception taking its first real test and passing; the word survives as hover text, because the
+exception buys a picture the right to stand alone *on screen*, not to be unnameable. Four things
+that will catch a later reader. **The chrome's boundary is a hairline and the gap was already
+right** — offered as a knob from `gap(1)` to `gap(8)`, the thumb left it where it opened and turned
+the line on. **The text mirrors to the row's own direction and the cluster does not**, which narrows
+0033 §5 to *content, not furniture*: a cluster that mirrored per row would destroy the column on the
+one screen it was invented for. **A page rule reaches a scrolling surface only by pinning outside
+the scroll** — *Create note* is the second thing in the app to live outside the `ScrollArea`, at the
+cost of 209px of viewport, because a list has no leftover height for `slack_above` to spend.
+And **0038 §1 gains a set clause**: a glyph standing alone keeps advance-equals-ink, a glyph in a
+set takes a square advance, or two icon-only controls are two widths and the column is ragged again.
+It also makes the filter a three-way so *Unfiled* is expressible, and gives *Delete deck* a warning
+that names the count.
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.
