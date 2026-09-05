@@ -526,6 +526,25 @@ because they are validated findings, not because a web build ships.
     window size and the run produces perfectly valid captures of the *previous* screen under the next
     one's names. That silent miss has now arrived from four different sides (#122, #143, #153, #155);
     `%CX%`, `%LX+n%` and `%BY-n%` exist to close each of them.
+22. **A fixture may not depend on anything the card *identity* decides, because identity is random
+    per build.** A `NoteId` is `uuid_v4` from the OS, so it is stable across **devices sharing a
+    collection** — which is all any of the rules below it were ever for — and freshly random across
+    **builds of the same fixture definition**. Two places read it, and a fixture that lands near
+    either one is a coin flip rather than a state:
+    - `replay::leeches` breaks a rank tie on `CardRef::encode`. #160 found all three leeches given
+      identical histories, so both real keys tied, and every capture of the leech screen this
+      repository held showed an order the run had picked at random — two captures from *one* run
+      disagreed with each other. A fixture whose screen shows an order must **break the real keys**.
+    - `scheduling`'s interval fuzz is seeded from `CardRef::encode` (ADR-0027 §5, ADR-0001 §7), so a
+      card scheduled close to due is due on some builds and not others. The pre-#160 leech recovery
+      left as little as **two days** of margin against a fuzz that swings about three; it had simply
+      not lost the toss yet. Fixtures now leave **at least five days**, asserted directly, because
+      `Fixture::check` only ever sees the build it ran on and fails *intermittently* otherwise.
+
+    Both are the same shape as store rule 6 and the `%CX%` family: nothing errors, nothing looks
+    wrong, and the artifact is a valid picture of something nobody chose. **Measure, do not reason**
+    — the intervals are `fsrs`'s, so a new fixture's margin is found by installing it a few hundred
+    times, not by argument.
 
 ## The local store
 
