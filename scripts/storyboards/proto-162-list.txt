@@ -1,0 +1,20 @@
+# PROTOTYPE #162 — one still of the note list, at whatever `CAIRN_PROTO` says.
+#
+#   CAIRN_PROTO=actions,deck,picture,band,chrome,rule,ink,held,create \
+#     scripts/capture-desktop.sh scripts/storyboards/proto-162-list.txt 1280 800
+#
+# One shot per run rather than a choreographed sweep, because every axis here changes the **width**
+# of a row control, and a storyboard that clicked its way between states would be aiming at
+# coordinates that move with the thing it is photographing. The env var is read once on the first
+# frame that asks (`crate::proto`), which is why it has to be set before the app starts — the same
+# route `CAIRN_CHECKPOINT_SECONDS` takes.
+#
+# The ladder this file is run through, and the reason each rung exists, is
+# `docs/design/prototype-162/README.md`.
+fixture decks
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.4
+shot list

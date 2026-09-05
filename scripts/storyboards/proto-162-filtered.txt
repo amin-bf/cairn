@@ -1,0 +1,24 @@
+# PROTOTYPE #162 — the list **filtered to one deck**, which is the only state on this screen where
+# ADR-0035 §1 has anything to say.
+#
+# §1 is a page rule: *the last control cluster on a screen ends 165px above the bottom of the page
+# **when there is room***. With twenty-five rows there is no room and §1's own second clause
+# applies, so the toggle is invisible there. *Expressions idiomatiques et proverbes* holds three
+# notes, and two thirds of the page is empty under them.
+#
+# It also photographs the deck surface's own inheritance from
+# [#161](https://github.com/amin-bf/cairn/issues/161): *Delete deck* appears here and nowhere else,
+# it flags a deck deleted and derives **every note in it** deleted with it (ADR-0005 §7), and it is
+# drawn as an ordinary control directly under the benign *New deck* it shares a weight with.
+fixture decks
+mousemove %CX% 700 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.4
+# The deck filter, then its longest entry — chosen for what the **closed** control does with a long
+# name as much as for the three notes behind it.
+mousemove %LX+50% 145 click 1
+sleep 1
+mousemove %LX+130% 245 click 1
+sleep 1.4
+shot filtered

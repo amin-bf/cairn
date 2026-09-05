@@ -1,0 +1,27 @@
+# PROTOTYPE #162 — the note list in the **light** appearance (ADR-0036), at whatever `CAIRN_PROTO`
+# says. Switched through the real control on Settings rather than a test hook, for `light.txt`'s
+# reason: the appearance is a stored, device-local preference, so forcing it another way would
+# photograph a state the application cannot be put into.
+#
+# **`Light` is at y=478 here, not at `notes-light.txt`'s y=93**, because the prototype switcher sits
+# above `Appearance` — which is where #154 established a harness control has to go, since anything
+# *below* prose that wraps at one width and not the other sits at a different y at each. The
+# switcher itself is the thing that moved `Appearance`, and the cost is one measured coordinate in
+# this file rather than a silent miss in every light run.
+#
+# **It is the same y at 1280 and at 560**, which was checked rather than assumed: the switcher's
+# rows are `spacing::row_wrapped` and none of them wraps at the narrow width. So this file runs at
+# both, unlike `notes-persian.txt`, which has to pin itself to one.
+fixture decks
+mousemove %CX% 700 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.4
+mousemove %LX+84% 478 click 1
+sleep 1.5
+# Wind the shared scroll area back up before leaving, or Notes opens mid-page.
+mousemove %CX% 400 click 4 click 4 click 4 click 4 click 4 click 4 click 4 click 4
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.4
+shot list

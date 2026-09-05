@@ -1,0 +1,25 @@
+# PROTOTYPE #162 — the placement state, at whatever `CAIRN_PROTO` says.
+#
+#   CAIRN_PROTO=1,0,1,1,2,0,90,1,0 \
+#     scripts/capture-desktop.sh scripts/storyboards/proto-162-placement.txt 1280 800
+#
+# **This file is pinned to the right-aligned column** (`actions=1`), and that is not an arbitrary
+# choice of candidate — it is the only arrangement whose *Move* control is at a coordinate a
+# storyboard can name. Measured off `row-1280x800/12-column-glyphs.png`: the two glyph controls are
+# 880→916 and 924→960 at 1280, and `960` is the page frame's right edge, on **every** row whatever
+# its preview says.
+#
+# Under the packed arrangement they are not, which is what made `notes.txt` photograph the editor
+# under `03-placement`'s name the first time it was pointed at the `decks` fixture: that file's
+# *Move* coordinate was measured off `backlog`'s first row, `decks` has a wider one, and the click
+# landed on the row. The row's own finding, arriving in the harness.
+fixture decks
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.4
+# *Move* on the first row — the centre of a 36px square control, not a guess.
+mousemove %LX+578% 261 click 1
+sleep 1.4
+shot placement

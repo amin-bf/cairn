@@ -1,0 +1,30 @@
+# PROTOTYPE #162 — `proto-162-filtered.txt` with every coordinate moved up **36px**, for the one
+# switch position that moves them.
+#
+# **This file exists because the ticket's own toggle broke the other one.** With *Create note* on
+# the reach line it is no longer at the top of the page, so the 36px control above the deck block
+# is gone and the whole chrome rises by exactly its height: the filter sits at y=109 rather than
+# 145, and its longest entry at 209 rather than 245. The first run of `proto-162-filtered.txt` at
+# this switch position clicked 145 and then 245, missed the dropdown, landed on a row, and
+# photographed the **editor** under the name `41-create-reach` — a perfectly valid capture of
+# another screen.
+#
+# It also passed the page-colour check, because the editor is dark too. That check has caught the
+# theme miss twice ([#143](https://github.com/amin-bf/cairn/issues/143),
+# [#150](https://github.com/amin-bf/cairn/issues/150)) and it cannot catch this one, which is worth
+# knowing about the check as much as about the storyboard.
+#
+# Same shape as [#155](https://github.com/amin-bf/cairn/issues/155)'s: the silent miss caused not by
+# a coordinate that was wrong when written but by **the ticket's own decision moving the thing it
+# aimed at**. Two files rather than one clever file, because a storyboard that computed the offset
+# would be a harness that knows which candidate is selected.
+fixture decks
+mousemove %CX% 700 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.4
+mousemove %LX+50% 109 click 1
+sleep 1
+mousemove %LX+130% 209 click 1
+sleep 1.4
+shot filtered
