@@ -183,9 +183,15 @@ pub fn install(ctx: &egui::Context) {
     // — a mark has no weight, and a second cut of it would be a second drawing of the same object
     // that could drift from the first. `MARK` is private use, so appending this last shadows
     // nothing and nothing shadows it.
+    //
+    // **PROTOTYPE #162 — the face here is the prototype's, not the shipped one.** It is a
+    // *superset*: the mark is the same glyph at the same private-use code point, plus `move` and
+    // `delete` at `U+E001` and `U+E002` (`crate::proto`, `scripts/proto-162-icon-face.py`). Nothing
+    // that draws the mark notices, and `scripts/build-icon-face.py --check` still describes the
+    // shipped `CairnIcons-Regular.ttf`, which this branch leaves untouched. Never merges.
     let icons = [(
         "icons",
-        &include_bytes!("../assets/CairnIcons-Regular.ttf")[..],
+        &include_bytes!("../assets/Proto162Icons-Regular.ttf")[..],
     )];
 
     for &(name, bytes) in regular.iter().chain(&bold).chain(&icons) {
