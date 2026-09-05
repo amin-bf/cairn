@@ -114,3 +114,79 @@ two dormant cases. The theme switch is on Settings (ADR-0036 §3).
 The ticket's third question — **what the Cards pane is** — was answered in conversation as *a
 preview*, from the shipped app plus the `dormant` fixture's first captures. Building variants for it
 would have been doing the redraw's work before its material was decided.
+
+---
+
+# Second round: two sets of variants
+
+Added after the knobs, once the ticket reached its arrangement questions. **These two are preserved as
+captures and as descriptions rather than as code**, and that is deliberate: unlike the knobs, each one
+was a handful of lines against a base that has since moved several times, so a stale copy that no
+longer compiles would be worth less than the pictures plus a paragraph that says exactly what changed.
+The knobs above are the code half of this tag; these are the judgement half.
+
+## 3. Where *Done* sits — and whether the reach line has anything to place
+
+Selected with `CAIRN_DONE_AT=a|b|c`, captured at 1280×800 and 560×860.
+
+| | variant | captures |
+|---|---|---|
+| **A** | *Done* above the heading — what shipped | `done-a-1280.png`, `done-a-560.png` |
+| **B** | below the heading: *Edit note* → the way out → the note | `done-b-1280.png`, `done-b-560.png` |
+| **C** | at the foot of the page on ADR-0035 §1's reach line | `done-c-1280.png`, `done-c-560.png` |
+
+**C won, and building the three is what collapsed two questions into one.** ADR-0035 §1 places *the
+last control on the page*, and while *Done* sat at the top the editor's last control was the **Back
+field** — a form whose inputs float at the foot of the page is not an arrangement anyone wants. So §1
+had no target on this screen at all until the exit moved, and A and B are the same answer to the reach
+line wearing different hats. Three tickets had inherited *apply §1 here* without being able to.
+
+It also forced §1 to say which of two things it means. Every call site before this one places
+something the reader is meant to press **next** — a grade cluster, the leech entrance, *Back to
+review*. *Done* is what you press when you are **finished**. §1 is therefore read as *the last control
+on the page* rather than *the way forward*.
+
+Measured on landing: bottom edge **166px** above the page bottom — §1's 165 plus the stroke — at both
+widths.
+
+## 4. The card pane and its warning
+
+Selected with `CAIRN_PANE=1|2|3`, on the `dormant` fixture at 1280×800. Judged in a browser review
+surface against 2× crops, one region at a time with the variants swapped **in place**.
+
+| | variant | captures |
+|---|---|---|
+| **1** | what shipped | `pane-v1-pruned.png`, `pane-v1-nolive.png`, `warn-v1.png`, `pane-v1.png` |
+| **2** | the warning's weight uninverted and given a left rule; pane untouched | `warn-v2.png`, `pane-v2-*.png` |
+| **3** | 2, plus the dormant entry as a peer of the card and §6's statement demoted | `warn-v3.png`, `pane-v3-*.png` |
+
+The `warn-*` files are the left column at 2× — the warning block alone. The `pane-*` files are the
+right column at 2×, where a real card sits directly above the dormant entry.
+
+**3 won.** What it turns on could not be measured and could not be decided by the person who drew it:
+whether an outline at the card's own footprint reads as **a card that is not there** or merely as a
+box. Put in front of the repo owner beside a real card, it came back as an absence.
+
+It also depends on this ticket's answer to what the pane **is**. In a *preview* — a specimen case — an
+entry that is not a specimen has to look like one missing. Had the answer been *listing*, the same
+shape would only have been a row and the redraw would have gone the other way. Question 3 decided
+question 4's form, which neither was written expecting.
+
+**A fourth was considered and not built**: dropping the history from the pane entry to kill the
+duplicated sentence outright. It would overturn ADR-0018 §2, which puts the history there, so it is
+recorded as available rather than tried.
+
+## What the second round cost, and it was not the variants
+
+Two process failures worth more than the pictures.
+
+**The first review artifact was three variants side by side at ~370px wide**, and the response was
+*"the pics are too small I do not see the details"*. A standing note already said screenshots to judge
+go one per screen at full width with variants swapped in place. Having the rule and ignoring it is a
+different failure from not having it, and it cost a round.
+
+**Two sessions built position-based detectors and both lied.** Checking *did the editor open* by
+sampling the card-pane area for the card fill reports "no" on the note that has no live card — which
+is precisely the note under test. A parallel session sampling for *Done* at its old coordinates read
+"no" on a frame where it had opened, because this ticket had just moved *Done*. Looking at the image
+settled it both times, in both sessions.
