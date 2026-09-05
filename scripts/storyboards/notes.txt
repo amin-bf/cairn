@@ -1,9 +1,11 @@
 # The **Notes** destination end to end — the list, the deck overlay, the placement state, and the
 # editor. The *before* for the Notes slice (#150) and its two children.
 #
-# Runs unchanged at any width, and is meant to be run at more than one: the editor's arrangement
-# flips at `frame::TWO_COLUMN_MIN_WIDTH` (900), so 880 and 920 photograph the threshold from either
-# side while 1280 and 560 photograph the two ends.
+# Runs unchanged at any width, and is meant to be run at more than one — though **not to photograph a
+# threshold any more**. It used to: the editor's arrangement flipped at `frame::TWO_COLUMN_MIN_WIDTH`
+# (900), and 880 and 920 existed to catch it from either side. #163 deleted that width, so the
+# desktop draws two columns at every size and the widths now photograph the *gradient* — 560 and 1280
+# are the two ends of how narrow a pane gets, not two sides of a switch.
 #
 # `%CX%` is the centre of the output; `%LX+n%` is `n` px inside the **page frame's** left edge
 # (#131). Every y below was measured off a capture rather than adjusted by eye, and every one of

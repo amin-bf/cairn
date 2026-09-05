@@ -103,11 +103,16 @@ binary, and overridable with `CAIRN_PAGE_MARGIN` / `CAIRN_MEASURE`. A harness th
 could not start unless the app was already correct, and photographing a *broken* app is most of what
 this is for.
 
-**Two of the app's arrangements move the nav row, so mind the order of a storyboard.** Above
-`frame::TWO_COLUMN_MIN_WIDTH` the editor takes a wider frame and the nav follows it (ADR-0031 §3), so
-a `%LX+n%` nav click *after* the editor is open lands on empty page. Leaving by *Done* does not help:
-that button is compact at 1280 and full-width at 560, so no single coordinate reaches it at both.
+**Opening the editor moves the nav row, so mind the order of a storyboard.** The editor takes a wider
+frame and the nav follows it (ADR-0031 §3), so a `%LX+n%` nav click *after* the editor is open lands
+on empty page — use `%EX+n%` inside the editor, which is that frame's own token.
 `storyboards/baseline.txt` visits the editor **last** for exactly this reason, and says so.
+
+This used to be *"above `frame::TWO_COLUMN_MIN_WIDTH`"*, and #163 deleted that width: the editor
+folds its two panes into a toggle where a soft keyboard eats the height, never where a window is
+narrow, so on the desktop it is side by side at **every** width and the wider frame is unconditional.
+That removed the awkward half of this warning rather than the warning — *Done* is still compact
+beside two columns, so the coordinate that reaches it is the editor frame's and not the page's.
 
 This is worth more than convenience, because **the failure it prevents is silent**. A click aimed at
 a full-width control with a hard-coded `640` simply misses at 560 — nothing errors, the screen never

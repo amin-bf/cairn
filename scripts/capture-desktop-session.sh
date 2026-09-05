@@ -75,21 +75,26 @@ echo "session: page frame — margin $margin, measure $measure, column left edge
 
 # `%EX%` — the left edge of the **editor's** frame, and `%EX+n%` for a control `n` px inside it.
 #
-# The editor is the one screen that does not use the page measure. `frame::cap_for` gives it 1120
-# once the window can hold two panes, so its column starts at x=80 at 1280 where every other screen
-# starts at 320, and below the threshold it falls back to the measure and the two edges coincide.
-# `%LX+n%` is therefore right for the nav row and wrong for anything inside the editor, and `%CX%`
-# — 640 — reaches a field at 560 and lands fourteen pixels past its right edge at 1280.
+# The editor is the one screen that does not use the page measure. `frame::cap_for` gives it 1120,
+# so its column starts at x=80 at 1280 where every other screen starts at 320. `%LX+n%` is therefore
+# right for the nav row and wrong for anything inside the editor, and `%CX%` — 640 — reaches a field
+# at 560 and lands fourteen pixels past its right edge at 1280.
 #
 # That gap is why `persian.txt` had been aiming at empty page since #131 and why `notes-persian.txt`
 # was pinned to one width instead: #122's silent miss arriving from a fifth side, and the first one
 # caused by a **frame** rather than by a coordinate. A pin is not a fix — it leaves the storyboard
 # correct at exactly one window and silently wrong at every other, which is the property the tokens
 # exist to remove — so #163 spends the token rather than the caveat.
-two_column_min=${CAIRN_TWO_COLUMN_MIN_WIDTH:-900}
+#
+# **The cap is unconditional, because #163 deleted the width that used to gate it.** The editor's
+# arrangement is now a question about the platform's input rather than about the window
+# (`frame::editor_is_side_by_side`), and this harness only ever photographs the **desktop**, which
+# has no soft keyboard — so the editor is side by side at every width the harness is given and takes
+# the wide cap at every one of them. A handset capture is not this script's, and if it ever is, this
+# is the line that has to learn the difference rather than a width comparison that would look
+# plausible and be wrong on both platforms at once.
 two_column_measure=${CAIRN_TWO_COLUMN_MEASURE:-1120}
-editor_cap=$measure
-[ "${CAIRN_WIDTH:-1280}" -ge "$two_column_min" ] && editor_cap=$two_column_measure
+editor_cap=$two_column_measure
 editor_inner=$(( ${CAIRN_WIDTH:-1280} - margin * 2 ))
 [ "$editor_inner" -gt "$editor_cap" ] && editor_inner=$editor_cap
 ex=$(( (${CAIRN_WIDTH:-1280} - editor_inner) / 2 ))

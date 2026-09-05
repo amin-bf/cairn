@@ -1,7 +1,6 @@
 # The Notes destination in **Persian** — the editor's fields and card face, and a note-list row.
 #
-# **1280×800 while the editor has two arrangements** — but for a narrower reason than before, and the
-# x half of the old pin is gone.
+# **Runs at any width, and the two things that stopped it are both gone.**
 #
 # This is the one storyboard in the set that has to aim at a control *inside* the editor, and the
 # editor takes its own wider frame (#131, `frame::cap_for` → 1120) — so its column starts at x=80 at
@@ -9,17 +8,18 @@
 # the nav row. `%CX%` — 640 — reaches a field at 560 and lands **fourteen pixels past its right edge**
 # at 1280: `persian.txt` aimed that way and had been missing since #131, and the first run of this
 # file did the same, typed nothing, and photographed the French note under the Persian name. #163
-# spent `%EX+n%` on that rather than keeping the caveat, and every x below is now right at any width.
+# spent `%EX+n%` on that rather than keeping the caveat, and every x below is right at any width.
 #
-# **The y is not, and running this at 560 is what showed why.** Below `frame::TWO_COLUMN_MIN_WIDTH`
-# the editor inserts the `Write | Cards` toggle, which pushes both fields down by one row — so at 560
-# the x lands correctly and y=265 falls in empty page while y=300 finds *Front*. The run then selects
-# and overwrites the wrong field: the first string goes nowhere and the second replaces `l'aube`,
-# leaving `dawn` behind it. Same silent-miss class as the x, arriving from the **vertical** axis, and
-# caused by an arrangement change rather than by a frame or a coordinate.
+# The **y** then pinned it to 1280 for one more round, and that is the interesting half. Below the old
+# `TWO_COLUMN_MIN_WIDTH` the editor inserted the `Write | Cards` toggle, which pushed both fields
+# down by a row — so at 560 the x landed correctly and y=265 fell in empty page while y=300 found
+# *Front*, and the run overwrote `l'aube` with the Back string and left `dawn` behind it. Same
+# silent-miss class as the x, arriving from the **vertical** axis, and caused by an arrangement
+# change rather than by a frame or a coordinate.
 #
-# So the pin that is left is *the editor has two vertical stacks*, which is the thing #163 is
-# deciding. If the toggle stops being a function of width, this file stops needing a width.
+# #163 deleted that arrangement change: the toggle is a question about the platform's soft keyboard
+# now, not about the window, so the desktop has **one** vertical stack at every width and the field
+# y's below are the same at 560 as at 1280. The pin went with the width it was made of.
 #
 # **Both shots are self-evidencing** and stay worth checking: a run that missed leaves
 # `06-editor-persian` showing `l'aube` / `dawn`, and leaves `07-list-persian` with no Persian row.

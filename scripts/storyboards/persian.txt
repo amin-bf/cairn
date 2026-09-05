@@ -12,14 +12,16 @@
 # failure. A storyboard cannot tell you it missed (#122), so both files are now on the same token.
 #
 # **Everything inside the editor is `%EX+n%`, not `%CX%`** (#163). The editor is the one screen with
-# its own frame — `frame::cap_for` gives it 1120 above `TWO_COLUMN_MIN_WIDTH` — so `%CX%` is inside a
-# field at the 560 this file is run at and lands fourteen pixels past its right edge at 1280. It has
-# been correct here and wrong anywhere else since #131, which is the same latent miss the nav x above
-# had actually taken; the token removes it before it is paid for rather than after.
+# its own frame — `frame::cap_for` gives it 1120 — so `%CX%` is inside a field at the 560 this file is
+# run at and lands fourteen pixels past its right edge at 1280. It has been correct here and wrong
+# anywhere else since #131, which is the same latent miss the nav x above had actually taken; the
+# token removes it before it is paid for rather than after.
 #
-# **The y's are still the one-column arrangement's**, so this file is a 560×860 storyboard until the
-# editor stops having two vertical stacks. See `notes-persian.txt` for what running one at the wrong
-# width looks like.
+# **The y's are the two-column arrangement's, which is now the only one the desktop has.** #163
+# deleted `TWO_COLUMN_MIN_WIDTH` — the editor folds its panes into a toggle where a soft keyboard
+# eats the height, not where a window is narrow — so there is one vertical stack at every width and
+# these coordinates hold at all of them. This file is still *run* at 560×860, because that is the
+# window its shots were composed against, not because it would miss anywhere else.
 mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+86% 11 click 1
