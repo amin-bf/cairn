@@ -178,8 +178,7 @@ fn note_list(
             row.deck
                 .as_ref()
                 .and_then(|id| {
-                    held
-                        .iter()
+                    held.iter()
                         .find(|(d, _)| d.to_canonical() == *id)
                         .map(|(_, n)| n.clone())
                 })
@@ -903,7 +902,14 @@ mod tests {
         let mut moving = Some(hidden);
 
         let _ = ctx.run_ui(Default::default(), |ui| {
-            notes_screen(ui, &mut coll, &mut editing, &mut search, &mut deck, &mut moving);
+            notes_screen(
+                ui,
+                &mut coll,
+                &mut editing,
+                &mut search,
+                &mut deck,
+                &mut moving,
+            );
         });
 
         assert_eq!(

@@ -107,8 +107,8 @@ pub struct RowPress {
 pub fn row(ui: &mut Ui, text: &str, caption: Option<&str>, actions: &[Action]) -> RowPress {
     let mut press = RowPress::default();
     let height = row_height(ui, caption.is_some());
-    let cluster = actions.len() as f32 * HEIGHT
-        + (actions.len().saturating_sub(1)) as f32 * spacing::gap(1);
+    let cluster =
+        actions.len() as f32 * HEIGHT + (actions.len().saturating_sub(1)) as f32 * spacing::gap(1);
     let band_width = (ui.available_width() - cluster - spacing::gap(2)).max(spacing::gap(8));
 
     spacing::row(ui, 1, |ui| {
@@ -128,7 +128,10 @@ pub fn row(ui: &mut Ui, text: &str, caption: Option<&str>, actions: &[Action]) -
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             for (i, action) in actions.iter().enumerate().rev() {
                 let job = crate::text(ui, &action.glyph.to_string());
-                if control_job(ui, job, HEIGHT).on_hover_text(action.word).clicked() {
+                if control_job(ui, job, HEIGHT)
+                    .on_hover_text(action.word)
+                    .clicked()
+                {
                     press.action = Some(i);
                 }
             }
@@ -620,16 +623,15 @@ mod tests {
                 ],
             );
         };
-        let right_edge = |rects: Vec<egui::Rect>| {
-            rects
-                .iter()
-                .map(|r| r.right())
-                .fold(f32::MIN, f32::max)
-        };
+        let right_edge =
+            |rects: Vec<egui::Rect>| rects.iter().map(|r| r.right()).fold(f32::MIN, f32::max);
 
         let short = right_edge(rects_in(640.0, |ui| actions(ui, "کتاب")));
         let long = right_edge(rects_in(640.0, |ui| {
-            actions(ui, "Il ne faut pas vendre la peau de l'ours avant de l'avoir tué")
+            actions(
+                ui,
+                "Il ne faut pas vendre la peau de l'ours avant de l'avoir tué",
+            )
         }));
         assert!(
             (short - long).abs() < 0.5,

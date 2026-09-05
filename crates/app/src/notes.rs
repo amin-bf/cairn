@@ -168,7 +168,8 @@ impl Filter {
                 // unfiled too (ADR-0005 §8) and is the case a typo in an imported file produces, so
                 // a test for `None` alone would hide exactly the notes a user came here to find.
                 let filed = row.deck.as_ref().is_some_and(|d| {
-                    held.iter().any(|id| id.to_canonical().as_str() == d.as_str())
+                    held.iter()
+                        .any(|id| id.to_canonical().as_str() == d.as_str())
                 });
                 if filed {
                     return false;
@@ -612,7 +613,8 @@ mod tests {
         coll.mutable_set("note", &filed.0, "deck", Some(&french.to_canonical()))
             .unwrap();
 
-        let bare = coll.create_note("basic", &[("Front", "bare")]).unwrap();
+        // No `deck` attribute at all — the other kind of unfiled.
+        coll.create_note("basic", &[("Front", "bare")]).unwrap();
 
         // A reference to a deck that was never created — the imported-typo case.
         let dangling = coll.create_note("basic", &[("Front", "dangling")]).unwrap();
@@ -665,7 +667,8 @@ mod tests {
             coll.mutable_set("note", &id.0, "deck", Some(&deck.to_canonical()))
                 .unwrap();
         }
-        coll.create_note("basic", &[("Front", "elsewhere")]).unwrap();
+        coll.create_note("basic", &[("Front", "elsewhere")])
+            .unwrap();
 
         assert_eq!(count_in_deck(&coll, deck).unwrap(), 3);
     }
