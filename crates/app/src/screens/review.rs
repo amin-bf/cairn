@@ -13,9 +13,9 @@ use cairn_store::Collection;
 use crate::session::{self, Offered, ReviewState};
 use crate::{
     Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading,
-    surface, text,
+    surface,
 };
-use crate::{bidi, controls, fonts, frame, spacing, typography};
+use crate::{bidi, controls, fonts, frame, spacing, theme, typography};
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
 /// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
@@ -63,7 +63,23 @@ pub(crate) fn review(
             heading(ui, "Leeches");
             ui.add_space(spacing::gap(2));
             let edit = leech_screen(ui, coll, &ranked, &suspended, &replayed);
-            ui.add_space(spacing::gap(2));
+            // **ADR-0035 §1's third call site** (ADR-0038 §5 made it a *page* rule). #155 moved the
+            // entrance that leads *into* this screen onto the reach line and left the screen behind
+            // it drawing its own last control hard under the list, with the rest of the page empty —
+            // *a rule promoted from one screen to all screens moves screens nobody listed*, arriving
+            // one screen further along than #155 noticed. `slack_above` had two callers and neither
+            // was here.
+            //
+            // The fallback arm needs no branch: `slack_above` returns the stated gap on a page with
+            // no room left, so a long list and a short window reach it by arithmetic.
+            ui.add_space(frame::slack_above(
+                frame::page_room(ui),
+                controls::HEIGHT,
+                spacing::gap(2),
+            ));
+            // **Ordinary, never primary.** This screen has cards on it now (`leech_row`), so
+            // ADR-0034 §2's primary — *the one control on a screen with no card* — has no call site
+            // here, and `full_width_button` is the ordinary weight.
             if full_width_button(ui, "Back to review").clicked() {
                 *showing_leeches = false;
             }
@@ -425,24 +441,26 @@ fn leech_screen(
         body(ui, "These keep catching you out — worst first.");
         ui.add_space(spacing::gap(1));
         for (i, (card, preview, days, reviews)) in active.iter().enumerate() {
-            // Two units between leeches, one between a leech's badge and its own controls — so the
-            // entry binds to its cost rather than to the entry below it. Both were the ambient 3px
-            // until ADR-0032, which is to say neither was chosen and the pair read as one list of
-            // alternating strips.
             if i > 0 {
-                ui.add_space(spacing::gap(2));
+                ui.add_space(BETWEEN_ROWS);
             }
             // The cost, made concrete (ADR-0010 §6): failure days and how many reviews they took.
-            badge(ui, &format!("{days} bad days · {reviews} reviews"));
-            ui.add_space(spacing::gap(1));
-            spacing::row(ui, 1, |ui| {
-                if ui.button(text(ui, preview)).clicked() {
+            //
+            // **The wording is still one rank key and one non-key, and #173 is what changes it.**
+            // `leeches` ranks by failure days, then by the most recent failure, then by card
+            // identity — so this line states the *first* key, spends its other half on
+            // `review_count`, **which orders nothing**, and never draws the second key at all. The
+            // sitting chose ADR-0010 §6's duration sentence to replace it and made a bench that can
+            // produce a real duration its precondition, because every fixture writes a constant
+            // 4,200ms and §6's own example draws as `0 minutes`.
+            leech_row(ui, preview, Some(&format!("{days} bad days · {reviews} reviews")), |ui| {
+                if controls::snug(ui, "Edit").clicked() {
                     edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
                 }
-                if ui.button(text(ui, "Suspend")).clicked() {
+                if controls::snug(ui, "Suspend").clicked() {
                     suspend = Some(*card);
                 }
-                if ui.button(text(ui, "Delete")).clicked() {
+                if controls::snug(ui, "Delete").clicked() {
                     delete = Some(card.note);
                 }
             });
@@ -457,13 +475,16 @@ fn leech_screen(
         ui.add_space(spacing::gap(1));
         for (i, (card, preview)) in suspended_rows.iter().enumerate() {
             if i > 0 {
-                ui.add_space(spacing::gap(1));
+                ui.add_space(BETWEEN_ROWS);
             }
-            spacing::row(ui, 1, |ui| {
-                if ui.button(text(ui, preview)).clicked() {
+            // The same row, carrying no cost line: a suspended card is not being ranked, so there is
+            // no rank to state. Drawn in the same well as an active leech because it is the same kind
+            // of thing — one card, named once, with what you may do to it underneath.
+            leech_row(ui, preview, None, |ui| {
+                if controls::snug(ui, "Edit").clicked() {
                     edit = Some(card.note);
                 }
-                if ui.button(text(ui, "Unsuspend")).clicked() {
+                if controls::snug(ui, "Unsuspend").clicked() {
                     unsuspend = Some(*card);
                 }
             });
@@ -482,6 +503,72 @@ fn leech_screen(
         let _ = coll.mutable_set("note", &note.0, "deleted", Some("true"));
     }
     edit
+}
+
+/// The gap **between** two rows of this screen — four units, against the one unit that separates the
+/// parts *inside* a row.
+///
+/// **The fault this fixes is the ratio, not either number.** It was 16 against 8, and at 2:1 a
+/// three-leech list read as one block of six lines rather than as three things: a caption sat as far
+/// from the row it belonged to as from the row above it. Judged by dragging the two distances
+/// against each other in the running app (#156) rather than picked from stills, which is what #141
+/// and #155 both found a distance wants.
+const BETWEEN_ROWS: f32 = spacing::gap(4);
+
+/// One row of the leech screen: the card **in a well** (ADR-0033 §1's material), with what you may do
+/// to it underneath.
+///
+/// # The row is a card, and that is the decision
+///
+/// This is the one screen in the application that lists **cards** (ADR-0010 §1), so the row's subject
+/// is exactly the thing ADR-0033 gave a material to — and it is drawn in that material, cut into the
+/// page as a well. Nothing else on the screen carries a fill, so the well is what says *this is one
+/// thing*: before it, a note's own text was a button among buttons and the row it belonged to had no
+/// boundary at all.
+///
+/// **The controls stay outside the well and stay quieter than it**, which is ADR-0034 §2 holding on a
+/// screen that now has a card on it — an ordinary control is 1.099:1 against the page and the well is
+/// 1.121:1. That also means **no control on this screen may take the `primary` weight** any more,
+/// including *Back to review*: §2's primary exists for a screen with no card, and this screen now has
+/// three. The durable *entrance* on the caught-up floor keeps its primary, because that screen still
+/// has none.
+///
+/// # The words stay, and that is #149's exception failing its first test
+///
+/// [ADR-0038 §3](../../../../docs/adr/0038-the-mark-and-the-icon-rule.md)'s rule is *an icon never
+/// carries meaning alone, **except** where repetition pays for the learning — a control that appears
+/// on every row of a list may stand as an icon alone*. #149 recorded that it was decided with **no
+/// build behind it**. This screen is the first list in the application with a control on every row,
+/// so it is that build, and the exception **lost** when it was drawn: repetition teaches a symbol
+/// that already exists and cannot invent one, and *Suspend* has no such symbol. A frameless control
+/// was not a candidate either — #134's judging rejected that twice, as *a control nobody can tell is
+/// a control*.
+///
+/// # Why the word is not the control any more
+///
+/// It was, and that made the thing the row is *about* wear the same weight as *Delete* beside it. So
+/// the word is text and **`Edit` is named** — a third control per row is the price, paid visibly.
+/// ADR-0010 §7 keeps edit the *primary action* in the sense of being the right one to reach for; that
+/// is about which action the design recommends, not about ADR-0034 §2's fill.
+fn leech_row(ui: &mut egui::Ui, preview: &str, cost: Option<&str>, actions: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(theme::card_fill(ui.visuals()))
+        .stroke(theme::card_stroke(ui.visuals()))
+        .corner_radius(egui::CornerRadius::same(surface::RADIUS))
+        .inner_margin(egui::Margin::same(spacing::gap(2) as i8))
+        .show(ui, |ui| {
+            // `available_width` inside a `Frame` is already net of the inner margin, so subtracting
+            // it again here leaves every well short of the column — 33px short at the judging width,
+            // visible only against the right edge of the control below it.
+            ui.set_width(ui.available_width());
+            body(ui, preview);
+            if let Some(cost) = cost {
+                ui.add_space(spacing::gap(1));
+                badge(ui, cost);
+            }
+        });
+    ui.add_space(spacing::gap(1));
+    spacing::row(ui, 1, actions);
 }
 
 /// One card's prompt, for a leech row — the card the user will recognise. A dormant card (its content
@@ -767,6 +854,110 @@ mod tests {
             walk(&clipped.shape, &mut text);
         }
         text
+    }
+
+    /// Every filled rect a closure drew, with its rect — so an assertion can be about **what is on
+    /// screen** rather than about the branch the code took. In a named theme, because a weight rule
+    /// checked in one palette says nothing about the other (ADR-0036 §2).
+    fn filled_rects(
+        choice: crate::theme::ThemeChoice,
+        mut add: impl FnMut(&mut egui::Ui),
+    ) -> Vec<(egui::Rect, egui::Color32)> {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx, choice);
+        crate::typography::install(&ctx);
+        crate::spacing::install(&ctx);
+        let out = ctx.run_ui(Default::default(), |ui| {
+            ui.set_width(frame::MEASURE);
+            add(ui);
+        });
+
+        fn walk(shape: &egui::Shape, into: &mut Vec<(egui::Rect, egui::Color32)>) {
+            match shape {
+                egui::Shape::Rect(r) => into.push((r.rect, r.fill)),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, into)),
+                _ => {}
+            }
+        }
+        let mut found = Vec::new();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut found);
+        }
+        found
+    }
+
+    /// **The leech row's weights and its touch target, made checkable — and the reason the screen
+    /// needed a ticket at all.**
+    ///
+    /// Before #156 every control on this screen was a bare `ui.button`, which takes egui's
+    /// `widgets.inactive` rung. That is the rung `theme::primary_fill` reads, so each row drew three
+    /// **primaries** — the weight [ADR-0034 §2] reserves for *the one control on a screen that is the
+    /// way forward*, of which a screen may have one — while the single control that was the way
+    /// onward drew at the ordinary rung. Measured off a capture, the row controls were **1.293:1**
+    /// against the page and *Back to review* **1.099:1**: ADR-0034's own two figures, exactly
+    /// inverted. The same buttons drew **19px** tall where `controls::HEIGHT` is 36, directly above
+    /// one that was 36, against the map's *hit targets follow touch, never the pointer*.
+    ///
+    /// **Nothing failed, and nothing would.** A bare `ui.button` compiles, renders and reads as
+    /// perfectly ordinary; the defect is only visible beside a control that went through the
+    /// vocabulary, and this screen had no such neighbour until the row gained a well. That is what
+    /// *the one screen the pass walked past* turned out to mean once it was measured rather than
+    /// asserted — so the guard has to be about the pixels, not about which helper was called.
+    ///
+    /// [ADR-0034 §2]: ../../../../docs/adr/0034-the-controls.md
+    #[test]
+    fn a_leech_row_draws_no_primary_and_its_controls_are_the_touch_target() {
+        for choice in [
+            crate::theme::ThemeChoice::Dark,
+            crate::theme::ThemeChoice::Light,
+        ] {
+            let visuals = match choice {
+                crate::theme::ThemeChoice::Light => crate::theme::cairn_light(),
+                _ => crate::theme::cairn_dark(),
+            };
+            let card = crate::theme::card_fill(&visuals);
+            let ordinary = crate::theme::control_fill(&visuals);
+            let primary = crate::theme::primary_fill(&visuals);
+
+            let drawn = filled_rects(choice, |ui| {
+                leech_row(ui, "néanmoins", Some("6 bad days · 12 reviews"), |ui| {
+                    let _ = controls::snug(ui, "Edit");
+                    let _ = controls::snug(ui, "Suspend");
+                    let _ = controls::snug(ui, "Delete");
+                });
+            });
+
+            assert!(
+                drawn.iter().any(|(_, fill)| *fill == card),
+                "{choice:?}: the row is a well (ADR-0033 §1) — drew {drawn:?}"
+            );
+            // The load-bearing one. `primary_fill` and the rung a bare `ui.button` takes are the same
+            // colour, so this fails the moment a row control stops going through `controls::*`.
+            assert!(
+                !drawn.iter().any(|(_, fill)| *fill == primary),
+                "{choice:?}: ADR-0034 §2 allows a screen one primary and this screen has a card on \
+                 it, so it may have none — a bare `ui.button` draws exactly this fill. drew {drawn:?}"
+            );
+
+            let controls_drawn: Vec<_> = drawn
+                .iter()
+                .filter(|(_, fill)| *fill == ordinary)
+                .collect();
+            assert_eq!(
+                controls_drawn.len(),
+                3,
+                "{choice:?}: three ordinary controls per row — drew {drawn:?}"
+            );
+            for (rect, _) in controls_drawn {
+                assert!(
+                    (rect.height() - controls::HEIGHT).abs() < 0.5,
+                    "{choice:?}: a row control is the touch target, not egui's default — \
+                     {}px against {}px",
+                    rect.height(),
+                    controls::HEIGHT
+                );
+            }
+        }
     }
 
     /// **ADR-0029 §1, and the only reason it is enforceable.** The edit entrance appears on a

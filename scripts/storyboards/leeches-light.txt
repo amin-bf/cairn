@@ -1,0 +1,26 @@
+# The **leech screen** in the **light** appearance (ADR-0036 §3) — `leeches.txt`'s route with the
+# theme switched first.
+#
+# The screen had no light storyboard before #156, which is why its light page had never been
+# photographed at all. It draws cards now (ADR-0033's well, one per row), and #143 found that a rule
+# holding in dark can fail in light on the identical setting — so this is the pair of `leeches.txt`
+# rather than a nicety.
+#
+# **`10-settings` is shot and kept**, because it is the only thing that separates a light run from a
+# full set of perfectly valid *dark* captures under light names. Nothing fails when the theme click
+# lands on empty page: the appearance simply does not change. That silent miss has now arrived from
+# six sides (#122, #143, #153, #154, #155, #156).
+fixture leeches
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+shot 10-settings
+mousemove %LX+84% 93 click 1
+sleep 1.2
+mousemove %LX+27% 11 click 1
+sleep 1.2
+# The durable entrance, on ADR-0035 §1's reach line — `%BY-183%`, never a literal y.
+mousemove %CX% %BY-183% click 1
+sleep 1.2
+shot 11-leech-screen-light
