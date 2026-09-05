@@ -10,18 +10,28 @@
 # storyboard photographed the Review screen three times under three editor names and said nothing.
 # `baseline.txt` was migrated to `%LX%` when the frame landed and this file was not; that is the whole
 # failure. A storyboard cannot tell you it missed (#122), so both files are now on the same token.
+#
+# **Everything inside the editor is `%EX+n%`, not `%CX%`** (#163). The editor is the one screen with
+# its own frame — `frame::cap_for` gives it 1120 above `TWO_COLUMN_MIN_WIDTH` — so `%CX%` is inside a
+# field at the 560 this file is run at and lands fourteen pixels past its right edge at 1280. It has
+# been correct here and wrong anywhere else since #131, which is the same latent miss the nav x above
+# had actually taken; the token removes it before it is paid for rather than after.
+#
+# **The y's are still the one-column arrangement's**, so this file is a 560×860 storyboard until the
+# editor stops having two vertical stacks. See `notes-persian.txt` for what running one at the wrong
+# width looks like.
 mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
 mousemove %CX% 87 click 1
 sleep 1.5
-mousemove %CX% 300 click 1
+mousemove %EX+30% 300 click 1
 sleep 0.8
 sh xdotool type --delay 120 'سگ در خانه است.'
 sleep 1.5
 shot 08-editor-persian-front
-mousemove %CX% 335 click 1
+mousemove %EX+30% 335 click 1
 sleep 0.8
 sh xdotool type --delay 120 'the dog is in the house'
 sleep 1.5
@@ -31,9 +41,9 @@ shot 09-editor-persian-and-latin
 # it (ADR-0032 §1). Client-stack rule 7 makes this worth a capture rather than an assumption: within
 # a family the *first* matching face wins, more than one shipped face carries the Arabic script, and
 # a glyph existing is not the same as the right face drawing it. Nothing but looking tells them apart.
-mousemove %LX+75% 250 click 1
+mousemove %EX+75% 250 click 1
 sleep 1.2
 shot 11-cards-persian-display
-mousemove %CX% 48 click 1
+mousemove %EX+60% 48 click 1
 sleep 1.5
 shot 10-notes-list-with-persian
