@@ -1,0 +1,21 @@
+# **PROTOTYPE #155** — the caught-up floor in the **light** appearance. Never merges.
+#
+# `light.txt` cannot serve here. It clicks Appearance at y=93 because `theme_control` is the first
+# thing under the Settings heading; the prototype's switcher sits above it (three knobs and two
+# toggle groups) and pushes Appearance down. Clicking 93 would hit a knob, produce no theme change,
+# and photograph a full set of perfectly valid **dark** captures under light names — the silent miss
+# #122, #143 and #153 each met from a different side.
+#
+# The y below is measured off `10-settings.png`, which is why that shot is taken first and kept.
+fixture caught-up
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+shot 10-settings
+mousemove %LX+84% 435 click 1
+sleep 1.2
+shot 11-settings-light
+mousemove %LX+20% 11 click 1
+sleep 1.2
+shot 12-caught-up-light

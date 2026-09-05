@@ -63,6 +63,26 @@ pub const BODY: f32 = 15.0;
 /// The footnote tier: the box badge, the interval preview, a field's caption.
 pub const SMALL: f32 = 12.0;
 
+/// **The mark, drawn large.** A font size, and *not a fifth tier of the scale* —
+/// [ADR-0038 §3](../../../docs/adr/0038-the-mark-and-the-icon-rule.md).
+///
+/// It is here because [ADR-0038 §1](../../../docs/adr/0038-the-mark-and-the-icon-rule.md) makes an
+/// icon a **glyph**, so an icon's size *is* a font size, and this module's header says font sizes
+/// are named here and nowhere else. The rule did not get an exception for pictures.
+///
+/// **It is not a tier**, and the tests below still say four. The four tiers are a *scale*: they
+/// relate to one another by ratio, they meet inside a sentence, and `the_scale_accelerates` is a
+/// claim about the shape they make together. This number is in none of that. It is one picture's
+/// dimension on one screen, and the four sizes it is not between were the whole reason the ticket
+/// had to ask — a mark set at `DISPLAY` is the size of a word, which is what the app's only *you
+/// are done* moment was never going to be able to say.
+///
+/// **What it draws is 0.72 of it.** The glyph's ink is one cap height, so this is the size to *ask*
+/// for and not the height that appears — `fonts::the_mark_is_a_cap_height_of_stones` pins the
+/// ratio. That indirection is the honest cost of the route: an icon that inherits the type scale
+/// inherits the way type is measured too.
+pub const MARK: f32 = 150.0;
+
 /// The name egui knows the display tier by. Private on purpose: [`display`] is how a caller reaches
 /// it, so the string is written once.
 const DISPLAY_SLOT: &str = "display";

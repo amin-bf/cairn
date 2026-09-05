@@ -15,7 +15,7 @@ use crate::{
     Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading,
     surface, text,
 };
-use crate::{bidi, controls, frame, spacing, typography};
+use crate::{bidi, controls, fonts, frame, spacing, typography};
 
 /// Draw the whole review destination for this frame: the count picker when no sitting is running,
 /// otherwise the current card. Returns the note the user asked to **edit**, if any — the review
@@ -114,7 +114,8 @@ pub(crate) fn review(
         // notice its absence. Drawn at the ordinary control weight it is a faint rectangle on an
         // otherwise empty page, which is the same defect wearing a fill.
         if !ranked.is_empty() || !suspended.is_empty() {
-            ui.add_space(spacing::gap(3));
+            // **PROTOTYPE #155**: ADR-0035 §1's second call site. Shipping, this is `gap(3)`.
+            ui.add_space(crate::proto::entrance_lead(ui));
             if controls::wide_primary(ui, &leech_entry_wording(ranked.len(), suspended.len()))
                 .clicked()
             {
@@ -667,7 +668,8 @@ fn grade_cluster_height(touch: bool) -> f32 {
     }
 }
 
-/// The caught-up floor: the statement, centred and given the screen (ADR-0034 §3).
+/// The caught-up floor: **the mark, then the statement**, centred and given the screen
+/// (ADR-0034 §3, [ADR-0038 §3](../../../../docs/adr/0038-the-mark-and-the-icon-rule.md)).
 ///
 /// **The display tier is used here for something that is not a card face**, which narrows
 /// [ADR-0032 §1](../../../../docs/adr/0032-the-type-scale-and-the-rhythm.md)'s *"the text actually
@@ -676,9 +678,28 @@ fn grade_cluster_height(touch: bool) -> f32 {
 /// content of this screen is set at the size of the word *Review* three lines above it, which reads
 /// as a caption rather than as the state. #124's variant E reached for 24 and the scale does not
 /// have it.
+///
+/// **The mark's first appearance anywhere inside the application**, and the only one. Three other
+/// homes were weighed and rejected on [The Craft](https://github.com/amin-bf/cairn/issues/149): a
+/// nav strip is chrome seen four hundred times a sitting, a splash is a delay added on purpose, and
+/// Settings is where you go to change things. This is the app's one *you are done* moment.
+///
+/// **It appears whenever nothing is due — including on a fresh install, where nothing has been
+/// earned**, and that is what keeps it clear of ADR-0001 §3's quiet constraint. A picture that shows
+/// up when you have done nothing cannot be a reward for doing something.
 fn caught_up(ui: &mut egui::Ui) {
-    ui.add_space(spacing::gap(8));
+    // **PROTOTYPE #155**: the size, the gap, the ink and the block's lead are all knobs. Shipping,
+    // this reads `spacing::gap(8)`, `typography::MARK`, `spacing::gap(3)` and `text_color()`.
+    let block = crate::proto::block_height(ui);
+    ui.add_space(crate::proto::lead(ui, block));
     ui.vertical_centered(|ui| {
+        crate::icon(
+            ui,
+            fonts::MARK,
+            crate::proto::size(),
+            crate::proto::ink(ui.visuals()),
+        );
+        ui.add_space(spacing::gap(crate::proto::gap()));
         ui.label(bidi::job(
             "All caught up.",
             egui::FontId::proportional(typography::DISPLAY),
