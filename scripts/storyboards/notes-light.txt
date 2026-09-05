@@ -27,17 +27,21 @@ sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
 shot 01-list
-mousemove %LX+50% 145 click 1
+# Every y below the heading moved in #162 — *Create note* left the top of the page for the reach
+# line below the scroll, so the chrome rose by that control plus its gap. See `notes.txt`.
+mousemove %LX+50% 109 click 1
 sleep 1
 shot 02-list-deck-open
 key Escape
 sleep 0.8
-mousemove %LX+79% 252 click 1
+# `+578` is the move control on every row, not just this one (ADR-0039 §1).
+mousemove %LX+578% 259 click 1
 sleep 1.2
 shot 03-placement
-mousemove %CX% 261 click 1
+mousemove %CX% 225 click 1
 sleep 1.2
-# The editor last — above 900 it takes its own wider frame and the nav row follows it.
-mousemove %LX+24% 252 click 1
+# The editor last — it takes its own wider frame and the nav row follows it. The row's band is the
+# open affordance now, so this aims at the middle of the row.
+mousemove %LX+200% 259 click 1
 sleep 1.5
 shot 04-editor

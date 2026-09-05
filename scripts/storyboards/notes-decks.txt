@@ -1,0 +1,46 @@
+# The note list's **deck surface**, which nothing photographed until #161 built the fixture: the
+# filter holding five entries and an *Unfiled* value, a row captioned with the deck it is filed
+# under, *Delete deck* asking before it destroys anything, and the placement state over a list with
+# decks in it.
+#
+# `notes.txt` runs against `backlog`, which holds **no decks** — so there every note is unfiled by
+# definition, no row is captioned (ADR-0039 §3), and the filter offers only the two values that
+# exist when no deck does. This file is where the other half of the screen lives.
+#
+# **`%LX+578%` is the move control on every row**, whatever its preview says (ADR-0039 §1). That is
+# worth stating because the coordinate used to be per-row: `notes.txt`'s old `+79` was measured off
+# `backlog`'s first row, and pointing it at this fixture — whose first row is wider — clicked the
+# row instead and photographed the editor under the placement state's name.
+fixture decks
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 700 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.4
+shot 01-list
+# The filter, open: *All decks*, *Unfiled*, then the four decks. *Unfiled* sits directly under *All
+# decks* rather than after the named decks — it narrows the collection rather than naming a part of
+# it (ADR-0039 §5).
+mousemove %LX+50% 109 click 1
+sleep 1
+shot 02-deck-open
+# The longest deck name, chosen for what the **closed** control does with it — and for the three
+# notes behind it, which is the only state on this screen with room to spare below the rows.
+mousemove %LX+130% 228 click 1
+sleep 1.4
+shot 03-deck-filtered
+# *Delete deck* appears only for a named deck, and asks before it acts (ADR-0039 §6). The warning
+# names the count, because an empty deck and a year of authoring are otherwise the same tap.
+mousemove %LX+40% 173 click 1
+sleep 1.2
+shot 04-deck-delete-warning
+# Keep it, back to all decks, and into the placement state over the whole list.
+mousemove %LX+270% 233 click 1
+sleep 1.2
+mousemove %LX+50% 109 click 1
+sleep 1
+mousemove %LX+40% 135 click 1
+sleep 1.4
+mousemove %LX+578% 259 click 1
+sleep 1.4
+shot 05-placement
