@@ -1,18 +1,27 @@
 # The Notes destination in **Persian** — the editor's fields and card face, and a note-list row.
 #
-# **1280×800 only, and deliberately so.** This is the one storyboard in the set that has to aim at a
-# control *inside* the editor, and the editor takes its own wider frame (#131, `frame::cap_for` →
-# 1120). So its column's left edge is 80 at 1280 where the list's is 320, and the harness has a
-# token for the **list's** frame (`%LX+n%`) and none for the editor's.
+# **1280×800 while the editor has two arrangements** — but for a narrower reason than before, and the
+# x half of the old pin is gone.
 #
-# `%CX%` — 640 — reaches an editor field at 560 and lands **fourteen pixels past its right edge** at
-# 1280. `persian.txt` aims that way and has been missing there since #131; the first run of this
-# file did the same, typed nothing, and photographed the French note under the Persian name. That is
-# #122's silent miss arriving from a fifth side, and the first caused by a *frame* rather than by a
-# coordinate. It is pinned here rather than papered over, the way `fixture-bench.txt` is, and #163
-# owns the choice between adding the token and keeping the pin.
+# This is the one storyboard in the set that has to aim at a control *inside* the editor, and the
+# editor takes its own wider frame (#131, `frame::cap_for` → 1120) — so its column starts at x=80 at
+# 1280 where the list's starts at 320, and `%LX+n%` is the wrong frame here however right it is in
+# the nav row. `%CX%` — 640 — reaches a field at 560 and lands **fourteen pixels past its right edge**
+# at 1280: `persian.txt` aimed that way and had been missing since #131, and the first run of this
+# file did the same, typed nothing, and photographed the French note under the Persian name. #163
+# spent `%EX+n%` on that rather than keeping the caveat, and every x below is now right at any width.
 #
-# **Both shots are self-evidencing**, which is what makes the pin tolerable: a run that missed leaves
+# **The y is not, and running this at 560 is what showed why.** Below `frame::TWO_COLUMN_MIN_WIDTH`
+# the editor inserts the `Write | Cards` toggle, which pushes both fields down by one row — so at 560
+# the x lands correctly and y=265 falls in empty page while y=300 finds *Front*. The run then selects
+# and overwrites the wrong field: the first string goes nowhere and the second replaces `l'aube`,
+# leaving `dawn` behind it. Same silent-miss class as the x, arriving from the **vertical** axis, and
+# caused by an arrangement change rather than by a frame or a coordinate.
+#
+# So the pin that is left is *the editor has two vertical stacks*, which is the thing #163 is
+# deciding. If the toggle stops being a function of width, this file stops needing a width.
+#
+# **Both shots are self-evidencing** and stay worth checking: a run that missed leaves
 # `06-editor-persian` showing `l'aube` / `dawn`, and leaves `07-list-persian` with no Persian row.
 fixture backlog
 mousemove %CX% 600 click 1
@@ -21,16 +30,17 @@ mousemove %LX+86% 11 click 1
 sleep 1.2
 mousemove %LX+24% 252 click 1
 sleep 1.5
-# The editor's Front field spans x 80..626 at 1280, so `%LX+30%` (=350) is inside it and `%CX%` is
-# not. `xdotool type` remaps keysyms to reach characters the layout does not carry, so what this
-# exercises is the **keymap** path — the same events an `ir(pes)` layout produces — and not a
-# composing input method, which #129 ruled out of scope.
-mousemove %LX+30% 265 click 1
+# The editor's Front field starts at the editor frame's own left edge, so `%EX+30%` is inside it at
+# every width — 110 at 1280 and 58 at 560 — where `%LX+30%` is inside it only above the two-column
+# threshold and `%CX%` is inside it only below. `xdotool type` remaps keysyms to reach characters the
+# layout does not carry, so what this exercises is the **keymap** path — the same events an `ir(pes)`
+# layout produces — and not a composing input method, which #129 ruled out of scope.
+mousemove %EX+30% 265 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 80 'سپیده‌دم'
 sleep 0.8
-mousemove %LX+30% 300 click 1
+mousemove %EX+30% 300 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 80 'آغاز روز، پیش از برآمدن خورشید'
@@ -42,10 +52,11 @@ sleep 1
 mousemove %CX% 500 click 1
 sleep 1.5
 shot 06-editor-persian
-# Back to the list by *Done* — compact at x 80..200 at this width. Clicking the nav row's *Notes*
-# does not work here: it is the current destination, so the click is a no-op and the next shot is
-# the editor again under the list's name.
-mousemove 140 49 click 1
+# Back to the list by *Done*, which starts at the editor frame's left edge in both arrangements —
+# compact above the two-column threshold and full-width below it, so `%EX+60%` is inside it either
+# way. Clicking the nav row's *Notes* does not work here: it is the current destination, so the click
+# is a no-op and the next shot is the editor again under the list's name.
+mousemove %EX+60% 49 click 1
 sleep 1.5
 # The row this produces is drawn **outside its own button and outside the page margin** — the button
 # is allocated 61px at x=318..378 and the glyphs draw from x=274. See #162.

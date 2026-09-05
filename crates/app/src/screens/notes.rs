@@ -60,6 +60,13 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
             full_width_button(ui, "Done")
         };
         if done.clicked() {
+            // **Settle before letting go of the buffers.** On the frame *Done* is clicked the panes
+            // below are never drawn, so the field the user is inside never produces the response its
+            // autosave is read from (ADR-0021 §7) — and clearing `editing` then throws the edit away
+            // with the buffer. That lost the last field typed, silently, on both arrangements.
+            if let Some(ed) = editing {
+                editor::settle_all(coll, ed.note, &ed.kind, &ed.fields, ed.deck);
+            }
             *editing = None;
             return;
         }
@@ -348,7 +355,7 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_c
     // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
     // and nothing to auto-scroll to (ADR-0018 §4). A draft not yet born has no stored note, so no
     // cards and no history — its pane is empty until its first field commits (ADR-0021 §7).
-    let pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
+    let mut pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
 
     // On a phone the two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show
     // together (ADR-0025 §5). **Where both fit, they now sit side by side** — which is what ADR-0012
@@ -378,7 +385,17 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_c
     }
 
     editor_header(ui, coll, ed);
-    pane_toggle(ui, &mut ed.show_cards);
+    // Switching to *Cards* stops drawing the form on the same frame, so the field being typed in
+    // never sees its blur — the same loss *Done* had, and worse in kind: the pane the tap asked
+    // *"what will I be asked"* of would answer with a card missing the half just written.
+    if pane_toggle(ui, &mut ed.show_cards) && ed.show_cards {
+        ed.note = editor::settle_all(coll, ed.note, &ed.kind, &ed.fields, ed.deck);
+        // Re-read the pane after settling, not on the next frame. It was computed above from the
+        // content the store held *before* this tap, and egui repaints on demand — so leaving it
+        // stale draws the card the tap was asking about one edit behind, until something unrelated
+        // asks for another frame.
+        pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
+    }
     ui.add_space(spacing::gap(2));
     if ed.show_cards {
         editor_cards_body(ui, pane.as_ref());
@@ -446,7 +463,12 @@ fn pane_column(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) {
 
 /// The phone's `Write | Cards` pane toggle (ADR-0012 §1): two mutually exclusive choices, the current
 /// one marked. Which pane is showing is the only thing it changes — there is no third state.
-fn pane_toggle(ui: &mut egui::Ui, show_cards: &mut bool) {
+///
+/// Returns whether this tap **moved** it. The caller needs the transition rather than the state,
+/// because leaving *Write* is what strands the edit in the field being typed in, and re-settling on
+/// every frame spent on the *Cards* tab would ask the store the same question forever.
+fn pane_toggle(ui: &mut egui::Ui, show_cards: &mut bool) -> bool {
+    let was = *show_cards;
     spacing::row(ui, 1, |ui| {
         if ui
             .selectable_label(!*show_cards, text(ui, "Write"))
@@ -461,6 +483,7 @@ fn pane_toggle(ui: &mut egui::Ui, show_cards: &mut bool) {
             *show_cards = true;
         }
     });
+    *show_cards != was
 }
 
 /// The editor's **form body** (ADR-0012 §1): the destructive-edit warning **above** the fields
@@ -526,11 +549,15 @@ fn editor_form_body(
     // forward — under autosave, that is all "save and add another" ever meant. Bound to the modifier
     // chord, so it can never collide with a field's own Enter.
     if new_note_chord {
-        for (field, value) in ed.fields.clone() {
-            if let Ok(committed) = editor::commit_field(coll, note, &kind, &field, &value) {
-                note = committed;
-            }
-        }
+        // Through `settle_all` rather than its own loop, which is where this fix started: the chord
+        // was the one exit that already committed its buffers, and it did so **without** the filing
+        // line above it — so a note born by the chord under an active deck filter landed unfiled,
+        // where the same note born by a blur landed filed.
+        // ADR-0021 §8 carries the *kind* forward and says nothing about the deck, so the fresh draft
+        // is left unfiled exactly as before — that is a design question for #163, not a defect.
+        // The id it returns is deliberately dropped: the draft replacing `ed` is a *different* note,
+        // so carrying the settled one forward is what would be wrong here.
+        editor::settle_all(coll, note, &kind, &ed.fields, ed.deck);
         *ed = Editing::new_draft(&kind);
     }
 }

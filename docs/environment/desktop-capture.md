@@ -153,10 +153,21 @@ scripts/capture-desktop.sh scripts/storyboards/caught-up.txt 1280 800
 | `crossing` | one card one failure day short of the floor — grade it *Forgot* and the sitting ends on the end-of-session pointer |
 | `backlog` | twenty-five due: a framed backlog, and the entrance's shorter-sitting line, which is the link accent's only call site |
 | `cloze` | a card whose two faces **overflow** the budget while the prompt alone does not — the only shape that makes ADR-0033 §4's step-down fire, and one the seed's six French words cannot produce at any width |
+| `due-with-leeches` | cards due **and** leeches at once — the picker with the durable leech entrance under it, which is the second screen ADR-0038 §5 moved and the only one it moved without anybody looking |
+| `decks` | four decks with notes filed in them, three notes left unfiled, and five in Persian — the note list's whole deck surface (ADR-0021 §9), and a right-to-left row |
 
 `cargo build -p cairn-desktop` builds the installer, `cairn-fixture`, alongside the app;
 `crates/app/src/fixtures.rs` defines the states and says why they are collections rather than a seed
 change or a capture mode.
+
+**`decks` is the first fixture whose state is on Notes rather than on Review, and the first whose
+ids are part of its contract.** `Collection::create_deck` mints a fresh UUIDv4 per call, which is
+right for a person making a deck and useless to anything that has to *match* one: authority follows
+deck id (ADR-0008 §11), so an inbound `.cdeck` only exercises ADR-0022's update lines — *N already
+yours*, *notes moving in from X*, *X will be left empty* — when its deck ids match ids the collection
+holds. So this fixture's four are fixed and published as `cairn_app::fixtures::DECKS`, which is what
+a file built to be imported against it reads. Every import plan this repository could reach before it
+said *new deck*.
 
 **The storyboard names its own fixture, and that placement is the point.** A storyboard that needs a
 pre-made collection and is run without one produces a full set of perfectly valid captures **of the

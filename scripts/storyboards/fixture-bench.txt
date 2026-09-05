@@ -22,8 +22,9 @@ mousemove %LX+140% 11 click 1
 sleep 1.2
 mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1.2
-# `Nothing due`, the first of the four — the leftmost, so its x is the one in the row that survives
-# the row wrapping.
+# `Nothing due`, the first of the seven — the leftmost, so its x is the one in the row that survives
+# the row wrapping. That wrapping is no longer hypothetical: since #161 the block draws two lines,
+# and every button but this one has moved at least once.
 mousemove %LX+60% 557 click 1
 sleep 1.5
 # Installing a fixture lands you on Review, because looking at the state is the whole purpose. The

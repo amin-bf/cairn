@@ -73,6 +73,28 @@ inner=$(( ${CAIRN_WIDTH:-1280} - margin * 2 ))
 lx=$(( (${CAIRN_WIDTH:-1280} - inner) / 2 ))
 echo "session: page frame — margin $margin, measure $measure, column left edge $lx"
 
+# `%EX%` — the left edge of the **editor's** frame, and `%EX+n%` for a control `n` px inside it.
+#
+# The editor is the one screen that does not use the page measure. `frame::cap_for` gives it 1120
+# once the window can hold two panes, so its column starts at x=80 at 1280 where every other screen
+# starts at 320, and below the threshold it falls back to the measure and the two edges coincide.
+# `%LX+n%` is therefore right for the nav row and wrong for anything inside the editor, and `%CX%`
+# — 640 — reaches a field at 560 and lands fourteen pixels past its right edge at 1280.
+#
+# That gap is why `persian.txt` had been aiming at empty page since #131 and why `notes-persian.txt`
+# was pinned to one width instead: #122's silent miss arriving from a fifth side, and the first one
+# caused by a **frame** rather than by a coordinate. A pin is not a fix — it leaves the storyboard
+# correct at exactly one window and silently wrong at every other, which is the property the tokens
+# exist to remove — so #163 spends the token rather than the caveat.
+two_column_min=${CAIRN_TWO_COLUMN_MIN_WIDTH:-900}
+two_column_measure=${CAIRN_TWO_COLUMN_MEASURE:-1120}
+editor_cap=$measure
+[ "${CAIRN_WIDTH:-1280}" -ge "$two_column_min" ] && editor_cap=$two_column_measure
+editor_inner=$(( ${CAIRN_WIDTH:-1280} - margin * 2 ))
+[ "$editor_inner" -gt "$editor_cap" ] && editor_inner=$editor_cap
+ex=$(( (${CAIRN_WIDTH:-1280} - editor_inner) / 2 ))
+echo "session: editor frame — cap $editor_cap, column left edge $ex"
+
 while IFS= read -r line || [ -n "$line" ]; do
   [ -z "$line" ] && continue
   line="${line//%CX%/$cx}"
@@ -89,6 +111,17 @@ while IFS= read -r line || [ -n "$line" ]; do
     line="$pre$(( lx + off ))$post"
   done
   line="${line//%LX%/$lx}"
+  # `%EX+n%` and `%EX%` — the editor's frame, expanded the same way and for the same reason. Written
+  # as its own loop rather than folded into the one above because the two edges differ only above the
+  # two-column threshold, so a single shared expansion would test identical at 560 and diverge
+  # silently at 1280 — which is the failure, not a saving.
+  while [[ "$line" =~ (.*)%EX\+([0-9]+)%(.*) ]]; do
+    pre="${BASH_REMATCH[1]}"
+    off="${BASH_REMATCH[2]}"
+    post="${BASH_REMATCH[3]}"
+    line="$pre$(( ex + off ))$post"
+  done
+  line="${line//%EX%/$ex}"
   # `%BY-n%` — `n` px **above the bottom of the output**, the vertical twin of `%LX+n%`.
   #
   # Since ADR-0035 the last control cluster on a screen is anchored to a reach line measured up from
