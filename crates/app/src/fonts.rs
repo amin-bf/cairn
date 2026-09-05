@@ -12,6 +12,12 @@
 //! - **`DejaVu Sans`** — covers the IPA extensions the bundled Latin faces do not. Latin and
 //!   Cyrillic still come from egui's own Hack / Ubuntu-Light wherever they have the glyph, because
 //!   the added faces are appended as **fallbacks**.
+//! - **`Cairn Icons`** — the application's own pictures, currently one: [`MARK`], the four stones.
+//!   [ADR-0038 §1](../../../docs/adr/0038-the-mark-and-the-icon-rule.md) routes icons through the
+//!   font stack rather than through images, and this is what that costs: a fourth face, appended as
+//!   a fallback exactly like the other two, carrying no script. It is generated from the drawable
+//!   the Android build already ships — `scripts/build-icon-face.py`, whose `--check` mode is the
+//!   claim that the glyph really *is* the launcher's stones.
 //!
 //! Both are registered into **every family in use**, because a face missing from one renders as
 //! boxes there silently (ADR-0003 §4, client-stack rule 7). That is now **three** families, not the
@@ -30,6 +36,20 @@
 use std::sync::Arc;
 
 use egui::{FontData, FontDefinitions, FontFamily};
+
+/// **The mark** — the four stones, as one character.
+///
+/// A private-use code point, which is what makes the icon face safe to append **last** in every
+/// family: nothing else can claim `U+E000`, so the face can shadow no other face and no other face
+/// can shadow it. That is the property the whole route rests on — an icon is reached the way a
+/// missing glyph is reached, by falling through, so no call site selects a family and an icon at
+/// [`crate::typography::BODY`] *is* body ([ADR-0038 §1]).
+///
+/// Its size is named in [`crate::typography`] with every other font size, because that is what an
+/// icon's size now is.
+///
+/// [ADR-0038 §1]: ../../../docs/adr/0038-the-mark-and-the-icon-rule.md
+pub const MARK: char = '\u{E000}';
 
 /// The font family that carries **bold**, registered by [`install`] and drawn by whatever renders
 /// the Markdown `**bold**` subset (ADR-0002 §8).
@@ -75,7 +95,22 @@ pub(crate) fn families() -> [FontFamily; 3] {
 ///
 /// The captions carry no Persian or Arabic themselves. A caption is the statement being checked
 /// *against*, so it has to be readable even on the run where the rendering is what is broken.
-pub(crate) const SPECIMENS: [(&str, &str); 7] = [
+///
+/// # The icon face has no script, and joins this list unchanged
+///
+/// [ADR-0038 §2](../../../docs/adr/0038-the-mark-and-the-icon-rule.md). The obvious reading is that a
+/// scriptless face has no business in a list of scripts — but what this list is *for* is the two
+/// questions a face can fail: **is the glyph there** (which the test answers, in every family) and
+/// **is it drawn right** (which only an eye answers). The mark can fail both. Registered into two
+/// families of three it is a box in the third, silently, exactly like Arabic. And a glyph built from
+/// paths can come out mirrored, upside down, or holed through the middle where two contours wound
+/// against each other and cancelled — from a font file that is otherwise perfectly valid, and which
+/// the coverage test would pass.
+///
+/// So it is one row like any other. What being scriptless changes is only what the caption asks of
+/// the reader: not *are these words in the right order* but *are these four stones, stacked, the
+/// right way up*.
+pub(crate) const SPECIMENS: [(&str, &str); 8] = [
     (
         "Persian — the dog is in the house; the full stop belongs at the far left",
         "سگ در خانه است.",
@@ -102,6 +137,10 @@ pub(crate) const SPECIMENS: [(&str, &str); 7] = [
     (
         "IPA, wider — every symbol a glyph, none of them a box",
         "ɸθðʃʒŋɲʎɫæœøɜɾʔ ˈˌː",
+    ),
+    (
+        "The mark — four stones, stacked largest at the bottom, solid the whole way through",
+        "\u{E000}",
     ),
 ];
 
@@ -140,7 +179,16 @@ pub fn install(ctx: &egui::Context) {
         ),
     ];
 
-    for &(name, bytes) in regular.iter().chain(&bold) {
+    // The application's own pictures (ADR-0038 §1). **One face, in every family, with no bold cut**
+    // — a mark has no weight, and a second cut of it would be a second drawing of the same object
+    // that could drift from the first. `MARK` is private use, so appending this last shadows
+    // nothing and nothing shadows it.
+    let icons = [(
+        "icons",
+        &include_bytes!("../assets/CairnIcons-Regular.ttf")[..],
+    )];
+
+    for &(name, bytes) in regular.iter().chain(&bold).chain(&icons) {
         fonts
             .font_data
             .insert(name.into(), Arc::new(FontData::from_static(bytes)));
@@ -148,16 +196,21 @@ pub fn install(ctx: &egui::Context) {
     // Driven by `families()` so the enumeration the test and the specimen read is the same one that
     // installs — a family added there is registered here without a second edit.
     for family in families() {
+        let list = fonts.families.entry(family.clone()).or_default();
         if family == bold_family() {
             // Bold is built *from scratch*, not appended to: it must hold the bold cuts and nothing
             // else, or the regular faces sit in front of them and bold silently stops being bold.
-            fonts
-                .families
-                .insert(family, bold.iter().map(|&(name, _)| name.into()).collect());
+            // The entry is fresh — `bold_family` is a name egui has never heard of — so this is the
+            // whole list rather than an addition to one.
+            list.extend(bold.iter().map(|&(name, _)| name.into()));
         } else {
-            let list = fonts.families.entry(family).or_default();
             list.extend(regular.iter().map(|&(name, _)| name.into()));
         }
+        // **The icon face goes into bold too, and it is the regular cut there.** That is the one
+        // stated exception to the sentence above, and it is stated rather than silent: the mark has
+        // no bold cut to reach, so a bold family without this face draws a box where every other
+        // family draws stones. Last in every list, which private use makes safe.
+        list.extend(icons.iter().map(|&(name, _)| name.into()));
     }
 
     ctx.set_fonts(fonts);
@@ -192,16 +245,21 @@ mod tests {
     /// non-joiner has none *by definition*, which makes neither less load-bearing — `می‌روم` needs
     /// the ZWNJ — so the join it produces is checked by eye on the specimen, where its absence is
     /// what would show.
+    ///
+    /// **That sentence is the rule, and the filter used to be its opposite.** It was written as an
+    /// allowlist — alphanumerics, plus four IPA marks named one at a time — which admits the same
+    /// characters only for as long as every specimen happens to be letters and digits. The mark is
+    /// the first that is neither: `U+E000` is private use, so an allowlist of categories silently
+    /// **skipped** it, and the coverage test would have passed on a family the mark was never
+    /// registered into (ADR-0038 §2). Stated as the denylist the comment always described, a
+    /// specimen row is checked whatever it holds, and adding one needs no edit here.
     #[test]
     fn every_added_face_covers_its_script_in_every_family() {
         let ctx = installed();
         for family in families() {
             let font_id = FontId::new(14.0, family.clone());
             for (caption, specimen) in SPECIMENS {
-                for c in specimen
-                    .chars()
-                    .filter(|c| c.is_alphanumeric() || is_symbol(*c))
-                {
+                for c in specimen.chars().filter(|c| !is_invisible(*c)) {
                     assert!(
                         draws(&ctx, &font_id, c),
                         "family {family:?} draws {c:?} (U+{:04X}) as a box — from the specimen \
@@ -248,10 +306,13 @@ mod tests {
         }
     }
 
-    fn is_symbol(c: char) -> bool {
-        // The IPA length mark and the stress marks are modifier letters and punctuation, not
-        // alphanumerics, and they are exactly what `deːɐ̯ hʊnt` is shipped to draw.
-        matches!(c, 'ː' | 'ˈ' | 'ˌ' | '\u{032F}')
+    /// The characters a specimen carries that are **not supposed to draw anything**, and therefore
+    /// the only ones a coverage check must not ask about.
+    ///
+    /// Spaces, and the zero-width non-joiner `می‌روم` needs. Everything else in a specimen is there
+    /// to be seen — a letter, a digit, an IPA mark, a full stop, a bracket, or a picture.
+    fn is_invisible(c: char) -> bool {
+        c.is_whitespace() || matches!(c, '\u{200C}' | '\u{200D}')
     }
 
     /// True when `c` really draws in `font_id`'s family — that is, when the glyph it lays out to is
@@ -277,6 +338,45 @@ mod tests {
             galley.rows.first()?.glyphs.first().map(|g| g.uv_rect)
         };
         uv(c).is_some() && uv(c) != uv('\u{FFFD}')
+    }
+
+    /// **An icon's size is a font size, so the glyph's own metrics decide what a stated size means**
+    /// (ADR-0038 §1). The face is built to two rules and both are invisible in a screenshot: the ink
+    /// is **one cap height** tall, and the advance width **is** the ink width.
+    ///
+    /// The first is why the mark can stand beside a word — a glyph filling its em would overshoot
+    /// the line it is set in — and it is what makes ADR-0038 §3's number mean stones rather than a
+    /// box that mostly is not stones. The second is why a centred label centres the *stones*.
+    ///
+    /// Neither can be read off a `.ttf` by looking, and `scripts/build-icon-face.py` is the only
+    /// thing that knows them. Regenerate the face from a drawable with different padding and every
+    /// use of the mark quietly redraws at a different size, with nothing failing. So the ratios are
+    /// pinned here, where the application reads them.
+    #[test]
+    fn the_mark_is_a_cap_height_of_stones_and_no_wider_than_it_draws() {
+        let ctx = installed();
+        const SIZE: f32 = 100.0;
+        let galley = ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                MARK.to_string(),
+                FontId::new(SIZE, FontFamily::Proportional),
+                Color32::WHITE,
+            )
+        });
+        let glyph = galley.rows[0].glyphs[0];
+        let ink = glyph.uv_rect.size;
+        assert!(
+            (ink[1] / SIZE - 0.72).abs() < 0.02,
+            "the mark's ink is {}px at size {SIZE} — a cap height is 0.72 of it",
+            ink[1]
+        );
+        assert!(
+            (galley.rect.width() - ink[0]).abs() < 2.0,
+            "the mark advances {}px while drawing {}px of stones — a centred label would centre \
+             the difference rather than the picture",
+            galley.rect.width(),
+            ink[0]
+        );
     }
 
     /// Bold is a heavier **face**, not a brighter colour: measuring the laid-out width proves a
