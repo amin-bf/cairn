@@ -38,9 +38,6 @@ pub(crate) fn notes_screen(
     });
 }
 
-/// The editor inside its own frame. **Whether the panes sit side by side is asked once and handed
-/// down** — never re-derived further in, where the answer would be about the column rather than the
-/// screen.
 /// The editor's heading — *Edit note* or *New note*, drawn by the screen rather than by the pane
 /// since #163 put *Done* at the foot of the page.
 fn editor_heading(ui: &mut egui::Ui, ed: &Editing) {
@@ -54,6 +51,9 @@ fn editor_heading(ui: &mut egui::Ui, ed: &Editing) {
     );
 }
 
+/// The editor inside its own frame. **Whether the panes sit side by side is asked once and handed
+/// down** — never re-derived further in, where the answer would be about the column rather than the
+/// screen.
 fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<Editing>) {
     // **No width is measured here any more** (#163). This used to read `viewport_rect().width()` and
     // compare it against a 900px threshold, and the width was never what the question was about: the
