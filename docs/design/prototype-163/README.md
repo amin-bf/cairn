@@ -190,3 +190,20 @@ sampling the card-pane area for the card fill reports "no" on the note that has 
 is precisely the note under test. A parallel session sampling for *Done* at its old coordinates read
 "no" on a frame where it had opened, because this ticket had just moved *Done*. Looking at the image
 settled it both times, in both sessions.
+
+## The review surface itself
+
+`pane-review.html` is the artifact the card-pane sitting was judged in, exported standalone — every
+crop inlined, no server, no sibling files. Open it directly.
+
+It is kept for the same reason the losing variants are. The **verdict** is in `main` and the
+**pictures** are beside this readme, but neither shows *how the question was put*: one big picture per
+region with 1/2/3 swapping in place and arrow keys to flicker between them, so a difference is seen
+rather than hunted. That framing is most of why the sitting produced an answer in one round.
+
+Its first version did not, and that is preserved as prose rather than as a file: three variants side
+by side at ~370px wide, met with *"the pics are too small I do not see the details"*. The rebuild is
+what this file is.
+
+The working copy lives in the repo's untracked `.lavish/` scratch directory alongside earlier
+sittings' artifacts; this is the copy that survives.
