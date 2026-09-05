@@ -80,6 +80,7 @@ pub(crate) fn settings_screen(
     optimise_done: &mut bool,
     handoff: &mut HandOff,
     inbound: &mut Option<inbound::Inbound>,
+    import_outcome: &mut Option<String>,
     file_list: &mut FileList,
     bench: &mut Bench,
     now_ms: i64,
@@ -164,7 +165,7 @@ pub(crate) fn settings_screen(
     ui.add_space(spacing::gap(3));
     ui.separator();
     ui.add_space(spacing::gap(2));
-    inbound_specimen(ui, coll, inbound.as_ref());
+    inbound_specimen(ui, coll, inbound.as_ref(), import_outcome);
 
     request
 }
@@ -497,7 +498,12 @@ fn handoff_specimen(ui: &mut egui::Ui, state: &mut HandOff) {
 /// the numbers rather than staling them. Every string the file carries is already bounded plain text
 /// (ADR-0022 §7) and is drawn through [`bidi::job`] like all chrome — a stranger's string can never
 /// style the screen it is previewed on (client-stack rule 1).
-fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbound::Inbound>) {
+fn inbound_specimen(
+    ui: &mut egui::Ui,
+    coll: &mut Collection,
+    inbound: Option<&inbound::Inbound>,
+    import_outcome: &mut Option<String>,
+) {
     body(
         ui,
         "Development control — what the platform handed us to open. Drop a .cdeck on this window, or \
@@ -506,20 +512,24 @@ fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbou
     );
     ui.add_space(spacing::gap(2));
 
-    let Some(inbound) = inbound else {
+    let Some(file) = inbound else {
         body(ui, "Nothing has arrived yet.");
         return;
     };
 
-    field_label(ui, &format!("Arrived: {}", inbound.arrival.label()));
-    match &inbound.name {
+    // Whether the read ended in a plan — the one condition under which the gate offers an Import
+    // (ADR-0022 §1, §4). Set below, and read after the borrow of `coll` the read needs has ended.
+    let mut apply = false;
+
+    field_label(ui, &format!("Arrived: {}", file.arrival.label()));
+    match &file.name {
         Some(name) => field_label(ui, &format!("Name it gave: \"{name}\"")),
         // A share may carry none, and identity never needs it (ADR-0024 §1).
         None => field_label(ui, "Name it gave: none — identified by its bytes."),
     }
 
     // Derived on the spot against the collection as it stands (ADR-0022 §5), never stored.
-    match inbound::read(inbound, coll) {
+    match inbound::read(file, coll) {
         Err(e) => body(
             ui,
             &format!("Could not read the collection to diff against: {e}"),
@@ -545,9 +555,49 @@ fn inbound_specimen(ui: &mut egui::Ui, coll: &Collection, inbound: Option<&inbou
                         }
                         body(ui, &line);
                     }
+                    apply = true;
                 }
             }
         }
+    }
+
+    if !apply {
+        return;
+    }
+
+    // **The development half of ADR-0022 §1's gate**, and the *shape* of the real one: a control that
+    // appears only where a plan does, so a refusal is never importable. What #167 draws is the pair —
+    // Import beside Cancel, under the plan — with the wording, weight and placement decided there;
+    // what is proven here is that pressing it writes what the lines above promised.
+    //
+    // **The lines re-derive on the next frame** (ADR-0022 §5), so a second press is the whole of
+    // ADR-0008 §3's idempotence, live: the plan flips to *"Nothing will change."* and a further press
+    // writes nothing. No state is held to make that happen — it falls out of never caching the plan.
+    ui.add_space(spacing::gap(2));
+    if compact_button(ui, "Import (development control)").clicked() {
+        *import_outcome = Some(match inbound::apply(file, coll) {
+            Err(e) => format!("Could not write the import: {e}"),
+            // A refusal here means the file stopped being importable between the draw and the press,
+            // which is the derivation doing its job rather than a failure to report cleverly.
+            Ok(Err(refusal)) => refusal_wording(&refusal),
+            Ok(Ok(applied)) => format!(
+                "Imported. {} value(s) written; the note list would filter to {}.",
+                applied.written,
+                match applied.filter_to {
+                    Some(_) => "the deck the file carried",
+                    None => "nothing — the file carried several decks",
+                }
+            ),
+        });
+    }
+
+    // **Not the post-import report ADR-0022 §5 refuses.** §5 owes the user nothing after the fact
+    // because the numbers were stated while they could still say no; this line reports to whoever is
+    // holding the phone that the write happened at all, and above all surfaces a store error that
+    // would otherwise be swallowed. It goes with the rest of the specimen when #167 lands.
+    if let Some(outcome) = import_outcome {
+        ui.add_space(spacing::gap(1));
+        body(ui, outcome);
     }
 }
 

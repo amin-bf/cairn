@@ -290,6 +290,11 @@ pub struct CairnApp {
     /// (ADR-0022 §5). This is the *file*, never a cached plan: `inbound::read` runs the whole
     /// gate-then-describe read against the live collection each time the specimen draws.
     inbound: Option<inbound::Inbound>,
+    /// **Temporary** — what the inbound specimen's development *Import* control last did, held only
+    /// so a store failure is not swallowed. The specified surface owes **nothing** after an import
+    /// (ADR-0022 §5); this is the specimen reporting to whoever is holding the phone, and it goes
+    /// when [#167](https://github.com/amin-bf/cairn/issues/167) draws the real gate.
+    import_outcome: Option<String>,
     /// Whether the launch intent has been consulted yet (`platform::launch_file` is a one-shot read,
     /// so it is asked once as the app comes up — which is where cold start is satisfied, ADR-0016 §5).
     launch_checked: bool,
@@ -351,6 +356,7 @@ impl CairnApp {
             file_list: FileList::default(),
             bench: Bench::default(),
             inbound: None,
+            import_outcome: None,
             launch_checked: false,
         }
     }
@@ -678,6 +684,7 @@ impl eframe::App for CairnApp {
                             &mut self.optimise_done,
                             &mut self.handoff,
                             &mut self.inbound,
+                            &mut self.import_outcome,
                             &mut self.file_list,
                             &mut self.bench,
                             now_ms,
