@@ -960,8 +960,14 @@ pub(crate) fn raise_keyboard(ctx: &egui::Context, response: &egui::Response) {
 }
 
 /// The bidi text-edit layouter shared by every field (`text_field`, `multiline_field_output`): it
-/// runs the field's contents through the `bidi` helper, left-aligned within the edit, so untrusted
-/// mixed-script text lays out correctly wherever it is typed.
+/// runs the field's contents through the `bidi` helper, so untrusted mixed-script text lays out
+/// correctly wherever it is typed. The **alignment** is the field's own `horizontal_align`, chosen
+/// from `bidi::is_rtl`, and never the job's.
+///
+/// **This used to reset `halign`, and no longer needs to.** `bidi` set it as a direction marker on
+/// an RTL string, which laid the galley into *negative x* — a `TextEdit` draws at a fixed origin
+/// and clips, so the field visibly ate the last character of every Persian line. This reset was the
+/// fix, applied at one call site; #162 found the other nine and removed the marker instead.
 pub(crate) fn bidi_layouter(
     ui: &egui::Ui,
     text: &dyn egui::TextBuffer,
@@ -972,7 +978,6 @@ pub(crate) fn bidi_layouter(
         egui::TextStyle::Body.resolve(ui.style()),
         ui.visuals().text_color(),
     );
-    job.halign = egui::Align::LEFT;
     job.wrap.max_width = wrap_width;
     ui.fonts_mut(|f| f.layout_job(job))
 }
@@ -980,6 +985,58 @@ pub(crate) fn bidi_layouter(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every `TextShape` a frame drew, as the rectangle it actually occupies on screen — the
+    /// galley's own rect translated to where the shape was placed. Reading the ink back off the
+    /// frame is the only way to catch a widget whose text lands outside it, because the widget's
+    /// own size is right and nothing fails.
+    fn drawn_text_rects(out: &egui::FullOutput) -> Vec<egui::Rect> {
+        fn walk(shape: &egui::Shape, into: &mut Vec<egui::Rect>) {
+            match shape {
+                egui::Shape::Text(t) => into.push(t.galley.rect.translate(t.pos.to_vec2())),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, into)),
+                _ => {}
+            }
+        }
+        let mut rects = Vec::new();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut rects);
+        }
+        rects
+    }
+
+    /// **A widget's text is drawn inside the widget, in either script** — the note-list row defect
+    /// (#162), pinned as a measurement.
+    ///
+    /// [`bidi::job`] sets `halign = RIGHT` on a right-to-left string as a **direction marker**, and
+    /// its own documentation says every caller must reset it, because epaint then lays the galley
+    /// out against the origin into **negative x**. Only two callers ever did — `surface::card` and
+    /// [`bidi_layouter`] — so every button, label, badge and dropdown in the chrome built its
+    /// galley one way and sized itself the other.
+    ///
+    /// On the note list that drew a Persian row's word **44px outside its own button and 46px
+    /// outside ADR-0031's left margin**, with the button rendering empty: the button is sized from
+    /// the galley's width, which is right, and positioned from its origin, which is not. Nothing
+    /// failed, no test covered it, and every capture in this repository was of six French words.
+    ///
+    /// This asserts the property rather than the pixel count, so it holds at any font size and for
+    /// any string: what a widget draws lies within what the widget claimed.
+    #[test]
+    fn a_widget_draws_its_text_inside_itself_in_either_script() {
+        for label in ["l'aube", "سپیده‌دم", "سگ در خانه است."] {
+            let ctx = egui::Context::default();
+            let mut button = egui::Rect::NOTHING;
+            let out = ctx.run_ui(Default::default(), |ui| {
+                button = ui.button(text(ui, label)).rect;
+            });
+            for ink in drawn_text_rects(&out) {
+                assert!(
+                    button.contains_rect(ink),
+                    "{label:?}: drew text at {ink:?}, outside its own button {button:?}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_card_with_no_review_history_badges_new_not_box_one() {

@@ -89,13 +89,14 @@ fn padding() -> f32 {
 
 /// Lay one face out at `size`, measured rather than assumed.
 ///
-/// `halign` is reset because `bidi` sets it as a **direction marker** and says every caller must:
-/// an RTL galley left at `Align::RIGHT` spans *negative x*, because epaint aligns its rows against
-/// the origin. That is not hypothetical — it is the defect #132 found on the shipped card face,
-/// worth −455px at the display tier, with nothing failing and no capture that would have shown it.
+/// **This used to reset `halign`, and no longer needs to.** `bidi` set it as a direction marker on
+/// an RTL string, which laid the galley out into *negative x* because epaint aligns rows against
+/// the origin — the defect #132 found on this very face, worth −455px at the display tier, with
+/// nothing failing and no capture that would have shown it. The reset here was the fix, applied at
+/// one call site; #162 found the other nine and removed the marker instead, so the job now arrives
+/// in positive space and this face is one of the things that no longer has to remember.
 fn face(ui: &Ui, text: &str, size: f32, width: f32) -> std::sync::Arc<egui::Galley> {
     let mut job = bidi::markdown_job(text, FontId::proportional(size), ui.visuals().text_color());
-    job.halign = Align::LEFT;
     job.wrap.max_width = width.max(1.0);
     ui.fonts_mut(|f| f.layout_job(job))
 }
