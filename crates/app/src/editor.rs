@@ -62,7 +62,8 @@ pub fn field_names(kind: &str) -> Vec<&'static str> {
 ///   (ADR-0021 §3), carrying its `kind` and this first field. Returns its fresh id, which the caller
 ///   holds so the next field lands on the same note.
 ///
-/// There is deliberately no Save and no commit-all: one field, one write, one stamp (ADR-0004 §7).
+/// One field, one write, one stamp (ADR-0004 §7). [`settle_all`] is not a Save button — see its own
+/// doc for the distinction, which is the whole reason it can exist without reopening §7.
 pub fn commit_field(
     coll: &mut Collection,
     existing: Option<NoteId>,
@@ -79,6 +80,72 @@ pub fn commit_field(
         None if value.is_empty() => Ok(None),
         None => Ok(Some(coll.create_note(kind, &[(field, value)])?)),
     }
+}
+
+/// Settle every field that still holds an unsettled edit, and file a draft born here — **what a blur
+/// would have done, for a field that never gets one**.
+///
+/// [ADR-0021 §7](../../../docs/adr/0021-note-ordering-saving-and-the-note-list.md) settles a field
+/// *"on blur or a short idle"*, and the blur half is observed through the widget's own response. So a
+/// field the user is still inside when the editor stops drawing it is never asked: the response is
+/// never produced, the edit is dropped with the buffers, and the note reads as if it was never typed.
+/// **That was reachable by pressing *Done*** — the screen's own exit, on both arrangements — and by
+/// the `Write | Cards` toggle, which additionally answered *"what will I be asked"* with a card
+/// missing the half just written.
+///
+/// **This is not the commit-all §7 refuses, and the difference is the unchanged-field check.** What
+/// §7 rules out is a control that gathers every field and writes them as one act, because that is a
+/// Save button whether or not it is labelled one — it makes the fields settle *together*, at a moment
+/// the user chooses. This settles each field independently, exactly as its own blur would have, and
+/// **writes only where the buffer and the store disagree**. On a note the user opened and left alone
+/// it therefore writes nothing at all: no row, no stamp, no sync traffic. Pressing *Done* twice is
+/// indistinguishable from pressing it once, which is the property a Save button does not have.
+///
+/// Asking the store is deliberate rather than tracking a dirty flag per field. The comparison is the
+/// question actually being asked — *is what I hold already what is stored* — where a flag is a second
+/// source of truth about it, and ADR-0006 §2's objection to those applies here as much as anywhere.
+/// It costs one read per field on exit and nothing per frame.
+///
+/// The **idle** half of §7 is still unbuilt (deferred in
+/// [#82](https://github.com/amin-bf/cairn/issues/82)'s closing comment and owned by nothing since),
+/// and this does not stand in for it: an exit commits, and putting a frozen phone down mid-note does
+/// not exit. What this removes is the loss that needed no kill at all.
+pub fn settle_all(
+    coll: &mut Collection,
+    existing: Option<NoteId>,
+    kind: &str,
+    fields: &[(String, String)],
+    deck: Option<DeckId>,
+) -> Option<NoteId> {
+    let born_before = existing.is_some();
+    let mut note = existing;
+    for (field, value) in fields {
+        if let Some(id) = note
+            && stored_value(coll, id, field).as_deref() == Some(value.as_str())
+        {
+            continue;
+        }
+        if let Ok(committed) = commit_field(coll, note, kind, field, value) {
+            note = committed;
+        }
+    }
+    // A draft born *here* rather than on a blur still carries the deck chosen before it existed
+    // (ADR-0021 §9). The `New note` chord committed its buffers without this, so a note created by
+    // the chord under an active deck filter landed unfiled.
+    if !born_before && let Some(id) = note {
+        let _ = set_note_deck(coll, id, deck);
+    }
+    note
+}
+
+/// What the store holds for `field`, with a cleared field reading as the empty string so it compares
+/// equal to an empty buffer. A read that fails reads as `None`, which settles rather than skips —
+/// the safe direction, since the cost of a redundant write is a stamp and the cost of a wrong skip
+/// is the edit.
+fn stored_value(coll: &Collection, note: NoteId, field: &str) -> Option<String> {
+    coll.mutable_get("note", &note.0, field)
+        .ok()
+        .map(Option::unwrap_or_default)
 }
 
 /// File a note under a deck, or clear its deck reference (ADR-0005 §8, ADR-0021 §9). A note belongs to
