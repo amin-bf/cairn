@@ -532,6 +532,41 @@ impl Collection {
         Ok(())
     }
 
+    /// Set one value **only where it differs from the value already settled** — the rule an import
+    /// writes under (ADR-0008 §3), returning whether anything was written.
+    ///
+    /// Restamping a value with the content it already has is not a no-op: [`Collection::mutable_set`]
+    /// takes a fresh Lamport counter, so an equal-valued write is a **new stamp** that propagates to
+    /// the user's own devices as an edit. Importing a 5,000-note deck would send 5,000 of them, and
+    /// re-importing the same file would send them all again. Reading the settled value first costs
+    /// one indexed lookup per value and is what makes ADR-0008 §3's *"re-importing the same file is a
+    /// genuine no-op: silent, idempotent, and producing nothing to sync"* true rather than nearly
+    /// true.
+    ///
+    /// **Absent and SQL NULL are the same value here**, exactly as [`Collection::mutable_get`]
+    /// reports them: clearing an attribute that was never set writes nothing.
+    pub fn mutable_set_if_changed(
+        &mut self,
+        entity: &str,
+        entity_id: &[u8],
+        attr: &str,
+        value: Option<&str>,
+    ) -> Result<bool, StoreError> {
+        if self.mutable_get(entity, entity_id, attr)?.as_deref() == value {
+            return Ok(false);
+        }
+        self.mutable_set(entity, entity_id, attr, value)?;
+        Ok(true)
+    }
+
+    /// The largest `position` order key the collection holds, or `None` when no note carries one —
+    /// the key a newly placed note is chained after (ADR-0021 §3). Byte order over the key alphabet
+    /// **is** the total order (`content::order`), so `MAX(value)` names the current last without
+    /// decoding anything.
+    pub fn last_position(&self) -> Result<Option<String>, StoreError> {
+        self.max_position()
+    }
+
     /// Mint a note and write its kind, `position` and fields onto the mutable surface, returning its
     /// fresh id.
     ///
