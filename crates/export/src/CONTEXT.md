@@ -133,6 +133,23 @@ The import plan, shown, with the import declinable. The one gate in this specifi
 because a regretted import is the one destructive act no archive and no peer can undo.
 _Avoid_: Confirmation dialog — this repo refuses those twice, and for reasons that do not reach here.
 
+**Apply**:
+Writing an import into the collection, once the user has accepted the preview. It is the plan's
+**own derivation run a second time**, never the plan the screen held — so the file is read again
+against the collection as it stands at the press. Every effect reduces to one assignment on the
+mutable surface, and only values whose content actually differs are written.
+_Avoid_: Commit — it names a transaction boundary, and this is a set of independently settling
+values rather than one atomic act.
+
+**Authoring values**:
+The deck-id-keyed values that describe a deck as a **published artifact** rather than as content:
+`{revision, digest}` and the author, description and licence. They sync between the user's own
+devices, are never exported as deck content, and never appear in the review log. An import adopts
+them; an export reads them back, which is what lets an unmodified relay re-emit the byte-identical
+file at the same revision.
+_Avoid_: Deck metadata — the deck-id-keyed slot also holds *personal* values, and the two halves have
+different rules about whether syncing is even an open question.
+
 **Gate / describe**:
 The two stages of reading a file. The **gate** reads the central directory only and refuses a file
 this build must not act on — unknown format integer, wrong profile, revision below the one held, a
@@ -189,7 +206,11 @@ The slot's other half is **personal** values, whose syncing is still open and wh
 - **The import plan is derived on every read, never cached.** A stored plan is a stored projection of
   the log — the thing ADR-0004 exists to prevent — and a sync landing while the preview is on screen
   can falsify it. Derived, promise and effect cannot diverge, which is why nothing is reported after
-  an import commits.
+  an import commits. **Applying re-derives too**, and the plan and its writes come out of *one* pass
+  so the counts stated and the values written cannot part company.
+- **A held note id is never re-imported; only its membership follows the file.** On the update path a
+  held note moves deck — one write — and keeps the content the user holds. So an author's edit to an
+  existing note does not reach a recipient; retraction and a fresh note is the route.
 - **The preview states effects, not file contents.** The manifest's counts are the wrong numbers in
   exactly the cases that matter: a file whose notes you almost all hold already, and a file whose
   retractions match nothing you have. The manifest is for **gating**; the payload is for describing.

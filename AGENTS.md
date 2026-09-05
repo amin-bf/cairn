@@ -638,6 +638,40 @@ A `.cdeck` file is a **zip archive** carrying deck content and never review prog
     emitted `AndroidManifest.xml`, never the source. The filter matches on **type**, but the extension
     still gates arrival one step upstream: it is what `MediaStore` derives that type from (rule 13), so
     the extension decides reachability without the filter ever reading it.
+16. **Applying an import re-derives it; it never executes a plan the screen computed.** ADR-0022 §5
+    makes the plan derived on every read and *never* stored, so a plan handed to apply is a stored
+    projection of the log — the precise thing ADR-0004 exists to prevent — and a sync landing under the
+    preview falsifies it. `import::read` therefore returns the plan **and** its writes from one pass,
+    and `inbound::apply` calls it again rather than keeping the first result. **The one-pass shape is
+    the point**: the *"1,202 already yours"* line and the notes apply skips come off the same `match`
+    arm, so they cannot part company. Derive them separately and nothing fails — the numbers simply
+    stop describing the writes, which is a preview that lies while every test still passes.
+17. **A held note id is never re-imported on either path — only its membership follows the file.**
+    ADR-0022 §3's table cites ADR-0005 §2's *"not re-imported"* against the **update**-path example, so
+    the collision rule is not the create path's alone: an update moves a held note between decks (one
+    `deck` write, ADR-0005 §8) and leaves its content exactly as the user holds it. This reads like a
+    contradiction with ADR-0008 §11's *"§9 applies in full"* and with §3's *"5,000 stamped values"*
+    worry, both of which sound like content following the file. Under this rule an author's edit to an
+    existing note does **not** propagate; retraction plus a new note is the route ADR-0008 §5 leaves
+    them. Written down because the other reading is the natural one and nothing catches it.
+18. **A field name arriving in a file becomes a mutable-surface attribute name, so the reserved ones
+    are dropped.** A field called `deck` would refile the note it arrives on — reaching past rule 3's
+    branches from inside the payload — and `deleted` would retract a note with no tombstone; `kind`,
+    `position` and the `tag:` prefix are the same hazard quieter. Nothing in the shipped kinds collides
+    with these, which is exactly why this looks like dead defensiveness: the names come from an
+    **acquired** kind definition, which is a stranger's data (ADR-0008 §7).
+19. **A rename alone is a change, and the digest cannot see it.** `deck_digest` excludes the deck name
+    on purpose (rule 5, ADR-0008 §4) so a rename does not bump the revision — so a `no_change` judged
+    on revision and digest alone reads *"nothing will change"* while apply renames the deck. The
+    no-change test carries the name for that reason, and dropping it puts the one line ADR-0022 §3
+    requires (*"renaming your X to Y"*) behind a `continue`.
+20. **The revision gate is only a gate because an import writes the revision back.** ADR-0008 §9 keeps
+    `{revision, digest}` on the deck's authoring slot, and until an import wrote it there every held
+    deck read as revision 0 — so an older file was never refused, an unchanged one never read as
+    *nothing will change*, and equal-revision-different-digest never reported. Three correct decisions
+    sitting behind a value nobody wrote. The attribute names are `cairn-export`'s
+    (`DECK_REVISION_ATTR` and friends) because the writer and the reader naming them separately is how
+    a written revision quietly stops being the one the gate consults.
 
 ## Sync
 
