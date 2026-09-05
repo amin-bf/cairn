@@ -1,0 +1,15 @@
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+shot r0-before
+mousemove %CX% 619
+sleep 0.5
+click 1
+sleep 1.5
+shot r1-listed
+mousemove %CX% 400 click 5 click 5 click 5 click 5
+sleep 1
+shot r2-listed-scrolled
