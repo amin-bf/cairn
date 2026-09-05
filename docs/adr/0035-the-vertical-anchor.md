@@ -50,6 +50,19 @@ comfortable and a stretch depending on which hand holds the phone.
 > cluster lands there and the leftover height falls **between the card and the controls**. When it
 > does not, the controls follow the card at the ordinary stated gap and nothing is placed.
 
+> **Confirmed as a page rule by [ADR-0038 §5](0038-the-mark-and-the-icon-rule.md), and it now has a
+> second call site.** *A screen* was written here deliberately and drawn once: `frame::slack_above`
+> had exactly one caller, the grade cluster, so until
+> [The Fixture Bench](https://github.com/amin-bf/cairn/issues/153) made the caught-up-with-a-leech
+> state photographable, nothing had cause to apply this section or ignore it anywhere else. That
+> screen was drawing the durable leech entrance `gap(3)` under the statement, at y=305 of 800 — this
+> section standing as written while the application did otherwise.
+>
+> **Narrowing it to Review was the live alternative, was drawn, and lost by looking.** On a page with
+> 500px of nothing under it, a control tucked against the statement reads as attached to the sentence
+> rather than as the way onward. The entrance now lands on the reach line like any other last
+> control, and a third screen ending in a control inherits this without a decision.
+
 **165 is measured, not chosen, and the measurement is the finding.** The prototype made the cluster
 *draggable* rather than offering fixed candidates, because the round before it came back as "closer,
 but the very bottom is still a stretch" — which is an answer about a distance nobody had a number

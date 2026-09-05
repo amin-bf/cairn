@@ -311,6 +311,24 @@ because they are validated findings, not because a web build ships.
    difference is invisible to anyone who does not read the script. Registering during creation
    breaks the web build: wgpu panics with "Tried to update a texture that has not been allocated
    yet", glow renders everything near-black. Defer it one frame.
+   **A fourth face ships and it carries no script: `Cairn Icons`**
+   ([ADR-0038 §1](./docs/adr/0038-the-mark-and-the-icon-rule.md)). An icon is a **glyph**, reached by
+   falling through like any missing character, so no call site selects a family and an icon at `BODY`
+   *is* `BODY` — and an icon's size is a **font** size, named in `typography` with the rest. Its code
+   point is **private use**, which is what makes it safe to append last everywhere: it shadows
+   nothing and nothing shadows it, so this rule's ordering hazard cannot arise for an icon. It goes
+   into `bold` as the *regular* cut — the one stated exception to "bold holds the bold cuts and
+   nothing else", because a mark has no weight. The face is **generated** from
+   `crates/app/res/drawable/ic_launcher_monochrome.xml` by `scripts/build-icon-face.py`; run
+   `--check` after touching the drawable, or the claim that the glyph is the launcher's four stones
+   quietly stops being true. **Two things fail silently here.** The coverage test's filter was an
+   *allowlist* of letters and digits while its own comment described a denylist, so a private-use
+   code point was skipped and the test would have passed on a family the face never reached — it is
+   a denylist now, and a new specimen row needs no edit there. And **an icon standing on its own must
+   be allocated its ink, not its line box**: `ui.label` allocates the *family's* `row_height`, which
+   at size 150 puts 109px of stones in a 172px row and adds 53px of unchosen space before the stated
+   gap (ADR-0032 §2). Call `crate::icon` for a picture standing alone; `ui.label` stays correct for
+   an icon **inline** with its word, which is the case the whole route exists for.
 8. **Android text input is ASCII-only, and cannot be fixed here.** winit's Android backend handles
    only motion and key events — it has no IME path, so composed text never reaches the app. This is
    not the activity backend: GameActivity was tried and reverted (see
@@ -495,6 +513,19 @@ because they are validated findings, not because a web build ships.
     Adding a state means adding a fixture that **asserts what it reached** — the intervals come from
     `fsrs`, so a fixture landing where it says is a claim about a pinned dependency rather than about
     our code, and it has already been wrong once (store rule 6).
+    **`cairn-fixture` wipes the platform data directory before it installs**, which is correct inside
+    the harness (it owns a scratch profile) and destroys the operator's own collection outside it.
+    Redirect `XDG_DATA_HOME` and `XDG_STATE_HOME` before running it by hand — the same two bases
+    `capture-desktop.sh` redirects, and the only thing standing between a bench run and someone's
+    review history.
+    **And every control below the last card is now reached by `%BY-n%`, never a literal y**
+    ([ADR-0038 §5](./docs/adr/0038-the-mark-and-the-icon-rule.md)). ADR-0035 §1 anchors a screen's
+    final control to a line above the **bottom of the page**, so its y is a function of the window
+    height — and §1 is a *page* rule now, not a Review one, so this reaches the leech entrance on the
+    caught-up floor as well as the grade cluster. A literal y lands on empty page at every other
+    window size and the run produces perfectly valid captures of the *previous* screen under the next
+    one's names. That silent miss has now arrived from four different sides (#122, #143, #153, #155);
+    `%CX%`, `%LX+n%` and `%BY-n%` exist to close each of them.
 
 ## The local store
 

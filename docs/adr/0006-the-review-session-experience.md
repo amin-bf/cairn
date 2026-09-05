@@ -142,6 +142,23 @@ it's additive, not a redesign.)
 > keyboard-free**, and the first shortcut is recorded deliberately so that a second is a decision
 > rather than a drift.
 
+> **Amended by [ADR-0038 §6](0038-the-mark-and-the-icon-rule.md): this holds *within a renderer*.**
+> What was measured here is that **one renderer's layout and sizing served both** a Pixel 8 Pro and a
+> mouse, and that finding stands unchanged for the egui build. It never licensed the design to forbid
+> a **native client** from speaking its own platform.
+>
+> Native iOS and Android clients are being built. The design system names the **operation** and the
+> **affordance**; the **gesture belongs to the platform** — a long-press context menu and a reorder
+> handle are system-level interactions the OS teaches its own users, not app inventions, so a native
+> client using them is being native rather than diverging. [ADR-0021
+> §4](0021-note-ordering-saving-and-the-note-list.md) was already reaching for this when it fixed the
+> reorder operation and refused to pin the gesture.
+>
+> This section has been softened once before: [#141](https://github.com/amin-bf/cairn/issues/141)
+> stacked the grades under a thumb, superseding [ADR-0034 §1](0034-the-controls.md) on touch. **That
+> divergence stopped at arrangement where this one reaches gesture**, and saying where it stops is
+> the point.
+
 ### 6. Constraint 4's box display: a quiet badge, only after reveal
 
 [ADR-0001 §3](0001-scheduling-algorithm-and-grade-scale.md) fixed *what* a box means (durability,
