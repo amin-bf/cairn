@@ -91,15 +91,17 @@ fn note_list(
     heading(ui, "Notes");
     ui.add_space(spacing::gap(2));
 
-    // Create opens a fresh draft; the note is not committed until its first non-empty field
-    // (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is a plain front/back. It
-    // opens already filed under the deck the list is filtered to, if any — the deck you are looking at
-    // is the likeliest one for the note you are about to write.
-    if full_width_button(ui, "Create note").clicked() {
-        let mut draft = Editing::new_draft("basic");
-        draft.deck = *deck_filter;
-        *editing = Some(draft);
-        return;
+    // PROTOTYPE #162 — never merges. Create opens a fresh draft; the note is not committed until its
+    // first non-empty field (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is
+    // a plain front/back. It opens already filed under the deck the list is filtered to, if any —
+    // the deck you are looking at is the likeliest one for the note you are about to write.
+    //
+    // Where it sits is the prototype's ADR-0035 §1 axis: at the top, or at the bottom of the content
+    // on the reach line, which is the position #125's *arranged for a pointer while sized for a
+    // thumb* argues for and which this screen has never drawn.
+    let mut create = false;
+    if !crate::proto::create_low() {
+        create = full_width_button(ui, "Create note").clicked();
     }
 
     // The empty state is the empty *collection* (ADR-0015 §7): shown when there is no note at all, not
@@ -107,19 +109,28 @@ fn note_list(
     if !notes::any_notes(coll).unwrap_or(false) {
         ui.add_space(spacing::gap(2));
         body(ui, notes::EMPTY_STATE);
+        if crate::proto::create_low() {
+            ui.add_space(crate::proto::create_lead(ui));
+            create = full_width_button(ui, "Create note").clicked();
+        }
+        if create {
+            let mut draft = Editing::new_draft("basic");
+            draft.deck = *deck_filter;
+            *editing = Some(draft);
+        }
         return;
     }
 
     // The deck filter and the deck authoring surface (ADR-0021 §9): decks are **created where they
     // are filtered**, so the filter dropdown, *new deck*, and the delete of the filtered deck all sit
     // together here. Deletion is ADR-0005 §7's flag, deriving through to the deck's notes.
-    ui.add_space(spacing::gap(2));
+    ui.add_space(crate::proto::chrome_gap());
     deck_controls(ui, coll, deck_filter, new_deck);
 
     // Text search — the load-bearing filter (ADR-0021 §2), a plain substring over field values,
     // composing with the deck filter above (deck ∩ text; the tag filter shares the vocabulary and is
     // set on notes but has no dedicated control yet).
-    ui.add_space(spacing::gap(2));
+    ui.add_space(crate::proto::chrome_gap());
     field_label(ui, "Search");
     text_field(ui, search);
     let filter = Filter {
@@ -128,8 +139,23 @@ fn note_list(
         ..Filter::default()
     };
 
-    ui.add_space(spacing::gap(2));
+    // The chrome ends here and the content begins. Whether anything on the screen says so is the
+    // prototype's second question: a gap the eye can read as a boundary, a hairline, or neither.
+    ui.add_space(crate::proto::chrome_gap());
+    crate::proto::rule(ui);
+    if crate::proto::rule_on() {
+        ui.add_space(crate::proto::chrome_gap());
+    }
     let rows = notes::list(coll, &filter).unwrap_or_default();
+    // PROTOTYPE #162 — the top *Create note* is drawn before any of this, so its press is handled
+    // before either of the two paths that return without reaching the row loop.
+    if create {
+        let mut draft = Editing::new_draft("basic");
+        draft.deck = *deck_filter;
+        *editing = Some(draft);
+        return;
+    }
+
     if rows.is_empty() {
         // A move whose target view is now empty has no gaps to offer; drop it rather than strand it.
         *moving = None;
@@ -158,6 +184,18 @@ fn note_list(
     let mut open: Option<NoteId> = None;
     let mut delete: Option<NoteId> = None;
     let mut start_move: Option<NoteId> = None;
+    // PROTOTYPE #162 — the deck axis needs a *name* where the row carries an **id** (ADR-0005 §8), and
+    // a reference naming no deck the collection holds is unfiled rather than broken. So this is a
+    // lookup that is allowed to miss, and a miss reads *Unfiled* — which is the same rule the editor's
+    // own dropdown already applies.
+    let decks = coll.decks().unwrap_or_default();
+    let deck_name = |row: &notes::NoteRow| -> Option<String> {
+        let id = row.deck.as_ref()?;
+        decks
+            .iter()
+            .find(|(d, _)| d.to_canonical() == *id)
+            .map(|(_, n)| n.clone())
+    };
     for (i, row) in rows.iter().enumerate() {
         // **The gap between rows is stated, one unit, and it is the same unit that separates the
         // controls *within* a row.** Before ADR-0032 these rows leaned on egui's ambient 3px and were
@@ -167,20 +205,29 @@ fn note_list(
         if i > 0 {
             ui.add_space(spacing::gap(1));
         }
-        spacing::row(ui, 1, |ui| {
-            if ui.button(text(ui, row.preview())).clicked() {
-                open = Some(row.id);
-            }
-            // **Move** enters the two-tap placement state (ADR-0021 §4): a tap here, then a tap on a
-            // gap. No drag and no long-press — the two taps behave identically under touch and mouse,
-            // which is the finding ADR-0006 §5 recorded and this must not break.
-            if ui.button(text(ui, "Move")).clicked() {
-                start_move = Some(row.id);
-            }
-            if ui.button(text(ui, "Delete")).clicked() {
-                delete = Some(row.id);
-            }
-        });
+        // **Move** enters the two-tap placement state (ADR-0021 §4): a tap on the row's move control,
+        // then a tap on a gap. No drag and no long-press — the two taps behave identically under
+        // touch and mouse, which is the finding ADR-0006 §5 recorded and this must not break.
+        let hit = crate::proto::row(ui, row.preview(), deck_name(row).as_deref());
+        if hit.open {
+            open = Some(row.id);
+        }
+        if hit.moved {
+            start_move = Some(row.id);
+        }
+        if hit.deleted {
+            delete = Some(row.id);
+        }
+    }
+    if crate::proto::create_low() {
+        ui.add_space(crate::proto::create_lead(ui));
+        create = full_width_button(ui, "Create note").clicked();
+    }
+    if create {
+        let mut draft = Editing::new_draft("basic");
+        draft.deck = *deck_filter;
+        *editing = Some(draft);
+        return;
     }
     if let Some(id) = start_move {
         *moving = Some(id);
@@ -212,25 +259,40 @@ fn placement_list(
         *moving = None;
         return;
     }
-    ui.add_space(spacing::gap(2));
+    ui.add_space(crate::proto::chrome_gap());
     let name = rows
         .iter()
         .find(|r| r.id == mid)
         .map_or("", |r| r.preview());
-    field_label(ui, &format!("Placing: {name}"));
-    ui.add_space(spacing::gap(2));
+    // PROTOTYPE #162 — the note in mid-move: today's caption, or the note held as a row on
+    // ADR-0037's floating material, which is the one thing in the system that means *temporarily on
+    // top* and is what a note being placed is.
+    crate::proto::moving_note(ui, name);
+    ui.add_space(crate::proto::chrome_gap());
 
     // The gaps run among the *other* visible rows — the moving note removed so it is never offered a
     // place beside itself. Gap `i` sits before `visible[i]`, and the last gap (past the final row) is
     // the end; the open ends send the note to either extreme (ADR-0021 §4).
     let visible: Vec<&notes::NoteRow> = rows.iter().filter(|r| r.id != mid).collect();
     let mut place: Option<usize> = None;
+    // PROTOTYPE #162 — the notes keep the weight they wear everywhere else in the list, and the
+    // targets are what the knob moves. The hit area is 36px at every knob position: a quiet target
+    // is not a small one, and the map holds hit targets to touch rather than to the pointer.
+    let decks = coll.decks().unwrap_or_default();
     for gap in 0..=visible.len() {
-        if full_width_button(ui, "Place here").clicked() {
+        if crate::proto::place_target(ui) {
             place = Some(gap);
         }
         if let Some(row) = visible.get(gap) {
-            body(ui, row.preview());
+            ui.add_space(spacing::gap(1));
+            let name = row.deck.as_ref().and_then(|id| {
+                decks
+                    .iter()
+                    .find(|(d, _)| d.to_canonical() == *id)
+                    .map(|(_, n)| n.clone())
+            });
+            crate::proto::row_plain(ui, row.preview(), name.as_deref());
+            ui.add_space(spacing::gap(1));
         }
     }
     if let Some(gap) = place {

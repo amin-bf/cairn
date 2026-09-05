@@ -88,6 +88,14 @@ pub(crate) fn settings_screen(
     heading(ui, "Settings");
     ui.add_space(spacing::gap(2));
 
+    // PROTOTYPE #162 — never merges. Above `Appearance` for the reason that control's own comment
+    // gives: anything a storyboard must click at both judging widths has to sit above prose that
+    // wraps at one width and not the other.
+    crate::proto::switcher(ui);
+    ui.add_space(spacing::gap(3));
+    ui.separator();
+    ui.add_space(spacing::gap(2));
+
     if *setting_up {
         enrolment_screen(ui, setting_up);
         return None;

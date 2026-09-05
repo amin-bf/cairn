@@ -30,6 +30,8 @@ pub mod motion;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
+/// PROTOTYPE #162 — the note list. Never merges; preserved as the tag `prototypes/issue-162`.
+pub mod proto;
 mod screens;
 pub mod session;
 pub mod spacing;
