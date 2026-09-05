@@ -52,18 +52,18 @@ shot 04-stepdown-open
 # 1.125 — so it is also where a wrong value has nowhere to hide.
 mousemove %LX+86% 11 click 1
 sleep 1.5
-mousemove %LX+300% 165 click 1
+mousemove %LX+300% 137 click 1
 sleep 0.5
 sh xdotool type --delay 40 'Cuisine'
 sleep 0.5
-mousemove %LX+36% 165 click 1
+mousemove %LX+36% 137 click 1
 sleep 1
-mousemove %LX+300% 165 click 1
+mousemove %LX+300% 137 click 1
 sleep 0.5
 sh xdotool type --delay 40 'Voyage'
 sleep 0.5
-mousemove %LX+36% 165 click 1
+mousemove %LX+36% 137 click 1
 sleep 1
-mousemove %LX+50% 145 click 1
+mousemove %LX+50% 109 click 1
 sleep 1
 shot 05-overlay

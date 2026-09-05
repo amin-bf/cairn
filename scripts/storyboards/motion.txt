@@ -12,7 +12,8 @@
 #   the entrance's one primary: %CX% y=129 — full width, so the centre reaches it at either width
 #   the card: %CX% y=254 — the whole face is the reveal target (ADR-0006 §3)
 #   the grades: %CX% %BY-183% reaches *Good*
-#   the deck filter's combo box: %LX+50% y=145; the new-deck field %LX+300% y=165, its button %LX+36%
+#   the deck filter's combo box: %LX+50% y=109; the new-deck field %LX+300% y=137, its button %LX+36%
+#   — all three moved up in #162, which took *Create note* off the top of the page
 #
 # **The grade row is the one click here that a literal y cannot reach**, and this storyboard was
 # written wrong before it was written right. ADR-0035 §1 anchors the last control cluster to a line
@@ -58,21 +59,21 @@ shot 04-stepdown-open
 # shadow against, and no fixture ships a deck.
 mousemove %LX+86% 11 click 1
 sleep 1.5
-mousemove %LX+300% 165 click 1
+mousemove %LX+300% 137 click 1
 sleep 0.5
 sh xdotool type --delay 40 'Cuisine'
 sleep 0.5
-mousemove %LX+36% 165 click 1
+mousemove %LX+36% 137 click 1
 sleep 1
-mousemove %LX+300% 165 click 1
+mousemove %LX+300% 137 click 1
 sleep 0.5
 sh xdotool type --delay 40 'Voyage'
 sleep 0.5
-mousemove %LX+36% 165 click 1
+mousemove %LX+36% 137 click 1
 sleep 1
 # **The only thing in the application that floats** (ADR-0037 §1). Before this it was drawn in
 # *exactly* the page colour inside stock egui's unassigned grey hairline with no shadow, in every
 # capture this repository holds. It should now read as a slab sitting on top of the page.
-mousemove %LX+50% 145 click 1
+mousemove %LX+50% 109 click 1
 sleep 1
 shot 05-overlay
