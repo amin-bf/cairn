@@ -28,7 +28,7 @@ mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
-mousemove %LX+24% 252 click 1
+mousemove %LX+200% 259 click 1
 sleep 1.5
 # The editor's Front field starts at the editor frame's own left edge, so `%EX+30%` is inside it at
 # every width — 110 at 1280 and 58 at 560 — where `%LX+30%` is inside it only above the two-column
@@ -66,6 +66,9 @@ shot 06-editor-persian
 # no-op and the next shot is the editor again under the list's name.
 mousemove %EX+60% %BY-184% click 1
 sleep 1.5
-# The row this produces is drawn **outside its own button and outside the page margin** — the button
-# is allocated 61px at x=318..378 and the glyphs draw from x=274. See #162.
+# The row this produces is the one #162 redrew. It used to be the defect this comment named — the
+# button allocated 61px at x=318..378 with the glyphs drawing from x=274, so the word sat outside
+# both its own control and the page margin — which `fc4e129c` fixed ahead of that ticket. What it
+# shows now is ADR-0039 §4: the row is a full-width band, so it has an **end** for the first time,
+# and the text mirrors to the note's own direction while the action column stays put.
 shot 07-list-persian

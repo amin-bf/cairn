@@ -1,5 +1,5 @@
 # The **Notes** destination end to end — the list, the deck overlay, the placement state, and the
-# editor. The *before* for the Notes slice (#150) and its two children.
+# editor.
 #
 # Runs unchanged at any width, and is meant to be run at more than one — though **not to photograph a
 # threshold any more**. It used to: the editor's arrangement flipped at `frame::TWO_COLUMN_MIN_WIDTH`
@@ -8,13 +8,19 @@
 # are the two ends of how narrow a pane gets, not two sides of a switch.
 #
 # `%CX%` is the centre of the output; `%LX+n%` is `n` px inside the **page frame's** left edge
-# (#131). Every y below was measured off a capture rather than adjusted by eye, and every one of
-# them will move when either child ticket lands.
+# (#131). Every y below was measured off a capture rather than adjusted by eye.
 #
-# **The editor is visited last**, for `baseline.txt`'s reason: above 900 it takes its own wider
-# frame and the nav row follows it, so any `%LX+n%` nav click after this point lands on empty page.
-# That same frame is why this file never aims at a control *inside* the editor — see
-# `notes-persian.txt`, which has to, and pins itself to one width to do it.
+# **Every coordinate below the heading moved in #162, and one of them moved for a reason worth
+# knowing.** *Create note* is no longer the first thing on the page — it is pinned below the scroll
+# on ADR-0035 §1's reach line — so the whole chrome rose by that control's height plus its gap. A run
+# against the old numbers does not fail: it misses the deck dropdown, lands on a row, and
+# photographs the **editor** under the list's name. The page-colour check that caught the theme miss
+# in #143 and #150 cannot see that one, because the editor is dark too.
+#
+# **The editor is visited last**, for `baseline.txt`'s reason: it takes its own wider frame and the
+# nav row follows it, so any `%LX+n%` nav click after this point lands on empty page. That same frame
+# is why this file never aims at a control *inside* the editor — see `notes-persian.txt`, which has
+# to, and pins itself to one width to do it.
 fixture backlog
 # The first click is spent giving the window keyboard focus and never reaches a widget.
 mousemove %CX% 600 click 1
@@ -22,26 +28,29 @@ sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
 shot 01-list
-# The deck filter — the app's only overlay, and since ADR-0037 the one surface that floats. With no
-# fixture that creates a deck it holds exactly one entry, *All decks*, which is the value that
-# exists when no deck does; #161 is the fixture that gives this shot something to show.
-mousemove %LX+50% 145 click 1
+# The deck filter — the app's only overlay, and since ADR-0037 the one surface that floats. Under
+# this fixture it holds *All decks* and *Unfiled*, the two values that exist when no deck does
+# (ADR-0039 §5); `notes-decks.txt` is the run that has decks in it.
+mousemove %LX+50% 109 click 1
 sleep 1
 shot 02-list-deck-open
 key Escape
 sleep 0.8
-# *Move* on the first row enters the two-tap placement state (ADR-0021 §4). The row is sized to its
-# own preview, so `+79` is the first row's *Move* and no other row's — which is the finding this
-# capture exists to show rather than an inconvenience of driving it.
-mousemove %LX+79% 252 click 1
+# *Move* on the first row enters the two-tap placement state (ADR-0021 §4). **`+578` is every row's
+# move control, not just this one** — the action column lands on the same x whatever the preview
+# says (ADR-0039 §1), which is the finding this coordinate now demonstrates rather than dodges.
+mousemove %LX+578% 259 click 1
 sleep 1.2
 shot 03-placement
-# *Cancel move* is full-width at y=261 — below the search field, where the rows would otherwise be.
-mousemove %CX% 261 click 1
+# *Cancel move* is full-width at **y=257** — its top edge is 238, under the boundary hairline at
+# 222, where the rows would otherwise begin. Measured off `03-placement.png`: 225 is the empty page
+# between the two, and aiming there leaves the app in the placement state, so the *next* click
+# **places the note** and the editor shot comes out as the list with the moved note at the top.
+mousemove %CX% 257 click 1
 sleep 1.2
-# The editor, opened from the first row. `chien` in the shipping seed; `l'aube` under `backlog`.
-# Either way it is a note that **has a card**, so the Cards pane has something in it — a fresh draft
-# would read "No cards yet" and leave half the two-column layout empty.
-mousemove %LX+24% 252 click 1
+# The editor, opened from the first row's band — the band *is* the open affordance now, so this aims
+# at the middle of the row rather than at a button inside it. `l'aube` under `backlog`: a note that
+# **has a card**, so the Cards pane has something in it.
+mousemove %LX+200% 259 click 1
 sleep 1.5
 shot 04-editor

@@ -50,6 +50,15 @@ comfortable and a stretch depending on which hand holds the phone.
 > cluster lands there and the leftover height falls **between the card and the controls**. When it
 > does not, the controls follow the card at the ordinary stated gap and nothing is placed.
 
+> **Extended by [ADR-0039 §8](0039-the-list-row.md): on a *scrolling* surface, a control on the
+> reach line lives outside the scroll.** `slack_above` spends **leftover** height, and a list has
+> none — twenty-five rows are longer than any page — so on the note list this section reached nothing
+> at all while the screen's one primary action sat at the very top, the furthest point from a thumb.
+> Applying it verbatim *inside* the scroll was drawn and refused: the control then scrolls away the
+> moment the list outgrows the page, which is the same defect with a better first screenshot. So the
+> rule gains a clause rather than an exception, and `frame::pinned_band` is the arithmetic — at the
+> cost of the reserved band, which a 1280×800 window pays 209px of list viewport for.
+
 > **Confirmed as a page rule by [ADR-0038 §5](0038-the-mark-and-the-icon-rule.md), and it now has a
 > second call site.** *A screen* was written here deliberately and drawn once: `frame::slack_above`
 > had exactly one caller, the grade cluster, so until

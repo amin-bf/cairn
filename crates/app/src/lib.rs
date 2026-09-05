@@ -239,12 +239,11 @@ pub struct CairnApp {
     /// Settings destination (ADR-0015 §7). The device flow that would follow it carries the network
     /// and is deferred (see `sync`), so this gates only what the screen *says*, not a grant.
     setting_up_sync: bool,
-    /// The note list's deck filter, held across frames — one of ADR-0005 §6's three composable
-    /// filters. `None` narrows by no deck (every note, filed or not).
-    deck_filter: Option<DeckId>,
-    /// The note list's *new deck* name buffer: decks are created where they are filtered (ADR-0021
-    /// §9), so the create control sits beside the deck filter.
-    new_deck: String,
+    /// The note list's **deck block**, held across frames (ADR-0021 §9): the filter, the *new deck*
+    /// name buffer, and a delete waiting to be confirmed. One value rather than three fields
+    /// because decks are created where they are filtered and deleted where they are named, so none
+    /// of the three means anything on its own — see [`notes::DeckBar`].
+    deck: notes::DeckBar,
     /// The note being reordered, or `None` when the list is not in its two-tap placement state
     /// (ADR-0021 §4). `Some(id)` after **Move**: the list then offers a gap target between every
     /// visible pair, and one tap places the note there. Held across frames; cleared on place or
@@ -342,8 +341,7 @@ impl CairnApp {
             editing: None,
             search: String::new(),
             setting_up_sync: false,
-            deck_filter: None,
-            new_deck: String::new(),
+            deck: notes::DeckBar::default(),
             moving: None,
             new_card_rate: None,
             showing_leeches: false,
@@ -481,7 +479,7 @@ impl CairnApp {
         self.showing_leeches = false;
         self.session_pointer = None;
         self.new_card_rate = None;
-        self.deck_filter = None;
+        self.deck = notes::DeckBar::default();
         self.search.clear();
         self.dest = Destination::Review;
     }
@@ -613,6 +611,53 @@ impl eframe::App for CairnApp {
                 .show(ui, |_| {});
         }
 
+        // ***Create note* is pinned below the scroll, on the reach line** (ADR-0039 §8, ADR-0035 §1).
+        //
+        // It is the second thing in the application to live outside the scroll, the nav row being
+        // the first, and it is here for the reason the nav row is: a control that scrolls away is
+        // not durably reachable. ADR-0035 §1 is a page rule, and on every screen before this one it
+        // was spent *inside* the content, where `frame::slack_above` absorbs the leftover height. A
+        // list has no leftover height — so on the note list the rule reached nothing, and the
+        // screen's one primary action sat at the very top of the page, which is the furthest point
+        // from a thumb (#125, #162).
+        //
+        // **Not during a move and not in the editor.** The placement state's whole content is
+        // *choose a position* and it offers its own way out; the editor is a different screen that
+        // happens to share the destination.
+        let creating = self.dest == Destination::Notes
+            && self.editing.is_none()
+            && self.moving.is_none()
+            && !self.setting_up_sync;
+        if creating {
+            let band = frame::pinned_band(ui.available_rect_before_wrap().height());
+            let cap = frame::cap_for(false);
+            let mut pressed = false;
+            // **The band is opaque, and that is not decoration.** A pinned panel over a scrolling
+            // list is the one place in the application where two things occupy the same pixels, so
+            // a transparent frame lets rows draw *through* the control — which is what the first
+            // run did, with half a Persian row and its two icons showing inside the button. The
+            // fill is the page's own (`panel_fill`, ADR-0033 §2), so the band reads as page rather
+            // than as a surface: nothing here floats, and ADR-0037 §2 keeps elevation for what is
+            // temporarily on top.
+            egui::Panel::bottom("create-note")
+                .exact_size(band)
+                .frame(egui::Frame::NONE.fill(ui.visuals().panel_fill))
+                .show(ui, |ui| {
+                    ui.add_space(spacing::gap(1));
+                    frame::wide_column(ui, cap, |ui| {
+                        pressed = full_width_button(ui, "Create note").clicked();
+                    });
+                });
+            if pressed {
+                // A new note opens already filed under the deck the list is narrowed to — the deck
+                // you are looking at is the likeliest one for the note you are about to write
+                // (ADR-0021 §9). It is not committed until its first non-empty field (ADR-0021 §7).
+                let mut draft = Editing::new_draft("basic");
+                draft.deck = self.deck.filter.for_new_note();
+                self.editing = Some(draft);
+            }
+        }
+
         // Everything the destination draws scrolls, which is what makes the covered band reachable
         // rather than merely clipped. The nav row is **not** in here — it is the pinned panel above,
         // so scrolling a long note list never carries the way out off the screen with it.
@@ -662,8 +707,7 @@ impl eframe::App for CairnApp {
                         coll,
                         &mut self.editing,
                         &mut self.search,
-                        &mut self.deck_filter,
-                        &mut self.new_deck,
+                        &mut self.deck,
                         &mut self.moving,
                     );
                 }

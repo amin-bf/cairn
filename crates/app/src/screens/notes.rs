@@ -1,15 +1,16 @@
 //! The **Notes** destination: the note list and deck controls, and the editor pane — its form and
 //! card bodies, the pane toggle, the cloze field and blank selection, and the warning banner.
 
-use cairn_core::content::{DeckId, NoteId};
+use cairn_core::content::NoteId;
 use cairn_store::Collection;
 
 use eframe::egui::{Align, Layout, vec2};
 
-use crate::notes::{self, Filter};
+use crate::notes::{self, DeckFilter, Filter};
 use crate::{
-    Editing, badge, bidi, bidi_layouter, body, box_badge_wording, cards, compact_button, editor,
-    field_label, frame, full_width_button, heading, raise_keyboard, sync, text, text_field,
+    Editing, badge, bidi, bidi_layouter, body, box_badge_wording, cards, compact_button, controls,
+    editor, field_label, fonts, frame, full_width_button, heading, raise_keyboard, sync, text,
+    text_field,
 };
 use crate::{controls, spacing, surface};
 
@@ -21,8 +22,7 @@ pub(crate) fn notes_screen(
     coll: &mut Collection,
     editing: &mut Option<Editing>,
     search: &mut String,
-    deck_filter: &mut Option<DeckId>,
-    new_deck: &mut String,
+    deck: &mut notes::DeckBar,
     moving: &mut Option<NoteId>,
 ) {
     // **The two surfaces take different frames, and this is the only screen in the app that does.**
@@ -34,7 +34,7 @@ pub(crate) fn notes_screen(
         return;
     }
     frame::column(ui, |ui| {
-        note_list(ui, coll, editing, search, deck_filter, new_deck, moving);
+        note_list(ui, coll, editing, search, deck, moving);
     });
 }
 
@@ -123,23 +123,16 @@ fn note_list(
     coll: &mut Collection,
     editing: &mut Option<Editing>,
     search: &mut String,
-    deck_filter: &mut Option<DeckId>,
-    new_deck: &mut String,
+    deck: &mut notes::DeckBar,
     moving: &mut Option<NoteId>,
 ) {
     heading(ui, "Notes");
     ui.add_space(spacing::gap(2));
 
-    // Create opens a fresh draft; the note is not committed until its first non-empty field
-    // (ADR-0021 §7). A new note defaults to `basic` — the shipped kind that is a plain front/back. It
-    // opens already filed under the deck the list is filtered to, if any — the deck you are looking at
-    // is the likeliest one for the note you are about to write.
-    if full_width_button(ui, "Create note").clicked() {
-        let mut draft = Editing::new_draft("basic");
-        draft.deck = *deck_filter;
-        *editing = Some(draft);
-        return;
-    }
+    // ***Create note* is not drawn here.** It is pinned below the scroll, on ADR-0035 §1's reach
+    // line (`CairnApp::ui`, ADR-0039 §8) — this screen's one primary action used to sit at the very
+    // top of the page, which is the furthest point from a thumb, and a list has no leftover height
+    // for the page rule to spend inside the scroll.
 
     // The empty state is the empty *collection* (ADR-0015 §7): shown when there is no note at all, not
     // when a filter happens to match nothing.
@@ -153,7 +146,7 @@ fn note_list(
     // are filtered**, so the filter dropdown, *new deck*, and the delete of the filtered deck all sit
     // together here. Deletion is ADR-0005 §7's flag, deriving through to the deck's notes.
     ui.add_space(spacing::gap(2));
-    deck_controls(ui, coll, deck_filter, new_deck);
+    deck_controls(ui, coll, deck);
 
     // Text search — the load-bearing filter (ADR-0021 §2), a plain substring over field values,
     // composing with the deck filter above (deck ∩ text; the tag filter shares the vocabulary and is
@@ -162,11 +155,16 @@ fn note_list(
     field_label(ui, "Search");
     text_field(ui, search);
     let filter = Filter {
-        deck: deck_filter.map(|d| d.to_canonical()),
+        deck: deck.filter.clone(),
         text: (!search.trim().is_empty()).then(|| search.trim().to_owned()),
         ..Filter::default()
     };
 
+    // **The chrome stops here, and a line says so** (ADR-0039 §2). The gap either side of it is the
+    // `gap(2)` that already separated the three chrome groups — the boundary was a missing line,
+    // not a missing distance.
+    ui.add_space(spacing::gap(2));
+    frame::rule(ui);
     ui.add_space(spacing::gap(2));
     let rows = notes::list(coll, &filter).unwrap_or_default();
     if rows.is_empty() {
@@ -197,29 +195,67 @@ fn note_list(
     let mut open: Option<NoteId> = None;
     let mut delete: Option<NoteId> = None;
     let mut start_move: Option<NoteId> = None;
+
+    // **The deck is a caption on the row exactly when the list is not narrowed to a deck**
+    // (ADR-0039 §3). Under *All decks* it is the only thing that tells a filed note from an unfiled
+    // one; under a named deck every row would repeat the name the filter already states, which is
+    // the same line saying nothing twenty-five times.
+    let held = coll.decks().unwrap_or_default();
+    // **And only when the collection holds a deck at all.** A caption earns its line by telling one
+    // row from another; in a collection with no decks every note is unfiled by definition, so the
+    // caption would read *Unfiled* twenty-five times and distinguish nothing — which is the same
+    // redundancy §3 refuses under a named filter, arriving from the empty end. That is the state
+    // every collection starts in, and the one the shipping seed is in.
+    let captioned = matches!(deck.filter, DeckFilter::All) && !held.is_empty();
+    let deck_of = |row: &notes::NoteRow| -> Option<String> {
+        if !captioned {
+            return None;
+        }
+        // A reference naming no deck the collection holds is **unfiled**, not broken (ADR-0005 §8),
+        // so this lookup is allowed to miss and a miss reads *Unfiled* — the rule the editor's own
+        // dropdown already applies.
+        Some(
+            row.deck
+                .as_ref()
+                .and_then(|id| {
+                    held.iter()
+                        .find(|(d, _)| d.to_canonical() == *id)
+                        .map(|(_, n)| n.clone())
+                })
+                .unwrap_or_else(|| notes::UNFILED.to_owned()),
+        )
+    };
+
+    // **Move** enters the two-tap placement state (ADR-0021 §4): a tap on the row's move control,
+    // then a tap on a gap. No drag and no long-press — the two taps behave identically under touch
+    // and mouse, which is the finding ADR-0006 §5 recorded and this must not break. The pictures
+    // stand alone here under ADR-0039 §1's exception, which is what twenty-five repetitions buys.
+    let actions = [
+        controls::Action {
+            glyph: fonts::MOVE,
+            word: "Move",
+        },
+        controls::Action {
+            glyph: fonts::DELETE,
+            word: "Delete",
+        },
+    ];
+
     for (i, row) in rows.iter().enumerate() {
-        // **The gap between rows is stated, one unit, and it is the same unit that separates the
-        // controls *within* a row.** Before ADR-0032 these rows leaned on egui's ambient 3px and were
-        // fused the moment it went to zero. Stating it equal in both axes is deliberate rather than
-        // convenient: a row is a group of three controls, and a vertical gap smaller than the
-        // horizontal one would make a *column* of Deletes read as a group before the row does.
+        // **The gap between rows is stated, one unit.** Before ADR-0032 these rows leaned on egui's
+        // ambient 3px and were fused the moment it went to zero.
         if i > 0 {
             ui.add_space(spacing::gap(1));
         }
-        spacing::row(ui, 1, |ui| {
-            if ui.button(text(ui, row.preview())).clicked() {
-                open = Some(row.id);
-            }
-            // **Move** enters the two-tap placement state (ADR-0021 §4): a tap here, then a tap on a
-            // gap. No drag and no long-press — the two taps behave identically under touch and mouse,
-            // which is the finding ADR-0006 §5 recorded and this must not break.
-            if ui.button(text(ui, "Move")).clicked() {
-                start_move = Some(row.id);
-            }
-            if ui.button(text(ui, "Delete")).clicked() {
-                delete = Some(row.id);
-            }
-        });
+        let press = controls::row(ui, row.preview(), deck_of(row).as_deref(), &actions);
+        if press.opened {
+            open = Some(row.id);
+        }
+        match press.action {
+            Some(0) => start_move = Some(row.id),
+            Some(1) => delete = Some(row.id),
+            _ => {}
+        }
     }
     if let Some(id) = start_move {
         *moving = Some(id);
@@ -252,24 +288,38 @@ fn placement_list(
         return;
     }
     ui.add_space(spacing::gap(2));
+
+    // **The note being placed is held, not named** (ADR-0039 §7). It is drawn as the row it is, on
+    // the one material in the system that means *temporarily on top* (ADR-0037 §2) — which is
+    // exactly what a note in mid-move is, and the only place in the product where that material has
+    // ever described its own contents rather than a popup's.
     let name = rows
         .iter()
         .find(|r| r.id == mid)
         .map_or("", |r| r.preview());
-    field_label(ui, &format!("Placing: {name}"));
+    field_label(ui, "Placing");
+    ui.add_space(spacing::gap(1));
+    controls::held(ui, name);
     ui.add_space(spacing::gap(2));
 
     // The gaps run among the *other* visible rows — the moving note removed so it is never offered a
     // place beside itself. Gap `i` sits before `visible[i]`, and the last gap (past the final row) is
     // the end; the open ends send the note to either extreme (ADR-0021 §4).
+    //
+    // **The notes keep the weight they wear everywhere else and the targets give it up.** Before
+    // ADR-0039 §7 this was the other way round — twenty-six identical full-width slabs with the
+    // notes set as plain body text between them, so the screen read as a list of buttons with
+    // captions rather than a list of notes with gaps between them.
     let visible: Vec<&notes::NoteRow> = rows.iter().filter(|r| r.id != mid).collect();
     let mut place: Option<usize> = None;
     for gap in 0..=visible.len() {
-        if full_width_button(ui, "Place here").clicked() {
+        if controls::quiet_target(ui, "Place here").clicked() {
             place = Some(gap);
         }
         if let Some(row) = visible.get(gap) {
-            body(ui, row.preview());
+            ui.add_space(spacing::gap(1));
+            controls::row_inert(ui, row.preview(), None);
+            ui.add_space(spacing::gap(1));
         }
     }
     if let Some(gap) = place {
@@ -286,48 +336,99 @@ fn placement_list(
 /// minted id (ADR-0005 §4); the dropdown shows names but the filter is by id, so two decks may share
 /// a name without merging. *All decks* and *Unfiled* are filter values, not decks: **no deck is ever
 /// auto-created** (ADR-0005 §8), so a collection may legitimately hold none.
-fn deck_controls(
-    ui: &mut egui::Ui,
-    coll: &mut Collection,
-    deck_filter: &mut Option<DeckId>,
-    new_deck: &mut String,
-) {
+fn deck_controls(ui: &mut egui::Ui, coll: &mut Collection, deck: &mut notes::DeckBar) {
     let decks = coll.decks().unwrap_or_default();
 
     field_label(ui, "Deck");
-    let selected = deck_filter
-        .and_then(|id| decks.iter().find(|(d, _)| *d == id).map(|(_, n)| n.clone()))
-        .unwrap_or_else(|| "All decks".to_owned());
+    let selected = match &deck.filter {
+        DeckFilter::All => ALL_DECKS.to_owned(),
+        DeckFilter::Unfiled => notes::UNFILED.to_owned(),
+        DeckFilter::Deck(id) => decks
+            .iter()
+            .find(|(d, _)| d == id)
+            .map(|(_, n)| n.clone())
+            // A filter naming a deck the collection no longer holds is the same nothing a note's
+            // dangling reference is (ADR-0005 §8), so it reads the same word.
+            .unwrap_or_else(|| notes::UNFILED.to_owned()),
+    };
     egui::ComboBox::from_id_salt("deck-filter")
         .selected_text(text(ui, &selected))
         .show_ui(ui, |ui| {
-            ui.selectable_value(deck_filter, None, text(ui, "All decks"));
+            ui.selectable_value(&mut deck.filter, DeckFilter::All, text(ui, ALL_DECKS));
+            // ***Unfiled* is a filter value, and until ADR-0039 §5 it was not expressible.** The
+            // filter was an `Option` whose `None` meant *narrow nothing*, so the state ADR-0005 §8
+            // calls "an unfiled view" had no way to be asked for and the dropdown offered no such
+            // entry. It sits directly under *All decks* rather than after the named decks, because
+            // it narrows the collection rather than naming one of its parts.
+            ui.selectable_value(
+                &mut deck.filter,
+                DeckFilter::Unfiled,
+                text(ui, notes::UNFILED),
+            );
             for (id, name) in &decks {
-                ui.selectable_value(deck_filter, Some(*id), text(ui, name));
+                ui.selectable_value(&mut deck.filter, DeckFilter::Deck(*id), text(ui, name));
             }
         });
 
     spacing::row(ui, 1, |ui| {
-        let created = ui.button(text(ui, "New deck")).clicked();
-        text_field(ui, new_deck);
+        let created = controls::snug(ui, "New deck").clicked();
+        text_field(ui, &mut deck.new_name);
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
         if created
-            && !new_deck.trim().is_empty()
-            && let Ok(id) = coll.create_deck(new_deck.trim())
+            && !deck.new_name.trim().is_empty()
+            && let Ok(id) = coll.create_deck(deck.new_name.trim())
         {
-            *deck_filter = Some(id);
-            new_deck.clear();
+            deck.filter = DeckFilter::Deck(id);
+            deck.new_name.clear();
         }
     });
 
-    // Delete is reachable from the same place (ADR-0021 §9); it flags the filtered deck deleted
-    // (ADR-0005 §7), which derives its notes deleted too. The binding warning naming how many notes
-    // lose content, and the *move to another deck* alternative (ADR-0005 §7), are the visual pass's.
-    if let Some(id) = *deck_filter
-        && ui.button(text(ui, "Delete deck")).clicked()
-    {
-        let _ = coll.mutable_set("deck", &id.0, "deleted", Some("true"));
-        *deck_filter = None;
+    // **Delete names what it destroys before it destroys it** (ADR-0021 §9, ADR-0039 §6). Flagging a
+    // deck deleted derives every note in it deleted (ADR-0005 §7) and there is no undelete
+    // (ADR-0021 §2) — recovery is a restore from backup. So the control asks, and the question
+    // carries the **count**, which is the one fact that makes the difference between an empty deck
+    // and a year of authoring legible before the tap rather than after it.
+    //
+    // The weight does not change and that was decided rather than defaulted: the palette holds a
+    // dormant error accent (ADR-0030 §5) and waking it here would make *every* destructive control
+    // in the product a palette question. What is dangerous about this control is that it is silent,
+    // not that it is quiet.
+    let Some(id) = deck.filter.named_deck() else {
+        deck.confirming = None;
+        return;
+    };
+    if deck.confirming == Some(id) {
+        let count = notes::count_in_deck(coll, id).unwrap_or(0);
+        ui.add_space(spacing::gap(1));
+        body(ui, &deck_delete_warning(&selected, count));
+        ui.add_space(spacing::gap(1));
+        spacing::row(ui, 1, |ui| {
+            if controls::snug(ui, "Delete the deck and its notes").clicked() {
+                let _ = coll.mutable_set("deck", &id.0, "deleted", Some("true"));
+                deck.filter = DeckFilter::All;
+                deck.confirming = None;
+            }
+            if controls::snug(ui, "Keep it").clicked() {
+                deck.confirming = None;
+            }
+        });
+    } else if controls::snug(ui, "Delete deck").clicked() {
+        deck.confirming = Some(id);
+    }
+}
+
+/// The word for the filter value that narrows by no deck at all.
+const ALL_DECKS: &str = "All decks";
+
+/// What the delete asks, naming the deck and the count.
+///
+/// A separate function so the sentence is testable without a `Ui`: the number is the whole point of
+/// the warning, and "0 notes" and "1 note" are the two readings a plural-by-`s` gets wrong.
+fn deck_delete_warning(name: &str, notes_in_deck: usize) -> String {
+    match notes_in_deck {
+        0 => format!("Delete {name}? It has no notes in it."),
+        1 => format!("Delete {name}? Its 1 note is deleted with it, and cannot be undeleted."),
+        n => format!("Delete {name}? Its {n} notes are deleted with it, and cannot be undeleted."),
     }
 }
 
@@ -827,20 +928,11 @@ mod tests {
         let ctx = egui::Context::default();
         let mut editing = None;
         let mut search = String::new();
-        let mut deck_filter = None;
-        let mut new_deck = String::new();
+        let mut deck = notes::DeckBar::default();
 
         let mut frame = |moving: &mut Option<NoteId>, coll: &mut Collection| {
             ctx.run_ui(Default::default(), |ui| {
-                notes_screen(
-                    ui,
-                    coll,
-                    &mut editing,
-                    &mut search,
-                    &mut deck_filter,
-                    &mut new_deck,
-                    moving,
-                );
+                notes_screen(ui, coll, &mut editing, &mut search, &mut deck, moving);
             })
         };
 
@@ -848,8 +940,9 @@ mod tests {
         let mut moving = None;
         let listed = drawn_text(&frame(&mut moving, &mut coll));
         assert!(
-            listed.contains("Move"),
-            "a row offers the reorder entrance — drew: {listed}"
+            listed.contains(fonts::MOVE),
+            "a row offers the reorder entrance, now as a glyph standing alone \
+             (ADR-0039 §1) — drew: {listed}"
         );
         assert!(
             !listed.contains("Place here"),
@@ -860,9 +953,15 @@ mod tests {
         // placement list.
         moving = Some(first);
         let placing = drawn_text(&frame(&mut moving, &mut coll));
+        // **Held, not named** (ADR-0039 §7): the state is labelled once and the note is drawn as
+        // the row it is, so the two facts are a caption and an object rather than one sentence.
         assert!(
-            placing.contains("Placing: alpha"),
-            "the moving note is named — drew: {placing}"
+            placing.contains("Placing"),
+            "the placement state says what it is — drew: {placing}"
+        );
+        assert!(
+            placing.contains("alpha"),
+            "the note being placed is held as a row — drew: {placing}"
         );
         assert!(
             placing.contains("Cancel move"),
@@ -890,8 +989,7 @@ mod tests {
         // A text filter that the moving note does not match — it cannot be placed against neighbours
         // the user cannot see, so the mode must not survive (ADR-0021 §4).
         let mut search = "beta".to_owned();
-        let mut deck_filter = None;
-        let mut new_deck = String::new();
+        let mut deck = notes::DeckBar::default();
         let mut moving = Some(hidden);
 
         let _ = ctx.run_ui(Default::default(), |ui| {
@@ -900,8 +998,7 @@ mod tests {
                 &mut coll,
                 &mut editing,
                 &mut search,
-                &mut deck_filter,
-                &mut new_deck,
+                &mut deck,
                 &mut moving,
             );
         });
@@ -909,6 +1006,34 @@ mod tests {
         assert_eq!(
             moving, None,
             "a move whose note the filter hides is cancelled"
+        );
+    }
+    /// **The delete warning names the count, and names it in a sentence that survives one note**
+    /// (ADR-0021 §9, ADR-0039 §6).
+    ///
+    /// The number is the whole point of the warning — an empty deck and a year of authoring are the
+    /// same tap otherwise — and `1 notes` is the reading a plural-by-`s` produces on the one deck
+    /// size where a person is most likely to shrug and confirm.
+    #[test]
+    fn the_delete_warning_names_what_is_lost() {
+        assert!(
+            deck_delete_warning("Français", 0).contains("no notes"),
+            "an empty deck says so: {}",
+            deck_delete_warning("Français", 0)
+        );
+        let one = deck_delete_warning("Français", 1);
+        assert!(one.contains("1 note is"), "singular: {one}");
+        let many = deck_delete_warning("Français", 25);
+        assert!(many.contains("25 notes are"), "plural: {many}");
+        for count in [0, 1, 25] {
+            assert!(
+                deck_delete_warning("Français", count).contains("Français"),
+                "the deck is named at {count}"
+            );
+        }
+        assert!(
+            deck_delete_warning("Français", 25).contains("cannot be undeleted"),
+            "there is no undelete here (ADR-0021 §2), and the warning is where that is said"
         );
     }
 }

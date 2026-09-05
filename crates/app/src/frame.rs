@@ -107,6 +107,57 @@ fn frame_of_width<R>(ui: &mut egui::Ui, cap: f32, add: impl FnOnce(&mut egui::Ui
 /// tall screen and too low on a short one.
 pub const REACH_LINE: f32 = 165.0;
 
+/// A **hairline** across the column: where one group of things stops and another starts.
+///
+/// The material is [ADR-0033](../../../docs/adr/0033-the-card.md)'s own — the rule that divides a
+/// card's two faces — so a boundary costs the system no new value (ADR-0039 §2).
+///
+/// **It exists because the distance was already right.** The note list's chrome was separated from
+/// its rows by `gap(2)`, which is also what separates one row from the next, and the obvious repair
+/// was a bigger gap. Dragged on a live knob from `gap(1)` to `gap(8)`, the thumb left it at
+/// `gap(2)` — where it started — and turned the line on instead. A menu of three gaps would have
+/// produced a larger number and nobody would have learned that the spacing was not the problem.
+pub fn rule(ui: &mut egui::Ui) {
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().rect_filled(
+        rect,
+        egui::CornerRadius::ZERO,
+        crate::theme::card_divider(ui.visuals()),
+    );
+}
+
+/// The height a **pinned** control cluster reserves so its bottom edge lands on [`REACH_LINE`].
+///
+/// [ADR-0035 §1](../../../docs/adr/0035-the-vertical-anchor.md) is a page rule, and until ADR-0039
+/// every screen it governed drew its last control *inside* the scrolled content, where
+/// [`slack_above`] simply absorbs whatever height is left over. A list has no leftover height —
+/// twenty-five rows are longer than any page — so on the note list the rule reaches nothing at all,
+/// and its primary action sat at the very top, the furthest point on the page from a thumb.
+///
+/// Pinning it outside the scroll is the third answer, and this is what it costs: the reserved band
+/// is the control **plus** the reach line, and the page below it is deliberately empty, because
+/// [#141](https://github.com/amin-bf/cairn/issues/141) measured that a thumb picks a line above the
+/// bottom rather than the bottom itself.
+///
+/// **Plus one unit above the control**, which is separation rather than rhythm. A row and an
+/// ordinary control share `control_fill`, so the list's last visible row and the pinned button meet
+/// as one unbroken block of the same colour — measured on the first run, where a row clipped by the
+/// viewport touched the button's top edge with nothing but its 1px stroke between them.
+///
+/// **The clamp is the rule's other half again.** On a page too short to spend `REACH_LINE` on
+/// nothing, the band collapses to the control and a stated gap — the same shape [`slack_above`]'s
+/// floor has, for the same reason. A third of the viewport is where that turns over: below it the
+/// empty band would be taking more of the screen than the list it exists to serve.
+pub fn pinned_band(viewport_height: f32) -> f32 {
+    let full = REACH_LINE + crate::controls::HEIGHT + crate::spacing::gap(1);
+    if full <= viewport_height / 3.0 {
+        full
+    } else {
+        crate::spacing::gap(2) + crate::controls::HEIGHT
+    }
+}
+
 /// How much page is left below the cursor, measured against the **visible viewport**.
 ///
 /// **`Ui::available_height` is the obvious call and it returns zero here.** Inside a `ScrollArea`
@@ -305,6 +356,42 @@ mod tests {
         assert!(
             TWO_COLUMN_MEASURE <= 1280.0 - PAGE_MARGIN * 2.0,
             "the two-column frame does not fit the judging width"
+        );
+    }
+    /// **The pinned band puts the control's bottom edge on the reach line**, which is the whole of
+    /// ADR-0035 §1 said about a control that lives outside the scroll (ADR-0039 §8).
+    ///
+    /// Arithmetic rather than a rendered window, for `slack_above`'s reason: the one thing worth
+    /// pinning is *where the bottom edge lands*, and a test that had to build a viewport to ask
+    /// would be testing egui.
+    #[test]
+    fn a_pinned_control_ends_on_the_reach_line() {
+        let viewport = 800.0;
+        let band = pinned_band(viewport);
+        // The band is anchored to the bottom; the control sits one unit below its top.
+        let bottom_edge = viewport - band + crate::spacing::gap(1) + crate::controls::HEIGHT;
+        assert!(
+            (viewport - bottom_edge - REACH_LINE).abs() < 0.5,
+            "the control ends at {bottom_edge} of {viewport}, which is \
+             {} above the bottom rather than {REACH_LINE}",
+            viewport - bottom_edge
+        );
+    }
+
+    /// **And it gives the line up rather than eat the screen.** On a page too short to spend 165px
+    /// on nothing, the band collapses — the same shape `slack_above`'s floor has, and the reason
+    /// both exist is that this map's vertical rules are about *leftover* room.
+    #[test]
+    fn a_short_page_collapses_the_pinned_band_rather_than_keeping_the_line() {
+        let tall = pinned_band(800.0);
+        let short = pinned_band(300.0);
+        assert!(
+            short < tall,
+            "a 300px viewport reserves {short}px where an 800px one reserves {tall}px"
+        );
+        assert!(
+            short >= crate::controls::HEIGHT,
+            "the control itself always fits: {short}px"
         );
     }
 }

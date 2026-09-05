@@ -57,6 +57,240 @@ use crate::{spacing, text, theme};
 /// the application's own, which is not a target anyone struggles to hit.
 pub const HEIGHT: f32 = 36.0;
 
+/// One action offered on a list [`row`]: the glyph that stands for it, and the word it stands for.
+///
+/// **The word is not decoration and it is not drawn.** It is the hover text, and it exists because
+/// [ADR-0039 §1](../../../docs/adr/0039-the-list-row.md)'s exception buys the picture
+/// the right to stand *alone on screen*, not the right to be unnameable. On a pointer the word is
+/// one hover away; under a thumb there is no hover and repetition is what pays, which is the
+/// bargain the exception was written as.
+pub struct Action<'a> {
+    pub glyph: char,
+    pub word: &'a str,
+}
+
+/// What a [`row`] had pressed on it this frame.
+#[derive(Default)]
+pub struct RowPress {
+    /// The band itself — the row's own affordance, which every list uses for *open this*.
+    pub opened: bool,
+    /// The index into the `actions` slice that was pressed, if any.
+    pub action: Option<usize>,
+}
+
+/// **A list row**: a full-width band carrying `text`, an optional `caption` under it, and a
+/// right-aligned cluster of icon actions.
+///
+/// Decided in [#162](https://github.com/amin-bf/cairn/issues/162) against the note list and
+/// recorded in [ADR-0039](../../../docs/adr/0039-the-list-row.md). It lives here rather than in
+/// `screens/notes.rs` for the reason this module exists at all: before #134 every control in the
+/// application was a bare `ui.button`, and after it **every control on a list row still was** —
+/// twelve call sites, all of them rows, drawing at `widgets.inactive` and at egui's default height
+/// on the two screens that carry the most controls in the product. A row that only the note list
+/// can draw is that defect with a nicer name.
+///
+/// # The cluster is a column, and that is the whole point
+///
+/// Each action is allocated a **square** of [`HEIGHT`], so two rows with different text put their
+/// actions at the same x. That is what a glyph buys and it is why the glyphs are metrically square
+/// (ADR-0038 §1's set clause): sized to their own ink they would be two different widths and the
+/// column would be as ragged as the words it replaced.
+///
+/// # Which end the text sits at is the row's question, and a shrink-to-fit control never had it
+///
+/// A control sized to its own label has no spare width, so nothing can be aligned within it. Give
+/// the row the measure and it acquires an end — and the answer is the note's **own** direction, not
+/// the interface's, which is [ADR-0033 §5](../../../docs/adr/0033-the-card.md)'s rule for the box
+/// badge said about a row. The **cluster does not follow it**: it is furniture rather than content,
+/// and a cluster that mirrored per row would destroy the column on the one screen the column was
+/// invented for (ADR-0039 §4).
+pub fn row(ui: &mut Ui, text: &str, caption: Option<&str>, actions: &[Action]) -> RowPress {
+    let mut press = RowPress::default();
+    let height = row_height(ui, caption.is_some());
+    let cluster =
+        actions.len() as f32 * HEIGHT + (actions.len().saturating_sub(1)) as f32 * spacing::gap(1);
+    let band_width = (ui.available_width() - cluster - spacing::gap(2)).max(spacing::gap(8));
+
+    spacing::row(ui, 1, |ui| {
+        let (rect, response) =
+            ui.allocate_exact_size(egui::vec2(band_width, height), egui::Sense::click());
+        let fill = if response.hovered() {
+            ui.visuals().widgets.hovered.bg_fill
+        } else {
+            theme::control_fill(ui.visuals())
+        };
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(2), fill);
+        band_text(ui, rect, text, caption);
+        press.opened = response.clicked();
+
+        // Right to left, so the last action ends on the frame and the rest stack inside it.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            for (i, action) in actions.iter().enumerate().rev() {
+                let job = crate::text(ui, &action.glyph.to_string());
+                if control_job(ui, job, HEIGHT)
+                    .on_hover_text(action.word)
+                    .clicked()
+                {
+                    press.action = Some(i);
+                }
+            }
+        });
+    });
+    press
+}
+
+/// A row drawn as a **destination** rather than as an actor — no controls, same surface.
+///
+/// The shape a row takes while some *other* row is being placed among them (ADR-0021 §4). It is not
+/// a variant of [`row`] but a correction to one: giving the placement state real rows made every one
+/// of them offer its own actions, so the screen invited you to delete the note you were placing
+/// *against*. Today's application avoids that only by not drawing rows there at all.
+pub fn row_inert(ui: &mut Ui, text: &str, caption: Option<&str>) {
+    let height = row_height(ui, caption.is_some());
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::hover(),
+    );
+    ui.painter().rect_filled(
+        rect,
+        egui::CornerRadius::same(2),
+        theme::control_fill(ui.visuals()),
+    );
+    band_text(ui, rect, text, caption);
+}
+
+/// The height of the text a row carries — one line, or two when it carries a caption.
+fn text_block(ui: &Ui, captioned: bool) -> f32 {
+    let line = |size: f32| {
+        ui.ctx()
+            .fonts_mut(|f| f.row_height(&egui::FontId::proportional(size)))
+    };
+    if captioned {
+        line(crate::typography::BODY) + line(crate::typography::SMALL)
+    } else {
+        line(crate::typography::BODY)
+    }
+}
+
+/// A row's height: its text plus a unit of air, and **never less than [`HEIGHT`]** — a row is a
+/// target before it is a line of text, and a two-line row that happened to measure 34px would be a
+/// target the map's *hit targets follow touch* already forbids.
+pub fn row_height(ui: &Ui, captioned: bool) -> f32 {
+    (text_block(ui, captioned) + spacing::gap(1)).max(HEIGHT)
+}
+
+/// The band's text, centred in its height and aligned to the **content's** direction.
+fn band_text(ui: &mut Ui, rect: egui::Rect, text: &str, caption: Option<&str>) {
+    let block = text_block(ui, caption.is_some());
+    let inner = egui::Rect::from_min_size(
+        egui::pos2(rect.left() + spacing::gap(1), rect.center().y - block / 2.0),
+        egui::vec2(rect.width() - spacing::gap(2), block),
+    );
+    let align = if crate::bidi::is_rtl(text) {
+        egui::Align::RIGHT
+    } else {
+        egui::Align::LEFT
+    };
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(inner)
+            .layout(egui::Layout::top_down(align)),
+    );
+    child.label(crate::bidi::job(
+        text,
+        egui::TextStyle::Button.resolve(child.style()),
+        child.visuals().text_color(),
+    ));
+    if let Some(caption) = caption {
+        // The caption follows the **row's** direction rather than its own script: it is a footnote
+        // on that line, and one that changed sides from the line above it would read as a second
+        // object rather than as part of the same one.
+        child.label(crate::bidi::job(
+            caption,
+            egui::TextStyle::Small.resolve(child.style()),
+            child.visuals().weak_text_color(),
+        ));
+    }
+}
+
+/// The ink a **placement target** carries: 131 of 255, measured on a live knob (ADR-0039 §7).
+///
+/// # Why an alpha here is not the mistake #143 found
+///
+/// [#143](https://github.com/amin-bf/cairn/issues/143) recorded that egui's `weak_text_alpha`
+/// weighs differently on a light ground than a dark one — 60% of a near-black lands ~4.2:1 where
+/// 60% of a near-white lands ~5.6:1 — so a fixed alpha is not a fixed weight. That is true of **ink
+/// on a ground**, where the alpha interpolates toward a background the value knows nothing about.
+///
+/// This alpha interpolates a **fill toward the page**, and both ends are palette roles: it lands
+/// the target 51% of the way from the page to an ordinary control, in whichever theme is drawing.
+/// The quantity it fixes is *a fraction of a step the palette already owns*, so it carries to a
+/// light page the way a ratio does and a colour does not.
+pub const TARGET_INK: u8 = 131;
+
+/// A **placement target** — a control that is a destination rather than an action.
+///
+/// The one place the application asks *where*, not *what*, so it is the one control that must not
+/// outshout the content it is being placed among. Before ADR-0039 §7 the note list drew twenty-six
+/// of these at full weight with the notes as plain body text between them, and the screen read as a
+/// list of buttons with captions.
+///
+/// **The hit area does not move with the ink.** It is one [`HEIGHT`] at every weight, because the
+/// map holds hit targets to touch and a quiet target is not a small one — which is the whole reason
+/// the ink could be taken this far down.
+pub fn quiet_target(ui: &mut Ui, label: &str) -> Response {
+    let alpha = f32::from(TARGET_INK) / 255.0;
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), HEIGHT),
+        egui::Sense::click(),
+    );
+    // Hovered, it becomes an ordinary control: the quiet weight says *this is somewhere to put it*,
+    // and the pointer asking about one of them is the moment it becomes something to press.
+    let (fill, ink) = if response.hovered() {
+        (
+            ui.visuals().widgets.hovered.bg_fill,
+            ui.visuals().text_color(),
+        )
+    } else {
+        (
+            theme::control_fill(ui.visuals()).gamma_multiply(alpha),
+            ui.visuals().text_color().gamma_multiply(alpha),
+        )
+    };
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::same(2), fill);
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::proportional(crate::typography::BODY),
+        ink,
+    );
+    response
+}
+
+/// A row **held** — lifted onto the one surface in the system that means *temporarily on top*
+/// (ADR-0037 §2), which is what a note in mid-move is (ADR-0039 §7).
+///
+/// It is the only place that material describes its **own contents** rather than a popup's, and
+/// that is the argument for using it rather than inventing a weight: an object that has been picked
+/// up and not yet put down is precisely what "temporarily on top" was decided to mean.
+pub fn held(ui: &mut Ui, label: &str) {
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), HEIGHT),
+        egui::Sense::hover(),
+    );
+    ui.painter().rect(
+        rect,
+        egui::CornerRadius::same(2),
+        ui.visuals().window_fill,
+        ui.visuals().window_stroke,
+        egui::StrokeKind::Inside,
+    );
+    band_text(ui, rect, label, None);
+}
+
 /// An ordinary control, at `width`.
 ///
 /// The default weight, and the one that answers ADR-0033 §3. Everything the user can press that is
@@ -334,5 +568,98 @@ mod tests {
                 "{name}: a primary draws primary_fill"
             );
         }
+    }
+    /// Every rect a frame drew, as rectangles rather than fills.
+    fn rects_in(width: f32, add: impl FnMut(&mut Ui)) -> Vec<egui::Rect> {
+        let ctx = egui::Context::default();
+        theme::install(&ctx, theme::ThemeChoice::Dark);
+        typography::install(&ctx);
+        spacing::install(&ctx);
+        let mut add = add;
+        let out = ctx.run_ui(Default::default(), |ui| {
+            ui.set_width(width);
+            add(ui);
+        });
+        fn walk(shape: &egui::Shape, into: &mut Vec<egui::Rect>) {
+            match shape {
+                egui::Shape::Rect(r) => into.push(r.rect),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, into)),
+                _ => {}
+            }
+        }
+        let mut rects = Vec::new();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut rects);
+        }
+        rects
+    }
+
+    /// **The action column is a column** — the property the whole row shape exists for (ADR-0039 §1).
+    ///
+    /// Two rows whose text differs by two hundred pixels put their last control's right edge on the
+    /// same x. Before ADR-0039 they did not, and the cost was not tidiness: a control that is
+    /// somewhere new on every row has to be *found* on every row, by an eye and by a finger — and
+    /// the capture harness proved it the hard way, aiming a coordinate at one row's *Move* and
+    /// opening another row's note instead.
+    ///
+    /// It is a test rather than a look because the way it breaks is by degrees. Nothing fails when
+    /// one row's cluster drifts four pixels; it just stops being a column.
+    #[test]
+    fn a_rows_actions_land_on_the_same_x_whatever_its_text() {
+        let actions = |ui: &mut Ui, text: &str| {
+            row(
+                ui,
+                text,
+                None,
+                &[
+                    Action {
+                        glyph: crate::fonts::MOVE,
+                        word: "Move",
+                    },
+                    Action {
+                        glyph: crate::fonts::DELETE,
+                        word: "Delete",
+                    },
+                ],
+            );
+        };
+        let right_edge =
+            |rects: Vec<egui::Rect>| rects.iter().map(|r| r.right()).fold(f32::MIN, f32::max);
+
+        let short = right_edge(rects_in(640.0, |ui| actions(ui, "کتاب")));
+        let long = right_edge(rects_in(640.0, |ui| {
+            actions(
+                ui,
+                "Il ne faut pas vendre la peau de l'ours avant de l'avoir tué",
+            )
+        }));
+        assert!(
+            (short - long).abs() < 0.5,
+            "a four-character row ends at {short} and a sixty-character one at {long}"
+        );
+    }
+
+    /// A row is **never shorter than a control**, whatever its text measures (ADR-0039 §1).
+    ///
+    /// The map holds hit targets to touch rather than to the pointer, and a row is a target before
+    /// it is a line of text — which is the rule the note list had been breaking at 19px on
+    /// seventy-five controls.
+    #[test]
+    fn a_row_is_never_shorter_than_a_touch_target() {
+        let ctx = egui::Context::default();
+        typography::install(&ctx);
+        spacing::install(&ctx);
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            assert!(
+                row_height(ui, false) >= HEIGHT,
+                "a one-line row is {}px",
+                row_height(ui, false)
+            );
+            assert!(
+                row_height(ui, true) >= HEIGHT,
+                "a captioned row is {}px",
+                row_height(ui, true)
+            );
+        });
     }
 }

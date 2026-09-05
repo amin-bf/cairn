@@ -18,7 +18,7 @@
 //! Everything here is a projection of the mutable surface, computed fresh — there is no cached list
 //! to fall out of step with an edit made from the review screen (ADR-0021 §6).
 
-use cairn_core::content::NoteId;
+use cairn_core::content::{DeckId, NoteId};
 use cairn_store::{Collection, StoreError, TAG_ATTR_PREFIX};
 
 /// One note as the browse surface sees it. Carries what narrows the list (deck, tags, field values)
@@ -59,8 +59,8 @@ impl NoteRow {
 /// (ADR-0021 §4).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Filter {
-    /// Keep only notes filed under this exact deck reference.
-    pub deck: Option<String>,
+    /// Which decks the list admits — see [`DeckFilter`].
+    pub deck: DeckFilter,
     /// Keep only notes carrying this tag.
     pub tag: Option<String>,
     /// Keep only notes with this substring somewhere in their own field values. Matched
@@ -69,12 +69,112 @@ pub struct Filter {
     pub text: Option<String>,
 }
 
+/// The word for a note filed under no deck, in the one place it is spelled.
+///
+/// Three surfaces say it — the filter, a row's caption, and the editor's deck dropdown — and they
+/// are three renderings of one fact (ADR-0005 §8), so a second spelling would be a second speaker.
+pub const UNFILED: &str = "Unfiled";
+
+/// Which decks the note list admits (ADR-0021 §2, ADR-0039 §5).
+///
+/// # Why this is not an `Option`
+///
+/// It was one, and `None` meant **narrow nothing** — which left *unfiled only* inexpressible, so
+/// the dropdown offered *All decks* and each named deck and nothing else. ADR-0005 §8 says an
+/// unfiled note *"appears in an unfiled view"* and nothing in the product had ever drawn one;
+/// [#161](https://github.com/amin-bf/cairn/issues/161) found the gap by building a fixture with
+/// three unfiled notes in it and discovering there was no way to ask for them.
+///
+/// The two states an `Option` conflated are genuinely different questions — *don't narrow* and
+/// *narrow to the notes with no deck* — and an enum is what stops the second being spelled as the
+/// absence of the first.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum DeckFilter {
+    /// Narrow nothing: every note, filed or not.
+    #[default]
+    All,
+    /// Only notes filed under this deck.
+    Deck(DeckId),
+    /// Only **unfiled** notes — no `deck` reference at all, *or* one naming no deck the collection
+    /// holds, which ADR-0005 §8 makes the same legal state. Judging that needs the set of held
+    /// decks, which is why [`list`] reads it and [`Filter::matches`] takes it.
+    Unfiled,
+}
+
+/// The note list's **deck block**, held across frames (ADR-0021 §9): what the list is narrowed to,
+/// the *new deck* name being typed, and the delete waiting to be confirmed.
+///
+/// One struct rather than three parameters because the three are one control group — decks are
+/// *created where they are filtered*, and the delete only exists for the deck the filter names, so
+/// none of the three means anything without the others.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeckBar {
+    pub filter: DeckFilter,
+    pub new_name: String,
+    /// The deck whose delete has been asked for and not yet confirmed.
+    ///
+    /// Deleting a deck derives **every note in it** deleted (ADR-0005 §7) and there is no undelete
+    /// (ADR-0021 §2), so ADR-0021 §9 requires a warning naming how many notes lose content before
+    /// it happens. Holding the id here is what makes that a two-step rather than a dialog.
+    pub confirming: Option<DeckId>,
+}
+
+impl DeckFilter {
+    /// The deck this filter names, if it names one. *All decks* and *Unfiled* name none — which is
+    /// what makes them filter values rather than decks (ADR-0005 §8).
+    pub fn named_deck(&self) -> Option<DeckId> {
+        match self {
+            DeckFilter::Deck(id) => Some(*id),
+            _ => None,
+        }
+    }
+
+    /// The deck a note created under this filter is filed into — the deck you are looking at is the
+    /// likeliest one for the note you are about to write (ADR-0021 §9). *All decks* and *Unfiled*
+    /// both file nothing, and *Unfiled* does so correctly: a note made while looking at the unfiled
+    /// notes belongs with them.
+    pub fn for_new_note(&self) -> Option<DeckId> {
+        self.named_deck()
+    }
+}
+
+/// How many notes a deck would take with it if it were deleted (ADR-0005 §7).
+///
+/// Counted through [`list`] rather than off the deck table, so it counts exactly the notes the
+/// **screen** would show under that filter — which is what the warning claims. A count computed a
+/// second way is a second speaker for the number the user is being asked to accept.
+pub fn count_in_deck(coll: &Collection, deck: DeckId) -> Result<usize, StoreError> {
+    Ok(list(
+        coll,
+        &Filter {
+            deck: DeckFilter::Deck(deck),
+            ..Filter::default()
+        },
+    )?
+    .len())
+}
+
 impl Filter {
-    fn matches(&self, row: &NoteRow) -> bool {
-        if let Some(deck) = &self.deck
-            && row.deck.as_deref() != Some(deck)
-        {
-            return false;
+    fn matches(&self, row: &NoteRow, held: &[DeckId]) -> bool {
+        match &self.deck {
+            DeckFilter::All => {}
+            DeckFilter::Deck(id) => {
+                if row.deck.as_deref() != Some(id.to_canonical().as_str()) {
+                    return false;
+                }
+            }
+            DeckFilter::Unfiled => {
+                // Unfiled is *not* "carries no deck attribute". A reference naming no held deck is
+                // unfiled too (ADR-0005 §8) and is the case a typo in an imported file produces, so
+                // a test for `None` alone would hide exactly the notes a user came here to find.
+                let filed = row.deck.as_ref().is_some_and(|d| {
+                    held.iter()
+                        .any(|id| id.to_canonical().as_str() == d.as_str())
+                });
+                if filed {
+                    return false;
+                }
+            }
         }
         if let Some(tag) = &self.tag
             && !row.tags.iter().any(|t| t == tag)
@@ -106,6 +206,12 @@ pub fn list(coll: &Collection, filter: &Filter) -> Result<Vec<NoteRow>, StoreErr
     // though its own flag is unset (ADR-0005 §7), and so is not listed. A note whose `deck` names no
     // held deck is not in this set — it is unfiled, not deleted, and stays in the list (ADR-0005 §8).
     let deleted_decks = coll.deleted_deck_ids()?;
+
+    // The decks the collection **holds**, which is what decides whether a note is filed at all
+    // (ADR-0005 §8). Read once here rather than per row, and needed only by `DeckFilter::Unfiled` —
+    // but read unconditionally, because a filter that is cheap on three of its arms and reads the
+    // deck table on the fourth is the kind of asymmetry that makes a later reader move the call.
+    let held_decks: Vec<DeckId> = coll.decks()?.into_iter().map(|(id, _)| id).collect();
 
     // Sort key held beside each row: the `position` value (absent sorts first, though creation always
     // assigns one) then the note id, the deterministic tie-break every device computes identically.
@@ -161,7 +267,7 @@ pub fn list(coll: &Collection, filter: &Filter) -> Result<Vec<NoteRow>, StoreErr
             tags,
             fields,
         };
-        if filter.matches(&row) {
+        if filter.matches(&row, &held_decks) {
             rows.push((position, row));
         }
     }
@@ -305,7 +411,7 @@ mod tests {
         let by_deck = list(
             &coll,
             &Filter {
-                deck: Some(french.to_canonical()),
+                deck: DeckFilter::Deck(french),
                 ..Filter::default()
             },
         )
@@ -319,7 +425,7 @@ mod tests {
         let tagged = list(
             &coll,
             &Filter {
-                deck: Some(french.to_canonical()),
+                deck: DeckFilter::Deck(french),
                 tag: Some("verb".to_owned()),
                 ..Filter::default()
             },
@@ -487,5 +593,83 @@ mod tests {
                 .iter()
                 .all(|(name, _)| name != "box" && name != "due")
         );
+    }
+    /// ***Unfiled* means "names no deck the collection holds", not "carries no `deck` attribute"**
+    /// (ADR-0005 §8, ADR-0039 §5).
+    ///
+    /// The two readings differ on exactly the note that matters. A note whose `deck` names an id
+    /// nobody holds is legal, listed, reviewable and **unfiled** — it is what a typo in an imported
+    /// file produces, and it is the note a person opens the unfiled view to find. A filter written
+    /// as `deck.is_none()` would hide it there while still showing it under *All decks*, so the one
+    /// view that exists to surface the problem would be the one view that could not.
+    #[test]
+    fn unfiled_finds_a_note_whose_deck_reference_names_nothing_held() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+
+        let french = coll.create_deck("Français").unwrap();
+        let filed = coll.create_note("basic", &[("Front", "filed")]).unwrap();
+        coll.mutable_set("note", &filed.0, "deck", Some(&french.to_canonical()))
+            .unwrap();
+
+        // No `deck` attribute at all — the other kind of unfiled.
+        coll.create_note("basic", &[("Front", "bare")]).unwrap();
+
+        // A reference to a deck that was never created — the imported-typo case.
+        let dangling = coll.create_note("basic", &[("Front", "dangling")]).unwrap();
+        coll.mutable_set(
+            "note",
+            &dangling.0,
+            "deck",
+            Some("00000000-0000-4000-8000-000000000000"),
+        )
+        .unwrap();
+
+        let unfiled = list(
+            &coll,
+            &Filter {
+                deck: DeckFilter::Unfiled,
+                ..Filter::default()
+            },
+        )
+        .unwrap();
+        let previews: Vec<&str> = unfiled.iter().map(|r| r.preview()).collect();
+        assert!(
+            previews.contains(&"bare") && previews.contains(&"dangling"),
+            "both kinds of unfiled note appear — drew: {previews:?}"
+        );
+        assert!(
+            !previews.contains(&"filed"),
+            "a filed note is not unfiled — drew: {previews:?}"
+        );
+
+        // And the default still narrows nothing, which is the state the `Option` used to conflate
+        // this one with.
+        assert_eq!(
+            list(&coll, &Filter::default()).unwrap().len(),
+            3,
+            "All decks admits every note, filed or not"
+        );
+    }
+
+    /// The count the delete warning names is **the count the screen would show** under that deck
+    /// (ADR-0039 §6). Computed one way, so the number a person is asked to accept and the number
+    /// they can see are the same number.
+    #[test]
+    fn a_decks_note_count_is_what_the_list_shows_for_it() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let deck = coll.create_deck("Français").unwrap();
+        for word in ["un", "deux", "trois"] {
+            let id = coll.create_note("basic", &[("Front", word)]).unwrap();
+            coll.mutable_set("note", &id.0, "deck", Some(&deck.to_canonical()))
+                .unwrap();
+        }
+        coll.create_note("basic", &[("Front", "elsewhere")])
+            .unwrap();
+
+        assert_eq!(count_in_deck(&coll, deck).unwrap(), 3);
     }
 }

@@ -1,0 +1,5 @@
+<!-- The design project's `assets/icons/delete.svg`, verbatim: a 24px grid, 1.5 stroke, round caps
+     and joins. Checked in here because `scripts/build-icon-face.py --check` claims the shipped face
+     IS these sources, and a claim about a file that lives only in the design project is a claim
+     nothing in this repository can test. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="delete"><path d="M5 7h14M9.5 7V4.5h5V7M7.5 7l.9 12.5h7.2L16.5 7"></path></svg>
