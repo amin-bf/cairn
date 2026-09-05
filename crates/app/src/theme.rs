@@ -277,6 +277,14 @@ pub fn card_divider(visuals: &Visuals) -> Color32 {
 /// with no fill at all and drew the right conclusion from it, having drawn only the two ends of the
 /// ramp. A control that keeps a surface keeps looking like a control, which is the property the
 /// judging session turned out to care about most.
+///
+/// **`widgets.inactive.bg_fill` now holds this same value, and that is argued rather than
+/// accidental** (#163). Two slots at one colour is exactly what #149 said must be read as a finding
+/// unless somebody defends it, so: `widgets.inactive` is the rung **every un-wrapped egui widget
+/// inherits**, and an un-wrapped widget is an ordinary control — that is what ADR-0034 §1's *"the
+/// default weight, and everything the user can press that is not the way forward on a card-less
+/// screen"* means when the renderer, not this crate, is doing the drawing. They agree because the
+/// role is the same, and `an_unwrapped_widget_inherits_the_ordinary_weight` pins the agreement.
 pub fn control_fill(visuals: &Visuals) -> Color32 {
     visuals.faint_bg_color
 }
@@ -300,8 +308,26 @@ pub fn control_stroke(visuals: &Visuals) -> Stroke {
 /// ink construction's, not a drift: on a light page there is no room above for a control to be, so
 /// the primary is placed by its gap from the card instead (ADR-0036 §2). That is also why light's
 /// body-on-primary is the tightest reading pair either theme has — see the module header.
+///
+/// **It names its rung instead of riding `widgets.inactive.bg_fill`, and #163 is why.** #134 put it
+/// on that slot following this crate's own ambient-role discipline, and the discipline was the wrong
+/// instrument here: `widgets.inactive` is not merely *a* slot, it is the one **every un-wrapped egui
+/// widget already reads**. Riding it put the loudest role in the most-inherited place, so fifteen
+/// call sites that never went through `controls::` — six raw `ui.button`s and three `ComboBox`es on
+/// Notes, five on the leech screen, one on Settings — drew themselves as primaries, beside a card,
+/// which is exactly what ADR-0033 §3 forbids. Measured off the shipped app: `#2c3237` where an
+/// ordinary control is `#21262a`.
+///
+/// The lesson is narrower than *don't ride slots* and is worth stating: the ambient-role pattern asks
+/// *which slot carries this family* and never asks **who else already reads it**. A slot with its own
+/// population is a broadcast, not a name — so the rung every widget inherits belongs to the role
+/// every widget should have, and the exception is what names a value.
 pub fn primary_fill(visuals: &Visuals) -> Color32 {
-    visuals.widgets.inactive.bg_fill
+    if visuals.dark_mode {
+        STONE_5
+    } else {
+        STONE_L_PRIMARY
+    }
 }
 
 /// The edge of a primary control (ADR-0034 §2) — the stroke rung every widget already rests at.
@@ -453,8 +479,11 @@ pub fn cairn_dark() -> Visuals {
     v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, STONE_11); // body text
     v.widgets.noninteractive.corner_radius = CornerRadius::same(2);
 
-    v.widgets.inactive.bg_fill = STONE_5;
-    v.widgets.inactive.weak_bg_fill = STONE_5;
+    // **The rung every un-wrapped widget inherits, so it is the ordinary one.** #134 rode the
+    // *primary* here, which put the loudest role in the most-inherited slot — every raw `ui.button`
+    // and every `ComboBox` in the app then drew itself as a primary.
+    v.widgets.inactive.bg_fill = STONE_3;
+    v.widgets.inactive.weak_bg_fill = STONE_3;
     v.widgets.inactive.bg_stroke = Stroke::new(1.0, QUIET);
     v.widgets.inactive.fg_stroke = Stroke::new(1.0, STONE_10);
     v.widgets.inactive.corner_radius = CornerRadius::same(2);
@@ -522,8 +551,8 @@ pub fn cairn_light() -> Visuals {
     v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, STONE_L_BODY); // body text
     v.widgets.noninteractive.corner_radius = CornerRadius::same(2);
 
-    v.widgets.inactive.bg_fill = STONE_L_PRIMARY;
-    v.widgets.inactive.weak_bg_fill = STONE_L_PRIMARY;
+    v.widgets.inactive.bg_fill = STONE_L_CONTROL;
+    v.widgets.inactive.weak_bg_fill = STONE_L_CONTROL;
     v.widgets.inactive.bg_stroke = Stroke::new(1.0, QUIET_L);
     v.widgets.inactive.fg_stroke = Stroke::new(1.0, STONE_L_ON_WIDGET);
     v.widgets.inactive.corner_radius = CornerRadius::same(2);
@@ -797,6 +826,34 @@ mod tests {
     ///
     /// This is the test that makes the constants outputs rather than choices. Nothing else stops a
     /// later reader nudging `STONE_L_CARD` a shade because it looked better on their monitor, which
+    /// **An un-wrapped egui widget draws itself as an ordinary control** (#163, ADR-0034 §1).
+    ///
+    /// This is the test that was missing. `widgets.inactive.bg_fill` is what every widget this crate
+    /// does not wrap reads — a raw `ui.button`, a `ComboBox`, anything egui draws on its own — and
+    /// #134 gave that slot to the **primary**, following the ambient-role discipline. Fifteen call
+    /// sites then drew the loudest weight in the palette, beside a card, and nothing failed: the
+    /// source was right at every one of them, the ADR was right, and the two never met.
+    ///
+    /// So the invariant is stated where the leak was, in terms of what a *screen* gets rather than
+    /// what a slot holds: ask for nothing and you get an ordinary control. The primary is the
+    /// exception and has to be asked for by name.
+    #[test]
+    fn an_unwrapped_widget_inherits_the_ordinary_weight() {
+        for (name, v) in [("dark", cairn_dark()), ("light", cairn_light())] {
+            assert_eq!(
+                v.widgets.inactive.bg_fill,
+                control_fill(&v),
+                "{name}: a widget nobody wrapped should be an ordinary control"
+            );
+            assert_ne!(
+                v.widgets.inactive.bg_fill,
+                primary_fill(&v),
+                "{name}: the primary is back on the slot every widget inherits, so every \
+                 un-wrapped control is a primary again"
+            );
+        }
+    }
+
     /// **A card and a text field are not the same material, in either theme** (#163, amending
     /// ADR-0033 §2).
     ///
