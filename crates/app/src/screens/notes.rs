@@ -11,7 +11,7 @@ use crate::{
     Editing, badge, bidi, bidi_layouter, body, box_badge_wording, cards, compact_button, editor,
     field_label, frame, full_width_button, heading, raise_keyboard, sync, text, text_field,
 };
-use crate::{spacing, surface};
+use crate::{controls, spacing, surface};
 
 /// The **Notes** destination (ADR-0021 §2): the browse surface and the app's authoring home. Shows
 /// the editor when one is open, otherwise the note list — create, the text search, and the rows,
@@ -41,6 +41,19 @@ pub(crate) fn notes_screen(
 /// The editor inside its own frame. **Whether the panes sit side by side is asked once and handed
 /// down** — never re-derived further in, where the answer would be about the column rather than the
 /// screen.
+/// The editor's heading — *Edit note* or *New note*, drawn by the screen rather than by the pane
+/// since #163 put *Done* at the foot of the page.
+fn editor_heading(ui: &mut egui::Ui, ed: &Editing) {
+    heading(
+        ui,
+        if ed.note.is_some() {
+            "Edit note"
+        } else {
+            "New note"
+        },
+    );
+}
+
 fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<Editing>) {
     // **No width is measured here any more** (#163). This used to read `viewport_rect().width()` and
     // compare it against a 900px threshold, and the width was never what the question was about: the
@@ -50,6 +63,39 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
     let two_column = frame::editor_is_side_by_side();
     let cap = frame::cap_for(true);
     frame::wide_column(ui, cap, |ui| {
+        // **The heading leads the screen, because *Done* no longer does** (#163). It used to sit
+        // above the heading, so the first thing on the editor was the way out of it.
+        if let Some(ed) = editing.as_ref() {
+            editor_heading(ui, ed);
+            ui.add_space(spacing::gap(2));
+        }
+        if let Some(ed) = editing.as_mut() {
+            editor_pane(ui, coll, ed, two_column);
+        }
+
+        // ***Done* sits on the reach line** — [ADR-0035 §1]'s **fourth** call site, and the first on
+        // Notes. Three tickets inherited *apply §1 here* and none could, because in every
+        // arrangement that kept *Done* at the top the screen's last control was the **Back field**,
+        // and a form whose inputs float at the foot of the page is not an arrangement anyone wants.
+        // So the rule had no target on this screen until the exit moved, which is why #163 judged
+        // the placement and the anchoring as one question rather than two.
+        //
+        // **It also makes §1 say which of two things it means.** Every call site before this one
+        // places something the reader is meant to press *next* — a grade cluster, the leech
+        // entrance, *Back to review*. *Done* is what you press when you are finished. §1 is
+        // therefore read as *the last control on the page* rather than *the way forward*, which is
+        // a distinction it never had to make while it only ever had the first kind.
+        //
+        // The fallback arm needs no branch: `slack_above` returns the stated gap on a page with no
+        // room left, so a long `cloze` note and a short window reach it by arithmetic. Measured at
+        // 166px above the page bottom — §1's 165 plus the stroke — at 1280×800 and 560×860 alike.
+        //
+        // [ADR-0035 §1]: ../../../../docs/adr/0035-the-vertical-anchor.md
+        ui.add_space(frame::slack_above(
+            frame::page_room(ui),
+            controls::HEIGHT,
+            spacing::gap(2),
+        ));
         // Full width is a target on a phone and a distance on a desktop: at 1120 it drew a *Done*
         // wider than the two columns of content beneath it. Same 36px height either way — the map
         // holds hit targets to touch, so only the stretching goes.
@@ -59,19 +105,13 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
             full_width_button(ui, "Done")
         };
         if done.clicked() {
-            // **Settle before letting go of the buffers.** On the frame *Done* is clicked the panes
-            // below are never drawn, so the field the user is inside never produces the response its
-            // autosave is read from (ADR-0021 §7) — and clearing `editing` then throws the edit away
-            // with the buffer. That lost the last field typed, silently, on both arrangements.
+            // **Settle before letting go of the buffers.** Clearing `editing` throws away the field
+            // the user is still inside, which never produced the response its autosave is read from
+            // (ADR-0021 §7). That lost the last field typed, silently, on both arrangements.
             if let Some(ed) = editing {
                 editor::settle_all(coll, ed.note, &ed.kind, &ed.fields, ed.deck);
             }
             *editing = None;
-            return;
-        }
-        ui.add_space(spacing::gap(2));
-        if let Some(ed) = editing {
-            editor_pane(ui, coll, ed, two_column);
         }
     });
 }
@@ -345,16 +385,6 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
 /// (ADR-0025 §4) — and the **card body**, *"what will I be asked"* (`cards`). On a narrow screen the
 /// two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show together.
 fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_column: bool) {
-    heading(
-        ui,
-        if ed.note.is_some() {
-            "Edit note"
-        } else {
-            "New note"
-        },
-    );
-    ui.add_space(spacing::gap(2));
-
     // The card pane and the ambient destructive-edit warning are recomputed from current content
     // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
     // and nothing to auto-scroll to (ADR-0018 §4). A draft not yet born has no stored note, so no
@@ -719,6 +749,67 @@ mod tests {
             walk(&clipped.shape, &mut text);
         }
         text
+    }
+
+    /// **ADR-0035 §1 on the editor, asserted from where the pixels landed** (#163).
+    ///
+    /// *Done* is the screen's last control and sits on the reach line — its **bottom edge** a stated
+    /// distance above the bottom of the page, whatever the note above it contains. That invariant is
+    /// the whole of §1, and three tickets inherited *apply it here* without being able to, because
+    /// while *Done* sat at the top the screen's last control was a text field and §1 had no sensible
+    /// target.
+    ///
+    /// **Nothing fails when this drifts.** Draw *Done* immediately under the form instead and the
+    /// editor renders perfectly, looks deliberate, and is simply wrong by the height of the empty
+    /// page — which is the state the app was in, on this screen, for three tickets running. So the
+    /// assertion is about the rect that came out rather than about the call being present: the
+    /// `slack_above` arithmetic is already pinned in `frame`, and what was missing was a caller.
+    #[test]
+    fn done_sits_on_the_reach_line_whatever_the_note_holds() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let note = coll
+            .create_note("basic", &[("Front", "l'aube"), ("Back", "dawn")])
+            .unwrap();
+
+        // The bottom of the lowest rect drawn — *Done* is the last thing on the page, so this is its
+        // bottom edge. Read off the shapes rather than off a returned `Response`, so a rearrangement
+        // that leaves the call in place and the button somewhere else still fails.
+        fn lowest_rect_bottom(out: &egui::FullOutput) -> f32 {
+            fn walk(shape: &egui::Shape, low: &mut f32) {
+                match shape {
+                    egui::Shape::Rect(r) => *low = low.max(r.rect.bottom()),
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, low)),
+                    _ => {}
+                }
+            }
+            let mut low = f32::MIN;
+            for clipped in &out.shapes {
+                walk(&clipped.shape, &mut low);
+            }
+            low
+        }
+
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
+        crate::typography::install(&ctx);
+        spacing::install(&ctx);
+        let mut editing = Some(Editing::for_note(&coll, note));
+        let mut page_bottom = 0.0;
+        let out = ctx.run_ui(Default::default(), |ui| {
+            // The page is the clip rect the screen is handed, which is what `frame::page_room`
+            // measures against — take it from inside the same `Ui` rather than guessing a window.
+            page_bottom = ui.clip_rect().bottom();
+            editor_screen(ui, &mut coll, &mut editing);
+        });
+
+        let clearance = page_bottom - lowest_rect_bottom(&out);
+        assert!(
+            (clearance - frame::REACH_LINE).abs() <= 2.0,
+            "the editor's last control should end {}px above the page bottom; it ended {clearance:.1}px",
+            frame::REACH_LINE
+        );
     }
 
     /// **ADR-0021 §4, and the half that fails in silence.** *Move* is present on a row, and taking it
