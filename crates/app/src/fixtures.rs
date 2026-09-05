@@ -12,6 +12,14 @@
 //! *prototype*, so the application shipped decided states whose only pictures were of something that
 //! is not the application.
 //!
+//! **The bench is no longer only about Review.** ADR-0021 §9's deck surface needs a collection with a
+//! deck in it, and nothing in the product creates one on its own — ADR-0005 §8 refuses an
+//! auto-created default outright, deliberately, so an empty collection holds zero decks and always
+//! will. The filter, *New deck*, *Delete deck* and the editor's deck dropdown were therefore drawn in
+//! every capture this repository holds with nothing in them at all. So is direction: the seed and
+//! every word list here are French, and the one right-to-left row the design pass has seen cost
+//! eleven storyboard steps driving `xdotool` into a field. [`Fixture::Decks`] is both.
+//!
 //! # The route, and the two it is not
 //!
 //! **A fixture is a pre-made collection, and the shipping seed is left alone.** The harness already
@@ -56,11 +64,12 @@
 //! hundred seconds stay named at the call site and this only ever returns something else when a bench
 //! override is present.
 
+use std::collections::HashSet;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use cairn_core::content::{CardRef, NoteId};
+use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
 use cairn_core::replay::{leeches, replay};
 use cairn_core::scheduling::Grade;
@@ -88,6 +97,18 @@ pub struct Reached {
     pub leeches: usize,
     /// What the Review destination will draw.
     pub state: ReviewState,
+    /// Decks the collection holds and has not deleted — every value the note list's filter dropdown
+    /// offers beside *All decks*, and every value the editor's deck dropdown offers beside *Unfiled*
+    /// (ADR-0021 §9).
+    pub decks: usize,
+    /// Notes the note list draws — its rows, which are notes and never cards (ADR-0021 §2). Not the
+    /// same number as `cards`: a cloze note generates one card per blank, and a deleted note
+    /// generates neither a card nor a row.
+    pub notes: usize,
+    /// How many of those rows are **unfiled** (ADR-0005 §8) — carrying no `deck` reference, or one
+    /// naming no deck the collection currently holds. Both are legal and still reviewable, and the
+    /// note list cannot tell them apart, so neither can this.
+    pub unfiled: usize,
 }
 
 impl std::fmt::Display for Reached {
@@ -96,7 +117,19 @@ impl std::fmt::Display for Reached {
             f,
             "{} cards, {} due, {} new, {} leeches — {:?}",
             self.cards, self.due, self.new, self.leeches, self.state
-        )
+        )?;
+        // The deck clause is written only by a fixture that reached a deck. On the six that reach
+        // none, every note is unfiled by ADR-0005 §8's definition and "0 decks, 25 unfiled" is
+        // therefore true — and reads as a shortfall in a fixture that was never about the deck
+        // surface. Silence is the honest report there.
+        if self.decks > 0 {
+            write!(
+                f,
+                ", {} decks, {} of {} notes unfiled",
+                self.decks, self.unfiled, self.notes
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -158,17 +191,43 @@ pub enum Fixture {
     /// than a third set of intervals to keep true. It is the ordinary case in real use — leeches
     /// earned months ago, cards due today — and it had no picture at all.
     DueWithLeeches,
+    /// **Decks with notes in them, and a script the shipping seed has no word in** — the note list's
+    /// whole deck surface, and a right-to-left row.
+    ///
+    /// It is the first fixture that names a state on **Notes** rather than on Review. No other
+    /// fixture, and no seed, creates a deck at all, so ADR-0021 §9's filter dropdown, *New deck* and
+    /// *Delete deck* have only ever been photographed holding the one value that exists when no deck
+    /// does — *All decks* — and the question of whether a row carries its deck has had nothing to
+    /// carry. The same holds for direction: every capture in this repository is of French, and the
+    /// one right-to-left row the pass has ever seen took eleven storyboard steps driving `xdotool`
+    /// into a field, which is how
+    /// [#150](https://github.com/amin-bf/cairn/issues/150)'s row defect went eleven months unseen.
+    ///
+    /// **The four decks are chosen to span the outcomes, not to look plausible.** More than two, so
+    /// the dropdown is a list rather than a pair; two named long enough to ask what a deck name does
+    /// to whatever has to carry it; one named in Persian, so the dropdown itself holds a
+    /// right-to-left entry; and notes left **unfiled** beside the filed ones, which is a legal state
+    /// (ADR-0005 §8) with its own value in the editor's dropdown and no picture anywhere.
+    ///
+    /// **Its deck ids are fixed and known** — see [`DECKS`], which is the whole reason this cannot
+    /// be built on [`Collection::create_deck`].
+    ///
+    /// **It adds no third claim about `fsrs`.** Every note is scheduled ahead by
+    /// [`SCHEDULED_AHEAD`], the pair [`Fixture::CaughtUp`] already asserts lands, so Review draws the
+    /// caught-up floor and the list is what there is to look at.
+    Decks,
 }
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 6] = [
+    pub const ALL: [Fixture; 7] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
         Fixture::Backlog,
         Fixture::Cloze,
         Fixture::DueWithLeeches,
+        Fixture::Decks,
     ];
 
     /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
@@ -181,6 +240,7 @@ impl Fixture {
             Fixture::Backlog => "backlog",
             Fixture::Cloze => "cloze",
             Fixture::DueWithLeeches => "due-with-leeches",
+            Fixture::Decks => "decks",
         }
     }
 
@@ -193,6 +253,7 @@ impl Fixture {
             Fixture::Backlog => "A backlog",
             Fixture::Cloze => "Cloze cards",
             Fixture::DueWithLeeches => "Due, with leeches",
+            Fixture::Decks => "Decks, and Persian",
         }
     }
 
@@ -205,6 +266,7 @@ impl Fixture {
             Fixture::Backlog => "a framed backlog, and the entrance's shorter-sitting line",
             Fixture::Cloze => "a card that steps down, and a reveal that grows by a whole face",
             Fixture::DueWithLeeches => "the picker with the leech entrance on the reach line",
+            Fixture::Decks => "the deck filter with decks in it, and a right-to-left row",
         }
     }
 
@@ -296,6 +358,28 @@ impl Fixture {
                     cloze_note(coll, text)?;
                 }
             }
+            // **The decks are written before the notes, at ids this module names.** Nothing else in
+            // the bench writes a `deck` entity at all, and nothing anywhere writes one at a known
+            // id — [`Collection::create_deck`] mints a fresh UUIDv4 per call, which is right for a
+            // person making a deck and useless to anything that has to *match* one (see [`DECKS`]).
+            //
+            // The notes are created in table order, so the `position` keys `create_note` assigns run
+            // in that order too and the list draws them as the table reads (ADR-0021 §3). The unfiled
+            // ones are interleaved rather than gathered at the end, because a filed run followed by
+            // an unfiled run is a picture of the table rather than of a collection.
+            Fixture::Decks => {
+                let mut ids = Vec::with_capacity(DECKS.len());
+                for (id, name) in DECKS {
+                    ids.push(deck(coll, id, name)?);
+                }
+                for (filed_under, front, back) in DECK_NOTES {
+                    let card = note(coll, front, back)?;
+                    if let Some(index) = filed_under {
+                        file(coll, card.note, ids[index])?;
+                    }
+                    history.passes(card, SCHEDULED_AHEAD);
+                }
+            }
         }
         history.write(coll, now_ms)?;
 
@@ -363,6 +447,13 @@ impl Fixture {
                     new: 4,
                     leeches: 0,
                     state: ReviewState::NewDeck { new: 4 },
+                    // Four notes behind five cards, stated rather than implied: it is the whole of
+                    // what "one note, two blanks, two cards" means, and `cards` alone cannot say it.
+                    // No deck, so every note is unfiled — the definition, not a shortfall
+                    // (ADR-0005 §8).
+                    decks: 0,
+                    notes: 4,
+                    unfiled: 4,
                 } => None,
                 _ => Some(
                     "five cloze cards from four notes, four of them offered under the \
@@ -381,6 +472,44 @@ impl Fixture {
                 } if due > 20 => None,
                 _ => Some("more than twenty due, no new, and exactly three leeches beside them"),
             },
+            // **Counted off the tables rather than written out, because the tables are the
+            // specification.** A literal here would be a second statement of the same three numbers,
+            // and the one that goes stale silently when somebody adds a deck — which is exactly the
+            // shape #150 named: a rule stated in two places where only one of them is read.
+            //
+            // All three are load-bearing and each pins something different. `decks` pins that the
+            // fixed ids parsed and landed as *held, non-deleted* decks, which is the half
+            // [`Collection::decks`] can refuse without anything failing. `notes` pins that every row
+            // reached the list — a note filed under a deck flagged deleted is derived deleted and
+            // silently absent (ADR-0005 §7). And `unfiled` pins that the notes the table leaves
+            // unfiled are still unfiled: it is the number a typo in a deck id would move, because a
+            // note filed under an id no deck holds is not an error — it is *unfiled*, legally, with
+            // nothing failing (ADR-0005 §8).
+            Fixture::Decks => {
+                let wanted_unfiled = DECK_NOTES
+                    .iter()
+                    .filter(|(deck, ..)| deck.is_none())
+                    .count();
+                match reached {
+                    Reached {
+                        state: ReviewState::CaughtUp,
+                        leeches: 0,
+                        decks,
+                        notes,
+                        unfiled,
+                        ..
+                    } if decks == DECKS.len()
+                        && notes == DECK_NOTES.len()
+                        && unfiled == wanted_unfiled =>
+                    {
+                        None
+                    }
+                    _ => Some(
+                        "every deck and every note the fixture's own tables name, with the \
+                         unfiled ones unfiled, on a collection with nothing due",
+                    ),
+                }
+            }
         };
         match complaint {
             None => Ok(reached),
@@ -412,8 +541,16 @@ pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
     fixture.install(&mut coll, crate::now_ms())
 }
 
-/// What the Review destination would draw against this collection right now — the same four reads
-/// `screens::review` makes each frame, in one place the bench can assert on.
+/// What the two destinations with state behind them would draw against this collection right now —
+/// the same reads `screens::review` and `screens::notes` make each frame, in one place the bench can
+/// assert on.
+///
+/// The deck half is read the way the **note list** reads it and not the way the store does:
+/// [`notes::list`](crate::notes::list) with no filter is the rows, and a row is unfiled when its
+/// reference names no deck [`Collection::decks`] returns. That is the definition ADR-0005 §8 gives
+/// and the one the screen acts on — a note pointing at a deck that was never held and a note
+/// pointing at nothing are the same thing to it, so a fixture cannot be checked against a stricter
+/// one.
 pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
     let today = cairn_core::log::day_number(now_ms, DayScale::default());
     let current = deck::current_cards(coll).map_err(|e| e.to_string())?;
@@ -425,12 +562,25 @@ pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
     let replayed = replay(&current, &refs);
     let queue = session::compose(&current, &positions, &replayed, today, rate, &suspended);
     let reviewed_ever = !replayed.cards.is_empty();
+
+    let decks = coll.decks().map_err(|e| e.to_string())?;
+    let held: HashSet<String> = decks.iter().map(|(id, _)| id.to_canonical()).collect();
+    let rows =
+        crate::notes::list(coll, &crate::notes::Filter::default()).map_err(|e| e.to_string())?;
+    let unfiled = rows
+        .iter()
+        .filter(|row| !row.deck.as_deref().is_some_and(|d| held.contains(d)))
+        .count();
+
     Ok(Reached {
         cards: current.len(),
         due: queue.due.len(),
         new: queue.new.len(),
         leeches: leeches(&replayed, today).len(),
         state: ReviewState::of(&queue, current.len(), reviewed_ever),
+        decks: decks.len(),
+        notes: rows.len(),
+        unfiled,
     })
 }
 
@@ -486,12 +636,21 @@ impl History {
     }
 }
 
+/// **One pass then another, far enough ahead that neither is due again** — the two reviews that put
+/// a card out of the queue without putting it near the leech floor.
+///
+/// Named once because two fixtures now rest on it, and because what it claims is about `fsrs` rather
+/// than about this module: that *Good* twenty days ago followed by *Easy* two days ago buys an
+/// interval longer than two days. [`Fixture::CaughtUp`]'s check is what asserts it, so a fixture
+/// reusing this pair inherits an assertion rather than adding a second one to keep true.
+const SCHEDULED_AHEAD: [(i64, Grade); 2] = [(20, Grade::Good), (2, Grade::Easy)];
+
 /// `count` notes, each reviewed twice and scheduled well ahead — the filler every fixture needs so a
 /// screen has a collection behind it rather than one card.
 fn caught_up(coll: &mut Collection, history: &mut History, count: usize) -> Result<(), String> {
     for (front, back) in CAUGHT_UP_WORDS.iter().take(count) {
         let card = note(coll, front, back)?;
-        history.passes(card, [(20, Grade::Good), (2, Grade::Easy)]);
+        history.passes(card, SCHEDULED_AHEAD);
     }
     Ok(())
 }
@@ -510,6 +669,32 @@ fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, Strin
 /// re-parse it to name them. Nothing in [`Fixture::Cloze`] needs one — it writes no history.
 fn cloze_note(coll: &mut Collection, text: &str) -> Result<NoteId, String> {
     coll.create_note("cloze", &[("Text", text)])
+        .map_err(|e| e.to_string())
+}
+
+/// One deck, **at the id given rather than a minted one** — the whole of what [`DECKS`] buys, and the
+/// one place in the workspace a deck comes into being without drawing entropy.
+///
+/// It writes the same single `name` row [`Collection::create_deck`] writes, onto the same mutable
+/// surface, so the deck it makes is not a special kind of deck: ADR-0005 §4's *"a deck is `{ id,
+/// name }`"* is satisfied by both, and `create_deck` is simply that plus the mint. This reaches past
+/// it rather than through it because minting is exactly the part a fixture must not do.
+///
+/// An id that is not canonical text is refused rather than skipped. The alternative — filing notes
+/// under a deck that was never written — is *legal*: those notes are unfiled (ADR-0005 §8), the list
+/// draws them, and nothing fails.
+fn deck(coll: &mut Collection, id: &str, name: &str) -> Result<DeckId, String> {
+    let deck = DeckId::parse_canonical(id)
+        .ok_or_else(|| format!("deck id '{id}' is not canonical UUID text"))?;
+    coll.mutable_set("deck", &deck.0, "name", Some(name))
+        .map_err(|e| e.to_string())?;
+    Ok(deck)
+}
+
+/// File a note under a deck — its single `deck` reference, in canonical text (ADR-0005 §2, §8), the
+/// same value `editor::set_note_deck` writes when the editor's dropdown changes.
+fn file(coll: &mut Collection, note: NoteId, deck: DeckId) -> Result<(), String> {
+    coll.mutable_set("note", &note.0, "deck", Some(&deck.to_canonical()))
         .map_err(|e| e.to_string())
 }
 
@@ -592,6 +777,121 @@ const CLOZE_TEXTS: [&str; 4] = [
     // face lands on its floor rather than merely one tier down.
     "Le Traité de Versailles, signé le 28 juin 1919 dans la galerie des Glaces, mit fin à l'état \
      de guerre entre l'Allemagne et les {{1::Alliés}}",
+];
+
+/// The decks [`Fixture::Decks`] installs, as `(canonical id, name)` — **fixed, and public because
+/// something outside this module has to be able to name them.**
+///
+/// [`Collection::create_deck`] mints a fresh UUIDv4 per call (ADR-0005 §4), which is correct: a deck
+/// is created once, on one device, and its id is what survives export, import and sync. It is also
+/// why a fixture cannot use it. **Authority follows deck id** ([ADR-0008
+/// §11](../../../docs/adr/0008-the-deck-export-format.md)), so an inbound `.cdeck` exercises
+/// ADR-0022's *update* path — *updating a deck you already have*, *N already yours*, *notes moving in
+/// from X*, *renaming your X to Y*, *X will be left empty* — only when its deck ids **match ids the
+/// collection holds**. Against a collection whose ids were minted at install time, nothing can ever
+/// be built to match, and every import plan this repository can reach reads *new deck*: the six lines
+/// ADR-0022 exists for have never been drawn by anything, and §3's *a line that does not apply is
+/// absent, never shown as zero* is what makes that invisible. From the note list's side the
+/// difference is nil, which is why it has to be written down here rather than noticed there.
+///
+/// The ids are well-formed UUIDv4 text — version `4`, variant `8` — because that is what a deck id is
+/// and an ill-formed one would be a second fact about this collection that no real one shares. They
+/// are deliberately *legible*: `f1c7` reads as `fixt`, and a deck id in a capture, a `.cdeck` or a
+/// log line is then identifiable at a glance as the bench's rather than a person's.
+pub const DECKS: [(&str, &str); 4] = [
+    ("f1c70000-0001-4000-8000-000000000001", "Français"),
+    // Named in Persian, so the **dropdown** carries a right-to-left entry and not only a row. The
+    // filter draws deck names through `bidi`; nothing has ever handed it one to draw.
+    ("f1c70000-0002-4000-8000-000000000002", "فارسی"),
+    // Two long names, which is what asks the question a short one cannot: what a deck name does to
+    // whatever has to carry it — the dropdown's own width, and a row, if #162 decides a row shows its
+    // deck. Long in different ways, one running to a proper noun and one to a conjunction, so a
+    // truncation rule that happens to flatter one is caught by the other.
+    (
+        "f1c70000-0003-4000-8000-000000000003",
+        "Vocabulaire de la Révolution française",
+    ),
+    (
+        "f1c70000-0004-4000-8000-000000000004",
+        "Expressions idiomatiques et proverbes",
+    ),
+];
+
+/// The twenty-five notes [`Fixture::Decks`] installs, as `(deck index into [`DECKS`], Front, Back)`,
+/// **in the order the list draws them** — `create_note` assigns `position` at the end of the authored
+/// order (ADR-0021 §3), so table order is row order.
+///
+/// `None` is **unfiled** (ADR-0005 §8): a note carrying no `deck` reference at all, which is what
+/// declining the editor's deck dropdown leaves behind and is a legal, still-reviewable state with no
+/// picture anywhere.
+///
+/// Twenty-five because that is `backlog`'s number and the rhythm the pass has already judged a list
+/// at — this is the bench's second *list* state, and a list is the one thing that cannot be sized
+/// from three rows.
+///
+/// **The unfiled three are interleaved rather than gathered at the end.** A filed run followed by an
+/// unfiled run is a picture of this table; a collection where the two are mixed is a picture of a
+/// person's.
+const DECK_NOTES: [(Option<usize>, &str, &str); 25] = [
+    (Some(0), "le carrefour", "the crossroads"),
+    (Some(0), "la serrure", "the lock"),
+    (Some(0), "le tiroir", "the drawer"),
+    // Unfiled, first of three, and early enough that *All decks* is visibly not one deck.
+    (None, "le colporteur", "the pedlar"),
+    (Some(0), "la cheminée", "the chimney"),
+    (Some(0), "le trottoir", "the pavement"),
+    // The Persian deck. Short words first, so a right-to-left row is seen at the length the row was
+    // designed for before it is seen at the length that tests it.
+    (Some(1), "کتاب", "book"),
+    (Some(1), "پنجره", "window"),
+    (Some(1), "کتابخانه", "library"),
+    // Latin digits inside a right-to-left run: the neutral-run case, where the digits keep their own
+    // direction inside a paragraph that does not. It is the shape a bidi bug shows up in first and
+    // the one no capture in this repository holds.
+    (Some(1), "پرواز شماره 302", "flight number 302"),
+    // Long enough to wrap at the judging widths, so the right-to-left row is seen doing the thing
+    // #150 measured it failing at — its glyphs drawn 44px outside their own button.
+    (
+        Some(1),
+        "هر که بامش بیش، برفش بیشتر",
+        "the higher the roof, the more the snow",
+    ),
+    (Some(0), "la poignée", "the handle"),
+    (Some(0), "le grenier", "the attic"),
+    (None, "la girouette", "the weather vane"),
+    (Some(2), "la Bastille", "the Bastille"),
+    (Some(2), "le tiers état", "the third estate"),
+    (
+        Some(2),
+        "la Convention nationale",
+        "the National Convention",
+    ),
+    (
+        Some(2),
+        "le Comité de salut public",
+        "the Committee of Public Safety",
+    ),
+    (Some(0), "la lucarne", "the skylight"),
+    // The longest preview in the collection, and a whole sentence rather than a term — the row a
+    // truncation rule has to answer for, in the deck whose name is also long.
+    (
+        Some(3),
+        "Il ne faut pas vendre la peau de l'ours avant de l'avoir tué",
+        "don't count your chickens before they hatch",
+    ),
+    (
+        Some(3),
+        "Chacun voit midi à sa porte",
+        "everyone sees noon at their own door",
+    ),
+    (
+        Some(3),
+        "C'est en forgeant qu'on devient forgeron",
+        "practice makes perfect",
+    ),
+    (Some(0), "le paillasson", "the doormat"),
+    (Some(0), "la véranda", "the veranda"),
+    (None, "l'arrière-boutique", "the back room of a shop"),
 ];
 
 const CAUGHT_UP_WORDS: [(&str, &str); 12] = [
@@ -752,6 +1052,130 @@ mod tests {
         };
         assert!(backlog, "past a comfortable sitting, so Review frames it");
         assert!(due > 20, "past the longest shorter sitting: {due}");
+    }
+
+    /// **The deck fixture's ids are the ids the collection holds** — the property the whole fixture
+    /// exists for and the one thing about it `Fixture::check` cannot see, since a deck at *any* id
+    /// counts as a deck. An id that came out different is invisible from the note list (a deck is a
+    /// deck) and fatal from the file bench's side, because ADR-0008 §11's authority follows deck id
+    /// and an import built to match would take the *new deck* path against a collection that already
+    /// holds the deck.
+    #[test]
+    fn the_deck_fixture_lands_on_the_ids_it_publishes() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Decks.install(&mut coll, NOW_MS).unwrap();
+
+        let held: Vec<(String, String)> = coll
+            .decks()
+            .unwrap()
+            .into_iter()
+            .map(|(id, name)| (id.to_canonical(), name))
+            .collect();
+        let published: Vec<(String, String)> = DECKS
+            .iter()
+            .map(|(id, name)| ((*id).to_owned(), (*name).to_owned()))
+            .collect();
+        for deck in &published {
+            assert!(
+                held.contains(deck),
+                "DECKS names {deck:?}, which the collection does not hold: {held:?}"
+            );
+        }
+        assert_eq!(held.len(), published.len(), "and holds nothing else");
+    }
+
+    /// The deck surface this fixture exists to make drawable, asserted as the **shape** the ticket
+    /// asked for rather than as four numbers: more than two decks so the dropdown is a list, two
+    /// names long enough to ask a question of whatever carries them, and notes left unfiled beside
+    /// the filed ones.
+    ///
+    /// It is the sizes that are pinned, not the strings — a later reader may swap a word without
+    /// consulting anyone, and must not be able to quietly swap the coverage. #133's word list is the
+    /// precedent: trimming a list to three tidy entries removes the coverage without removing
+    /// anything that *looks* like coverage.
+    #[test]
+    fn the_deck_fixture_draws_a_dropdown_that_is_a_list_and_names_that_are_long() {
+        let (_d, _s, mut coll) = empty();
+        let reached = Fixture::Decks.install(&mut coll, NOW_MS).unwrap();
+
+        assert!(
+            reached.decks > 2,
+            "a dropdown of two decks is a pair, not a list: {reached}"
+        );
+        let long = DECKS
+            .iter()
+            .filter(|(_, name)| name.chars().count() > 30)
+            .count();
+        assert!(
+            long >= 2,
+            "two names long enough to test a row that carries one, got {long}"
+        );
+        assert!(
+            reached.unfiled > 0 && reached.unfiled < reached.notes,
+            "some notes unfiled and some filed, so the two states differ on screen: {reached}"
+        );
+        assert_eq!(reached.notes, 25, "a list state is sized like `backlog`'s");
+    }
+
+    /// **A right-to-left row, which is the second half of why this fixture exists.** The note list
+    /// draws a row's *first field* (`NoteRow::preview`), so a Persian note only reaches the surface
+    /// this is about if the Persian is in `Front` — a note whose `Back` is Persian would satisfy any
+    /// count of Persian notes and draw twenty-five Latin rows.
+    ///
+    /// Reaching one used to mean eleven storyboard steps driving `xdotool` into a field, which is how
+    /// #150's row defect went unseen: the French seed has no right-to-left word in it, so there was
+    /// no capture anybody had a reason to take.
+    #[test]
+    fn the_deck_fixture_puts_persian_in_the_field_a_row_draws() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Decks.install(&mut coll, NOW_MS).unwrap();
+
+        // The Arabic script block, which is what "right to left" means for Persian here.
+        let rtl = |s: &str| s.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+        let rows = crate::notes::list(&coll, &crate::notes::Filter::default()).unwrap();
+        let persian: Vec<&crate::notes::NoteRow> =
+            rows.iter().filter(|r| rtl(r.preview())).collect();
+        assert!(
+            persian.len() > 1,
+            "one right-to-left row is a specimen; several are a list to judge: {}",
+            persian.len()
+        );
+        assert!(
+            persian.iter().any(|r| r.preview().chars().count() > 20),
+            "and one of them long enough to wrap at the judging widths"
+        );
+        assert!(
+            DECKS.iter().any(|(_, name)| rtl(name)),
+            "the dropdown carries a right-to-left entry too, not only the rows"
+        );
+    }
+
+    /// Every deck the fixture files a note under is a deck it **holds**. A `deck` reference naming no
+    /// held deck is legal and silent — the note is unfiled (ADR-0005 §8), the list draws it, and
+    /// nothing fails — so a typo in one id would move a note out of its deck with no error anywhere.
+    #[test]
+    fn every_deck_the_note_table_files_under_exists() {
+        for (filed_under, front, _) in DECK_NOTES {
+            if let Some(index) = filed_under {
+                assert!(
+                    index < DECKS.len(),
+                    "'{front}' is filed under deck {index}, and there are {} decks",
+                    DECKS.len()
+                );
+            }
+        }
+        let ids: HashSet<&str> = DECKS.iter().map(|(id, _)| *id).collect();
+        assert_eq!(
+            ids.len(),
+            DECKS.len(),
+            "two decks may share a name, never an id"
+        );
+        for (id, _) in DECKS {
+            assert!(
+                cairn_core::content::DeckId::parse_canonical(id).is_some(),
+                "'{id}' is not canonical UUID text, so no note can be filed under it"
+            );
+        }
     }
 
     /// The bench refuses to write into a collection that already holds rows. A fixture layered on
