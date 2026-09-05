@@ -38,18 +38,17 @@ pub(crate) fn notes_screen(
     });
 }
 
-/// The editor inside its own frame. **Whether the panes sit side by side is decided here, against
-/// the window, and handed down** — never re-derived from `ui.available_width()` further in, which
-/// under the page frame is the *column's* width and would put every desktop into the phone's toggle
-/// (`frame::TWO_COLUMN_MIN_WIDTH`).
+/// The editor inside its own frame. **Whether the panes sit side by side is asked once and handed
+/// down** — never re-derived further in, where the answer would be about the column rather than the
+/// screen.
 fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<Editing>) {
-    // `viewport_rect`, not `available_width` and not `content_rect`. The width the whole window has
-    // is the thing this decision is about; `available_width` is the frame's column, which is the
-    // trap, and the safe-area insets `content_rect` subtracts are vertical on every device that has
-    // them — so taking them off would make an arrangement decision out of a notch.
-    let window = ui.ctx().viewport_rect().width();
-    let two_column = window >= frame::TWO_COLUMN_MIN_WIDTH;
-    let cap = frame::cap_for(true, window);
+    // **No width is measured here any more** (#163). This used to read `viewport_rect().width()` and
+    // compare it against a 900px threshold, and the width was never what the question was about: the
+    // toggle below exists because a soft keyboard eats *height*, and at 880 on a desktop there is no
+    // keyboard and 450px going spare. Dragged down by hand to 118px per pane the two columns stayed
+    // readable, so there is no width to find — `frame::editor_is_side_by_side` asks the platform.
+    let two_column = frame::editor_is_side_by_side();
+    let cap = frame::cap_for(true);
     frame::wide_column(ui, cap, |ui| {
         // Full width is a target on a phone and a distance on a desktop: at 1120 it drew a *Done*
         // wider than the two columns of content beneath it. Same 36px height either way — the map

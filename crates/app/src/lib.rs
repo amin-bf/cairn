@@ -592,10 +592,7 @@ impl eframe::App for CairnApp {
             // The row aligns to whatever column the destination beneath it is using, which on every
             // screen but a wide editor is the measure. Both sides ask `frame::cap_for` rather than
             // naming a number, so the nav cannot drift out of step with the content (`frame`).
-            let cap = frame::cap_for(
-                self.dest == Destination::Notes && self.editing.is_some(),
-                ui.ctx().viewport_rect().width(),
-            );
+            let cap = frame::cap_for(self.dest == Destination::Notes && self.editing.is_some());
             egui::Panel::top("nav")
                 .resizable(false)
                 .show(ui, |ui| nav_bar(ui, &mut self.dest, cap));
