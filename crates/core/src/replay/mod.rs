@@ -497,8 +497,18 @@ pub fn leeches(replayed: &Replayed, today: i64) -> Vec<Leech> {
         })
         .collect();
 
-    // Ranked worst first (ADR-0010 §4): most failure days, then most recent failure, then a stable
-    // card-identity tie-break so two devices reach the same order without communicating.
+    // Ranked worst first (ADR-0010 §4): most failure days, then most recent failure, then a
+    // card-identity tie-break.
+    //
+    // **Which stability that last key has is worth stating, because assuming the other one cost a
+    // ticket.** A `NoteId` is generated once and travels with the note, so it is stable across
+    // *devices sharing a collection* — which is what two devices reaching the same order without
+    // communicating actually need, and all this key was ever for. It is **not** stable across
+    // *builds of the same rows*: the id is `uuid_v4` from the OS, so a collection constructed twice
+    // from one definition gets fresh ids and this key orders the two runs differently. Anything
+    // that needs a reproducible order — the fixture bench above all — has to break the two keys
+    // above rather than lean on this one, which is what #160 changed after four captures of the
+    // leech screen turned out to be photographs of a coin flip.
     out.sort_by(|a, b| {
         b.failure_days
             .cmp(&a.failure_days)

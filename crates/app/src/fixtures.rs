@@ -297,19 +297,17 @@ impl Fixture {
             Fixture::CaughtUp => caught_up(coll, &mut history, 12)?,
             Fixture::Leeches => {
                 caught_up(coll, &mut history, 9)?;
-                // A leech that is **not due**: four failure days inside the ninety-day window, then
-                // a recovery long enough to schedule it ahead. Both halves are needed — a card whose
-                // *last* grade is a failure is due whatever its interval says (`session::compose`),
-                // so a leech that simply failed its way over the floor cannot coexist with a
-                // caught-up screen, and one that failed four times still has too little stability to
-                // leave the queue on a single pass.
-                for (front, back) in LEECH_WORDS {
-                    let card = note(coll, front, back)?;
-                    history.fails(card, [80, 60, 40, 20]);
-                    history.passes(
-                        card,
-                        [(18, Grade::Good), (10, Grade::Good), (3, Grade::Easy)],
-                    );
+                // Leeches that are **not due**: failure days inside the ninety-day window, then a
+                // recovery long enough to schedule each one ahead. Both halves are needed — a card
+                // whose *last* grade is a failure is due whatever its interval says
+                // (`session::compose`), so a leech that simply failed its way over the floor cannot
+                // coexist with a caught-up screen, and a card that has failed that often still has
+                // too little stability to leave the queue on a single pass. The three records
+                // differ from each other on purpose; [`LEECHES`] is where that is argued.
+                for leech in &LEECHES {
+                    let card = note(coll, leech.front, leech.back)?;
+                    history.fails(card, leech.fails);
+                    history.passes(card, leech.passes);
                 }
             }
             Fixture::Crossing => {
@@ -318,7 +316,7 @@ impl Fixture {
                 // one more *Forgot*, on a fourth distinct day, takes it over the floor during the
                 // sitting rather than before it.
                 let card = note(coll, "l'écureuil", "the squirrel")?;
-                history.fails(card, [40, 30, 20]);
+                history.fails(card, &[40, 30, 20]);
             }
             Fixture::Backlog => {
                 // One pass, long enough ago that the interval it bought has expired several times
@@ -326,27 +324,23 @@ impl Fixture {
                 // person who kept failing.
                 for (front, back) in BACKLOG_WORDS {
                     let card = note(coll, front, back)?;
-                    history.passes(card, [(60, Grade::Good)]);
+                    history.passes(card, &[(60, Grade::Good)]);
                 }
             }
             // **A composition of the two above, deliberately re-tuning neither.** The leeches are
-            // `Leeches`'s exactly — four failure days inside the window, then a recovery long
-            // enough to schedule them ahead — so they are leeches *and not due*, which is what lets
-            // due cards decide the screen. The due half is `Backlog`'s expired pass. Both sets of
-            // intervals are already asserted by their own fixtures, so this one adds no third claim
-            // about `fsrs` to keep true.
+            // `Leeches`'s exactly — [`LEECHES`] entire, ranks and all — so they are leeches *and not
+            // due*, which is what lets due cards decide the screen. The due half is `Backlog`'s
+            // expired pass. Both sets of intervals are already asserted by their own fixtures, so
+            // this one adds no third claim about `fsrs` to keep true.
             Fixture::DueWithLeeches => {
                 for (front, back) in BACKLOG_WORDS {
                     let card = note(coll, front, back)?;
-                    history.passes(card, [(60, Grade::Good)]);
+                    history.passes(card, &[(60, Grade::Good)]);
                 }
-                for (front, back) in LEECH_WORDS {
-                    let card = note(coll, front, back)?;
-                    history.fails(card, [80, 60, 40, 20]);
-                    history.passes(
-                        card,
-                        [(18, Grade::Good), (10, Grade::Good), (3, Grade::Easy)],
-                    );
+                for leech in &LEECHES {
+                    let card = note(coll, leech.front, leech.back)?;
+                    history.fails(card, leech.fails);
+                    history.passes(card, leech.passes);
                 }
             }
             Fixture::Cloze => {
@@ -377,7 +371,7 @@ impl Fixture {
                     if let Some(index) = filed_under {
                         file(coll, card.note, ids[index])?;
                     }
-                    history.passes(card, SCHEDULED_AHEAD);
+                    history.passes(card, &SCHEDULED_AHEAD);
                 }
             }
         }
@@ -605,15 +599,15 @@ struct History {
 
 impl History {
     /// Grade this card *Forgot* on each of these days — one **failure day** apiece (ADR-0010 §2).
-    fn fails<const N: usize>(&mut self, card: CardRef, days_ago: [i64; N]) {
-        for day in days_ago {
+    fn fails(&mut self, card: CardRef, days_ago: &[i64]) {
+        for &day in days_ago {
             self.rows.push((day, card, Grade::Forgot));
         }
     }
 
     /// Grade this card at the given days and grades, oldest first.
-    fn passes<const N: usize>(&mut self, card: CardRef, reviews: [(i64, Grade); N]) {
-        for (day, grade) in reviews {
+    fn passes(&mut self, card: CardRef, reviews: &[(i64, Grade)]) {
+        for &(day, grade) in reviews {
             self.rows.push((day, card, grade));
         }
     }
@@ -650,7 +644,7 @@ const SCHEDULED_AHEAD: [(i64, Grade); 2] = [(20, Grade::Good), (2, Grade::Easy)]
 fn caught_up(coll: &mut Collection, history: &mut History, count: usize) -> Result<(), String> {
     for (front, back) in CAUGHT_UP_WORDS.iter().take(count) {
         let card = note(coll, front, back)?;
-        history.passes(card, SCHEDULED_AHEAD);
+        history.passes(card, &SCHEDULED_AHEAD);
     }
     Ok(())
 }
@@ -909,10 +903,93 @@ const CAUGHT_UP_WORDS: [(&str, &str); 12] = [
     ("le seuil", "the threshold"),
 ];
 
-const LEECH_WORDS: [(&str, &str); 3] = [
-    ("néanmoins", "nevertheless"),
-    ("désormais", "from now on"),
-    ("d'ailleurs", "besides"),
+/// One leech, and the record that ranks it.
+struct LeechSpec {
+    front: &'static str,
+    back: &'static str,
+    /// Days before now on which the card was graded *Forgot* — one **failure day** each, and the
+    /// primary rank key is how many of them there are (`replay::leeches`).
+    fails: &'static [i64],
+    /// The recovery that takes the card back out of the queue, oldest first. A card whose latest
+    /// grade is a failure is due whatever its interval says, so every leech here has to pass its
+    /// way out; the count also feeds the caption's second number, which is **not** a rank key.
+    passes: &'static [(i64, Grade)],
+}
+
+/// The three leeches, **deliberately unequal, and unequal in two different ways**.
+///
+/// They were identical until [#160](https://github.com/amin-bf/cairn/issues/160) — four failure days
+/// and the same last failure day apiece — so both of `replay::leeches`' rank keys tied and the order
+/// fell through to the card-identity tie-break. That key is stable across *devices sharing a
+/// collection* and freshly random across *builds of a fixture*, so every capture of this screen the
+/// repository held showed an order the run had picked at random, and a re-run produced a diff that
+/// read as a change and was not one.
+///
+/// The spread is chosen to photograph the rank **as it actually behaves**, not to make it look
+/// easy. `néanmoins` is worst on the visible key and leads. `désormais` and `d'ailleurs` **tie on
+/// it** and are separated only by which failed more recently — a key the screen does not draw — so
+/// the pair is the honest test of whether the caption can carry the order at all
+/// ([#156](https://github.com/amin-bf/cairn/issues/156)). Giving all three distinct counts would
+/// have hidden that question behind a fixture rigged to answer it.
+///
+/// Review counts differ too, and their **order is chosen against the rank**: the tied pair reads
+/// *"4 bad days · 9 reviews"* above *"4 bad days · 10 reviews"*, so one picture shows that the
+/// caption's second number is context and not the key that ordered the list. Ordering them the
+/// other way would have let a reader read the screen correctly for the wrong reason.
+///
+/// # The recoveries are sized, not guessed
+///
+/// Each record ends in enough successful reviews to put the card **7 to 14 days** clear of due, and
+/// that margin is the specification rather than slack. `scheduling`'s interval fuzz is seeded from
+/// the `CardRef` (ADR-0027 §5, ADR-0001 §7) — the same identity that is stable across devices and
+/// **random across builds** — so a leech scheduled close to the edge is due on some builds and not
+/// on others, and the fixture's own check then fails intermittently. Measured over 200 builds
+/// apiece, the recovery this fixture shipped before #160 left as little as **two days** of margin;
+/// these leave seven at worst. A future edit here should re-measure rather than reason: the
+/// intervals are `fsrs`'s, not ours.
+const LEECHES: [LeechSpec; 3] = [
+    // Six failure days: worst on the primary key, and first whatever the other two do.
+    LeechSpec {
+        front: "néanmoins",
+        back: "nevertheless",
+        fails: &[86, 71, 57, 43, 29, 15],
+        passes: &[
+            (36, Grade::Good),
+            (25, Grade::Good),
+            (16, Grade::Good),
+            (9, Grade::Easy),
+            (4, Grade::Easy),
+            (1, Grade::Easy),
+        ],
+    },
+    // Four failure days, the more recent last failure — second, on nine reviews.
+    LeechSpec {
+        front: "désormais",
+        back: "from now on",
+        fails: &[79, 62, 45, 22],
+        passes: &[
+            (40, Grade::Good),
+            (28, Grade::Good),
+            (17, Grade::Good),
+            (8, Grade::Easy),
+            (3, Grade::Easy),
+        ],
+    },
+    // Four failure days, the older last failure — third, on *more* reviews than the row above it,
+    // and the screen cannot say why it is third.
+    LeechSpec {
+        front: "d'ailleurs",
+        back: "besides",
+        fails: &[84, 68, 52, 36],
+        passes: &[
+            (30, Grade::Good),
+            (20, Grade::Good),
+            (13, Grade::Good),
+            (7, Grade::Good),
+            (3, Grade::Good),
+            (1, Grade::Easy),
+        ],
+    },
 ];
 
 const BACKLOG_WORDS: [(&str, &str); 25] = [
@@ -1003,6 +1080,140 @@ mod tests {
         let reached = Fixture::Leeches.install(&mut coll, NOW_MS).unwrap();
         assert_eq!(reached.state, ReviewState::CaughtUp);
         assert_eq!(reached.leeches, 3);
+    }
+
+    /// One ranked leech, read the way `screens::review` reads it — the prompt, the two rank keys,
+    /// and the review count the caption's second number comes from.
+    #[derive(Debug, PartialEq, Eq)]
+    struct RankedLeech {
+        prompt: String,
+        failure_days: u32,
+        last_failure_day: i64,
+        reviews: u32,
+    }
+
+    fn ranked_leeches(coll: &Collection, now_ms: i64) -> Vec<RankedLeech> {
+        let today = cairn_core::log::day_number(now_ms, DayScale::default());
+        let current = deck::current_cards(coll).unwrap();
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&current, &refs);
+        leeches(&replayed, today)
+            .into_iter()
+            .map(|leech| RankedLeech {
+                prompt: deck::render(coll, leech.card)
+                    .unwrap()
+                    .expect("a leech's card is still generated")
+                    .prompt,
+                failure_days: leech.failure_days,
+                last_failure_day: leech.last_failure_day,
+                reviews: replayed
+                    .cards
+                    .get(&leech.card)
+                    .map_or(0, |state| state.review_count),
+            })
+            .collect()
+    }
+
+    /// **The leech order is a fact about the collection, and the same fact on every build.**
+    ///
+    /// Three things are pinned, because the defect [#160](https://github.com/amin-bf/cairn/issues/160)
+    /// found had three faces. The **order** is stated, so a fixture edit that reshuffles the screen
+    /// says so here rather than in a capture nobody diffs. The two rank keys are **distinct per
+    /// card**, which is the property that keeps the order reproducible — `replay::leeches` falls
+    /// through to card identity when they tie, and identity is `uuid_v4` per build, so a tied
+    /// fixture ranks differently every run. And no two **captions** are the same string, so the
+    /// three rows can be told apart in a picture.
+    ///
+    /// The second install is the half that can actually see the old defect: a single-install
+    /// assertion against three tied leeches passes one run in six.
+    #[test]
+    fn the_leeches_rank_in_a_stated_order_and_the_same_one_every_build() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Leeches.install(&mut coll, NOW_MS).unwrap();
+        let ranked = ranked_leeches(&coll, NOW_MS);
+
+        let order: Vec<&str> = ranked.iter().map(|l| l.prompt.as_str()).collect();
+        assert_eq!(
+            order,
+            ["néanmoins", "désormais", "d'ailleurs"],
+            "worst first (ADR-0010 §4): six failure days, then four and four split by recency"
+        );
+
+        let keys: HashSet<(u32, i64)> = ranked
+            .iter()
+            .map(|l| (l.failure_days, l.last_failure_day))
+            .collect();
+        assert_eq!(
+            keys.len(),
+            3,
+            "two leeches tying on both rank keys hand the order to a per-build random id"
+        );
+
+        let captions: Vec<(u32, u32)> =
+            ranked.iter().map(|l| (l.failure_days, l.reviews)).collect();
+        assert_eq!(
+            captions,
+            [(6, 12), (4, 9), (4, 10)],
+            "the screen draws '{{days}} bad days · {{reviews}} reviews' and nothing else per row: \
+             three distinct strings, and the review count deliberately *ascending* across the \
+             tied pair so it cannot be mistaken for what ordered them"
+        );
+
+        let (_d2, _s2, mut again) = empty();
+        Fixture::Leeches.install(&mut again, NOW_MS).unwrap();
+        assert_eq!(
+            ranked_leeches(&again, NOW_MS),
+            ranked,
+            "the same definition installed twice must rank the same way"
+        );
+    }
+
+    /// **Every leech sits well clear of due, and the margin is the assertion.**
+    ///
+    /// `Fixture::check` already refuses a `leeches` collection with anything due, but it only ever
+    /// sees the one build it ran on. The interval fuzz is seeded from the `CardRef` (ADR-0027 §5),
+    /// which is fresh per build, so a leech scheduled one day clear passes that check on most runs
+    /// and fails on the rest — an intermittent failure whose cause is three files away. This asserts
+    /// the *distance*, which is a property of the record rather than of the build that read it.
+    #[test]
+    fn every_leech_is_scheduled_days_clear_of_due_not_hours() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Leeches.install(&mut coll, NOW_MS).unwrap();
+        let today = cairn_core::log::day_number(NOW_MS, DayScale::default());
+        let current = deck::current_cards(&coll).unwrap();
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let replayed = replay(&current, &refs);
+
+        for leech in leeches(&replayed, today) {
+            let state = &replayed.cards[&leech.card];
+            let margin = state.due_day - today;
+            let prompt = deck::render(&coll, leech.card).unwrap().unwrap().prompt;
+            assert!(
+                margin >= 5,
+                "{prompt} is {margin} days from due — the fuzz swings about three, so this \
+                 fixture would install differently on different builds"
+            );
+        }
+    }
+
+    /// [`Fixture::DueWithLeeches`] composes [`Fixture::Leeches`]' leeches unchanged, so it inherits
+    /// the order rather than re-tuning one. Pinned because the composition is the *reason* that
+    /// fixture exists, and a copy that drifted would put a second, differently-ranked leech screen
+    /// behind a picker that looks identical.
+    #[test]
+    fn the_composed_fixture_ranks_its_leeches_the_same_way() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Leeches.install(&mut coll, NOW_MS).unwrap();
+        let (_d2, _s2, mut composed) = empty();
+        Fixture::DueWithLeeches
+            .install(&mut composed, NOW_MS)
+            .unwrap();
+        assert_eq!(
+            ranked_leeches(&composed, NOW_MS),
+            ranked_leeches(&coll, NOW_MS)
+        );
     }
 
     /// The crossing fixture leaves its card **one failure day short**, and one *Forgot* today takes

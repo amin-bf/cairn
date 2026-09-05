@@ -4,10 +4,16 @@
 # the screen carries a control at all, and therefore the only state in which ADR-0035 §1's reach line
 # has a second call site to be judged against (#155 owes that amendment).
 #
-# Reaching it needs a card **failed four times and then recovered**: a card whose latest grade is a
-# failure is due whatever its interval says, so a leech that merely failed its way over the floor
+# Reaching it needs a card **failed over the floor and then recovered**: a card whose latest grade is
+# a failure is due whatever its interval says, so a leech that merely failed its way over the floor
 # would put the screen back into the card state. That is why this is a fixture and not a storyboard
 # that grades a few cards.
+#
+# The three records are **deliberately unequal** — six failure days, then four and four split by
+# which failed more recently (#160). They were identical until then, so both of `replay::leeches`'
+# rank keys tied and the order fell through to a card identity that is fresh on every build: the two
+# widths of one run disagreed with each other, and this screen was the picture that showed it. What
+# is photographed here is the rank, so the rank has to be a fact about the collection.
 fixture leeches
 # The first click is spent giving the window keyboard focus and never reaches a widget, so it is
 # aimed at empty space.
