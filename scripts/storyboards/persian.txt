@@ -28,12 +28,12 @@ mousemove %LX+86% 11 click 1
 sleep 1.2
 mousemove %CX% 87 click 1
 sleep 1.5
-mousemove %EX+30% 300 click 1
+mousemove %EX+30% 229 click 1
 sleep 0.8
 sh xdotool type --delay 120 'سگ در خانه است.'
 sleep 1.5
 shot 08-editor-persian-front
-mousemove %EX+30% 335 click 1
+mousemove %EX+30% 265 click 1
 sleep 0.8
 sh xdotool type --delay 120 'the dog is in the house'
 sleep 1.5
@@ -43,9 +43,15 @@ shot 09-editor-persian-and-latin
 # it (ADR-0032 §1). Client-stack rule 7 makes this worth a capture rather than an assumption: within
 # a family the *first* matching face wins, more than one shipped face carries the Arabic script, and
 # a glyph existing is not the same as the right face drawing it. Nothing but looking tells them apart.
-mousemove %EX+75% 250 click 1
+#
+# **It needs no tap now.** This used to click the `Write | Cards` toggle, because at 560 the editor
+# folded its panes; #163 made that fold a question about the platform's soft keyboard rather than
+# about the window, so the desktop draws both panes at every width and the card is already on screen.
+# Blurring into empty page is what settles the field and redraws it (ADR-0021 §7).
+mousemove %CX% 500 click 1
 sleep 1.2
 shot 11-cards-persian-display
-mousemove %EX+60% 48 click 1
+# *Done* is on ADR-0035 §1's reach line since #163, so its y follows the window height.
+mousemove %EX+60% %BY-184% click 1
 sleep 1.5
 shot 10-notes-list-with-persian

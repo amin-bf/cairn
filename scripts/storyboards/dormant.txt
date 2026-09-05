@@ -17,15 +17,19 @@ sleep 1.2
 shot 1-list
 # The six filler notes come first (authored order, ADR-0021 §3), so the three notes this fixture is
 # about are rows seven, eight and nine — at y=252 + 27 per row.
+#
+# Leaving the editor is `%BY-184%`, not a literal: #163 put *Done* on ADR-0035 §1's reach line, so its
+# y is a function of the window height. A literal clicked the heading and the next shot was the same
+# note under the next note's name.
 mousemove %LX+24% 414 click 1
 sleep 1.5
 shot 2-pruned-cloze
-mousemove %EX+60% 49 click 1
+mousemove %EX+60% %BY-184% click 1
 sleep 1.2
 mousemove %LX+24% 441 click 1
 sleep 1.5
 shot 3-nothing-live
-mousemove %EX+60% 49 click 1
+mousemove %EX+60% %BY-184% click 1
 sleep 1.2
 mousemove %LX+24% 468 click 1
 sleep 1.5
