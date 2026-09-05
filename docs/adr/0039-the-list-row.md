@@ -44,18 +44,37 @@ here* with the notes set as plain body text between them, so the targets outweig
 were placed among.
 
 **And the thing that was not a question.** The note list never received ADR-0034. Measured at
-1280×800 against the *Create note* slab six pixels above the rows on the same page:
+1280×800 against the *Create note* slab six pixels above the rows on the same page, **at the time
+this ticket opened**:
 
 | | fill | against the page | height |
 |---|---|---|---|
 | *Create note* — `controls::wide` | `#21262a` | 1.102:1 — ADR-0034 §1 | **36px** |
-| a note row's three buttons | `#2c3237` | 1.313:1 — `widgets.inactive` | **19px** |
+| a note row's three buttons | `#2c3237` | 1.313:1 | **19px** |
 
-`widgets.inactive` is the rung ADR-0034 moved every control off, and 36px is the map's *hit targets
-follow touch, never the pointer*. Seventy-five controls, all at a weight the system abolished and a
-little over half the height it requires. **The other eleven bare `ui.button` call sites in the crate
-are all list rows too** — five of them on the leech screen — which makes this a rule stated for
-every caller that only some callers followed, and not a note-list defect.
+Seventy-five controls, at a weight the system had abolished and a little over half the height it
+requires. **The other eleven bare `ui.button` call sites in the crate were all list rows too** —
+five of them on the leech screen — which made this a rule stated for every caller that only some
+callers followed, and not a note-list defect.
+
+**Half of it was fixed on `main` while this ticket was in flight, and by a better fix than the one
+here.** [#163](https://github.com/amin-bf/cairn/issues/163) found the cause of the *weight* and it
+was one assignment: #134 had given `primary_fill` the ambient slot `widgets.inactive.bg_fill`, which
+is not merely *a* slot but **the one every un-wrapped egui widget already reads** — so riding it put
+the loudest role in the most-inherited place and fifteen call sites became primaries without anybody
+writing a colour. That landed as `a13e4cba`, and it quieted these seventy-five rows and the leech
+screen's before either ticket touched them.
+
+So what this section is about is the **height**, and only the height. A bare `ui.button` still takes
+egui's `spacing.interact_size.y` of 18 and draws 19px, because `controls::HEIGHT` has a name and no
+ambient slot — which is the same shape one value family over, and is
+[#175](https://github.com/amin-bf/cairn/issues/175)'s. Going through `controls` fixes it here; the
+slot fixes it everywhere.
+
+**That correction is itself the finding worth keeping**: this ADR's headline measurement decayed
+between the sitting and the writing, in the direction of *someone else fixed it properly*. The table
+above is kept as measured rather than restated, because a ticket that quietly re-describes the world
+it found is how a record stops being evidence.
 
 Judged in one sitting against the prototype `prototypes/issue-162`, on the fixture
 [#161](https://github.com/amin-bf/cairn/issues/161) built: four decks, twenty-five notes, three of
@@ -273,13 +292,36 @@ clause; `the_mark_is_a_cap_height_of_stones_and_no_wider_than_it_draws` still pi
 
 ## Consequences
 
-**The leech screen inherits §1 and has not applied it.** Five of the eleven remaining bare
-`ui.button` call sites are `screens/review.rs`'s leech rows, which carry the same defect at the same
-two numbers. `controls::row` exists in `controls` rather than in `screens/notes.rs` precisely so
-[#156](https://github.com/amin-bf/cairn/issues/156) adopts it rather than inventing a second answer —
-the map's Notes require these two screens to compare answers, and a file row and a note row
-disagreeing about what an unlabelled picture may mean would be the icon rule failing its first two
-tests in opposite directions.
+**The leech screen answered the same question first and answered it differently, and that has to
+be recorded rather than reconciled away.** [#156](https://github.com/amin-bf/cairn/issues/156) landed
+in [#174](https://github.com/amin-bf/cairn/pull/174) while this ticket was in the sitting, and its
+row is a **card with worded controls** — it states in `leech_row`'s own doc comment that #149's
+exception *"**lost** when it was drawn: repetition teaches a symbol that already exists and cannot
+invent one, and *Suspend* has no such symbol."*
+
+This ADR's §1 says the exception **held**. Both were judged by looking, at first-hand builds, on the
+two screens #149 named — and the map's Notes anticipated exactly this: *a file row and a note row
+disagreeing about what an unlabelled picture may mean would be the rule failing its first two tests
+in opposite directions.*
+
+**They are not actually opposed, and the reconciliation is the finding.** *Delete* is a bin and
+*move* is a double-headed arrow: both are conventions a reader arrives already holding, so repetition
+only has to attach an existing symbol to a place. *Suspend* has no such convention — a pause bar
+means *paused*, not *not shown in review* — so repetition would have to **teach a symbol as well as
+a location**, which is a different and much larger claim. So the rule is neither *icons on rows* nor
+*words on rows*:
+
+> **Repetition pays for the learning where the symbol already exists. Where it would have to be
+> invented, repetition is not enough and the word stays.**
+
+Neither ticket could have written that alone, and neither should now write it alone: it belongs to
+whichever of them, or of [#167](https://github.com/amin-bf/cairn/issues/167), next has cause to
+amend #149's rule with two builds behind it instead of none.
+
+**`controls::row` is still in `controls` rather than in `screens/notes.rs`**, and now for a second
+reason: the leech screen took a different *drawing* but the same *material question*, and the next
+list — the file surface — should have to choose between two existing answers rather than invent a
+third.
 
 **The list is longer, and that was judged rather than absorbed.** Twenty-five rows go from 667px to
 1092px at the system's material, or 1167px carrying a deck — about twenty visible rows at 1280×800

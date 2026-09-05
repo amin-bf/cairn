@@ -1,6 +1,6 @@
 # The note list, after
 
-Twenty-nine captures of the note list as [ADR-0039](../../adr/0039-the-list-row.md) leaves it,
+Twenty-eight captures of the note list as [ADR-0039](../../adr/0039-the-list-row.md) leaves it,
 resolving [#162](https://github.com/amin-bf/cairn/issues/162). The *before* is
 [`../notes-before-2026-09-05/`](../notes-before-2026-09-05/), and the throwaway prototype the
 decisions were judged against is the tag `prototypes/issue-162`:
@@ -36,10 +36,16 @@ values that exist when no deck does. The deck surface lives in the other file.
 Compare against `../notes-before-2026-09-05/1280x800/01-list.png`. Three things changed and only one
 of them was a design question.
 
-**The row is 36px on `control_fill`**, where it was 19px on `widgets.inactive`. That is ADR-0034
-reaching this screen for the first time — seventy-five controls that had never had it — and it is a
-repair rather than a choice. It costs density: twenty-five rows go from 667px to 1092px, or 1167px
-carrying a deck.
+**The row is 36px**, where it was 19px. That is ADR-0034's height reaching this screen for the first
+time — seventy-five controls that had never had it — and it is a repair rather than a choice. It
+costs density: twenty-five rows go from 667px to 1092px, or 1167px carrying a deck.
+
+The row's *weight* was repaired on `main` mid-flight by
+[#163](https://github.com/amin-bf/cairn/issues/163) (`a13e4cba`), which found that
+`widgets.inactive.bg_fill` — the slot every un-wrapped widget reads — was carrying the **primary**
+rung. **These captures were re-taken after that landed**, and the first set was discarded: they
+showed the deck combo at `#2c3237` where it now draws `#21262a`, which is a picture of a defect
+somebody else had already fixed.
 
 **The two actions land on the same x on every row**, at 880→916 and 924→960 at 1280, with the second
 ending on the page frame. Before, they landed somewhere new on all twenty-five.
@@ -111,3 +117,10 @@ editor is dark, so the check that caught the theme miss in #143 and #150 passes 
 That is #122's silent miss from a further side, and the second one caused by a *ticket's own
 decision* rather than wrong when written (#155 was the first). The instrument that catches it is the
 one the harness's own documentation names and nothing automates: **look at the images**.
+
+**And it caught a second one in this very set, which is the better evidence.** The rewritten
+`notes.txt` aimed *Cancel move* at y=225 — the empty page between the boundary hairline at 222 and
+the button's top edge at 238. The click did nothing, the app stayed in the placement state, and the
+*next* click placed the note instead of opening it, so `04-editor.png` came out as **the list with
+the moved note at the top**. Page colour: correct. Every shot present: yes. Only looking at it says
+otherwise, and the coordinate is now measured (`y=257`) rather than estimated.

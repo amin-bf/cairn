@@ -38,7 +38,7 @@ sleep 0.8
 mousemove %LX+578% 259 click 1
 sleep 1.2
 shot 03-placement
-mousemove %CX% 225 click 1
+mousemove %CX% 257 click 1
 sleep 1.2
 # The editor last — it takes its own wider frame and the nav row follows it. The row's band is the
 # open affordance now, so this aims at the middle of the row.

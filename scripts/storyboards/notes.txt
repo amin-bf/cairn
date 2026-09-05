@@ -42,9 +42,11 @@ sleep 0.8
 mousemove %LX+578% 259 click 1
 sleep 1.2
 shot 03-placement
-# *Cancel move* is full-width at y=225 — directly under the boundary hairline, where the rows would
-# otherwise begin.
-mousemove %CX% 225 click 1
+# *Cancel move* is full-width at **y=257** — its top edge is 238, under the boundary hairline at
+# 222, where the rows would otherwise begin. Measured off `03-placement.png`: 225 is the empty page
+# between the two, and aiming there leaves the app in the placement state, so the *next* click
+# **places the note** and the editor shot comes out as the list with the moved note at the top.
+mousemove %CX% 257 click 1
 sleep 1.2
 # The editor, opened from the first row's band — the band *is* the open affordance now, so this aims
 # at the middle of the row rather than at a button inside it. `l'aube` under `backlog`: a note that
