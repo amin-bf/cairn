@@ -197,20 +197,35 @@ fn band_text(ui: &mut Ui, rect: egui::Rect, text: &str, caption: Option<&str>) {
             .max_rect(inner)
             .layout(egui::Layout::top_down(align)),
     );
-    child.label(crate::bidi::job(
-        text,
-        egui::TextStyle::Button.resolve(child.style()),
-        child.visuals().text_color(),
-    ));
+    // **`selectable(false)`, and it is the difference between a row that opens and one that does
+    // not.** `ui.label` is `Label::selectable`d by default, and a selectable label senses *click and
+    // drag* so it can put a text cursor in itself — so the label sitting on the band ate every press
+    // that landed on the note's own words, which is the most natural place on the row to aim. The
+    // band still opened when clicked on its **empty** part, so every capture looked right and the
+    // storyboards that drove it from the far side of a short preview passed.
+    //
+    // Found by a probe rather than by looking: `%LX+19%` lands on `chien` and did nothing, `%LX+200%`
+    // lands past it and opened the editor, with the two screens identical.
+    child.add(
+        egui::Label::new(crate::bidi::job(
+            text,
+            egui::TextStyle::Button.resolve(child.style()),
+            child.visuals().text_color(),
+        ))
+        .selectable(false),
+    );
     if let Some(caption) = caption {
         // The caption follows the **row's** direction rather than its own script: it is a footnote
         // on that line, and one that changed sides from the line above it would read as a second
         // object rather than as part of the same one.
-        child.label(crate::bidi::job(
-            caption,
-            egui::TextStyle::Small.resolve(child.style()),
-            child.visuals().weak_text_color(),
-        ));
+        child.add(
+            egui::Label::new(crate::bidi::job(
+                caption,
+                egui::TextStyle::Small.resolve(child.style()),
+                child.visuals().weak_text_color(),
+            ))
+            .selectable(false),
+        );
     }
 }
 
@@ -661,5 +676,59 @@ mod tests {
                 row_height(ui, true)
             );
         });
+    }
+    /// **A row opens when it is clicked on its own words**, which is the most natural place to aim
+    /// and was the one place it did not work (ADR-0039 §1).
+    ///
+    /// `ui.label` is selectable by default and a selectable label senses **click and drag**, so it
+    /// can put a text cursor in itself. Sitting on the band, it ate every press that landed on the
+    /// note's preview — and the band still opened on its **empty** part, so the screen was identical,
+    /// every capture looked right, and the storyboards that happened to aim past a short preview
+    /// passed. It was found by probing two x coordinates on one row.
+    ///
+    /// This drives real pointer events rather than inspecting a flag, because what broke was not the
+    /// value of a `Sense` but *which widget won the interaction*, and that is only answerable by
+    /// asking egui.
+    #[test]
+    fn a_row_opens_when_clicked_on_its_own_text() {
+        fn press_at(x: f32) -> bool {
+            let ctx = egui::Context::default();
+            typography::install(&ctx);
+            spacing::install(&ctx);
+            theme::install(&ctx, theme::ThemeChoice::Dark);
+            let at = egui::pos2(x, 20.0);
+            let mut opened = false;
+            // **Three passes, and the first one is why this test is written and not obvious.** egui
+            // resolves an interaction against the rects the *previous* frame allocated, so a widget
+            // drawn for the first time in the same frame as the press is not there to be pressed.
+            // Frame one only moves the pointer; then press, then release, because a click is
+            // reported on release.
+            for event in [None, Some(true), Some(false)] {
+                let mut events = vec![egui::Event::PointerMoved(at)];
+                if let Some(pressed) = event {
+                    events.push(egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    });
+                }
+                let input = egui::RawInput {
+                    events,
+                    ..Default::default()
+                };
+                let _ = ctx.run_ui(input, |ui| {
+                    ui.set_width(400.0);
+                    if row(ui, "chien", None, &[]).opened {
+                        opened = true;
+                    }
+                });
+            }
+            opened
+        }
+
+        // Over the word, and over the empty band past it. Both are the row.
+        assert!(press_at(20.0), "a click on the row's own text opens it");
+        assert!(press_at(200.0), "a click past the text opens it too");
     }
 }
