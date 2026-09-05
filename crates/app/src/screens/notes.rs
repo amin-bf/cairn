@@ -12,7 +12,7 @@ use crate::{
     editor, field_label, fonts, frame, full_width_button, heading, raise_keyboard, sync, text,
     text_field,
 };
-use crate::{controls, spacing, surface};
+use crate::{spacing, surface};
 
 /// The **Notes** destination (ADR-0021 §2): the browse surface and the app's authoring home. Shows
 /// the editor when one is open, otherwise the note list — create, the text search, and the rows,
