@@ -9,8 +9,8 @@ use eframe::egui::{Align, Layout, vec2};
 use crate::notes::{self, DeckFilter, Filter};
 use crate::{
     Editing, badge, bidi, bidi_layouter, body, box_badge_wording, cards, compact_button, controls,
-    editor, field_label, fonts, frame, full_width_button, heading, raise_keyboard, sync, text,
-    text_field,
+    editor, field_label, field_label_over, fonts, frame, full_width_button, heading,
+    raise_keyboard, sync, text, text_field,
 };
 use crate::{spacing, surface};
 
@@ -653,7 +653,15 @@ fn editor_form_body(
         // `cloze`'s Text field is the one multiline field — Enter inserts a newline there, and it
         // carries the *Blank it* action.
         let cloze_text = kind == "cloze" && name == "Text";
-        field_label(ui, &name);
+        // **The gap the rest of the form has** (ADR-0040 §6). Every other pair in this column is one
+        // `gap(2)` apart, and a field's label sat directly on the field above it — the same missing
+        // stated gap `a075e920` found under the deck dropdown, one loop further down.
+        if idx > 0 {
+            ui.add_space(spacing::gap(2));
+        }
+        // The label follows **its own field's** direction, not the note's and not the prompt's: a
+        // Persian prompt over a Latin answer puts *Front* right and *Back* left.
+        field_label_over(ui, &name, &ed.fields[idx].1);
         let resp = if cloze_text {
             cloze_text_field(ui, &mut ed.fields[idx].1, pane)
         } else {

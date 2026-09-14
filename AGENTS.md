@@ -17,6 +17,34 @@ argue the trade-off on its own merits.
 
 This applies to every agent working in this repo, on every artifact that persists.
 
+## Showing a design question
+
+**Draw it as a wireframe. Build and photograph the real application only when the repo owner asks
+for it, or when a wireframe cannot show the thing being judged — and say which of the two it is.**
+
+A build-and-capture round is many times the cost of a wireframe: prototype code, a compile, a
+nested-compositor run per variant, crops, and every image read back. Most design questions here are
+about **arrangement** — which side a label sits on, where a control goes, what is grouped with what,
+which pane is where — and a wireframe drawn at the application's real metrics shows arrangement
+faithfully. [#163](https://github.com/amin-bf/cairn/issues/163)'s Persian sitting is the worked
+example of the expensive way: three builds and eleven captures to ask where a label and a pane go.
+
+**Draw it at the real metrics, or it is a different design.** Take the frame (margin, measure, the
+editor's second frame), the rhythm, the type scale, the 36px control height and the palette from
+`frame`, `spacing`, `typography`, `controls` and `theme`, and render text in the scripts the question
+is about. A wireframe that invents its own spacing answers a question nobody asked.
+
+**A wireframe is not enough when the answer depends on something only the renderer produces:**
+- how a real script shapes and orders — bidi runs, font fallback, which face draws Persian
+  (client-stack rules 1, 7 and 18 are all findings a wireframe would have hidden);
+- a colour or contrast on the actual palette, where the separation is the question;
+- motion, or anything judged over time;
+- a distance or a feel judged in the hand on the handset;
+- a defect or state in the shipped application that has to be shown as it really is.
+
+Knobs, variants swapped in place, and one big picture per region still apply to wireframes; only the
+material changes.
+
 ## Landing work
 
 Tickets here are worked in **parallel worktree sessions**, each branching from `origin/main` and

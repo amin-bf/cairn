@@ -56,6 +56,12 @@ no sentence written to explain it.
 beside the input" honoured by serialising rather than dropping it. §8's requirement is satisfied by
 the card pane: a card is rendered Markdown.
 
+> **Amended by [ADR-0040 §1](0040-the-note-editor.md): "on a phone" means *where a soft keyboard
+> exists*, never *where the window is narrow*.** The toggle is there because a keyboard takes the
+> height, so it is gated on `SoftKeyboard::exists` and no width is measured. Two panes dragged down to
+> 118px each still read, so a narrow window is a gradient with no threshold in it, and the desktop
+> draws both panes side by side at every width.
+
 ### 2. The kind is a dropdown, chosen at creation and changeable afterwards
 
 A closed set of four (§2) is small enough to show as chips and was prototyped both ways; the

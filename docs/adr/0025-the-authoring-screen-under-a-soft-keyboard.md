@@ -148,6 +148,11 @@ serialised rather than dropped exactly as §1 claimed. **The failure is vertical
 addresses it** — which is why the toggle was never the thing to re-judge and the form pane's ordering
 was.
 
+> **Acted on by [ADR-0040 §1](0040-the-note-editor.md).** ADR-0031 §4 superseded this section's
+> *"where both fit they show together"* with a 900px window threshold, which was still a width rule
+> answering a vertical failure. That threshold is deleted: the panes fold where a soft keyboard exists
+> and sit side by side everywhere else, so the sentence above is now what the code does.
+
 ### 6. What this ADR does *not* settle
 
 - **The per-tap keyboard re-pop.** As shipped, text entry on this platform dismisses and reopens the

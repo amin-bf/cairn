@@ -33,7 +33,8 @@ sleep 0.8
 sh xdotool type --delay 120 'سگ در خانه است.'
 sleep 1.5
 shot 08-editor-persian-front
-mousemove %EX+30% 265 click 1
+# Back is at 281 since ADR-0040 §6 put the form's stated gap between one field and the next label.
+mousemove %EX+30% 281 click 1
 sleep 0.8
 sh xdotool type --delay 120 'the dog is in the house'
 sleep 1.5
