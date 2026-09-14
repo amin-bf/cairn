@@ -34,6 +34,28 @@ three-deck file's Persian filename existed there was nothing to show it.
 yours"*. This set's counts are single digits, because every note is a real word a later import leaves
 in the list. A four-digit count, and whatever thousands separator it needs, is still unphotographed.
 
+## On the handset
+
+`handset/` is the same set reached from **inside** the application, on a Pixel 8 Pro running the
+debug build: the Settings bench's *Decks, and Persian*, then *Files to import*. **The black band at
+the top of each capture is a redaction** of the device's status bar (151px, read off the device), not
+a rendering defect.
+
+| | |
+|---|---|
+| `handset/03-files-installed.png` | The first press: *"imports — 4 files listed, 4 written now, each planning as the set says"*. |
+| `handset/04-files-again.png` | The second press: *"… 0 written now …"* — the set recognised its own files in `MediaStore` and added no `(1)` copies. |
+| `handset/05-preview-update.png` | The list and the update preview, every line of `02` drawn on the phone, and the Persian filename row reordering the same way it does on the desktop. |
+
+Nothing outside the application can write `MediaStore`, and the application can: `list` returns
+exactly the rows it inserted (ADR-0024 §3). That is why the set is written through
+`platform::put` and not copied into a folder, and these three captures are that argument measured.
+
+**The emulator could not have taken them.** A debug build crashes there before drawing: wgpu's debug
+labelling (`SetDebugUtilsObjectNameEXT`) crashes the emulator's Vulkan driver, `vulkan.ranchu.so`, and
+with Vulkan turned off the GL surface fails to create (*"Invalid surface"*). The August emulator run
+in `android-checkpoint-2026-08-12/` used a release build. Recorded, not diagnosed further.
+
 ## Reproducing
 
 ```sh
