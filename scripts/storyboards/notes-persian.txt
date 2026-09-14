@@ -40,12 +40,16 @@ sleep 1.5
 # took its place. The first run after that change typed into *Back* and then into empty page, leaving
 # `l'aube` in *Front* — the silent miss arriving from a fifth axis, and the second one caused by a
 # ticket's **own** decision rather than by a stale coordinate (#155 had the first).
+#
+# **And *Back* moved down 16px with ADR-0040 §6**, which put the stated `gap(2)` between a field and the
+# next field's label — so Back's centre is 281, not 265. Front's is unchanged: the gap goes *between*
+# fields, never above the first.
 mousemove %EX+30% 229 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 80 'سپیده‌دم'
 sleep 0.8
-mousemove %EX+30% 265 click 1
+mousemove %EX+30% 281 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 80 'آغاز روز، پیش از برآمدن خورشید'

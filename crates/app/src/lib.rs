@@ -949,6 +949,31 @@ pub(crate) fn field_label(ui: &mut egui::Ui, s: &str) {
     ));
 }
 
+/// A text field's label, drawn on the side **the field's own text** starts on — against the right
+/// edge above a Persian value, against the left above a Latin or empty one
+/// ([ADR-0040 §6](../../../docs/adr/0040-the-note-editor.md)).
+///
+/// A label is a caption on one field, so it follows that field's content the way ADR-0039 §4's row
+/// caption follows its row. Left where it was, *Front* sat ~490px from a Persian word at 1280, at the
+/// far end of the field it names. **Only the label moves**: the words stay English, the panes, the
+/// header and *Done* stay put, because those are furniture — mirroring the whole editor on the prompt
+/// was drawn and refused, since it flips the screen on the first letter typed.
+pub(crate) fn field_label_over(ui: &mut egui::Ui, s: &str, content: &str) -> egui::Response {
+    let job = bidi::job(
+        s,
+        egui::TextStyle::Small.resolve(ui.style()),
+        ui.visuals().weak_text_color(),
+    );
+    if bidi::is_rtl(content) {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            ui.label(job)
+        })
+        .inner
+    } else {
+        ui.label(job)
+    }
+}
+
 /// A text field routed through the bidi layouter (`AGENTS.md` client-stack rule 2): a `TextEdit` lays
 /// out its own text and otherwise bypasses the helper, so Persian would render with the words
 /// backwards. The layouter resets `halign` to `LEFT` — an RTL job otherwise spans negative x and the
@@ -1083,6 +1108,37 @@ mod tests {
                     "{label:?}: drew text at {ink:?}, outside its own button {button:?}"
                 );
             }
+        }
+    }
+
+    /// **A field's label sits on the side its field's text starts on** (ADR-0040 §6).
+    ///
+    /// Nothing fails when this drifts: draw the label with plain `field_label` and the editor renders
+    /// perfectly, with *Front* at the far end of the field from the Persian word it names — which is
+    /// the state every capture before ADR-0040 showed. An empty field is Latin-side, because it has no
+    /// strong character to follow and the field's own text alignment starts there too.
+    #[test]
+    fn a_field_label_sits_on_the_side_its_fields_text_starts_on() {
+        const WIDTH: f32 = 480.0;
+        for (content, rtl) in [("dawn", false), ("", false), ("سپیده‌دم", true)] {
+            let ctx = egui::Context::default();
+            let mut column = egui::Rect::NOTHING;
+            let mut label = egui::Rect::NOTHING;
+            let _ = ctx.run_ui(Default::default(), |ui| {
+                ui.set_width(WIDTH);
+                column = ui.max_rect();
+                label = field_label_over(ui, "Front", content).rect;
+            });
+            assert!(label.width() > 0.0, "{content:?}: the label drew nothing");
+            let (edge, want, side) = if rtl {
+                (label.right(), column.right(), "right")
+            } else {
+                (label.left(), column.left(), "left")
+            };
+            assert!(
+                (edge - want).abs() < 0.5,
+                "{content:?}: the label's {side} edge is at {edge}, the column's at {want}"
+            );
         }
     }
 
