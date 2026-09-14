@@ -1,0 +1,111 @@
+# The file surface **as the bench installs it**: the file list populated, and a preview of each of
+# the four files behind it — including the update that draws every line ADR-0022 exists for, which
+# nothing could photograph before #166.
+#
+# `fixture decks` and `files imports` are **both** needed, and both are named here rather than on the
+# command line (#153, #166). Without the fixture the file set refuses to install, because its update
+# file plans as *new deck* against any other collection; without the file set the list reads *"No
+# files this application has written yet."* under the name of a populated one.
+#
+# **Run it at 1280×800 and nowhere else**, as `fixture-bench.txt` and for the same reason: both blocks
+# are temporary specimens at the bottom of Settings, below prose that wraps at one width and not the
+# other, so the row y's are measured at this size. It is tolerated because every shot is
+# self-evidencing — a list that was not pressed says *"Not listed yet"*, and every preview states the
+# **name** of the file it is previewing, so a row click that landed on the wrong row says so. It is
+# also the last storyboard these specimens will need: Draw the File Surface (#167) replaces both.
+#
+# **Each preview restarts the app** rather than scrolling back up to the list. `restart` keeps the
+# collection and the files and drops the scroll position and the selection, so every preview starts
+# from the one measured state rather than from wherever the previous plan left the page.
+fixture decks
+files imports
+# The first click is spent giving the window keyboard focus and never reaches a widget.
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+# Settings is long; overshoot to the bottom, where the list button sits at a y the prose above it
+# cannot move.
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+mousemove %CX% 619
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %CX% 400 click 5 click 5 click 5 click 5
+sleep 1
+shot 01-list
+# Rows are listed in name order — `Chapters 1-4.cdeck` 662, `French A1.cdeck` 689,
+# `collection.ccoll` 716, `فارسی and 2 more.cdeck` 743 — and the preview button is the row's start.
+restart
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+mousemove %CX% 619
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %LX+30% 689
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+shot 02-preview-update
+restart
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+mousemove %CX% 619
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %LX+30% 743
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+shot 03-preview-three-decks
+restart
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+mousemove %CX% 619
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %LX+30% 716
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+shot 04-refusal-archive
+restart
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+140% 11 click 1
+sleep 1.2
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+mousemove %CX% 619
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %LX+30% 662
+sleep 0.5
+click 1
+sleep 1.5
+mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
+sleep 1
+shot 05-refusal-unreadable

@@ -113,7 +113,7 @@ a line of text.
 
 **`move` is the one picture in the product drawn for the screen rather than taken from the set.** The
 design project's sixteen icons hold no *move* — they were authored before the screen that needed one
-— so `crates/app/res/icons/move.svg` is the source and the design project takes it from there.
+— so `crates/app/icons/move.svg` is the source and the design project takes it from there.
 
 ### 2. The chrome's boundary is a **hairline**, and the distance was already right
 

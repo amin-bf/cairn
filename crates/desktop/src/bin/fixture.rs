@@ -21,7 +21,16 @@
 //! photographing the seed under the fixture's name. A storyboard that misses its target fails
 //! silently and has done so twice (#122, #143); this is the one place that class of failure can be
 //! caught by a machine.
+//!
+//! ```text
+//! cairn-fixture files imports
+//! ```
+//!
+//! **The second form installs a file set** (`cairn_app::file_bench`) through the user-files seam,
+//! beside a collection that must already be the set's fixture. It wipes nothing; it writes wherever
+//! `$XDG_DOCUMENTS_DIR` points, which the harness redirects and a hand run must too.
 
+use cairn_app::file_bench::FileSet;
 use cairn_app::fixtures::Fixture;
 
 fn main() -> std::process::ExitCode {
@@ -29,6 +38,24 @@ fn main() -> std::process::ExitCode {
         eprintln!("usage: cairn-fixture <name>\n{}", catalogue());
         return std::process::ExitCode::FAILURE;
     };
+
+    if name == "files" {
+        let key = std::env::args().nth(2).unwrap_or_default();
+        let Some(set) = FileSet::parse(&key) else {
+            eprintln!("cairn-fixture: no file set called '{key}'\n{}", catalogue());
+            return std::process::ExitCode::FAILURE;
+        };
+        return match cairn_app::file_bench::install_into_platform_dirs(set) {
+            Ok(landed) => {
+                println!("cairn-fixture: files {} — {landed}", set.key());
+                std::process::ExitCode::SUCCESS
+            }
+            Err(message) => {
+                eprintln!("cairn-fixture: {message}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
 
     let Some(fixture) = Fixture::parse(&name) else {
         eprintln!("cairn-fixture: no fixture called '{name}'\n{}", catalogue());
@@ -48,9 +75,11 @@ fn main() -> std::process::ExitCode {
 }
 
 fn catalogue() -> String {
-    Fixture::ALL
+    let fixtures = Fixture::ALL
         .into_iter()
-        .map(|f| format!("  {:<12} {}", f.key(), f.reaches()))
-        .collect::<Vec<_>>()
-        .join("\n")
+        .map(|f| format!("  {:<18} {}", f.key(), f.reaches()));
+    let sets = FileSet::ALL
+        .into_iter()
+        .map(|s| format!("  files {:<12} {}", s.key(), s.reaches()));
+    fixtures.chain(sets).collect::<Vec<_>>().join("\n")
 }

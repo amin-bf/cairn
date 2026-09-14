@@ -18,7 +18,7 @@
 //!   font stack rather than through images, and this is what that costs: a fourth face, appended as
 //!   a fallback exactly like the other two, carrying no script. It is generated from sources this
 //!   repository keeps — the drawable the Android build already ships, and two SVGs under
-//!   `crates/app/res/icons/` — by `scripts/build-icon-face.py`, whose `--check` mode is the claim
+//!   `crates/app/icons/` — by `scripts/build-icon-face.py`, whose `--check` mode is the claim
 //!   that the glyphs really *are* those drawings.
 //!
 //!   **Adding to it cost no call site anything**, which is the property the route was chosen for:
@@ -64,7 +64,7 @@ pub const MARK: char = '\u{E000}';
 /// the icon rule reserves for a control repeated down every row of a list. Twenty-five repetitions
 /// is what pays for the learning.
 ///
-/// Its source is `crates/app/res/icons/move.svg`, and it is the one picture in the set drawn here
+/// Its source is `crates/app/icons/move.svg`, and it is the one picture in the set drawn here
 /// rather than in the design project — the sixteen icons there were authored before the screen that
 /// needed a *move*, so there was none to take.
 ///

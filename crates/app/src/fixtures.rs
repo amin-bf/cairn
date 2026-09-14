@@ -236,8 +236,9 @@ pub enum Fixture {
     /// right-to-left entry; and notes left **unfiled** beside the filed ones, which is a legal state
     /// (ADR-0005 §8) with its own value in the editor's dropdown and no picture anywhere.
     ///
-    /// **Its deck ids are fixed and known** — see [`DECKS`], which is the whole reason this cannot
-    /// be built on [`Collection::create_deck`].
+    /// **Its deck ids and its note ids are fixed and known** — see [`DECKS`] and [`deck_note_id`],
+    /// which are the whole reason this cannot be built on [`Collection::create_deck`] or
+    /// [`Collection::create_note`]. `file_bench` builds files against both.
     ///
     /// **It adds no third claim about `fsrs`.** Every note is scheduled ahead by
     /// [`SCHEDULED_AHEAD`], the pair [`Fixture::CaughtUp`] already asserts lands, so Review draws the
@@ -418,13 +419,18 @@ impl Fixture {
             // in that order too and the list draws them as the table reads (ADR-0021 §3). The unfiled
             // ones are interleaved rather than gathered at the end, because a filed run followed by
             // an unfiled run is a picture of the table rather than of a collection.
+            //
+            // **The notes are written at ids this module names too**, for the reason the decks are:
+            // a file built to update this collection has to name the notes it keeps, retracts and
+            // moves, and a minted id is one nothing outside the install can know (see
+            // [`deck_note_id`]).
             Fixture::Decks => {
                 let mut ids = Vec::with_capacity(DECKS.len());
                 for (id, name) in DECKS {
                     ids.push(deck(coll, id, name)?);
                 }
-                for (filed_under, front, back) in DECK_NOTES {
-                    let card = note(coll, front, back)?;
+                for (index, (filed_under, front, back)) in DECK_NOTES.into_iter().enumerate() {
+                    let card = note_at(coll, deck_note_id(index), front, back)?;
                     if let Some(index) = filed_under {
                         file(coll, card.note, ids[index])?;
                     }
@@ -840,6 +846,28 @@ fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, Strin
     Ok(CardRef::new(id, 0))
 }
 
+/// One `basic` note **at the id given rather than a minted one** — [`deck`]'s discipline applied to a
+/// note, and for the same reason: something outside the fixture has to be able to name it.
+///
+/// It writes exactly what [`Collection::create_note`] writes — `kind`, a `position` minted at the end
+/// of the authored order by the same [`order::between`](cairn_core::content::order::between), then
+/// the fields — and differs only in not drawing the id from entropy. So the note it makes is not a
+/// special kind of note, and table order is still row order (ADR-0021 §3).
+fn note_at(coll: &mut Collection, id: NoteId, front: &str, back: &str) -> Result<CardRef, String> {
+    let last = coll.last_position().map_err(|e| e.to_string())?;
+    let position = cairn_core::content::order::between(last.as_deref(), None);
+    for (attr, value) in [
+        ("kind", "basic"),
+        ("position", position.as_str()),
+        ("Front", front),
+        ("Back", back),
+    ] {
+        coll.mutable_set("note", &id.0, attr, Some(value))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(CardRef::new(id, 0))
+}
+
 /// One `cloze` note. **No `CardRef` comes back**, and that is the kind's own shape rather than a
 /// shortcut: a cloze note's cards are not fixed, being one per numbered blank at `cloze_slot(n)`
 /// (ADR-0002 §5, ADR-0017 §3), so the ordinals depend on the text and this helper would have to
@@ -1039,7 +1067,10 @@ pub const DECKS: [(&str, &str); 4] = [
 /// **The unfiled three are interleaved rather than gathered at the end.** A filed run followed by an
 /// unfiled run is a picture of this table; a collection where the two are mixed is a picture of a
 /// person's.
-const DECK_NOTES: [(Option<usize>, &str, &str); 25] = [
+///
+/// **Crate-visible because the file bench reads it**: its update file keeps, retracts and moves these
+/// notes by index, at the ids [`deck_note_id`] gives them.
+pub(crate) const DECK_NOTES: [(Option<usize>, &str, &str); 25] = [
     (Some(0), "le carrefour", "the crossroads"),
     (Some(0), "la serrure", "the lock"),
     (Some(0), "le tiroir", "the drawer"),
@@ -1100,6 +1131,36 @@ const DECK_NOTES: [(Option<usize>, &str, &str); 25] = [
     (Some(0), "la véranda", "the veranda"),
     (None, "l'arrière-boutique", "the back room of a shop"),
 ];
+
+/// The id [`Fixture::Decks`] gives the note at `index` in [`DECK_NOTES`] — **fixed, for the reason
+/// [`DECKS`] is.**
+///
+/// A deck id was not enough. An inbound `.cdeck` reaches ADR-0022's update path on its deck id, but
+/// every line *under* that path is about notes: *N already yours* counts note ids the deck holds,
+/// *moving in from X* counts note ids held in another deck, and *N of your notes will be deleted*
+/// counts tombstones naming a held note id (ADR-0008 §5, §11). [`Collection::create_note`] mints a
+/// fresh UUIDv4 per call, so against a minted collection a file could name the deck and none of its
+/// notes: every note would read *new*, no tombstone would bite, nothing would move, and the destructive
+/// half of the preview would still never draw — under a header that now correctly says *updating*.
+///
+/// Well-formed UUIDv4 in the `f1c70100` space, legible the way the deck ids are: the last byte is
+/// the table row plus one, so `f1c70100-0000-4000-8000-000000000019` is row 24.
+///
+/// **This also takes the one fixture that names notes out of client-stack rule 22's coin flip.** Its
+/// queue ties and interval fuzz are seeded from these ids, so they are now the same on every build.
+pub fn deck_note_id(index: usize) -> NoteId {
+    bench_id(0x01, index as u8 + 1)
+}
+
+/// A well-formed UUIDv4 in the bench's `f1c7` range — `f1c7{space}00-0000-4000-8000-0000000000{n}`.
+/// Version nibble `4` and variant `8` because that is what an id is, and an ill-formed one would be a
+/// second fact about the collection that no real one shares.
+pub(crate) const fn bench_id(space: u8, n: u8) -> NoteId {
+    NoteId([
+        0xf1, 0xc7, space, 0x00, 0x00, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        n,
+    ])
+}
 
 const CAUGHT_UP_WORDS: [(&str, &str); 12] = [
     ("la fenêtre", "the window"),
@@ -1595,6 +1656,31 @@ mod tests {
             );
         }
         assert_eq!(held.len(), published.len(), "and holds nothing else");
+    }
+
+    /// **And its notes are at the ids it publishes** — the same invisible-here, fatal-there property as
+    /// the deck ids, one level down. A note at a minted id is an ordinary row on the note list and a
+    /// *new* note to every file the bench builds, so the update file would plan with nothing kept,
+    /// nothing moved and nothing deleted.
+    #[test]
+    fn the_deck_fixture_lands_its_notes_on_the_ids_it_publishes() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Decks.install(&mut coll, NOW_MS).unwrap();
+
+        let rows = crate::notes::list(&coll, &crate::notes::Filter::default()).unwrap();
+        let landed: Vec<(NoteId, String)> = rows
+            .iter()
+            .map(|r| (r.id, r.preview().to_owned()))
+            .collect();
+        let published: Vec<(NoteId, String)> = DECK_NOTES
+            .iter()
+            .enumerate()
+            .map(|(i, (_, front, _))| (deck_note_id(i), (*front).to_owned()))
+            .collect();
+        assert_eq!(
+            landed, published,
+            "every row at its published id, in table order"
+        );
     }
 
     /// The deck surface this fixture exists to make drawable, asserted as the **shape** the ticket

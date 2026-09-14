@@ -310,6 +310,19 @@ _Avoid_: Seed, for a fixture — the seed is the six cards a real first install 
 the two is how "just extend the seed" gets proposed again; capture mode, which is the route this
 deliberately is not.
 
+**File set** / **The file bench**:
+A set of **files an import arrives from**, named by what planning them reaches — `imports` — and the
+module that defines them (`file_bench`). A fixture is what is inside the application; a file set is
+what is outside it, in the place the user-files seam lists. Each set is **built against one fixture**,
+because an import's plan is a diff against the collection: the update path, and every line under it,
+exists only when the file names deck and note ids the collection holds. A set is written **through the
+seam** rather than into a folder, which is the only route onto a handset, and it **verifies itself** by
+planning every file the way a selected row does — refused unless each plans as the set says, which is
+also what refuses a set installed beside the wrong collection. It is **idempotent**: byte-identical
+files, and a clashing name refused rather than deduped, because the seam has no delete.
+_Avoid_: Fixture, for a file set — a fixture replaces the collection and a file set only adds files
+beside it; test files, which says nothing about the collection they are only meaningful against.
+
 **Card pane**:
 The authoring editor's second pane: **the cards this note currently generates**, answering "what will
 I be asked" (ADR-0012 §1). Ordered by **raw slot number**, live and dormant alike — never grouped by
