@@ -60,6 +60,10 @@ fi
 # `%CX%` exists to kill, arriving from a third side. Tying the two together makes that unreachable.
 # `CAIRN_FIXTURE` still overrides, for photographing one storyboard against another's state.
 fixture="${CAIRN_FIXTURE:-$(sed -n 's/^[[:space:]]*fixture[[:space:]]\+\([^[:space:]]*\).*/\1/p' "$CAIRN_STORYBOARD" | head -1)}"
+# **And its own file set** (issue #166), on a `files <name>` line, for the same reason from the other
+# side: a storyboard that photographs the file list without its files produces *"No files this
+# application has written yet."* under the name of a populated list. `CAIRN_FILES` overrides.
+files="${CAIRN_FILES:-$(sed -n 's/^[[:space:]]*files[[:space:]]\+\([^[:space:]]*\).*/\1/p' "$CAIRN_STORYBOARD" | head -1)}"
 
 mkdir -p "$CAIRN_SHOTS"
 
@@ -72,7 +76,14 @@ export XDG_DATA_HOME="$profile/data"
 export XDG_STATE_HOME="$profile/state"
 export XDG_CONFIG_HOME="$profile/config"
 export XDG_CACHE_HOME="$profile/cache"
-mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+# **The documents directory too, and unconditionally.** It is where the user-files seam writes and
+# lists (`cairn_export::platform::desktop::files_dir`), and until #166 it was the one base this script
+# did not redirect — so an export pressed during a capture run wrote into the operator's real
+# `~/Documents`, and the file list photographed whatever happened to be there. Both broke the promise
+# at the top of this file. Redirected whether or not the storyboard names a file set, because the
+# defect was never about the bench.
+export XDG_DOCUMENTS_DIR="$profile/documents"
+mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DOCUMENTS_DIR"
 
 # The fixture goes in *before* the compositor starts, into the scratch profile above — so the app's
 # first launch opens a collection that is already in the wanted state and the seed never fires
@@ -86,6 +97,20 @@ if [ -n "$fixture" ]; then
   fi
   if ! "$fixture_bin" "$fixture"; then
     echo "capture: fixture '$fixture' did not install — abandoning the run" >&2
+    exit 1
+  fi
+fi
+
+# The file set goes in **after** the fixture, because it checks its files' plans against the
+# collection and refuses unless they plan as the set says — so a `files` line without the fixture the
+# set is built for abandons the run here instead of photographing *new deck* under an update's name.
+if [ -n "$files" ]; then
+  if [ ! -x "$fixture_bin" ]; then
+    echo "capture: '$CAIRN_STORYBOARD' asks for file set '$files' but there is no binary at $fixture_bin — run 'cargo build -p cairn-desktop'" >&2
+    exit 1
+  fi
+  if ! "$fixture_bin" files "$files"; then
+    echo "capture: file set '$files' did not install — abandoning the run" >&2
     exit 1
   fi
 fi

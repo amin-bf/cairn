@@ -9,6 +9,7 @@
 #   restart         kill the app and start it again, on the same collection
 #   sh <command>    run a shell command (used for `xdotool type`, which needs its own quoting)
 #   fixture <name>  read by capture-desktop.sh before this script runs; ignored here
+#   files <name>    likewise — a file set, installed after the fixture; ignored here
 #   <anything else> passed to xdotool verbatim, e.g. `mousemove %CX% 131 click 1`
 #   # <comment>     ignored
 #
@@ -147,6 +148,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     # place before the app opens it, and by now the app holds the database. Skipped rather than
     # passed to xdotool, which would otherwise report an unknown command and carry on.
     fixture\ *) continue ;;
+    files\ *) continue ;;
     shot\ *)
       name="${line#shot }"
       sleep 0.8
