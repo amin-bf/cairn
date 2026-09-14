@@ -207,3 +207,44 @@ what this file is.
 
 The working copy lives in the repo's untracked `.lavish/` scratch directory alongside earlier
 sittings' artifacts; this is the copy that survives.
+
+---
+
+# Third round: does the chrome follow a Persian note?
+
+## 5. Three answers, one knob
+
+Selected with `CAIRN_PERSIAN=0|1|2`, captured at 1280×800 on the `backlog` fixture. Everything is in
+[`persian/`](persian/).
+
+| | variant | captures |
+|---|---|---|
+| **0** | nothing moves — what shipped | `persian/v0-*.png` |
+| **1** | each field's label goes to the edge its own field's text starts at | `persian/v1-*.png` |
+| **2** | the whole editor mirrors on the prompt: panes swap, heading, header and *Done* go right | `persian/v2-*.png` |
+
+Each set is four shots of one note, one edit apart: `01-french` as it arrives, `02-one-letter` with a
+single Persian letter typed over the prompt, `03-mixed` a Persian prompt over a Latin answer, and
+`04-persian` both sides Persian. Knob 2 has its own storyboard because after the first letter the form
+is in the right pane — `prototype-163-persian-mirror.txt`, x=734 where the other uses `%EX+30%`.
+
+**Unlike round two this is preserved as code**, as `persian/persian-knob.patch` against `e698a8ea`
+rather than applied here — this tag's tree is based on `8ce75a61` and the editor has moved under it
+since. `git apply` it on that commit.
+
+**1 won.** A label is a caption on one field, so it goes where that field's reading starts — ADR-0039
+§4's row caption, said about a form. 0 left *Front* ~490px from its Persian word. 2 is the rule ADR-0039
+refused (furniture moving with content), and `v2-02-one-letter.png` is the picture of why: one letter
+in, the form has jumped to the other pane under the pointer while the card still says `l'aube`. It also
+put the Latin *Back* label over the wrong end of `dawn`.
+
+**Found in every capture, 0 included:** each field after the first had its label directly on the field
+above it. Fixed with the decision; ADR-0040 §6.
+
+`persian/review.html` is the surface it was judged in, exported standalone.
+
+**This round was a build, and the next one should probably not be.** Asked afterwards, the repo owner
+set a standing rule in `AGENTS.md`: show a design question as a **wireframe** first, and build and
+photograph the real app only when asked or when a wireframe cannot show the answer. Three variants of
+this question were a label's edge and a pane's side — arrangement, which a wireframe at the app's real
+metrics shows — so the eleven-shot capture round was the expensive way to ask it.

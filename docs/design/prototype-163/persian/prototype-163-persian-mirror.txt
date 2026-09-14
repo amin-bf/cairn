@@ -1,0 +1,38 @@
+# Prototype #163 — Persian in the editor, under `CAIRN_PERSIAN=2`: the whole editor mirrors on the
+# prompt's direction. `prototype-163-persian.txt` with one difference, and it is the finding: after
+# the first Persian letter the form is in the **right** pane, so every later click is at x=734 —
+# the right pane's left edge (80 + 546 + 28) plus 80 — rather than `%EX+30%`.
+#
+# **Pinned to 1280×800**, for that x.
+fixture backlog
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+200% 259 click 1
+sleep 1.5
+shot 01-french
+mousemove %EX+30% 229 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 80 'س'
+sleep 0.5
+mousemove %CX% 500 click 1
+sleep 1.2
+shot 02-one-letter
+mousemove 734 229 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 80 'سپیده‌دم'
+sleep 0.5
+mousemove %CX% 500 click 1
+sleep 1.2
+shot 03-mixed
+mousemove 734 265 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 80 'آغاز روز، پیش از برآمدن خورشید'
+sleep 0.5
+mousemove %CX% 500 click 1
+sleep 1.2
+shot 04-persian

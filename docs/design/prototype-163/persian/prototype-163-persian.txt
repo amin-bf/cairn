@@ -1,0 +1,42 @@
+# Prototype #163 — Persian in the editor, under `CAIRN_PERSIAN` 0 and 1, where the panes never move.
+# Knob 2 moves the form to the right the moment the prompt turns Persian, so it has its own file,
+# `prototype-163-persian-mirror.txt`, identical except for the x of every click after the first letter.
+#
+# **Pinned to 1280×800.** The form's x is `%EX+30%` here and 734 in the mirror file, and the harness has
+# no token for the right pane, so neither is portable and neither pretends to be.
+#
+# Four shots of one note, each one edit further on: the French note as it arrives, one Persian letter
+# typed over its prompt, a Persian prompt over a Latin answer, and both sides Persian. **Every shot is
+# self-evidencing** — a missed click leaves `l'aube` or `dawn` standing where Persian should be.
+fixture backlog
+mousemove %CX% 600 click 1
+sleep 1
+mousemove %LX+86% 11 click 1
+sleep 1.2
+mousemove %LX+200% 259 click 1
+sleep 1.5
+shot 01-french
+mousemove %EX+30% 229 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 80 'س'
+sleep 0.5
+mousemove %CX% 500 click 1
+sleep 1.2
+shot 02-one-letter
+mousemove %EX+30% 229 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 80 'سپیده‌دم'
+sleep 0.5
+mousemove %CX% 500 click 1
+sleep 1.2
+shot 03-mixed
+mousemove %EX+30% 265 click 1
+sleep 0.5
+key ctrl+a
+sh xdotool type --delay 80 'آغاز روز، پیش از برآمدن خورشید'
+sleep 0.5
+mousemove %CX% 500 click 1
+sleep 1.2
+shot 04-persian

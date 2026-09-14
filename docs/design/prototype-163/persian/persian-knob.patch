@@ -1,0 +1,118 @@
+diff --git a/crates/app/src/screens/notes.rs b/crates/app/src/screens/notes.rs
+index 4884dad8..c8201d59 100644
+--- a/crates/app/src/screens/notes.rs
++++ b/crates/app/src/screens/notes.rs
+@@ -51,6 +51,40 @@ fn editor_heading(ui: &mut egui::Ui, ed: &Editing) {
+     );
+ }
+ 
++/// **Prototype #163 — Persian.** Which of three answers the editor draws for a right-to-left note,
++/// seeded from `CAIRN_PERSIAN` so a capture can photograph each: `0` (or unset) is what ships — only
++/// content follows its script — `1` puts each field's label on its own field's reading side, and `2`
++/// mirrors the whole editor on the prompt's direction. Never merges.
++#[derive(Clone, Copy, PartialEq)]
++enum PersianKnob {
++    Shipped,
++    LabelsFollow,
++    Mirror,
++}
++
++fn persian_knob() -> PersianKnob {
++    match std::env::var("CAIRN_PERSIAN").as_deref() {
++        Ok("1") => PersianKnob::LabelsFollow,
++        Ok("2") => PersianKnob::Mirror,
++        _ => PersianKnob::Shipped,
++    }
++}
++
++/// Knob `2`, on a note whose **prompt** — its first field — reads right to left, which is ADR-0033
++/// §5's governor for the box badge.
++fn editor_mirrored(ed: &Editing) -> bool {
++    persian_knob() == PersianKnob::Mirror && ed.fields.first().is_some_and(|(_, v)| bidi::is_rtl(v))
++}
++
++/// Draw `add` against the right edge when `rtl`, and as usual otherwise.
++fn reading_side<R>(ui: &mut egui::Ui, rtl: bool, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
++    if rtl {
++        ui.with_layout(Layout::right_to_left(Align::Min), add).inner
++    } else {
++        add(ui)
++    }
++}
++
+ /// The editor inside its own frame. **Whether the panes sit side by side is asked once and handed
+ /// down** — never re-derived further in, where the answer would be about the column rather than the
+ /// screen.
+@@ -61,12 +95,13 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
+     // keyboard and 450px going spare. Dragged down by hand to 118px per pane the two columns stayed
+     // readable, so there is no width to find — `frame::editor_is_side_by_side` asks the platform.
+     let two_column = frame::editor_is_side_by_side();
++    let mirrored = editing.as_ref().is_some_and(editor_mirrored);
+     let cap = frame::cap_for(true);
+     frame::wide_column(ui, cap, |ui| {
+         // **The heading leads the screen, because *Done* no longer does** (#163). It used to sit
+         // above the heading, so the first thing on the editor was the way out of it.
+         if let Some(ed) = editing.as_ref() {
+-            editor_heading(ui, ed);
++            reading_side(ui, mirrored, |ui| editor_heading(ui, ed));
+             ui.add_space(spacing::gap(2));
+         }
+         if let Some(ed) = editing.as_mut() {
+@@ -100,7 +135,7 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
+         // wider than the two columns of content beneath it. Same 36px height either way — the map
+         // holds hit targets to touch, so only the stretching goes.
+         let done = if two_column {
+-            compact_button(ui, "Done")
++            reading_side(ui, mirrored, |ui| compact_button(ui, "Done"))
+         } else {
+             full_width_button(ui, "Done")
+         };
+@@ -508,13 +543,21 @@ fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_c
+         // text field out of *new deck* and belongs to neither.
+         let gutter = frame::PANE_GUTTER;
+         let each = ((ui.available_width() - gutter) / 2.0).max(1.0);
++        let mirrored = editor_mirrored(ed);
++        let align = if mirrored { Align::Max } else { Align::Min };
+         ui.horizontal_top(|ui| {
+-            pane_column(ui, each, |ui| {
++            if mirrored {
++                pane_column(ui, each, align, |ui| editor_cards_body(ui, pane.as_ref()));
++                ui.add_space(gutter);
++            }
++            pane_column(ui, each, align, |ui| {
+                 editor_header(ui, coll, ed);
+                 editor_form_body(ui, coll, ed, pane.as_ref());
+             });
+-            ui.add_space(gutter);
+-            pane_column(ui, each, |ui| editor_cards_body(ui, pane.as_ref()));
++            if !mirrored {
++                ui.add_space(gutter);
++                pane_column(ui, each, align, |ui| editor_cards_body(ui, pane.as_ref()));
++            }
+         });
+         return;
+     }
+@@ -585,10 +628,10 @@ fn editor_header(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
+ 
+ /// One of the editor's two side-by-side panes: a fixed-width, top-down child so the pane's own
+ /// full-width controls size to the **pane** rather than to the row they sit in.
+-fn pane_column(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) {
++fn pane_column(ui: &mut egui::Ui, width: f32, align: Align, add: impl FnOnce(&mut egui::Ui)) {
+     ui.allocate_ui_with_layout(
+         vec2(width, ui.available_height()),
+-        Layout::top_down(Align::Min),
++        Layout::top_down(align),
+         |ui| {
+             ui.set_width(width);
+             add(ui);
+@@ -653,7 +696,9 @@ fn editor_form_body(
+         // `cloze`'s Text field is the one multiline field — Enter inserts a newline there, and it
+         // carries the *Blank it* action.
+         let cloze_text = kind == "cloze" && name == "Text";
+-        field_label(ui, &name);
++        let label_rtl =
++            persian_knob() == PersianKnob::LabelsFollow && bidi::is_rtl(&ed.fields[idx].1);
++        reading_side(ui, label_rtl, |ui| field_label(ui, &name));
+         let resp = if cloze_text {
+             cloze_text_field(ui, &mut ed.fields[idx].1, pane)
+         } else {
