@@ -11,7 +11,7 @@ lives in this repository:
 
 - **the mark** — `crates/app/res/drawable/ic_launcher_monochrome.xml`, which the Android build
   already ships, so the four stones in the face are the launcher's own;
-- **`move`** and **`delete`** — `crates/app/res/icons/*.svg`, the note-list row's two controls
+- **`move`** and **`delete`** — `crates/app/icons/*.svg`, the note-list row's two controls
   (#162). `delete.svg` is the design project's file verbatim; `move.svg` is drawn here, because the
   design project's sixteen icons have no `move` — the set was authored before the screen that
   needed one.
@@ -86,7 +86,10 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 ROOT = Path(__file__).resolve().parent.parent
 DRAWABLE = ROOT / "crates/app/res/drawable/ic_launcher_monochrome.xml"
-ICONS = ROOT / "crates/app/res/icons"
+# **Not under `res/`.** `res/` is the directory `cargo-apk` hands to aapt, and aapt refuses any
+# subdirectory that is not an Android resource type — `icons/` there stopped every APK from packaging,
+# with nothing on the desktop failing (#166).
+ICONS = ROOT / "crates/app/icons"
 FACE = ROOT / "crates/app/assets/CairnIcons-Regular.ttf"
 
 ANDROID = "{http://schemas.android.com/apk/res/android}"

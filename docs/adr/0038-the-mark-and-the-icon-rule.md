@@ -66,7 +66,7 @@ Noto is never reached* — cannot arise for an icon.
 **The face is generated, not drawn.** `scripts/build-icon-face.py` reads
 `crates/app/res/drawable/ic_launcher_monochrome.xml` — the monochrome launcher icon the Android build
 already ships, *"the same four stones as one flat shape"* — and emits the glyph from its paths. Since
-ADR-0039 it also reads `crates/app/res/icons/*.svg`, the row icons' own sources, and **converts**
+ADR-0039 it also reads `crates/app/icons/*.svg`, the row icons' own sources, and **converts**
 rather than exports them: those are a 24px grid of 1.5 strokes with `fill: none`, and a glyph has no
 strokes, so each segment becomes a closed stadium wound the same way as every other and non-zero
 winding merges them into one filled shape. Wound against each other they would cancel where they
