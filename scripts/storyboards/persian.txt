@@ -26,7 +26,11 @@ mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
-mousemove %CX% 87 click 1
+# *Create note* is pinned at the foot of the list on the reach line since #162 (ADR-0039 §8), so its
+# y follows the window height. This clicked `%CX% 87` — where the button used to be — until #163's
+# verification run found it opening nothing, after which the next click opened the *chat* row and
+# every shot below was of the wrong note.
+mousemove %CX% %BY-183% click 1
 sleep 1.5
 mousemove %EX+30% 229 click 1
 sleep 0.8
