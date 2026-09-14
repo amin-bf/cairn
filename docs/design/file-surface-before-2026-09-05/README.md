@@ -92,6 +92,14 @@ at 560×860 — the exact shape of the miss ADR-0036's ticket hit, and the reaso
 `scripts/storyboards/`. They also take `XDG_DOCUMENTS_DIR` from the caller, which a storyboard cannot
 set. **Promote them once #166 makes both facts untrue.**
 
+**#166 made one of them untrue and promoted them anyway.** The files and the environment variable now
+come from the bench — `fixture decks` and `files imports` in `scripts/storyboards/file-surface.txt`,
+which replaces all five storyboards here and `seed-files.rs` with them. The width fact still stands,
+and was accepted rather than fixed: both blocks are temporary specimens that
+[Draw the File Surface](https://github.com/amin-bf/cairn/issues/167) replaces, so making their y's
+width-independent would be work on a screen that is about to stop existing. The files kept here are
+the recipe for these six images and nothing more — their update file names ids no fixture holds.
+
 Each is self-evidencing in the way #153 asked for: a missed click leaves the file list reading
 *"Not listed yet — press the button."* or *"No files this application has written yet."* under the
 name of a populated one.

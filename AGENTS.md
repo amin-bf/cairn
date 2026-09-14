@@ -546,6 +546,14 @@ because they are validated findings, not because a web build ships.
     Redirect `XDG_DATA_HOME` and `XDG_STATE_HOME` before running it by hand — the same two bases
     `capture-desktop.sh` redirects, and the only thing standing between a bench run and someone's
     review history.
+    **The file surface needs files, not a collection, and they are a *file set*** (`file_bench`,
+    #166): named on a `files <name>` line, installed **after** the fixture it is built against, and
+    refused unless every file plans against that collection the way the set says. It is written
+    through `cairn_export::platform::put` — never copied into a folder — because that is the only way
+    onto a handset, where nothing outside the application writes `MediaStore`. So
+    `capture-desktop.sh` redirects **`XDG_DOCUMENTS_DIR`** as well, on every run: it was the one base
+    left pointing at the operator's real `~/Documents`, and a hand run of `cairn-fixture files` owes
+    it the same redirect.
     **And every control below the last card is now reached by `%BY-n%`, never a literal y**
     ([ADR-0038 §5](./docs/adr/0038-the-mark-and-the-icon-rule.md)). ADR-0035 §1 anchors a screen's
     final control to a line above the **bottom of the page**, so its y is a function of the window
@@ -575,6 +583,11 @@ because they are validated findings, not because a web build ships.
       the build it ran on and fails *intermittently* otherwise.
     - `screens::review`'s suspended section sorts on identity too. No fixture suspends anything yet,
       so this one is a trap rather than a defect — the first fixture that does inherits it.
+
+    **`decks` escapes all four by construction**: its deck and note ids are fixed
+    (`fixtures::DECKS`, `fixtures::deck_note_id`), because a file built to update that collection
+    has to name them. Fixed ids are the cure wherever something outside a fixture must name what it
+    holds, never a tidy-up to apply to the others — their states are argued against random identity.
 
     All four are the same shape as store rule 6 and the `%CX%` family: nothing errors, nothing looks
     wrong, and the artifact is a valid picture of something nobody chose. **Measure, do not reason**

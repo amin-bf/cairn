@@ -77,6 +77,7 @@ A storyboard is a line-per-step file under `scripts/storyboards/`:
 | `restart` | kill and relaunch the app on the same collection |
 | `sh <command>` | run a shell command — used for `xdotool type`, which needs its own quoting |
 | `fixture <name>` | install a pre-made collection before the app starts — see *Fixtures* below |
+| `files <name>` | install a file set beside it, after the fixture — see *File sets* below |
 | anything else | passed to `xdotool` verbatim, e.g. `mousemove 640 131 click 1` |
 
 **The first click of any storyboard is spent giving the window keyboard focus and never reaches a
@@ -172,7 +173,9 @@ deck id (ADR-0008 §11), so an inbound `.cdeck` only exercises ADR-0022's update
 yours*, *notes moving in from X*, *X will be left empty* — when its deck ids match ids the collection
 holds. So this fixture's four are fixed and published as `cairn_app::fixtures::DECKS`, which is what
 a file built to be imported against it reads. Every import plan this repository could reach before it
-said *new deck*.
+said *new deck*. **Its twenty-five notes are fixed too** (`fixtures::deck_note_id`, added by #166):
+a deck id reaches the update path, but every line under it counts *note* ids — kept, moved, retracted
+— so a file against minted notes would say *updating* and then nothing else.
 
 **The storyboard names its own fixture, and that placement is the point.** A storyboard that needs a
 pre-made collection and is run without one produces a full set of perfectly valid captures **of the
@@ -202,6 +205,46 @@ first launch either, because ADR-0007 §6 deliberately puts it in the Auto Backu
 fixtures are therefore installable from *inside*, from a temporary block at the bottom of Settings —
 one definition, two ways in. `storyboards/fixture-bench.txt` drives that block here, so the handset
 is not where it is first found broken.
+
+## File sets: the files an import arrives from
+
+A fixture is what is *inside* the application. The file surface — the file list and the import
+preview behind it — needs something *outside* it: files, in the place the user-files seam lists. A
+storyboard names a **file set** the way it names a fixture:
+
+```
+fixture decks
+files imports
+```
+
+| file set | built against | what it makes reachable |
+|---|---|---|
+| `imports` | `decks` | an update of *Français* that renames it, deletes three held notes, moves notes in from a deck and from unfiled and leaves that deck empty; a three-deck file, one held and two new, under a Persian filename; a collection archive; a file that no longer parses |
+
+**The documents directory is part of the scratch profile.** `capture-desktop.sh` sets
+`XDG_DOCUMENTS_DIR` into it on every run, set or not by the storyboard, because that is where
+`cairn_export::platform::desktop` writes and lists. Before #166 it was the one base left pointing at
+the operator's real `~/Documents`, so an export pressed during a capture wrote there, and the file list
+photographed whatever was in it.
+
+**A set is written through the seam, not copied in.** `cairn-fixture files <set>` calls the same
+`platform::put` an export does. That is what makes the set reachable on a **handset**, where no harness
+can write `MediaStore` but the application can, and where the list returns exactly the rows the
+application inserted — so the same sets are a row of buttons under the fixtures on Settings.
+
+**A set verifies itself and is installed after its fixture.** It lists its files back, re-reads each,
+and plans it through the same read a selected row takes, and exits non-zero unless every file plans as
+the set says. The update file only takes the update path against the collection it names, so a `files`
+line without its `fixture` line abandons the run instead of photographing *new deck* under an update's
+name — the silent miss, arriving from a sixth side.
+
+**Installing a set twice writes nothing.** The files are byte-identical on every build, and the seam
+has no delete, so a name already present with the same bytes is left alone and a name present with
+different bytes is **refused**, never deduped to `French A1 (1).cdeck` beside it.
+
+`storyboards/file-surface.txt` photographs the list and all four previews. It runs at **1280×800
+only**, for `fixture-bench.txt`'s reason: the specimens sit below prose that wraps differently at other
+widths. Every shot names the file it previews, so a missed row says so.
 
 ## Persian: what the harness proves, and what it does not
 
