@@ -19,6 +19,7 @@ pub mod cards;
 pub mod controls;
 pub mod deck;
 pub mod editor;
+pub mod file_bench;
 pub mod fixtures;
 pub mod fonts;
 pub mod frame;

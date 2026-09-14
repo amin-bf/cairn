@@ -8,8 +8,8 @@ use cairn_store::Collection;
 
 use crate::screens::enrolment::enrolment_screen;
 use crate::{
-    bidi, body, compact_button, field_label, fixtures, fonts, full_width_button, heading, inbound,
-    listing, optimise, sync, text_field,
+    bidi, body, compact_button, field_label, file_bench, fixtures, fonts, full_width_button,
+    heading, inbound, listing, optimise, sync, text_field,
 };
 use crate::{spacing, typography};
 
@@ -141,7 +141,7 @@ pub(crate) fn settings_screen(
     ui.add_space(spacing::gap(3));
     ui.separator();
     ui.add_space(spacing::gap(2));
-    if let Some(chosen) = fixture_bench(ui, bench) {
+    if let Some(chosen) = fixture_bench(ui, bench, coll) {
         request = Some(chosen);
     }
 
@@ -185,8 +185,14 @@ pub(crate) fn settings_screen(
 /// reaches it; this shortens it for the rest of the process, which is the difference between a
 /// decided state that gets looked at and one that does not.
 ///
+/// The **file sets** sit under the fixtures, and they are the one control here that acts on the spot:
+/// a set only *adds* files through the user-files seam and reads the collection to check its plans,
+/// so it closes no connection and needs nothing from the caller. On a handset this row is the only
+/// way a file set lands at all — `MediaStore` is writable by the application and by nothing outside
+/// it (`file_bench`).
+///
 /// Returns what the person asked for; the caller acts once the collection borrow has ended.
-fn fixture_bench(ui: &mut egui::Ui, bench: &mut Bench) -> Option<BenchRequest> {
+fn fixture_bench(ui: &mut egui::Ui, bench: &mut Bench, coll: &Collection) -> Option<BenchRequest> {
     let mut request = None;
 
     field_label(ui, "Fixtures (temporary)");
@@ -203,6 +209,20 @@ fn fixture_bench(ui: &mut egui::Ui, bench: &mut Bench) -> Option<BenchRequest> {
             if compact_button(ui, fixture.label()).clicked() {
                 bench.said = format!("Installing {} — {}…", fixture.key(), fixture.reaches());
                 request = Some(BenchRequest::Install(fixture));
+            }
+        }
+    });
+
+    ui.add_space(spacing::gap(1));
+    spacing::row_wrapped(ui, 1, |ui| {
+        for set in file_bench::FileSet::ALL {
+            if compact_button(ui, set.label()).clicked() {
+                // Said in full either way, for the reason the fixture verdict is: a set built against
+                // the wrong collection is refused, and the refusal names the fixture it needs.
+                bench.said = match set.install(coll) {
+                    Ok(landed) => format!("{} — {landed}", set.key()),
+                    Err(message) => message,
+                };
             }
         }
     });
@@ -546,9 +566,10 @@ fn inbound_specimen(
                     // One unit between statements. The preview is the one screen a stranger's file
                     // writes onto (ADR-0022 §10), so its lines must not run together into a single
                     // block a reader skims — and they did exactly that once the ambient 3px went to
-                    // zero. This screen is **not reachable by the capture harness** (it needs a file
-                    // dropped on the window, which synthetic input cannot produce), so nothing would
-                    // have photographed the regression.
+                    // zero. Nothing photographed the regression because this screen was believed
+                    // unreachable by the capture harness — it needs no drop, only a row selected in
+                    // the list above (#151) — and is photographed now by
+                    // `storyboards/file-surface.txt` against the file bench (#166).
                     for (i, line) in plan_lines(plan).into_iter().enumerate() {
                         if i > 0 {
                             ui.add_space(spacing::gap(1));
