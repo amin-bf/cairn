@@ -50,6 +50,11 @@ comfortable and a stretch depending on which hand holds the phone.
 > cluster lands there and the leftover height falls **between the card and the controls**. When it
 > does not, the controls follow the card at the ordinary stated gap and nothing is placed.
 
+> **Amended by [ADR-0040 §4](0040-the-note-editor.md): *the last control on the page*, not *the way
+> forward*.** Every earlier call site placed something pressed next. The editor's *Done* is pressed when
+> finished, and it sits on this line too — the fourth call site and the first on Notes — which is the
+> reading that lets the rule mean anything on a screen with no way forward on it.
+
 > **Extended by [ADR-0039 §8](0039-the-list-row.md): on a *scrolling* surface, a control on the
 > reach line lives outside the scroll.** `slack_above` spends **leftover** height, and a list has
 > none — twenty-five rows are longer than any page — so on the note list this section reached nothing

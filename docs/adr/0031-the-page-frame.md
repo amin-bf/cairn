@@ -89,7 +89,16 @@ where the eye has two columns to line up against rather than one.
 `frame::cap_for` is asked by the nav row *and* by the screen, so the two cannot disagree. Had each
 named its own number, the nav would drift out of step the first time one of them changed.
 
+> **Amended by [ADR-0040 §1](0040-the-note-editor.md): `cap_for` takes no width.** It was handed the
+> window, and that parameter was the one thing that let the two call sites measure for themselves and
+> disagree. It now asks `frame::editor_is_side_by_side`, which reads the platform's soft keyboard.
+
 ### 4. The editor's two panes sit side by side, and the threshold measures the window
+
+> **Superseded in part by [ADR-0040 §1](0040-the-note-editor.md): there is no threshold.**
+> `TWO_COLUMN_MIN_WIDTH` is deleted and the panes fold where a soft keyboard exists, which settles this
+> section's *"what is not decided here"*. Two columns, form left and cards right, the header travelling
+> with the form, and the editor's second frame at 1120 all stand.
 
 [ADR-0012 §1](0012-the-note-authoring-experience.md) has always described the wide editor as two
 panes that *"cannot sit side by side"* below a threshold. The implementation stacked them vertically

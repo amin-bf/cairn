@@ -104,6 +104,11 @@ is `extreme_bg_color`. A well therefore means *content*, not *editable*; the two
 8px corner against the widget's 2px, and by never appearing on the same screen. If they ever must
 diverge, `theme::card_fill` is the one line that changes.
 
+> **Amended by [ADR-0040 §2](0040-the-note-editor.md): they diverge, and the field is what moved.** The
+> editor draws fields and card faces side by side, so the second ground never held there and the two
+> were 1.000:1. The card keeps `STONE_0`; `extreme_bg_color` — the field — is `STONE_1` in dark and
+> `STONE_L_FIELD` in light, **between the page and the card**, so the card stays the deepest surface.
+
 **What was rejected, and why it is close.** An **outline** card — no fill, the page showing through —
 is very nearly the same picture, because the dark end of the stone ramp is compressed enough that
 `STONE_0`-on-`panel_fill` is only 1.12:1. It was rejected for what it costs later rather than for how
