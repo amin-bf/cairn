@@ -8,7 +8,7 @@
 //! sniffing the bytes' `mimetype` member, never the name: on Android both profiles store as
 //! `application/octet-stream` and a `.cdeck` may in fact carry a collection archive, so the sniff is
 //! the only thing that can tell them apart ([`describe`], ADR-0024 §1). A file this application wrote
-//! but can no longer parse sniffs to `None` and is **still listed, marked unreadable** — hiding it
+//! but can no longer parse is **still listed, marked unreadable** — hiding it
 //! would send a user after a permissions problem that does not exist (ADR-0022 §11).
 //!
 //! **What the list cannot show, and must not imply it can.** Scoped storage grants this application
@@ -20,11 +20,12 @@
 //! **One mechanism, not two.** Selecting a listed row does not open a second identification path: it
 //! re-reads the bytes and hands them to [`select`], which produces an [`Inbound`] exactly as an
 //! arriving file does, so it reaches the same [`crate::inbound::read`] gate-and-plan (acceptance of
-//! #108, ADR-0022 §5). The row description here is the cheap sniff, deliberately: describing a whole
-//! folder must inflate **zero payloads** (ADR-0022 §11), and the plan — which does inflate — is
+//! #108, ADR-0022 §5). The row description is the sniff plus the **manifest** — the counts and, for
+//! an archive, the date ADR-0022 §11 draws — and still inflates **zero payloads**: the manifest is the
+//! central directory's small companion, not a payload (ADR-0022 §2). The plan, which does inflate, is
 //! derived only for the one file the user selects.
 
-use cairn_export::Profile;
+use cairn_export::Summary;
 
 use crate::inbound::{Arrival, Inbound};
 
@@ -34,10 +35,10 @@ use crate::inbound::{Arrival, Inbound};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listed {
     pub name: String,
-    /// What the bytes say the file is, sniffed from the `mimetype` member (ADR-0024 §1). `None` when
-    /// a file we wrote no longer parses as a container — **listed and marked unreadable**, never
-    /// hidden (ADR-0022 §11).
-    pub sniffed: Option<Profile>,
+    /// What the file's own manifest says it is (ADR-0022 §11), its profile decided by the `mimetype`
+    /// member (ADR-0024 §1). [`Summary::Unreadable`] when a file we wrote no longer parses —
+    /// **listed and marked unreadable**, never hidden (ADR-0022 §11).
+    pub summary: Summary,
 }
 
 /// Describe one listed file **from its bytes**, never its extension. The profile is the sniff's, so a
@@ -47,7 +48,7 @@ pub struct Listed {
 pub fn describe(name: &str, bytes: &[u8]) -> Listed {
     Listed {
         name: name.to_owned(),
-        sniffed: cairn_export::sniff(bytes),
+        summary: cairn_export::summarise(bytes),
     }
 }
 
@@ -70,8 +71,8 @@ mod tests {
     use cairn_core::content::DeckId;
     use cairn_core::identity::CollectionId;
     use cairn_export::{
-        CollectionArchive, DeckContent, DeckExport, Metadata, build_collection, build_deck,
-        deck_digest, next_revision,
+        CollectionArchive, DeckContent, DeckExport, Metadata, Profile, build_collection,
+        build_deck, deck_digest, next_revision,
     };
     use cairn_store::Collection;
     use tempfile::TempDir;
@@ -106,7 +107,7 @@ mod tests {
     fn an_unparseable_file_we_wrote_is_still_listed_marked_unreadable() {
         let listed = describe("French A1.cdeck", b"was a deck once, now truncated");
         assert_eq!(listed.name, "French A1.cdeck");
-        assert_eq!(listed.sniffed, None);
+        assert_eq!(listed.summary, Summary::Unreadable);
     }
 
     /// Identity is the sniff, never the extension: a `.cdeck` whose **bytes** are a collection archive
@@ -116,10 +117,10 @@ mod tests {
     fn the_profile_is_the_sniff_not_the_extension() {
         // A collection archive that a collision or a rename left carrying a deck extension.
         let listed = describe("backup.cdeck", &collection_bytes());
-        assert_eq!(listed.sniffed, Some(Profile::Collection));
+        assert!(matches!(listed.summary, Summary::Collection { .. }));
 
         let listed = describe("shared.ccoll", &deck_bytes(DeckId([0xaa; 16]), "Deck"));
-        assert_eq!(listed.sniffed, Some(Profile::Deck));
+        assert!(matches!(listed.summary, Summary::Deck { decks: 1, .. }));
     }
 
     /// Selecting a listed file reaches the **same** identification and plan path an arriving file

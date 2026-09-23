@@ -13,11 +13,12 @@
 //!   Cyrillic still come from egui's own Hack / Ubuntu-Light wherever they have the glyph, because
 //!   the added faces are appended as **fallbacks**.
 //! - **`Cairn Icons`** — the application's own pictures: [`MARK`], the four stones, plus [`MOVE`]
-//!   and [`DELETE`], the note-list row's two controls (#162).
+//!   and [`DELETE`], the note-list row's two controls (#162), and [`DECK`], [`ARCHIVE`] and
+//!   [`UNREADABLE`], the file list's three kinds of row (#167).
 //!   [ADR-0038 §1](../../../docs/adr/0038-the-mark-and-the-icon-rule.md) routes icons through the
 //!   font stack rather than through images, and this is what that costs: a fourth face, appended as
 //!   a fallback exactly like the other two, carrying no script. It is generated from sources this
-//!   repository keeps — the drawable the Android build already ships, and two SVGs under
+//!   repository keeps — the drawable the Android build already ships, and the SVGs under
 //!   `crates/app/icons/` — by `scripts/build-icon-face.py`, whose `--check` mode is the claim
 //!   that the glyphs really *are* those drawings.
 //!
@@ -74,6 +75,26 @@ pub const MOVE: char = '\u{E001}';
 /// **Delete** — the note-list row's other control (#162), from the design project's own
 /// `assets/icons/delete.svg`, redrawn as a filled outline because a glyph has no strokes.
 pub const DELETE: char = '\u{E002}';
+
+/// **Deck** — a file-list row that holds decks (#167), from the design project's own
+/// `assets/icons/deck.svg`.
+///
+/// **It accompanies its word and never stands in for it**, and that is the opposite of [`MOVE`]'s
+/// licence rather than an inconsistency with it ([ADR-0041 §4]). A reader arrives already knowing a
+/// bin and a double-headed arrow, so twenty-five repetitions only have to attach them to a place; no
+/// one arrives knowing this picture means *a deck file*, so it is drawn beside the word *deck* and
+/// the word stays.
+///
+/// [ADR-0041 §4]: ../../../docs/adr/0041-the-file-surface.md
+pub const DECK: char = '\u{E003}';
+
+/// **Archive** — a file-list row that is a collection archive (#167). Drawn here, for the reason
+/// [`MOVE`] was: the design project's set has no picture for it. Accompanies its words, as [`DECK`].
+pub const ARCHIVE: char = '\u{E004}';
+
+/// **Unreadable** — a file-list row this application wrote and can no longer read, listed rather
+/// than hidden (ADR-0022 §11). Drawn here, and accompanies its word, as [`DECK`].
+pub const UNREADABLE: char = '\u{E005}';
 
 /// The font family that carries **bold**, registered by [`install`] and drawn by whatever renders
 /// the Markdown `**bold**` subset (ADR-0002 §8).
@@ -459,12 +480,23 @@ mod tests {
             .rect
             .width()
         };
-        let (mv, del) = (advance(MOVE), advance(DELETE));
-        assert!(
-            (mv - del).abs() < 0.5,
-            "a set's glyphs share an advance so an icon-only column lines up: \
-             move is {mv}px and delete is {del}px"
-        );
+        let mv = advance(MOVE);
+        // The file list's three join the set, and a file row's picture sits in a column exactly as
+        // a note row's action does (#167): three kinds of file with three ink widths would put the
+        // name beside each at a different x.
+        for (name, glyph) in [
+            ("delete", DELETE),
+            ("deck", DECK),
+            ("archive", ARCHIVE),
+            ("unreadable", UNREADABLE),
+        ] {
+            let other = advance(glyph);
+            assert!(
+                (mv - other).abs() < 0.5,
+                "a set's glyphs share an advance so an icon column lines up: \
+                 move is {mv}px and {name} is {other}px"
+            );
+        }
         // **The mark keeps §1's original rule and is deliberately not asserted here.** It stands
         // alone, so its advance is its own ink — which
         // `the_mark_is_a_cap_height_of_stones_and_no_wider_than_it_draws` already pins, and which is

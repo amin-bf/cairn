@@ -15,6 +15,9 @@ lives in this repository:
   (#162). `delete.svg` is the design project's file verbatim; `move.svg` is drawn here, because the
   design project's sixteen icons have no `move` — the set was authored before the screen that
   needed one.
+- **`deck`**, **`archive`** and **`unreadable`** — the file list's three kinds of row (#167).
+  `deck.svg` is the design project's file verbatim; the other two are drawn here, for the same
+  reason `move` was.
 
 Edit a source and the face follows; edit neither and `--check` says so.
 
@@ -110,6 +113,9 @@ GLYPHS = [
     ("mark", 0xE000, DRAWABLE, "ink"),
     ("move", 0xE001, ICONS / "move.svg", "square"),
     ("delete", 0xE002, ICONS / "delete.svg", "square"),
+    ("deck", 0xE003, ICONS / "deck.svg", "square"),
+    ("archive", 0xE004, ICONS / "archive.svg", "square"),
+    ("unreadable", 0xE005, ICONS / "unreadable.svg", "square"),
 ]
 
 
@@ -187,6 +193,12 @@ def polylines(data):
             for v in n:
                 cursor = (cursor[0], v) if command == "V" else (cursor[0], cursor[1] + v)
                 points.append(cursor)
+        elif command in "Zz":
+            # Close back to the subpath's start: one more straight segment. `deck.svg` is the first
+            # source to close a shape, and the stadium caps make the closing joint round like the rest.
+            if points and points[-1] != points[0]:
+                points.append(points[0])
+            cursor = points[0] if points else cursor
         else:
             raise SystemExit(f"unsupported path command {command!r}")
     if len(points) > 1:
@@ -373,7 +385,7 @@ def main():
     with tempfile.NamedTemporaryFile(suffix=".ttf") as fresh:
         print(build(fresh.name))
         if filecmp.cmp(fresh.name, FACE, shallow=False):
-            print(f"{FACE.relative_to(ROOT)} is those three sources")
+            print(f"{FACE.relative_to(ROOT)} is its sources")
             return 0
         print(
             f"{FACE.relative_to(ROOT)} does not match its sources — "

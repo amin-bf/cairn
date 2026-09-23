@@ -128,6 +128,13 @@ is a projection of the log, and a cached one can be falsified by a merge landing
 _Avoid_: Import summary, import result — both name something produced after the fact, and there is
 nothing after the fact.
 
+**Summary**:
+What a file-list row says about a file, read from its `mimetype` member and manifest alone and
+inflating no payload (ADR-0022 §11, ADR-0041 §5): a deck file's deck, note and retraction counts, an
+archive's date and counts, or *unreadable*. **The file's own claims, never its effects** — the preview
+derives those; a summary's counts are the wrong numbers for it.
+_Avoid_: Description (the manifest field of that name is the author's prose), plan.
+
 **Preview**:
 The import plan, shown, with the import declinable. The one gate in this specification, and it exists
 because a regretted import is the one destructive act no archive and no peer can undo.

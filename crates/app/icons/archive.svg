@@ -1,0 +1,5 @@
+<!-- **Drawn for the file list (#167), not taken from the sixteen**, which have no picture for a
+     collection archive. A lidded box with a slot: the thing a whole collection is packed into, in
+     the set's own language — the 24px grid, the 1.5 stroke, round caps and joins. It accompanies the
+     words *collection archive* and never replaces them (ADR-0041 §4). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="archive"><path d="M3.75 4.75h16.5v4H3.75z"></path><path d="M5.25 8.75v10.5h13.5V8.75M10 12.5h4"></path></svg>

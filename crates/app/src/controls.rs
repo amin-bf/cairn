@@ -160,6 +160,61 @@ pub fn row_inert(ui: &mut Ui, text: &str, caption: Option<&str>) {
     band_text(ui, rect, text, caption);
 }
 
+/// A row that **opens** and carries a picture beside its words — the file list's row
+/// ([ADR-0041 §4](../../../docs/adr/0041-the-file-surface.md)). Returns whether the band was pressed.
+///
+/// **The picture accompanies the words and never replaces them.** The note row's glyphs stand alone
+/// because a reader arrives already knowing a bin and a double-headed arrow (ADR-0039 §1); nobody
+/// arrives knowing a picture for *a deck file* or *a collection archive*, so here the caption keeps
+/// the word and the picture is only what lets the eye sort the list before reading it.
+///
+/// The mark sits at the row's **leading** edge — the side its text starts from — so a Persian-named
+/// file carries it on the right, beside the name it belongs to. It takes a square of one **heading**
+/// size in the caption's weak ink — the same square the set's advance gives every glyph (ADR-0039 §9),
+/// so two rows with different kinds of file start their names at the same x. Heading rather than body
+/// because it stands beside *two* lines, the name and its caption: drawn at body it was eight pixels of
+/// ink against a thirty-two pixel block of text, and read as a speck rather than as a picture.
+pub fn row_marked(ui: &mut Ui, mark: char, text: &str, caption: &str) -> bool {
+    let height = row_height(ui, true);
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::click(),
+    );
+    let fill = if response.hovered() {
+        ui.visuals().widgets.hovered.bg_fill
+    } else {
+        theme::control_fill(ui.visuals())
+    };
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::same(2), fill);
+
+    let size = crate::typography::HEADING;
+    let rtl = crate::bidi::is_rtl(text);
+    let pad = spacing::gap(1);
+    let mark_x = if rtl {
+        rect.right() - pad - size / 2.0
+    } else {
+        rect.left() + pad + size / 2.0
+    };
+    ui.painter().text(
+        egui::pos2(mark_x, rect.center().y),
+        egui::Align2::CENTER_CENTER,
+        mark,
+        egui::FontId::proportional(size),
+        ui.visuals().weak_text_color(),
+    );
+
+    // The text takes what is left after the mark and a unit of air beside it.
+    let taken = size + pad;
+    let text_rect = if rtl {
+        egui::Rect::from_min_max(rect.min, egui::pos2(rect.right() - taken, rect.bottom()))
+    } else {
+        egui::Rect::from_min_max(egui::pos2(rect.left() + taken, rect.top()), rect.max)
+    };
+    band_text(ui, text_rect, text, Some(caption));
+    response.clicked()
+}
+
 /// The height of the text a row carries — one line, or two when it carries a caption.
 fn text_block(ui: &Ui, captioned: bool) -> f32 {
     let line = |size: f32| {

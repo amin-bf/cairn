@@ -30,6 +30,7 @@ pub mod files;
 pub mod import;
 pub mod name;
 pub mod platform;
+pub mod summary;
 
 pub use collection::{
     CollectionArchive, RESTORE_IS_A_MERGE, RESTORE_MISMATCH_WAY_OUT, RestorePlan, RestoreRefusal,
@@ -48,3 +49,4 @@ pub use import::{
 };
 pub use name::{DECK_EXTENSION, export_filename, sanitise};
 pub use platform::{PlatformError, Written};
+pub use summary::{Summary, summarise};

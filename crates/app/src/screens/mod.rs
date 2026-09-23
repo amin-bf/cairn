@@ -3,6 +3,8 @@
 //! what every destination needs and none of them owns.
 
 pub(crate) mod enrolment;
+/// The import preview — not a destination: it takes the screen while a file is held (ADR-0022 §6).
+pub(crate) mod import;
 pub(crate) mod notes;
 pub(crate) mod review;
 pub(crate) mod settings;
