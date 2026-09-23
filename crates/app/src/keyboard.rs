@@ -164,6 +164,16 @@ impl Band {
         }
     }
 
+    /// Put the next frame's scroll area at its top.
+    ///
+    /// For a screen that **replaces** the page rather than continuing it — the import preview (#167).
+    /// Every screen is drawn in the one scroll area, so without this a row opened halfway down
+    /// Settings opens its preview halfway down too, with the file's name and its header already
+    /// scrolled away above the viewport.
+    pub fn scroll_to_top(&mut self) {
+        self.forced_scroll = Some(0.0);
+    }
+
     /// Record where the scroll area ended up, for the next frame's guards.
     pub fn record<R>(&mut self, out: &egui::scroll_area::ScrollAreaOutput<R>) {
         self.scroll_offset = out.state.offset.y;

@@ -480,6 +480,8 @@ imported deck when the file carried one and left unfiltered when it carried seve
 from a cold start lands on the count picker**, the same place ADR-0006 §2's force-stop test lands.
 What it *states* is `export`'s (**import plan**, **preview**, **gate / describe**); what is here is
 that it has no home and takes the screen. The **restore preview** is the same screen, one line long.
+Its **gate** is *Import* and *Cancel*, or a lone *Close* when it refuses or would change nothing,
+pinned on the reach line (ADR-0041 §3).
 _Avoid_: Import dialog, import modal, import overlay — ADR-0022 §6 rules out all three, and *overlay*
 implies a destination underneath that a cold start does not have.
 

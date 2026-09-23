@@ -322,20 +322,26 @@ pub struct CairnApp {
     band: keyboard::Band,
     /// **Temporary** — the hand-off specimen's state (see [`handoff_specimen`]).
     handoff: HandOff,
-    /// **Temporary** — the file-list specimen's state (see [`file_list_specimen`]).
+    /// The file list's rows, read again each time Settings opens (ADR-0022 §11, ADR-0041 §5).
     file_list: FileList,
     /// **Temporary** — the fixture bench's state (see `fixtures`).
     bench: Bench,
     /// The file the platform handed us — a launch intent read once at startup, or the last file
-    /// dropped on the window — held so the inbound specimen can **re-derive** its plan every frame
-    /// (ADR-0022 §5). This is the *file*, never a cached plan: `inbound::read` runs the whole
-    /// gate-then-describe read against the live collection each time the specimen draws.
+    /// dropped on the window, or a row opened in the file list. **While it is `Some`, the import
+    /// preview takes the screen** (ADR-0022 §6). This is the *file*, never a cached plan:
+    /// `inbound::read` runs the whole gate-then-describe read against the live collection every frame
+    /// the preview draws (ADR-0022 §5).
     inbound: Option<inbound::Inbound>,
-    /// **Temporary** — what the inbound specimen's development *Import* control last did, held only
-    /// so a store failure is not swallowed. The specified surface owes **nothing** after an import
-    /// (ADR-0022 §5); this is the specimen reporting to whoever is holding the phone, and it goes
-    /// when [#167](https://github.com/amin-bf/cairn/issues/167) draws the real gate.
-    import_outcome: Option<String>,
+    /// Why pressing *Import* wrote nothing — a store error, which would otherwise be swallowed.
+    ///
+    /// **Not the post-import report ADR-0022 §5 refuses.** A successful import says nothing at all:
+    /// the numbers were stated while the person could still say no, and the application simply
+    /// lands on the note list looking at what arrived. This is only ever a failure, and it stays on
+    /// the preview, where pressing *Import* again is the recovery.
+    import_failed: Option<String>,
+    /// Whether the preview was on screen last frame — so the frame it starts or ends on can put the
+    /// page back at its top.
+    was_previewing: bool,
     /// Whether the launch intent has been consulted yet (`platform::launch_file` is a one-shot read,
     /// so it is asked once as the app comes up — which is where cold start is satisfied, ADR-0016 §5).
     launch_checked: bool,
@@ -396,7 +402,8 @@ impl CairnApp {
             file_list: FileList::default(),
             bench: Bench::default(),
             inbound: None,
-            import_outcome: None,
+            import_failed: None,
+            was_previewing: false,
             launch_checked: false,
         }
     }
@@ -514,6 +521,42 @@ impl CairnApp {
         }
     }
 
+    /// **Accept the file on the preview** — ADR-0022 §1's gate, pressed.
+    ///
+    /// The import is **derived again here** and applied from that derivation, never from the plan the
+    /// screen drew (`inbound::apply`, deck-export rule 16). If the file stopped being importable
+    /// between the draw and the press, nothing is written and the next frame's preview says why.
+    ///
+    /// On success **nothing is reported** (ADR-0022 §5). The application goes to the note list,
+    /// filtered to the deck the file carried, or unfiltered when it carried several — so the person
+    /// lands looking at what arrived rather than at a screen asserting that it did. An editor left
+    /// open underneath is settled first, because clearing it would otherwise throw away the field
+    /// being typed in (ADR-0021 §7). The sitting goes: ADR-0022 §6 accepts losing the chosen count
+    /// and the timer rather than holding state to preserve them.
+    fn accept_import(&mut self) {
+        let (Some(file), Ok(coll)) = (self.inbound.as_ref(), self.store.as_mut()) else {
+            return;
+        };
+        match inbound::apply(file, coll) {
+            Err(e) => self.import_failed = Some(format!("Could not write the import: {e}")),
+            Ok(Err(_)) => {}
+            Ok(Ok(applied)) => {
+                if let Some(ed) = self.editing.take() {
+                    editor::settle_all(coll, ed.note, &ed.kind, &ed.fields, ed.deck);
+                }
+                self.inbound = None;
+                self.import_failed = None;
+                self.sitting = None;
+                self.moving = None;
+                self.search.clear();
+                self.deck.filter = applied
+                    .filter_to
+                    .map_or(notes::DeckFilter::All, notes::DeckFilter::Deck);
+                self.dest = Destination::Notes;
+            }
+        }
+    }
+
     /// Forget every in-memory screen state, because all of it describes rows that no longer exist.
     fn forget_screen_state(&mut self) {
         self.sitting = None;
@@ -628,7 +671,13 @@ impl eframe::App for CairnApp {
         //
         // It sits below the status-bar band and outside the scroll area, which is what makes it
         // pinned rather than merely first.
-        if !self.band.keyboard_is_up() {
+        //
+        // **And it steps aside while a file is being previewed.** The preview has no destination and
+        // takes the screen (ADR-0022 §6, #151): its only ways out are the gate's, so a file held while
+        // the person wanders to another destination can never be left behind half-decided — and the
+        // one screen that renders a stranger's strings is the one screen with nothing else on it.
+        let previewing = self.inbound.is_some();
+        if !self.band.keyboard_is_up() && !previewing {
             // The row aligns to whatever column the destination beneath it is using, which on every
             // screen but a wide editor is the measure. Both sides ask `frame::cap_for` rather than
             // naming a number, so the nav cannot drift out of step with the content (`frame`).
@@ -669,7 +718,61 @@ impl eframe::App for CairnApp {
         let creating = self.dest == Destination::Notes
             && self.editing.is_none()
             && self.moving.is_none()
-            && !self.setting_up_sync;
+            && !self.setting_up_sync
+            && !previewing;
+
+        // The list reads itself again whenever Settings is opened (ADR-0041 §5), so leaving it drops
+        // the rows it held.
+        if self.dest != Destination::Settings || previewing {
+            self.file_list.forget();
+        }
+
+        // ---- The import preview's gate, pinned on the reach line (ADR-0022 §1, ADR-0041 §3) --------
+        //
+        // The plan is derived **once this frame**, here, and handed to both the band and the body, so
+        // the gate and the lines above it describe the same derivation; the next frame derives again
+        // (ADR-0022 §5). It is never held past this frame.
+        let report = self.inbound.as_ref().map(|file| inbound::read(file, coll));
+        if let Some(report) = &report {
+            let gate = match report {
+                Ok(report) => screens::import::gate_for(&report.outcome),
+                Err(_) => screens::import::Gate::Dismiss,
+            };
+            let band = frame::pinned_band(ui.available_rect_before_wrap().height());
+            let mut pressed = None;
+            // Opaque, for the reason *Create note*'s band is below.
+            egui::Panel::bottom("import-gate")
+                .exact_size(band)
+                .frame(egui::Frame::NONE.fill(ui.visuals().panel_fill))
+                .show(ui, |ui| {
+                    ui.add_space(spacing::gap(1));
+                    frame::column(ui, |ui| {
+                        pressed = screens::import::gate(ui, gate);
+                    });
+                });
+            match pressed {
+                None => {}
+                // Declining costs nothing and leaves nothing behind (ADR-0022 §1). From a cold start
+                // this lands on Review, which is the count picker (§6).
+                Some(screens::import::Pressed::Leave) => {
+                    self.inbound = None;
+                    self.import_failed = None;
+                }
+                Some(screens::import::Pressed::Import) => self.accept_import(),
+            }
+        }
+        // The press above may have ended the preview; the rest of the frame draws what is now so.
+        let previewing = self.inbound.is_some();
+        let report = report.filter(|_| previewing);
+        // The preview replaces the page, so it opens at its top — and so does whatever it hands back
+        // to, which is the note list after an import (see `Band::scroll_to_top`).
+        if previewing != self.was_previewing {
+            self.band.scroll_to_top();
+            self.was_previewing = previewing;
+        }
+        let Ok(coll) = self.store.as_mut() else {
+            return;
+        };
         if creating {
             let band = frame::pinned_band(ui.available_rect_before_wrap().height());
             let cap = frame::cap_for(false);
@@ -714,6 +817,19 @@ impl eframe::App for CairnApp {
         let mut bench_request: Option<BenchRequest> = None;
         let out = area.show(ui, |ui| {
             ui.add_space(spacing::gap(1));
+
+            // **A held file takes the screen** in place of the destination (ADR-0022 §6): the
+            // preview has no destination of its own, and its gate is the band pinned above.
+            if let Some(report) = &report {
+                frame::column(ui, |ui| match report {
+                    Ok(report) => screens::import::import_screen(ui, report),
+                    Err(e) => body(ui, &format!("Could not read the collection: {e}")),
+                });
+                if let Some(failed) = &self.import_failed {
+                    frame::column(ui, |ui| body(ui, failed));
+                }
+                return;
+            }
 
             // **Every destination is drawn inside the page frame** (`frame`, #131): a 28px gutter,
             // one column capped at the measure, centred, at every width. Notes is the one that takes
@@ -767,7 +883,6 @@ impl eframe::App for CairnApp {
                             &mut self.optimise_done,
                             &mut self.handoff,
                             &mut self.inbound,
-                            &mut self.import_outcome,
                             &mut self.file_list,
                             &mut self.bench,
                             now_ms,
