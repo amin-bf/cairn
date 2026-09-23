@@ -55,12 +55,35 @@ use egui::{Color32, FontId};
 /// the merge, at the cost of a visible gap).
 fn push(job: &mut LayoutJob, text: &str, fmt: &TextFormat) {
     let start = ByteIndex(job.text.len());
-    job.text.push_str(text);
+    // The isolate marks have done their work by now — they steered the ordering above — and no face
+    // draws them, so what reaches the galley is only the text the reader sees (see [`isolate`]).
+    job.text
+        .extend(text.chars().filter(|c| !matches!(*c, FSI | PDI)));
     job.sections.push(LayoutSection {
         leading_space: 0.0,
         byte_range: start..ByteIndex(job.text.len()),
         format: fmt.clone(),
     });
+}
+
+/// FIRST STRONG ISOLATE and POP DIRECTIONAL ISOLATE — the pair [`isolate`] wraps a name in.
+const FSI: char = '\u{2068}';
+const PDI: char = '\u{2069}';
+
+/// Wrap `name` so it is laid out as a run of its **own** direction and cannot reorder the words
+/// around it — the form for a name placed inside the application's sentence (#167).
+///
+/// **Joining the two was the defect.** *"4 notes moving in from فارسی and 2 more"* as one paragraph
+/// lets the name's right-to-left run absorb the neutrals and digits beside it, so the application's
+/// words and the name's words interleave. Isolated, the name orders by its own first strong
+/// character and the sentence around it orders by its own, which is exactly how two statements
+/// sharing one line should behave (Unicode Bidirectional Algorithm, rules X5a–X6a).
+///
+/// The marks never reach the screen: [`job`] orders with them and then drops them. `cairn-export`'s
+/// `plain` removes every bidi control from a string arriving in a file, so a stranger's name cannot
+/// carry a pop-isolate of its own that would close this one early.
+pub fn isolate(name: &str) -> String {
+    format!("{FSI}{name}{PDI}")
 }
 
 /// Arabic-Indic digits carry the Arabic script property, so `guess_segment_properties()` infers
@@ -364,6 +387,33 @@ mod tests {
         // The direction is still available, from the question that answers it.
         assert!(is_rtl("سلام دنیا"));
         assert!(!is_rtl("hello world"));
+    }
+
+    /// **An isolated name keeps its own order and leaves the sentence's alone** (#167). Joined into
+    /// the sentence, the Persian word leads the name's Latin tail — *"from فارسی and 2 more into"* —
+    /// because the name's run and the sentence's run are the same paragraph. Isolated, the name orders
+    /// by its own first strong character, so its Latin tail comes first on screen and the
+    /// application's words on either side stay exactly where they were written.
+    #[test]
+    fn an_isolated_name_orders_by_its_own_direction() {
+        let name = "فارسی and 2 more";
+        assert_eq!(
+            visual(&format!("from {name} into Nederlands")),
+            "from فارسی and 2 more into Nederlands",
+            "joined: the name is read as part of the English sentence",
+        );
+        assert_eq!(
+            visual(&format!("from {} into Nederlands", isolate(name))),
+            "from and 2 more فارسی into Nederlands",
+        );
+    }
+
+    /// The isolate marks steer the ordering and never reach the galley — no face draws them, so one
+    /// left in would be a box on screen.
+    #[test]
+    fn isolate_marks_never_reach_the_galley() {
+        let text = visual(&format!("renaming your {} to X", isolate("فارسی")));
+        assert!(!text.contains(FSI) && !text.contains(PDI), "{text:?}");
     }
 
     #[test]
