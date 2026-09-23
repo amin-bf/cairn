@@ -43,10 +43,21 @@ const MAX_DESCRIPTION_CHARS: usize = 1000;
 /// collapse to spaces, runs of whitespace fold to one, and the result is truncated to `max` chars
 /// with a trailing `…` when it was longer. Never interprets Markdown — the caller renders the result
 /// verbatim (ADR-0022 §7).
+///
+/// **Bidi formatting characters are dropped outright** (#167). They are format characters, not
+/// controls, so `is_control` passes them — and they are the one piece of *styling* plain text can
+/// still carry. The preview isolates a stranger's deck name inside the application's own sentence,
+/// so a name ending in a pop-isolate would close that isolate early and a right-to-left override
+/// after it would then reverse *"3 of your notes will be deleted"* — the application's words, drawn
+/// backwards by a file, on the one screen that renders a stranger's strings before the user has
+/// agreed to anything. The joiners (ZWJ, ZWNJ) are kept: Persian needs them to spell words.
 pub fn plain(s: &str, max: usize) -> String {
     let mut out = String::new();
     let mut pending_space = false;
     for ch in s.chars() {
+        if is_bidi_format(ch) {
+            continue;
+        }
         if ch.is_whitespace() || ch.is_control() {
             pending_space = !out.is_empty();
             continue;
@@ -62,6 +73,15 @@ pub fn plain(s: &str, max: usize) -> String {
         out.push('…');
     }
     out
+}
+
+/// The bidi formatting characters: the marks (LRM, RLM, ALM), the embeddings and overrides
+/// (LRE…RLO), and the isolates (LRI…PDI). Not the joiners, which shape letters rather than order runs.
+fn is_bidi_format(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
 }
 
 /// What a file is, decided by its `mimetype` member and nothing else (ADR-0024 §1).
@@ -949,6 +969,16 @@ mod tests {
         let bounded = plain(&long, 200);
         assert_eq!(bounded.chars().count(), 201); // 200 + the ellipsis
         assert!(bounded.ends_with('…'));
+    }
+
+    /// A stranger's name may not carry bidi controls into the application's sentence (#167): a
+    /// pop-isolate would close the preview's isolate early, and an override after it would reverse
+    /// the application's own words. The joiners survive, because Persian spells with them.
+    #[test]
+    fn plain_drops_bidi_controls_and_keeps_the_joiners() {
+        assert_eq!(plain("Deck\u{2069}\u{202E} evil", 100), "Deck evil");
+        assert_eq!(plain("\u{200F}فارسی\u{200E}", 100), "فارسی");
+        assert_eq!(plain("می\u{200C}خواهم", 100), "می\u{200C}خواهم");
     }
 
     #[test]
