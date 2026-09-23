@@ -689,19 +689,22 @@ fn editor_form_body(
     ed.note = note;
 
     // *New note* (ADR-0021 §8): commit the current buffers, then start a fresh draft carrying the kind
-    // forward — under autosave, that is all "save and add another" ever meant. Bound to the modifier
-    // chord, so it can never collide with a field's own Enter.
+    // and the deck forward — under autosave, that is all "save and add another" ever meant. Bound to
+    // the modifier chord, so it can never collide with a field's own Enter.
     if new_note_chord {
         // Through `settle_all` rather than its own loop, which is where this fix started: the chord
         // was the one exit that already committed its buffers, and it did so **without** the filing
         // line above it — so a note born by the chord under an active deck filter landed unfiled,
         // where the same note born by a blur landed filed.
-        // ADR-0021 §8 carries the *kind* forward and says nothing about the deck, so the fresh draft
-        // is left unfiled exactly as before — that is a design question for #163, not a defect.
         // The id it returns is deliberately dropped: the draft replacing `ed` is a *different* note,
         // so carrying the settled one forward is what would be wrong here.
         editor::settle_all(coll, note, &kind, &ed.fields, ed.deck);
+        // §8 names the deck as well as the kind. This once read §8 as silent on the deck and left
+        // the fresh draft unfiled, so a run of notes typed into one deck landed one filed and the
+        // rest unfiled, with nothing saying so (#181).
+        let deck = ed.deck;
         *ed = Editing::new_draft(&kind);
+        ed.deck = deck;
     }
 }
 
@@ -1175,5 +1178,42 @@ mod tests {
             deck_delete_warning("Français", 25).contains("cannot be undeleted"),
             "there is no undelete here (ADR-0021 §2), and the warning is where that is said"
         );
+    }
+
+    /// **The *New note* chord carries the deck forward as well as the kind** (ADR-0021 §8, #181).
+    ///
+    /// §8 names both, and the chord kept only the kind: twenty notes typed into *Français* landed
+    /// one filed and nineteen unfiled, with nothing on screen saying so. Nothing failed, because
+    /// nothing checked the deck. Driven through a real frame with the chord pressed, so a handler
+    /// that builds its draft some other way is caught too.
+    #[test]
+    fn the_new_note_chord_carries_the_deck_forward() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let deck = coll.create_deck("Français").unwrap();
+        let note = coll
+            .create_note("basic-reverse", &[("Front", "l'aube"), ("Back", "dawn")])
+            .unwrap();
+        editor::set_note_deck(&mut coll, note, Some(deck)).unwrap();
+        let mut ed = Editing::for_note(&coll, note);
+
+        let chord = egui::RawInput {
+            modifiers: egui::Modifiers::COMMAND,
+            events: vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        let _ = ctx.run_ui(chord, |ui| editor_form_body(ui, &mut coll, &mut ed, None));
+
+        assert_eq!(ed.note, None, "the chord opened a fresh draft");
+        assert_eq!(ed.kind, "basic-reverse", "the kind is carried forward");
+        assert_eq!(ed.deck, Some(deck), "the deck is carried forward too");
     }
 }

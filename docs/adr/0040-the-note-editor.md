@@ -310,7 +310,10 @@ the quantity that came out* than to either.
 It landed here anyway because it is a binding rule the app was breaking rather than a design either ticket
 could make; both inherited a corrected baseline rather than a decision.
 
-**What is still not designed here.** The *New note* chord carries the **kind** forward (ADR-0021 §8) and
-leaves the fresh draft **unfiled**, because §8 says nothing about the deck — so a run of notes written under
-one deck needs the deck re-chosen each time. Nobody has judged whether the deck should carry forward too;
-it is named here so the next reader of this screen does not have to rediscover it.
+**The chord carries the deck, and this paragraph once said it was undecided.** ADR-0021 §8 has the *New
+note* chord carry *"the current kind and deck forward"*. The code carried only the kind and left the fresh
+draft unfiled, and this ADR repeated a code comment reading §8 as silent on the deck — so a run of notes
+typed into one deck landed one filed and the rest unfiled, with nothing saying so. That was a defect, not an
+open question, and [#181](https://github.com/amin-bf/cairn/issues/181) fixed it:
+`the_new_note_chord_carries_the_deck_forward` presses the chord on a filed note and asserts the new draft is
+filed to the same deck. The comment was never checked against the ADR it cited; checking it is the lesson.
