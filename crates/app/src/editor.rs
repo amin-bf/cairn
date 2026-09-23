@@ -9,17 +9,15 @@
 //!   non-empty field** — before that there is nothing for a kill to lose, which is the whole point
 //!   of the rule on a frozen Android app.
 //!
-//!   §7 names **two** triggers, *"on blur or a short idle"*, and this line used to state both as
-//!   though both were built. **Only the blur exists.** The idle trigger was deferred in
-//!   [#82](https://github.com/amin-bf/cairn/issues/82)'s closing comment — *"for the
-//!   verify-on-handset pass — a container cannot judge them"* — against an acceptance criterion
-//!   that was never ticked, and has been owned by nothing since. Say so here rather than restating
-//!   the rule, because a doc comment that describes an unbuilt half is how it stayed unnoticed.
+//!   §7 names **two** triggers, *"on blur or a short idle"*, and both are built. The idle half was
+//!   deferred in [#82](https://github.com/amin-bf/cairn/issues/82)'s closing comment for a handset
+//!   pass that never owned it, and went thirteen months unbuilt while this line described it as
+//!   though it existed ([#179](https://github.com/amin-bf/cairn/issues/179)).
 //!
 //!   The blur half is observed through a widget's own response, so it cannot see a field the editor
-//!   stops drawing while the user is still inside it. [`settle_all`] closes that at the exits; the
-//!   idle trigger is still the answer for the case with no exit at all — a phone put down mid-note,
-//!   which is §7's third recorded ground.
+//!   stops drawing while the user is still inside it. [`settle_all`] closes that at the exits, and
+//!   the idle — [`SETTLE_AFTER_IDLE`] after the last change to any buffer — closes the case with no
+//!   exit at all: a phone put down mid-note, which is §7's third recorded ground.
 //! - **The kind dropdown** (ADR-0012 §2, ADR-0017 §6): the shipped kinds, plus the note's *own*
 //!   current kind when that kind was acquired — and **never another acquired one**, because no note
 //!   may be switched *into* a kind whose slot namespace this build did not mint.
@@ -28,8 +26,24 @@
 //! destructive-edit warning that sits above the fields are `cards`, not here. What *is* here is the
 //! form pane's own logic: the commit rule and the dropdown's contents.
 
+use std::time::Duration;
+
 use cairn_core::content::{DeckId, KindDefinition, NoteId, SHIPPED_KINDS};
 use cairn_store::{Collection, StoreError};
+
+/// ADR-0021 §7's *"short idle"*: how long the buffers must sit unchanged before the field being typed
+/// in settles without a blur. §7 names no number, so this is where it is decided, once.
+///
+/// **Long enough not to be a per-keystroke save.** §7 accepts that a field mid-edit can publish and
+/// relies on blur-or-idle to keep that rare; the gap between keystrokes, and between words, is well
+/// under this, so a sentence typed at any ordinary pace settles once at the end rather than word by
+/// word. **Short enough to beat the phone going down.** The window is measured on frames the
+/// foreground app draws, and a backgrounded Android app draws none (client-stack rule 10) — so what
+/// this protects is a note whose author paused before locking the screen, and every second added
+/// here is a second in which that pause is not enough.
+///
+/// The handset is where this is judged by feel; a change to it is a change to this line only.
+pub const SETTLE_AFTER_IDLE: Duration = Duration::from_secs(2);
 
 /// The kinds the dropdown offers for a note whose current kind is `current` (ADR-0012 §2 as amended
 /// by ADR-0017 §6): every shipped kind, **plus** `current` itself when it is an acquired kind this
@@ -118,10 +132,9 @@ pub fn commit_field(
 /// source of truth about it, and ADR-0006 §2's objection to those applies here as much as anywhere.
 /// It costs one read per field on exit and nothing per frame.
 ///
-/// The **idle** half of §7 is still unbuilt (deferred in
-/// [#82](https://github.com/amin-bf/cairn/issues/82)'s closing comment and owned by nothing since),
-/// and this does not stand in for it: an exit commits, and putting a frozen phone down mid-note does
-/// not exit. What this removes is the loss that needed no kill at all.
+/// It is also what the **idle** half of §7 calls once the typing stops ([`SETTLE_AFTER_IDLE`]), and
+/// the unchanged-field check is what lets it: a pause over a field already blurred into the store
+/// reads, compares equal, and writes nothing.
 pub fn settle_all(
     coll: &mut Collection,
     existing: Option<NoteId>,

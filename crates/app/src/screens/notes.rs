@@ -1,6 +1,8 @@
 //! The **Notes** destination: the note list and deck controls, and the editor pane — its form and
 //! card bodies, the pane toggle, the cloze field and blank selection, and the warning banner.
 
+use std::time::Instant;
+
 use cairn_core::content::NoteId;
 use cairn_store::Collection;
 
@@ -672,6 +674,11 @@ fn editor_form_body(
         if !cloze_text && bare_enter && resp.lost_focus() {
             resp.request_focus();
         }
+        // The idle window runs from the last change to any buffer. A bare Enter changes none, so it
+        // cannot start one — §8's inert Enter stays inert here too.
+        if resp.changed() {
+            ed.touched(Instant::now());
+        }
         // Autosave on blur (ADR-0021 §7): a field settles as one row when it loses focus, and the
         // note is created here if this is its first non-empty field.
         if resp.lost_focus() {
@@ -687,6 +694,12 @@ fn editor_form_body(
         let _ = editor::set_note_deck(coll, id, ed.deck);
     }
     ed.note = note;
+
+    // Autosave on a short idle (ADR-0021 §7) — the half of it with no blur and no exit, which is the
+    // phone put down mid-note. Until it is due, ask for the frame that will find it due.
+    if let Some(wait) = ed.settle_if_idle(coll, Instant::now(), editor::SETTLE_AFTER_IDLE) {
+        ui.ctx().request_repaint_after(wait);
+    }
 
     // *New note* (ADR-0021 §8): commit the current buffers, then start a fresh draft carrying the kind
     // and the deck forward — under autosave, that is all "save and add another" ever meant. Bound to
@@ -725,10 +738,13 @@ fn cloze_text_field(
             full_width_button(ui, "Blank it").clicked()
         })
         .inner;
+    let mut resp = output.response.response;
     if clicked && let Some(range) = selection {
         blank_selection(buffer, range, pane);
+        // The buffer changed outside the widget, so say so: the idle window starts from here.
+        resp.mark_changed();
     }
-    output.response.response
+    resp
 }
 
 /// Wrap the selected `range` of `buffer` as a new `{{n::…}}` blank (ADR-0012 §3). The number is
