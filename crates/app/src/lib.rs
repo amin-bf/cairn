@@ -31,6 +31,7 @@ pub mod motion;
 pub mod notes;
 pub mod optimise;
 pub mod platform;
+mod probe186;
 mod screens;
 pub mod session;
 pub mod spacing;
@@ -551,6 +552,20 @@ impl eframe::App for CairnApp {
         page_color(visuals)
     }
 
+    fn on_exit(&mut self) {
+        probe186::exit();
+    }
+
+    fn save(&mut self, _storage: &mut dyn eframe::Storage) {
+        if let Ok(coll) = self.store.as_mut() {
+            probe186::save(coll, self.editing.as_mut());
+        }
+    }
+
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // The shipped font set is installed here, on the first frame, and this frame draws nothing:
         // `set_fonts` applies at the start of the *next* pass, so the newly-named bold family is not
@@ -592,6 +607,7 @@ impl eframe::App for CairnApp {
             }
             Ok(coll) => coll,
         };
+        probe186::frame(ui.ctx(), coll, self.editing.as_mut());
 
         // ---- The band the platform's chrome and keyboard are sitting on (ADR-0025 §1) -----------
         //

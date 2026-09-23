@@ -375,6 +375,10 @@ fn android_main(app: android_activity::AndroidApp) {
         event_loop_builder: Some(Box::new(move |b| {
             b.with_android_app(app.clone());
         })),
+        // #186 probe: a storage is what makes eframe call `App::save` on `Suspended`.
+        persistence_path: cairn_store::platform::data_dir()
+            .ok()
+            .map(|d| d.join("eframe.ron")),
         ..Default::default()
     };
     let _ = eframe::run_native(
