@@ -157,7 +157,8 @@ pub(crate) struct Editing {
 
 impl Editing {
     /// A fresh draft of `kind`, carrying that kind's fields as empty buffers. Used by **create** and
-    /// by the *New note* chord, which carries the current kind forward (ADR-0021 §8).
+    /// by the *New note* chord. Unfiled; each caller sets the deck — *create* from the list's filter
+    /// (ADR-0021 §9), the chord from the note it leaves (§8 carries the kind and the deck forward).
     pub(crate) fn new_draft(kind: &str) -> Self {
         Editing {
             note: None,
