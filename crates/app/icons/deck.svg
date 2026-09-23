@@ -1,0 +1,4 @@
+<!-- The design project's `assets/icons/deck.svg`, verbatim: three stacked layers on the 24px grid,
+     1.5 stroke, round caps and joins. The file list's *deck* row (#167) — a picture that accompanies
+     the word and never stands in for it, because nobody arrives already knowing this symbol. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="deck"><path d="M12 4l8 4-8 4-8-4 8-4z"></path><path d="M4 12l8 4 8-4M4 16.5l8 4 8-4"></path></svg>
