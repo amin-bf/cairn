@@ -306,6 +306,11 @@ because they are validated findings, not because a web build ships.
    #104); route a stranger's string — an import preview — through `markdown_job` and you have handed a
    file the power to style the screen it is being previewed on, which ADR-0022 §7 forbids. Both build
    the same bidi-ordered sections; the only difference is whether the markers are interpreted.
+   **And a name never shares a string with the application's words unless it is isolated.** Joined
+   into `"{name} — {statement}"`, a Persian name sets the direction of the whole paragraph, and the
+   file list drew *"and 2 more.cdeck — deck فارسی"* with nothing failing
+   ([ADR-0041 §2](./docs/adr/0041-the-file-surface.md)). Give the name its own line, or put it in the
+   sentence through `bidi::isolate`, which `bidi::job` orders with and then strips.
 2. **`TextEdit` needs the same treatment, via `.layouter()`** — it lays out its own text and
    otherwise bypasses the helper. Note that caret and selection are then in visual order while the
    buffer is logical, so RTL editing is imprecise; design around it rather than fighting it.
@@ -670,7 +675,10 @@ A `.cdeck` file is a **zip archive** carrying deck content and never review prog
 10. **Every string arriving in a file is hostile.** Author, description, licence and deck names render
     as plain text, never Markdown, length-bounded — the preview shows a stranger's strings *before* the
     user has agreed to anything. Deck names are sanitised **outbound** too, since the export filename
-    is derived from one.
+    is derived from one. **`plain` drops bidi formatting characters**, and `is_control` is not
+    enough to do it: they are format characters, so a name carrying a pop-isolate and an override
+    would otherwise close the preview's isolate and reverse the application's own sentence after it
+    ([ADR-0041 §2](./docs/adr/0041-the-file-surface.md)).
 11. **Read back the filename the platform wrote; never echo the one requested.** The Android put is a
     `MediaStore` insert, and the user chose neither name nor location, so the report is the only way
     they can find the file at all. **Measured on the handset** — it **dedupes**

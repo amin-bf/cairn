@@ -350,6 +350,11 @@ Neither ticket could have written that alone, and neither should now write it al
 whichever of them, or of [#167](https://github.com/amin-bf/cairn/issues/167), next has cause to
 amend #149's rule with two builds behind it instead of none.
 
+> **Settled by [ADR-0041 §4](0041-the-file-surface.md)**, the third build: *a picture stands alone
+> only where the symbol already exists; where it would have to be invented, the word stays — and the
+> picture may accompany it.* The file row carries an invented picture **beside** its word, which
+> keeps this section's sentence and adds the one thing neither of the first two screens could show.
+
 **`controls::row` is still in `controls` rather than in `screens/notes.rs`**, and now for a second
 reason: the leech screen took a different *drawing* but the same *material question*, and the next
 list — the file surface — should have to choose between two existing answers rather than invent a
