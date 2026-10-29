@@ -1284,9 +1284,10 @@ struct LeechSpec {
 /// have hidden that question behind a fixture rigged to answer it.
 ///
 /// Review counts differ too, and their **order is chosen against the rank**: the tied pair reads
-/// *"4 bad days · 9 reviews"* above *"4 bad days · 10 reviews"*, so one picture shows that the
-/// caption's second number is context and not the key that ordered the list. Ordering them the
-/// other way would have let a reader read the screen correctly for the wrong reason.
+/// *"4 bad days · 9 reviews · 1 minute"* above *"4 bad days · 10 reviews · 11 minutes"*, so one
+/// picture shows that the caption's second number is context and not the key that ordered the list.
+/// Ordering them the other way would have let a reader read the screen correctly for the wrong
+/// reason.
 ///
 /// Answer times differ for the same reason and in the same direction
 /// ([#173](https://github.com/amin-bf/cairn/issues/173)). `d'ailleurs`, **last**, is the card eating
@@ -1643,9 +1644,9 @@ mod tests {
         assert_eq!(
             captions,
             [(6, 12), (4, 9), (4, 10)],
-            "the screen draws '{{days}} bad days · {{reviews}} reviews' and nothing else per row: \
-             three distinct strings, and the review count deliberately *ascending* across the \
-             tied pair so it cannot be mistaken for what ordered them"
+            "the screen draws '{{days}} bad days · {{reviews}} reviews · {{minutes}}' per row \
+             (ADR-0043 §4): the review count deliberately *ascending* across the tied pair so it \
+             cannot be mistaken for what ordered them"
         );
 
         let answer_ms: Vec<u64> = ranked.iter().map(|l| l.answer_ms).collect();
