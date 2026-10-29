@@ -20,11 +20,11 @@ restart
 mousemove %CX% 600 click 1
 sleep 1
 # `Start — all 25`. The checkpoint's clock starts here.
-mousemove %CX% 129 click 1
+mousemove %CX% 146 click 1
 sleep 1.5
 # Reveal is tap-the-card, so the capture shows the checkpoint over the state a reviewer is actually
 # in when ten minutes pass — answer on screen, grades under it (ADR-0006 §1: the card stays
 # *gradeable* while the checkpoint is up).
-mousemove %CX% 131 click 1
+mousemove %CX% 148 click 1
 sleep 4
 shot 09-checkpoint

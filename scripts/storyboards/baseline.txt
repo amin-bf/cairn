@@ -26,11 +26,11 @@ shot 01-review-start
 # card (#133) and the controls (#134). A storyboard cannot tell you it missed — it photographs
 # whatever is on screen under the name it was asked for — so each one here was re-measured off the
 # capture rather than adjusted by eye.
-mousemove %LX+39% 112 click 1
+mousemove %LX+39% 129 click 1
 sleep 1.5
 shot 02-review-question
 # Reveal is tap-the-card (review.rs: "the prompt is one wide button").
-mousemove %CX% 131 click 1
+mousemove %CX% 148 click 1
 sleep 1.5
 shot 03-review-revealed
 mousemove %LX+86% 11 click 1
@@ -53,6 +53,6 @@ sleep 1
 # Open the first note — `chien`, which has a card — rather than *Create note*. A fresh draft has no
 # cards, so the editor's card pane would read "No cards yet" and the two-column layout this pass
 # exists to photograph would have nothing in half of it.
-mousemove %LX+19% 252 click 1
+mousemove %LX+19% 286 click 1
 sleep 1.5
 shot 05-notes-editor

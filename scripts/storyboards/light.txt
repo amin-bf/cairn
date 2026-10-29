@@ -58,11 +58,11 @@ mousemove %LX+27% 11 click 1
 sleep 1.2
 shot 01-review-start
 # The count picker sits at the start of its line: `5` then `All 5`. `+39` reaches `All 5`.
-mousemove %LX+39% 112 click 1
+mousemove %LX+39% 129 click 1
 sleep 1.5
 shot 02-review-question
 # Reveal is tap-the-card (review.rs: "the prompt is one wide button").
-mousemove %CX% 131 click 1
+mousemove %CX% 148 click 1
 sleep 1.5
 shot 03-review-revealed
 mousemove %LX+86% 11 click 1
@@ -73,6 +73,6 @@ shot 04-notes-list
 # land on empty page.
 mousemove %CX% 400 click 4 click 4 click 4 click 4
 sleep 1
-mousemove %LX+19% 252 click 1
+mousemove %LX+19% 286 click 1
 sleep 1.5
 shot 05-notes-editor

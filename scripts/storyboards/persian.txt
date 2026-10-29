@@ -32,13 +32,14 @@ sleep 1.2
 # every shot below was of the wrong note.
 mousemove %CX% %BY-183% click 1
 sleep 1.5
-mousemove %EX+30% 229 click 1
+mousemove %EX+30% 295 click 1
 sleep 0.8
 sh xdotool type --delay 120 'سگ در خانه است.'
 sleep 1.5
 shot 08-editor-persian-front
-# Back is at 281 since ADR-0040 §6 put the form's stated gap between one field and the next label.
-mousemove %EX+30% 281 click 1
+# Back sits a stated gap below Front since ADR-0040 §6; both moved down 66px with #175, when the nav
+# row and the controls above the fields grew to the ambient 36px hit target.
+mousemove %EX+30% 346 click 1
 sleep 0.8
 sh xdotool type --delay 120 'the dog is in the house'
 sleep 1.5
