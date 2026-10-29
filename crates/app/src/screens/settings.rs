@@ -1,6 +1,7 @@
-//! The **Settings** destination: the reset control, the new-card-rate and optimise controls, the
-//! sync surface, and the **temporary** specimens. The specimens are development controls, not
-//! specified features — each keeps the doc comment marking it so.
+//! The **Settings** destination (ADR-0042): a *Studying* group (the new-card rate and optimise), a
+//! *This device* group (the sync surface, the file list, appearance), and a *Development* section
+//! at the end (reset, the fixture bench and the **temporary** specimens). The development controls
+//! are not specified features — each keeps the doc comment marking it so.
 
 use cairn_core::content::{DeckId, NoteId};
 use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
@@ -97,39 +98,100 @@ pub(crate) fn settings_screen(
     bench: &mut Bench,
     now_ms: i64,
 ) -> Option<BenchRequest> {
-    heading(ui, "Settings");
-    ui.add_space(spacing::gap(2));
-
+    // **Enrolment is a sub-state with its own heading**, so it is asked before this screen draws its
+    // own: drawn after, the page carried *Settings* and *Set up sync* one over the other (#152).
     if *setting_up {
         enrolment_screen(ui, setting_up);
         return None;
     }
 
-    // **Appearance sits first, directly under the heading**, and it is the one control here that is
-    // about *this device* rather than about the collection — everything below it (the rate, the
-    // scheduler, sync) syncs, and this deliberately does not (ADR-0036 §3). Putting the device-local
-    // item at the top is a first cut at the ordering #121 suspects this screen of lacking.
+    heading(ui, "Settings");
+    ui.add_space(spacing::gap(2));
+
+    // **Two groups, named by where a setting lives** (#152). Only the rate and the scheduler's
+    // parameters ride the collection to another device (ADR-0011 §5); the sync grant, the files and
+    // the appearance belong to this machine (ADR-0015, ADR-0041 §5, ADR-0036 §3). The page used to
+    // say *everything below Appearance syncs* in a comment and draw nothing of it, which was false
+    // for two of the three blocks below Appearance. The headings are what make the true version
+    // visible, so the order follows them rather than the other way round.
     //
-    // It also makes the control **reachable by the capture harness at every width**, which is what
-    // made anyone look: a control placed below prose sits at a y that depends on where that prose
-    // wraps, so the storyboard clicked the right place at 1280 and empty page at 560 — producing
-    // seven perfectly valid dark captures of a light storyboard, with nothing failing. Nothing above
-    // a one-word heading can wrap, so this position is the same at both.
-    theme_control(ui, coll);
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-
+    // **Settings places nothing on the reach line** (ADR-0042): it is a page of peer settings with
+    // no closing control. Its sub-states have one, and enrolment's *Back* takes the line.
+    group_heading(
+        ui,
+        "Studying",
+        Some("Follows your collection to every device."),
+    );
     new_card_rate_control(ui, coll, rate_buffer);
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-
+    block_rule(ui);
     optimise_control(ui, coll, optimise_job, optimise_done, now_ms);
+
+    ui.add_space(spacing::gap(4));
+    group_heading(ui, "This device", Some("Stays on this machine."));
+    sync_block(ui, setting_up);
+    block_rule(ui);
+    // **The file list** — a specified block, where two development specimens stood (ADR-0022 §9,
+    // §11; ADR-0041 §5).
+    file_block(ui, file_list, inbound);
+    block_rule(ui);
+    // Appearance closes the group. It was first on the page so the capture harness could reach it at
+    // a y no prose above it could move (#143's dark captures of a light storyboard); the storyboards
+    // now reach it by keyboard focus, whose order no width moves (`storyboards/light.txt`).
+    theme_control(ui, coll);
+
+    // **The development section** (#152): every control here exists to test the application, not to
+    // use it, and it is drawn in every build under one heading at the very end — the handset has no
+    // other route to a fixture (`fixture_bench`), and a storyboard drives it.
+    ui.add_space(spacing::gap(4));
+    ui.separator();
+    ui.add_space(spacing::gap(3));
+    group_heading(ui, "Development", None);
+    let mut request = reset_control(ui).then_some(BenchRequest::Reset);
+    block_rule(ui);
+    if let Some(chosen) = fixture_bench(ui, bench, coll, file_list) {
+        request = Some(chosen);
+    }
+    block_rule(ui);
+    rendering_specimen(ui);
+    block_rule(ui);
+    handoff_specimen(ui, handoff);
+
+    request
+}
+
+/// The rule between two blocks of one group: three units, a separator, two units.
+fn block_rule(ui: &mut egui::Ui) {
     ui.add_space(spacing::gap(3));
     ui.separator();
     ui.add_space(spacing::gap(2));
+}
 
+/// A group's heading on Settings: its name in the bold face at body size, and what the group has in
+/// common as a small caption under it (#152). The bold face at body size is how the import preview
+/// names a deck (ADR-0041), so a group reads as a name over what follows, not as a second page
+/// heading.
+fn group_heading(ui: &mut egui::Ui, name: &str, caption: Option<&str>) {
+    let size = egui::TextStyle::Body.resolve(ui.style()).size;
+    ui.label(bidi::job(
+        name,
+        egui::FontId::new(size, fonts::bold_family()),
+        ui.visuals().text_color(),
+    ));
+    if let Some(caption) = caption {
+        field_label(ui, caption);
+    }
+    ui.add_space(spacing::gap(2));
+}
+
+/// The sync block for a device that is not enrolled (ADR-0015 §3, §7, §10): the promise, the entry
+/// to enrolment, and the durable removal route.
+///
+/// **Once enrolled it becomes a row that opens its own sync screen** (#152), the shape enrolment
+/// already has: ADR-0015 §12's *"one screen, and everything sync-shaped is on it"*, read literally.
+/// That screen waits on a live grant (see [`settings_screen`]), so only this state is drawn.
+fn sync_block(ui: &mut egui::Ui, setting_up: &mut bool) {
+    field_label(ui, "Sync");
+    ui.add_space(spacing::gap(1));
     // The promise, worded once (ADR-0015 §3) — never "automatic", never "in the background".
     body(ui, sync::PROMISE);
     ui.add_space(spacing::gap(2));
@@ -144,38 +206,6 @@ pub(crate) fn settings_screen(
     // The removal route and the app name, kept permanently because the folder is hidden and cannot be
     // navigated to (ADR-0015 §10, ADR-0020 §4). Disconnect is the only control this app owns.
     body(ui, &sync::revocation_and_removal());
-
-    // **The file list** — a specified block, where two development specimens stood (ADR-0022 §9,
-    // §11; ADR-0041 §5). Where on Settings it finally sits is the Settings slice's (#152); it goes
-    // above the development controls because it is not one of them.
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-    file_block(ui, file_list, inbound);
-
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-    let mut request = reset_control(ui).then_some(BenchRequest::Reset);
-
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-    if let Some(chosen) = fixture_bench(ui, bench, coll, file_list) {
-        request = Some(chosen);
-    }
-
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-    rendering_specimen(ui);
-
-    ui.add_space(spacing::gap(3));
-    ui.separator();
-    ui.add_space(spacing::gap(2));
-    handoff_specimen(ui, handoff);
-
-    request
 }
 
 /// **Temporary, and not a specified feature.** The fixture bench: the collection states the shipping
