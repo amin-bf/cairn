@@ -473,7 +473,7 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
 **Import preview**:
 The one gate in this specification (ADR-0022 §1), and **the one screen that belongs to no
 destination**. Three entry points — the file list, a desktop drop, an Android launch intent —
-produce **one** screen, which must be **cold-start capable**, because the intent can start the
+produce **one** screen (in the Kotlin app the **system picker** takes the list's place, ADR-0047 §2), which must be **cold-start capable**, because the intent can start the
 application directly into an import. So it is drawn without the nav row: there may not be a
 destination behind it. Applying returns to the **note list**, with the deck filter set to the
 imported deck when the file carried one and left unfiltered when it carried several; **cancelling
@@ -496,8 +496,12 @@ The **report** states the name the platform actually wrote and where, with ADR-0
 **beside** those lines rather than in place of them. The **file list** describes each file from its
 own manifest, inflating zero payloads, and says *"the files this application wrote"* — never anything
 implying a folder view, which on Android it is not (ADR-0024 §3).
+**In the Kotlin Android app there is no file list**: *Open a file…* opens the system picker in its
+place, export and the archive go through the system **save dialog** under a suggested name the user
+may edit, and the report states the name written with no location line (ADR-0047).
 _Avoid_: An *import screen* as a fourth member — import has no home, and the list is the only inbound
-surface that needed one.
+surface that needed one. *File list* for the picker — the list is ours and shows what we wrote; the
+picker is the platform's and shows everything.
 
 ## Rules that are easy to break silently
 

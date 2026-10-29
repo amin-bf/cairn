@@ -97,7 +97,9 @@ import does not.
 `cairn-export`'s own `platform` module: **put, get, list, hand_off**, three `#[cfg]` arms with a
 `compile_error!` third. How an artifact reaches a place the user can see, and then leaves it.
 Deliberately [ADR-0013](../../../docs/adr/0013-the-sync-transport.md) §1's shape reused; the fourth
-operation is [ADR-0023](../../../docs/adr/0023-sending-a-written-file.md)'s.
+operation is [ADR-0023](../../../docs/adr/0023-sending-a-written-file.md)'s. The Kotlin Android
+app does not use it: the system picker and save dialog hold the document, and the core takes and
+gives bytes ([ADR-0047 §6](../../../docs/adr/0047-the-file-surface-on-android.md)).
 
 **Hand off**:
 Giving the written file to whatever surface the platform provides for passing a file onward — the
@@ -198,7 +200,10 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   fine; results are not. The send was **measured** in the shipped APK shape — manifest plus one
   `.so`, no `classes.dex`, no `res/`
   ([evidence](../../../docs/research/android-outbound-share/README.md)) — so the picker's
-  disqualifying property genuinely does not reach it.
+  disqualifying property genuinely does not reach it. **This binds the egui build only**: the Kotlin
+  Android app is an activity with a dex, and uses the picker and the save dialog
+  ([ADR-0045 §6](../../../docs/adr/0045-the-native-android-client.md),
+  [ADR-0047](../../../docs/adr/0047-the-file-surface-on-android.md)).
 - **`hand_off` never fires by itself, and the two arms are not a divergence to fix.** A sheet or a
   file manager opening unasked takes the screen. Android sends and the desktop reveals because there
   is no share portal on the desktop and nothing to drag on Android; making them symmetric means
