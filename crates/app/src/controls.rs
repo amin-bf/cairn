@@ -72,8 +72,16 @@ pub const HEIGHT: f32 = 36.0;
 /// **`ui.horizontal` reads this too**, as the height a row opens at, centring what it holds inside.
 /// That is right for a row of controls and wrong for a line of text, which would sit in a 36px band:
 /// a row of text goes through [`spacing::text_row`] instead.
+///
+/// **A combo box's popup is capped by a height, not a count**, so its cap grows by the same factor:
+/// left at stock's 200px it held five 36px entries where it had held eleven, and the note list's
+/// sixth deck sat half under the edge of a popup with the rest of the window free below it.
 pub fn install(ctx: &egui::Context) {
-    ctx.all_styles_mut(|style| style.spacing.interact_size.y = HEIGHT);
+    ctx.all_styles_mut(|style| {
+        let spacing = &mut style.spacing;
+        spacing.combo_height *= HEIGHT / spacing.interact_size.y;
+        spacing.interact_size.y = HEIGHT;
+    });
 }
 
 /// One action offered on a list [`row`]: the glyph that stands for it, and the word it stands for.
@@ -798,6 +806,24 @@ mod tests {
                 assert!(height >= HEIGHT, "a {name} is {height}px");
             }
         });
+    }
+
+    /// A combo box's popup **holds as many entries as it did before they grew**. Its cap is a height,
+    /// and at stock's 200px six 36px entries left the note list's sixth deck half under the edge.
+    #[test]
+    fn a_popup_shows_as_many_entries_as_stock_did() {
+        let ctx = egui::Context::default();
+        install(&ctx);
+
+        let stock = egui::Style::default().spacing;
+        let entries = |s: &egui::style::Spacing| s.combo_height / s.interact_size.y;
+        for slot in [egui::Theme::Dark, egui::Theme::Light] {
+            let shown = entries(&ctx.style_of(slot).spacing);
+            assert!(
+                shown >= entries(&stock),
+                "{slot:?} shows {shown} entries before it scrolls"
+            );
+        }
     }
 
     /// The other half: a **row of text** keeps its text's height. `ui.horizontal` opens at the
