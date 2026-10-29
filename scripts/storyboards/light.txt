@@ -19,26 +19,38 @@ sleep 1
 # Settings. The nav row sits above the frame's content but aligns to the same left edge.
 mousemove %LX+140% 11 click 1
 sleep 1.2
-# **Appearance: Light.** `System` `Light` `Dark`, drawn with `selectable_label` the same way the nav
-# marks the current destination. `+84` is the centre of `Light`, measured off the capture rather than
-# computed — the row is frame-relative, so the same offset lands at both widths.
+# **Appearance: Light, reached by keyboard rather than by a coordinate.** Since #152 the control closes
+# the *This device* group, below the rate, scheduler and sync prose — and that prose wraps at 560 and
+# not at 1280, so no single y reaches it at both widths. #143 first met that miss as seven perfectly
+# valid *dark* captures with nothing failing, and answered it by moving the control to the top of the
+# page; #152 put the page in its own order, so the storyboard changes instead.
 #
-# **y=93 is the same at 1280 and at 560, and the control was moved to the top of Settings to make
-# that true.** The first draft of this storyboard clicked it where it sat below the new-card-rate
-# prose, which wraps to two lines at 560 — so the click landed on the right control at one width and
-# on empty page at the other, and the run produced seven perfectly valid *dark* captures with
-# nothing failing. Only the heading is above it now, and a one-word heading cannot wrap.
-mousemove %LX+84% 93 click 1
+# **Focus order is the order the page is built in, and no width moves it.** From an unfocused window,
+# Tab visits the nav row (Review, Notes, Settings), the new-card-rate field, *Optimise*, *Set up sync*,
+# then `System` and `Light` — eight Tabs, and Space presses what has focus. It holds against every
+# fixture, because each of those controls is drawn whatever the collection holds; only a **file set**
+# adds rows before Appearance, and no light storyboard names one. The `--delay` puts each key in a
+# frame of its own, since egui moves focus once per frame.
+key --delay 150 Tab Tab Tab Tab Tab Tab Tab Tab space
 sleep 1.5
+# Click the empty end of the nav band, which clears the focus ring off `Light` before the shot.
+mousemove %CX% 11 click 1
+sleep 1
 shot 06-settings-top
-# Settings is longer than any window this pass uses, so the specimens need scrolling to. Worth
-# capturing in light specifically: the rendering specimen is the one place the app draws every
-# family at once, and a light ground is where a wrong face is most visible.
+# Settings is longer than any window this pass uses. Eight notches show where *This device* ends and
+# the Development section begins.
 mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1.2
 shot 07-settings-scrolled
+# Then to the end of the page, where the specimens are since #152 put them under Development. Worth
+# capturing in light specifically: the rendering specimen is the one place the app draws every family
+# at once, and a light ground is where a wrong face is most visible. Forty notches is past the end at
+# both widths, and the scroll area stops there, so no count has to be exact.
+mousemove %CX% 400 click --repeat 40 --delay 30 5
+sleep 1.2
+shot 08-settings-end
 # Wind the shared scroll area back up before leaving, or the next destination opens mid-page.
-mousemove %CX% 400 click 4 click 4 click 4 click 4 click 4 click 4 click 4 click 4
+mousemove %CX% 400 click --repeat 60 --delay 30 4
 sleep 1
 # Review, in light. This is the screen ADR-0033 §3 is about — the card must still outweigh the
 # grades, and it is the pair the ink construction was chosen to preserve.

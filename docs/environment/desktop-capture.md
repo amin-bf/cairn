@@ -115,7 +115,14 @@ narrow, so on the desktop it is side by side at **every** width and the wider fr
 That removed the awkward half of this warning rather than the warning — *Done* is still compact
 beside two columns, so the coordinate that reaches it is the editor frame's and not the page's.
 
-This is worth more than convenience, because **the failure it prevents is silent**. A click aimed at
+**A control below prose that wraps has no y that holds at both widths, and no token gives it one.**
+Reach it by keyboard instead: egui's focus order is the order the page is built in, which no width
+moves, so `key --delay 150 Tab … space` presses the same control at any size. The `--delay` puts each
+key in a frame of its own, because egui moves focus once per frame. `storyboards/light.txt` reaches
+*Appearance: Light* this way since #152 moved it below the sync prose, and says which controls the
+Tabs pass.
+
+The tokens are worth more than convenience, because **the failure they prevent is silent**. A click aimed at
 a full-width control with a hard-coded `640` simply misses at 560 — nothing errors, the screen never
 changes, and the next `shot` photographs the *previous* screen under the new screen's name. The
 first narrow run here produced three such images and they looked entirely plausible.

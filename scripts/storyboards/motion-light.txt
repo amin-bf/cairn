@@ -14,16 +14,14 @@
 # photograph a state the application cannot be put into — and this fails loudly if that control
 # stops working.
 #
-# y=93 for Appearance is the same at both widths, and it is that way on purpose: only the one-word
-# heading is above it, and a one-word heading cannot wrap. The control was moved there after a run
-# produced seven perfectly valid *dark* captures because prose above it wrapped at one width and not
-# the other (#143).
+# Appearance is reached by keyboard — eight Tabs and Space — because since #152 it sits below prose
+# that wraps at one width and not the other, so no single y reaches it at both. See `light.txt`.
 fixture cloze
 mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+140% 11 click 1
 sleep 1.2
-mousemove %LX+84% 93 click 1
+key --delay 150 Tab Tab Tab Tab Tab Tab Tab Tab space
 sleep 1.5
 
 # --- the reveal, on a card that fits ---------------------------------------------------------------

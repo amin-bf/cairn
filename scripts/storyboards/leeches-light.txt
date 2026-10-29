@@ -16,7 +16,8 @@ sleep 1
 mousemove %LX+140% 11 click 1
 sleep 1.2
 shot 10-settings
-mousemove %LX+84% 93 click 1
+# Appearance: Light by keyboard, for `light.txt`'s reason: no single y reaches it at both widths.
+key --delay 150 Tab Tab Tab Tab Tab Tab Tab Tab space
 sleep 1.2
 mousemove %LX+27% 11 click 1
 sleep 1.2
