@@ -381,6 +381,22 @@ fn leech_entry_wording(leeches: usize, suspended: usize) -> String {
     }
 }
 
+/// A leech row's cost line (ADR-0043 §4): the first rank key, the reviews it took, and the answer
+/// time ADR-0010 §6 says makes the cost concrete — *"6 bad days · 12 reviews · 4 minutes"*.
+///
+/// The time is a fact rather than a verdict: §6's own example ended *"still failing"*, and a card stays
+/// on this list after its latest answer was a pass, so that clause would say something the app does
+/// not know. Rounded to the nearest minute; below half a minute it reads *under a minute*, because
+/// *0 minutes* reads as none.
+fn cost_line(failure_days: u32, reviews: u32, answer_ms: u64) -> String {
+    let time = match answer_ms.saturating_add(30_000) / 60_000 {
+        0 => "under a minute".to_owned(),
+        1 => "1 minute".to_owned(),
+        m => format!("{m} minutes"),
+    };
+    format!("{failure_days} bad days · {reviews} reviews · {time}")
+}
+
 /// The leech screen (ADR-0010 §4, §6, §7, §8): the ranked list of cards costing the user, worst first,
 /// each offering **edit** (primary), **suspend** and **delete** — and never a tag, which would publish
 /// a private struggle into a deck (ADR-0010 §7); plus the **permanent** section of suspended cards,
@@ -401,19 +417,18 @@ fn leech_screen(
 ) -> Option<NoteId> {
     // Render each card's preview text up front, while the collection is only read; the owned strings
     // then outlive the immutable borrow so the action writes below are free to take `&mut coll`.
-    let active: Vec<(CardRef, String, u32, u32)> = ranked
+    let active: Vec<(CardRef, String, String)> = ranked
         .iter()
         .filter(|leech| !suspended.contains(&leech.card))
         .map(|leech| {
-            let reviews = replayed
+            let (reviews, answer_ms) = replayed
                 .cards
                 .get(&leech.card)
-                .map_or(0, |state| state.review_count);
+                .map_or((0, 0), |state| (state.review_count, state.answer_ms));
             (
                 leech.card,
                 card_preview(coll, leech.card),
-                leech.failure_days,
-                reviews,
+                cost_line(leech.failure_days, reviews, answer_ms),
             )
         })
         .collect();
@@ -439,35 +454,22 @@ fn leech_screen(
     if !active.is_empty() {
         body(ui, "These keep catching you out — worst first.");
         ui.add_space(spacing::gap(1));
-        for (i, (card, preview, days, reviews)) in active.iter().enumerate() {
+        for (i, (card, preview, cost)) in active.iter().enumerate() {
             if i > 0 {
                 ui.add_space(BETWEEN_ROWS);
             }
-            // The cost, made concrete (ADR-0010 §6): failure days and how many reviews they took.
-            //
-            // **The wording is still one rank key and one non-key, and #156 is what changes it.**
-            // `leeches` ranks by failure days, then by the most recent failure, then by card
-            // identity — so this line states the *first* key, spends its other half on
-            // `review_count`, **which orders nothing**, and never draws the second key at all. The
-            // sitting chose ADR-0010 §6's duration sentence to replace it and made a bench that can
-            // produce a real duration its precondition; #173 met it — replay carries
-            // `CardState::answer_ms`, and the fixture's three leeches take unequal times.
-            leech_row(
-                ui,
-                preview,
-                Some(&format!("{days} bad days · {reviews} reviews")),
-                |ui| {
-                    if controls::snug(ui, "Edit").clicked() {
-                        edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
-                    }
-                    if controls::snug(ui, "Suspend").clicked() {
-                        suspend = Some(*card);
-                    }
-                    if controls::snug(ui, "Delete").clicked() {
-                        delete = Some(card.note);
-                    }
-                },
-            );
+            // The cost, made concrete (ADR-0010 §6, ADR-0043 §4).
+            leech_row(ui, preview, Some(cost), |ui| {
+                if controls::snug(ui, "Edit").clicked() {
+                    edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
+                }
+                if controls::snug(ui, "Suspend").clicked() {
+                    suspend = Some(*card);
+                }
+                if controls::snug(ui, "Delete").clicked() {
+                    delete = Some(card.note);
+                }
+            });
         }
     }
 
@@ -1255,6 +1257,29 @@ mod tests {
         assert_eq!(leech_entry_wording(2, 0), "Leeches (2)");
         assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
+    }
+
+    #[test]
+    fn the_cost_line_adds_the_answer_time_in_whole_minutes() {
+        // ADR-0043 §4: the rank key, the reviews, then ADR-0010 §6's answer time, rounded to the
+        // nearest minute. The fixture's three leeches, as the screen draws them.
+        assert_eq!(
+            cost_line(6, 12, 245_508),
+            "6 bad days · 12 reviews · 4 minutes"
+        );
+        assert_eq!(cost_line(4, 9, 61_000), "4 bad days · 9 reviews · 1 minute");
+        assert_eq!(
+            cost_line(4, 10, 632_440),
+            "4 bad days · 10 reviews · 11 minutes"
+        );
+        // Below half a minute there is no whole minute to state, and "0 minutes" would read as none.
+        assert_eq!(
+            cost_line(4, 5, 29_999),
+            "4 bad days · 5 reviews · under a minute"
+        );
+        assert_eq!(cost_line(4, 5, 30_000), "4 bad days · 5 reviews · 1 minute");
+        // A foreign row can saturate the sum (`CardState::answer_ms`); the line must still draw.
+        assert!(cost_line(4, 5, u64::MAX).ends_with(" minutes"));
     }
 
     #[test]
