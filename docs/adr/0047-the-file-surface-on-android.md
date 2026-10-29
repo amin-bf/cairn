@@ -136,6 +136,11 @@ as a file descriptor (an archive is a decade of log rows, so this is a memory qu
 binding one), and what becomes of the seam's Android arm, which the egui build still calls until it
 retires (ADR-0045 §5).
 
+> **Note (29.10.2026):** #195 has since been decided by
+> [ADR-0046 §5](0046-the-line-between-kotlin-and-rust.md): Kotlin reads the document and the bytes
+> cross both ways, and the seam's Android arms stay, uncalled by the Kotlin app, until the egui
+> build retires.
+
 ## Amendments to accepted ADRs
 
 All on Android only; the desktop reads each as written.

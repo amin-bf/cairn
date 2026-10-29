@@ -52,6 +52,15 @@ when it appears were answerable without knowing a single colour."*
 _Avoid_: The visual design pass, for either half alone — it is the word that lets a settled
 arrangement read as an open colour question, and an open colour question read as settled.
 
+**Renderer** / **Operation**:
+A **renderer** is what draws the application and speaks its platform: egui on the desktop (and on
+Android until parity), Compose on Android. An **operation** is what a screen asks the application to
+do — *grade this card*, *commit this field*, *plan this import* — implemented once, in Rust, for every
+renderer (ADR-0046 §1). The operation decides the rule and *which* statement applies; the renderer
+owns the words, the layout, the gesture and the text being typed (ADR-0046 §3 §4, ADR-0038 §6).
+_Avoid_: Frontend, backend, client for the renderer — the Kotlin app is a renderer over the same
+operations, not a second application.
+
 **Palette**:
 The app's colours, cool slate neutrals with **four desaturated accents**, named in **exactly one
 place** — a `theme` module producing an `egui::Visuals`, installed once — so every screen keeps
@@ -179,7 +188,8 @@ _Avoid_: Save, commit, draft, dirty state.
 **Session**:
 One sitting of review: a chosen card count, with a 10-minute timer running from the same moment.
 **Not a domain object** (ADR-0005 §6) — it exists only here, and its position is never stored, only
-derived from the log.
+derived from the log. *Here* is the application, not egui: ADR-0046 §3 moves the sitting into the
+operations every renderer shares.
 _Avoid_: Study session, cram session, queue.
 
 **Session count**:
