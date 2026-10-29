@@ -27,32 +27,32 @@ sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
 shot 1-list
-# Search, then the single row it leaves at the top of the list (y=257).
-mousemove %LX+200% 195 click 1
+# Search, then the single row it leaves at the top of the list (y=291; 257 before #175 grew the nav row and the deck filter).
+mousemove %LX+200% 229 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 40 'renard'
 sleep 1.2
-mousemove %LX+500% 257 click 1
+mousemove %LX+500% 291 click 1
 sleep 1.5
 shot 2-pruned-cloze
 mousemove %EX+60% %BY-184% click 1
 sleep 1.2
-mousemove %LX+200% 195 click 1
+mousemove %LX+200% 229 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 40 'cliff'
 sleep 1.2
-mousemove %LX+500% 257 click 1
+mousemove %LX+500% 291 click 1
 sleep 1.5
 shot 3-nothing-live
 mousemove %EX+60% %BY-184% click 1
 sleep 1.2
-mousemove %LX+200% 195 click 1
+mousemove %LX+200% 229 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 40 'beech'
 sleep 1.2
-mousemove %LX+500% 257 click 1
+mousemove %LX+500% 291 click 1
 sleep 1.5
 shot 4-unnameable-slot

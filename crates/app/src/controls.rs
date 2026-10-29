@@ -57,6 +57,33 @@ use crate::{spacing, text, theme};
 /// the application's own, which is not a target anyone struggles to hit.
 pub const HEIGHT: f32 = 36.0;
 
+/// Install [`HEIGHT`] into **every** theme slot as `spacing.interact_size.y` — the ambient hit target.
+///
+/// **The fourth value family made ambient** ([#175](https://github.com/amin-bf/cairn/issues/175)),
+/// and the one with a reach the others did not have. Every control this module draws already asked
+/// for [`HEIGHT`]; what did not were the egui widgets the application still uses as they come — a
+/// bare `ui.button` (the editor's *New deck*, #163), every `ComboBox` and the items in its popup, a
+/// `selectable_label`, and [`text_action`], which is a frameless `Button`. Stock egui gives those
+/// 18px and they drew at half a hit target. Naming the height here is what lets them stop asking.
+///
+/// Every slot for [`spacing::install`]'s reason (ADR-0032 §4): `Style` is per-theme and a height is
+/// not, so the active-slot trap of ADR-0030 §2 is made inapplicable rather than avoided.
+///
+/// **`ui.horizontal` reads this too**, as the height a row opens at, centring what it holds inside.
+/// That is right for a row of controls and wrong for a line of text, which would sit in a 36px band:
+/// a row of text goes through [`spacing::text_row`] instead.
+///
+/// **A combo box's popup is capped by a height, not a count**, so its cap grows by the same factor:
+/// left at stock's 200px it held five 36px entries where it had held eleven, and the note list's
+/// sixth deck sat half under the edge of a popup with the rest of the window free below it.
+pub fn install(ctx: &egui::Context) {
+    ctx.all_styles_mut(|style| {
+        let spacing = &mut style.spacing;
+        spacing.combo_height *= HEIGHT / spacing.interact_size.y;
+        spacing.interact_size.y = HEIGHT;
+    });
+}
+
 /// One action offered on a list [`row`]: the glyph that stands for it, and the word it stands for.
 ///
 /// **The word is not decoration and it is not drawn.** It is the hover text, and it exists because
@@ -732,6 +759,95 @@ mod tests {
             );
         });
     }
+
+    /// The hit target is ambient in **both** theme slots — launched in light, the condition an
+    /// untargeted setter misfires on (ADR-0030 §2).
+    #[test]
+    fn install_puts_the_hit_target_in_every_theme_slot() {
+        let ctx = egui::Context::default();
+        ctx.set_theme(egui::ThemePreference::Light);
+
+        install(&ctx);
+
+        for slot in [egui::Theme::Dark, egui::Theme::Light] {
+            assert_eq!(
+                ctx.style_of(slot).spacing.interact_size.y,
+                HEIGHT,
+                "{slot:?} still draws an unasked control at stock's height"
+            );
+        }
+    }
+
+    /// **What #175 is for:** the widgets that never asked for [`HEIGHT`] — a bare button, a combo box,
+    /// a selectable label, and the frameless [`text_action`] — are a hit target once it is ambient.
+    /// Before, they measured 18 or 19.
+    #[test]
+    fn an_unasked_control_is_a_whole_hit_target() {
+        let ctx = egui::Context::default();
+        typography::install(&ctx);
+        spacing::install(&ctx);
+        install(&ctx);
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            let heights = [
+                ("button", ui.button("x").rect.height()),
+                ("selectable", ui.selectable_label(true, "x").rect.height()),
+                ("text action", text_action(ui, "x").rect.height()),
+                (
+                    "combo box",
+                    egui::ComboBox::from_id_salt("c")
+                        .selected_text("x")
+                        .show_ui(ui, |_| {})
+                        .response
+                        .rect
+                        .height(),
+                ),
+            ];
+            for (name, height) in heights {
+                assert!(height >= HEIGHT, "a {name} is {height}px");
+            }
+        });
+    }
+
+    /// A combo box's popup **holds as many entries as it did before they grew**. Its cap is a height,
+    /// and at stock's 200px six 36px entries left the note list's sixth deck half under the edge.
+    #[test]
+    fn a_popup_shows_as_many_entries_as_stock_did() {
+        let ctx = egui::Context::default();
+        install(&ctx);
+
+        let stock = egui::Style::default().spacing;
+        let entries = |s: &egui::style::Spacing| s.combo_height / s.interact_size.y;
+        for slot in [egui::Theme::Dark, egui::Theme::Light] {
+            let shown = entries(&ctx.style_of(slot).spacing);
+            assert!(
+                shown >= entries(&stock),
+                "{slot:?} shows {shown} entries before it scrolls"
+            );
+        }
+    }
+
+    /// The other half: a **row of text** keeps its text's height. `ui.horizontal` opens at the
+    /// ambient height, so a line laid out in one sat in a 36px band and the import preview came out
+    /// double-spaced; [`spacing::text_row`] is the row that does not.
+    #[test]
+    fn a_row_of_text_is_not_a_hit_target() {
+        let ctx = egui::Context::default();
+        typography::install(&ctx);
+        spacing::install(&ctx);
+        install(&ctx);
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            let top = ui.cursor().top();
+            ui.label("x");
+            let line = ui.cursor().top() - top;
+
+            let top = ui.cursor().top();
+            spacing::text_row(ui, |ui| ui.label("x"));
+            let row = ui.cursor().top() - top;
+
+            assert_eq!(row, line, "a row of one line is {row}px, the line {line}px");
+        });
+    }
+
     /// **A row opens when it is clicked on its own words**, which is the most natural place to aim
     /// and was the one place it did not work (ADR-0039 §1).
     ///
