@@ -598,6 +598,13 @@ because they are validated findings, not because a web build ships.
     wrong, and the artifact is a valid picture of something nobody chose. **Measure, do not reason**
     — the intervals are `fsrs`'s, so a new fixture's margin is found by installing it a few hundred
     times, not by argument, and a fixture whose order matters is checked by *installing it twice*.
+23. **A fixture fabricates every field it writes, including the ones nothing draws yet.** A
+    placeholder in such a field is a fact nobody chose, and it surfaces the day a screen starts
+    reading it. Every review row took a constant 4,200ms until #173, so a card's answer time was its
+    review count times a constant, and ADR-0010 §6's *"22 reviews, 14 minutes"* could not be judged
+    from any capture — the leech caption's wording waited on it. Give a written field plausible,
+    **unequal** values (seeded, never random, per rule 22), and assert what came out, as
+    `fixtures::Pace` and the leech ranking test do.
 
 ## The local store
 
