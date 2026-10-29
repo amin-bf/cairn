@@ -577,12 +577,15 @@ because they are validated findings, not because a web build ships.
       repository held showed an order the run had picked at random — two captures from *one* run
       disagreed with each other. A fixture whose screen shows an order must **break the real keys**.
     - `session::compose` breaks the **due queue's** tie the same way, so it decides *which card a
-      sitting opens on*. This is the one that is still live: `backlog`'s twenty-five cards share one
-      history, so `checkpoint.txt` run twice photographs two different cards — measured, `le phare`
-      and `la marée` from the same storyboard minutes apart.
+      sitting opens on*. #171 found `backlog`'s twenty-five cards sharing one history, so all were
+      due on one day and `checkpoint.txt` run twice photographed two different cards — `le phare`
+      and `la marée` from the same storyboard minutes apart. Its passes are now spread three days
+      apart and the queue runs in table order. A fixture whose screen shows a card must give the
+      card it opens on **a `due_day` of its own**.
     - `scheduling`'s interval fuzz is seeded from `CardRef::encode` (ADR-0027 §5, ADR-0001 §7), so a
       card scheduled close to due is due on some builds and not others — and, through `due_day`, it
-      also perturbs the queue order above. The pre-#160 leech recovery left as little as **two days**
+      can reorder the queue above. Not below 2.5 days, which it leaves unfuzzed: a single *Good* on
+      a new card buys two, so `backlog`'s tie in #171 was the tie-break alone. The pre-#160 leech recovery left as little as **two days**
       of margin against a fuzz that swings about three; it had simply not lost the toss yet. Fixtures
       now leave **at least five days**, asserted directly, because `Fixture::check` only ever sees
       the build it ran on and fails *intermittently* otherwise.
