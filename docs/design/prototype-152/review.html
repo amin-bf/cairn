@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Take the Settings Slice — sitting 1</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  /* ---- the application's own values (theme.rs, frame.rs, spacing.rs, typography.rs, controls.rs) ---- */
+  :root {
+    --page: #1a1e21;        /* STONE_2 — panel_fill, the page */
+    --card: #0f1214;        /* STONE_0 — card fill */
+    --well: #15191b;        /* text field well */
+    --control: #21262a;     /* STONE_3 — an ordinary control */
+    --primary: #2c3237;     /* STONE_5 — the one way forward on a card-less screen */
+    --sep: #282e33;         /* STONE_4 — separators */
+    --body: #e2e6e6;        /* STONE_11 */
+    --on-widget: #b9c2c3;   /* STONE_10 */
+    --weak: #8f9a9d;        /* weak_text_color */
+    --link: #6f93a8;        /* LICHEN */
+    --sel: #2a4453; --sel-text: #cfe3ec;
+    --u: 8px; --margin: 28px; --measure: 640px; --h: 36px; --reach: 165px;
+  }
+
+  /* ---- the review surface around the drawings (not the app) ---- */
+  body { margin: 0; background: #f4f3ef; color: #1d1f21; font: 15px/1.55 system-ui, sans-serif; }
+  .doc { max-width: 1060px; margin: 0 auto; padding: 28px 20px 80px; }
+  .doc h1 { font-size: 26px; margin: 0 0 4px; }
+  .doc h2 { font-size: 20px; margin: 44px 0 6px; padding-top: 18px; border-top: 2px solid #1d1f21; }
+  .lede { color: #444; max-width: 780px; }
+  .muted { color: #666; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .box { background: #fff; border: 1px solid #d9d6cf; border-radius: 6px; padding: 12px 16px; }
+  .box h4 { margin: 0 0 6px; font-size: 14px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box li { margin: 3px 0; font-size: 14px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; margin-right: 6px; vertical-align: 1px; }
+  .t-decided { background: #dfe9df; color: #2f5130; }
+  .t-defect { background: #f1e3cf; color: #6b4a1c; }
+  .t-yours { background: #1d1f21; color: #fff; }
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+  dl.gloss dt { font-weight: 700; }
+  dl.gloss dd { margin: 0; }
+
+  .bar { position: sticky; top: 0; z-index: 5; background: #f4f3efee; backdrop-filter: blur(4px); border-bottom: 1px solid #d9d6cf; }
+  .bar .in { max-width: 1060px; margin: 0 auto; padding: 8px 20px; display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; font-size: 13px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid #1d1f21; border-radius: 4px; overflow: hidden; }
+  .seg label { padding: 3px 10px; cursor: pointer; user-select: none; }
+  .seg input { display: none; }
+  .seg label:has(input:checked) { background: #1d1f21; color: #fff; }
+  .variants { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 6px; font-size: 14px; }
+  .variants b { margin-right: 4px; min-width: 150px; }
+
+  .stage { position: relative; width: 100%; overflow: hidden; margin: 10px 0 4px; }
+  .stage > .win { transform-origin: top left; position: absolute; top: 0; left: 0; }
+  .pinnote { font-size: 14px; margin: 6px 0; }
+  .pinnote li { margin: 4px 0; }
+
+  form.q { background: #fff; border: 1.5px solid #1d1f21; border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+  form.q .qhead { font-weight: 700; margin-bottom: 6px; }
+  form.q label.opt { display: block; margin: 5px 0; padding: 6px 8px; border: 1px solid #e0ddd6; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  form.q label.opt:has(input:checked) { border-color: #1d1f21; background: #f7f6f2; }
+  form.q .rec { font-size: 11px; font-weight: 700; color: #2f5130; background: #dfe9df; padding: 0 6px; border-radius: 3px; margin-left: 6px; }
+  form.q textarea { width: 100%; box-sizing: border-box; min-height: 44px; font: inherit; font-size: 14px; margin-top: 6px; }
+  form.q button { margin-top: 8px; font: inherit; font-size: 14px; padding: 5px 14px; background: #1d1f21; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+  form.q .state { font-size: 12px; color: #2f5130; margin-left: 10px; }
+  #answers { width: 100%; box-sizing: border-box; min-height: 120px; font: 13px/1.5 ui-monospace, monospace; }
+
+  /* ================= the application window ================= */
+  .win { background: var(--page); color: var(--body); font-family: "CairnUI", sans-serif; font-size: 15px; line-height: 1.17; overflow: hidden; box-shadow: 0 1px 0 #0003, 0 8px 30px #0002; position: relative; }
+  .win.desk { width: 1280px; height: 800px; }
+  .win.hand { width: 412px; height: 915px; }
+  /* the tall drawing: the whole page laid out, with the window's own height marked as a fold */
+  .win.tall { height: auto; }
+  .win.tall .screen { position: relative; inset: auto; }
+  .win.tall .scroll { position: relative; inset: auto; padding-bottom: 40px; }
+  .win .fold { position: absolute; left: 0; right: 0; border-top: 2px dashed #e0b25c; pointer-events: none; z-index: 3; }
+  .win .fold::after { content: "bottom of the window — everything under this is reached by scrolling"; position: absolute; right: 8px; top: 2px; font: 11px system-ui; color: #e0b25c; background: #1a1e21cc; padding: 0 4px; }
+  .win .below { position: absolute; left: 0; right: 0; bottom: 0; background: #0006; pointer-events: none; z-index: 2; }
+  .win .nav { height: 23px; display: flex; align-items: center; gap: 12px; padding-left: calc((100% - min(100% - 2*var(--margin), var(--measure))) / 2); border-bottom: 1px solid var(--sep); background: var(--page); }
+  .win .nav span { padding: 1px 3px; color: var(--on-widget); }
+  .win .nav span.on { background: var(--sel); color: var(--sel-text); border-radius: 2px; }
+  .win .screen { position: absolute; inset: 24px 0 0 0; }
+  .win .scroll { position: absolute; inset: 0; overflow: hidden; }
+  .win .col { width: min(100% - 2*var(--margin), var(--measure)); margin: 0 auto; padding-top: calc(2*var(--u)); }
+  .win .heading { font-size: 20px; line-height: 1.2; }
+  .win .group { font-family: "CairnBold", sans-serif; font-size: 15px; }
+  .win .small, .win .fieldlabel { font-size: 12px; }
+  .win .fieldlabel, .win .weak { color: var(--weak); }
+  .win .gap1 { height: var(--u); } .win .gap2 { height: calc(2*var(--u)); } .win .gap3 { height: calc(3*var(--u)); } .win .gap4 { height: calc(4*var(--u)); }
+  .win .hair { height: 1px; background: var(--sep); }
+  .win .line + .line { margin-top: var(--u); }
+  .win .ctl { height: var(--h); display: flex; align-items: center; justify-content: center; background: var(--control); color: var(--on-widget); border-radius: 2px; }
+  .win .ctl.primary { background: var(--primary); color: var(--body); }
+  .win .ctl.field { background: var(--well); justify-content: flex-start; padding-left: var(--u); width: 120px; color: var(--body); }
+  .win .ctl.compact { display: inline-flex; padding: 0 calc(1.5*var(--u)); margin: 0 var(--u) var(--u) 0; height: 30px; }
+  .win .sl { display: flex; gap: var(--u); }
+  .win .sl span { padding: 3px 6px; color: var(--on-widget); border-radius: 2px; }
+  .win .sl span.on { background: var(--sel); color: var(--sel-text); }
+  .win .textaction { height: var(--h); display: flex; align-items: center; padding: 0 var(--u); color: var(--link); }
+  .win .rowband { min-height: var(--h); background: var(--control); border-radius: 2px; padding: 4px var(--u); display: flex; flex-direction: column; justify-content: center; }
+  .win .rowband + .rowband { margin-top: var(--u); }
+  .win .rowband .c { font-size: 12px; color: var(--weak); margin-top: 1px; }
+  .win .rowband.chev { flex-direction: row; justify-content: space-between; align-items: center; }
+  .win .band { position: absolute; left: 0; right: 0; height: calc(var(--reach) + var(--h) + var(--u)); background: var(--page); z-index: 1; border-top: 1px solid var(--sep); }
+  .win .band .col { padding-top: var(--u); }
+  .win .gate { display: flex; gap: var(--u); align-items: center; }
+  .win .gate .ctl.primary { flex: 1; }
+  .win .reachmark { position: absolute; left: 0; right: 0; border-top: 1px dashed #c2a37a88; pointer-events: none; z-index: 2; }
+  .win .reachmark::after { content: "reach line — 165px"; position: absolute; right: 6px; top: 1px; font: 10px system-ui; color: #c2a37acc; }
+  .win .dev { outline: 1px dashed #b07a7a88; outline-offset: 4px; }
+  .win .wire { outline: 1px dashed #6f93a8aa; outline-offset: 4px; }
+  .win .wirenote { font: 11px system-ui; color: #6f93a8; }
+  .win .bad { outline: 2px solid #d0605e; outline-offset: 3px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="bar"><div class="in">
+  <span><b>Window</b></span>
+  <span class="seg">
+    <label><input type="radio" name="w" value="desk" checked><span>Desktop 1280×800</span></label>
+    <label><input type="radio" name="w" value="hand"><span>Handset 412×915</span></label>
+  </span>
+  <span><b>Sync</b></span>
+  <span class="seg">
+    <label><input type="radio" name="sync" value="off" checked><span>not set up</span></label>
+    <label><input type="radio" name="sync" value="on"><span>set up (wireframe)</span></label>
+  </span>
+  <span class="muted">Every drawing redraws when you change these.</span>
+</div></div>
+
+<div class="doc">
+  <h1>Take the Settings Slice — sitting 1</h1>
+  <p class="lede">These are <b>wireframes drawn at the app's real sizes and colours</b>: the 640 column, the 28 margin, the 8 grid, 15/12/20 type, 36 controls, the dark palette and the shipped fonts. They are not builds. Settings is drawn <b>whole</b>, as one tall picture: the orange dashed line is where the window ends, and everything under it is reached by scrolling. Each selector above a drawing changes it in place, and the questions at the bottom are the same choices, with my recommendation marked.</p>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="box">
+      <h4>Words used on this page</h4>
+      <dl class="gloss">
+        <dt>block</dt><dd>one group on Settings: a small grey label, its controls, a line under it</dd>
+        <dt>specimen</dt><dd>a development block that only existed to test something: the rendering specimen (fonts, #97) and the hand-off specimen (writing a file and sharing it, #98). Both tickets are closed</dd>
+        <dt>fixture</dt><dd>a pre-made collection that replaces yours so a screen can be photographed (nothing due, leeches, a backlog…)</dd>
+        <dt>file set</dt><dd>a pre-made batch of files written into the file list, for the same reason</dd>
+        <dt>fixture bench</dt><dd>the block of fixture and file-set buttons. On the phone it's the only way to install one, and a script drives it</dd>
+        <dt>storyboard</dt><dd>a script of clicks the capture harness plays to take screenshots. It clicks at fixed positions, so moving a block means re-measuring them</dd>
+        <dt>sub-state</dt><dd>a second screen drawn inside Settings without a nav entry, like enrolment (setting up sync)</dd>
+        <dt>reach line</dt><dd>the line 165px above the bottom of the window where a screen's last control sits, measured by thumb (ADR-0035)</dd>
+        <dt>primary</dt><dd>the one filled control on a screen with no card: the way forward (ADR-0034 §2)</dd>
+        <dt>text action</dt><dd>an unframed alternative beside a primary, like <i>Cancel</i> (ADR-0034 §5)</dd>
+      </dl>
+    </div>
+    <div class="box">
+      <h4>How I sorted the questions</h4>
+      <ul>
+        <li><span class="tag t-decided">decided</span>already settled by an ADR. I draw it, I don't ask. Listed at the end so you can object.</li>
+        <li><span class="tag t-defect">defect</span>wrong today with an obvious fix. Also listed at the end.</li>
+        <li><span class="tag t-yours">yours</span><b>six questions.</b> Each has a drawing and my recommendation.</li>
+        <li>The one I most want you to push back on: <b>Q6</b>, because it changes what an accepted ADR says.</li>
+      </ul>
+      <p style="font-size:14px;margin:8px 0 0">The ticket's list of nine blocks is out of date: the inbound preview left with #167, and the fixture bench arrived later. Today Settings is <b>five real blocks</b> (Appearance, New cards a day, Scheduler, Sync, Files) and <b>four development blocks</b> (Reset, Fixture bench, Rendering specimen, Hand-off specimen).</p>
+    </div>
+  </div>
+
+  <!-- =============================================================== -->
+  <h2>1 · Settings, whole</h2>
+  <p class="muted">Development blocks have a dashed red outline so you can tell them apart; the app doesn't draw it. Set every selector to its first option to see today.</p>
+  <div class="variants"><b>Q1 · the two specimens</b>
+    <span class="seg">
+      <label><input type="radio" name="q1" value="a" checked><span>A · removed</span></label>
+      <label><input type="radio" name="q1" value="b"><span>B · moved into the development section</span></label>
+      <label><input type="radio" name="q1" value="c"><span>C · kept where they are</span></label>
+    </span>
+  </div>
+  <div class="variants"><b>Q2 · reset and the bench</b>
+    <span class="seg">
+      <label><input type="radio" name="q2" value="a" checked><span>A · only in a bench build</span></label>
+      <label><input type="radio" name="q2" value="b"><span>B · always, under one "Development" heading at the end</span></label>
+      <label><input type="radio" name="q2" value="c"><span>C · removed</span></label>
+    </span>
+    <span id="buildsel" class="seg" style="margin-left:8px">
+      <label><input type="radio" name="build" value="ship" checked><span>shipped build</span></label>
+      <label><input type="radio" name="build" value="bench"><span>bench build</span></label>
+    </span>
+  </div>
+  <div class="variants"><b>Q3 · order of the five</b>
+    <span class="seg">
+      <label><input type="radio" name="q3" value="a"><span>A · today's</span></label>
+      <label><input type="radio" name="q3" value="b" checked><span>B · grouped: Studying, then This device</span></label>
+      <label><input type="radio" name="q3" value="c"><span>C · studying first, no group headings</span></label>
+    </span>
+  </div>
+  <div class="variants"><b>Q6 · the reach line</b>
+    <span class="seg">
+      <label><input type="radio" name="q6" value="a" checked><span>A · Settings places nothing on it</span></label>
+      <label><input type="radio" name="q6" value="b"><span>B · the last control is pinned to it</span></label>
+    </span>
+  </div>
+  <div class="stage" data-screen="settings"></div>
+  <ol class="pinnote">
+    <li><b>Q1.</b> Both specimens answered their tickets. The Kotlin client will need its own test bench anyway, so these don't carry over to it. Removing the hand-off specimen leaves the share call (<code>hand_off</code>) with no caller until the export screen exists. That screen is out of scope here.</li>
+    <li><b>Q2.</b> Reset and the bench still have work to do: the phone has no other way to install a fixture, and <code>fixture-bench.txt</code> drives them. With <b>A</b>, the shipped Settings never shows them, and a build made with a <code>bench</code> switch adds them as one section at the end. Use the second selector to flip between the two builds.</li>
+    <li><b>Q3.</b> The code says <i>everything below Appearance syncs</i>, and that's false. Only <b>New cards a day</b> and the <b>Scheduler</b> follow your collection to another device. Appearance, the sync connection and the files belong to this machine. <b>B</b> makes that visible with two bold group headings. Any order other than today's means re-measuring the storyboard clicks at a fixed 1280×800, the way <code>file-surface.txt</code> already does. It's mechanical work, and I'd do it.</li>
+    <li><b>Q6.</b> ADR-0035 §1 (as amended by ADR-0040 §4) says <i>the last control on a screen</i> sits on the reach line, and ADR-0039 §8 says a scrolling screen meets it only by pinning that control outside the scroll. Read literally, Settings must pin whatever happens to come last. Flip to <b>B</b> to see what that looks like: a list row or the appearance switch, cut off from its block and kept on screen for no reason. <b>A</b> amends §1 to bind a screen's <i>closing</i> control (the one pressed to finish or go on: the grades, <i>Done</i>, the import gate, the leech entrance). A page of peer settings has no closing control, but its sub-states do (enrolment, a sync screen), and those take the line.</li>
+  </ol>
+
+  <!-- =============================================================== -->
+  <h2>2 · Sync, once it's set up <span class="tag t-yours">wireframe</span></h2>
+  <p class="muted">This can't be drawn live: there's no sync build that enrols. What it holds is decided (ADR-0015 §12, ADR-0019 §1): <i>Last caught up</i>, <i>Connected as</i>, <i>Sync now</i>, the device list, <i>Disconnect</i>, how to revoke, the history cutoff, and the desktop-authoring statement. The wording in [brackets] is a placeholder. Only <b>where</b> it goes is yours.</p>
+  <div class="variants"><b>Q4 · where it lives</b>
+    <span class="seg">
+      <label><input type="radio" name="q4" value="a"><span>A · inline, the Sync block grows</span></label>
+      <label><input type="radio" name="q4" value="b" checked><span>B · a row on Settings that opens its own sync screen</span></label>
+    </span>
+    <span id="q4view" class="seg" style="margin-left:8px">
+      <label><input type="radio" name="q4v" value="settings" checked><span>Settings</span></label>
+      <label><input type="radio" name="q4v" value="screen"><span>the sync screen</span></label>
+    </span>
+  </div>
+  <div class="stage" data-screen="synced"></div>
+  <ol class="pinnote">
+    <li><b>A</b> puts eight items, three of them paragraphs, in the middle of a settings page. The two studying settings would then sit far apart from the appearance switch.</li>
+    <li><b>B</b> follows ADR-0015 §12 literally (<i>"One screen, and everything sync-shaped is on it"</i>), and it's the same shape enrolment already has: a sub-state of Settings without a nav entry. The row's caption carries the one fact you'd look for, <i>last caught up</i>. The sync screen's <i>Back</i> takes the reach line, because it's that screen's closing control (Q6 A).</li>
+  </ol>
+
+  <!-- =============================================================== -->
+  <h2>3 · Setting up sync (enrolment)</h2>
+  <div class="variants"><b>Q5 · the enrolment screen</b>
+    <span class="seg">
+      <label><input type="radio" name="q5" value="a"><span>A · today</span></label>
+      <label><input type="radio" name="q5" value="b" checked><span>B · one heading, Back on the reach line</span></label>
+    </span>
+  </div>
+  <div class="stage" data-screen="enrol"></div>
+  <ol class="pinnote">
+    <li><b>Today shows two headings</b> (<i>Settings</i> and then <i>Set up sync</i>), because Settings draws its heading before it checks for the sub-state. That's a <span class="tag t-defect">defect</span>, outlined in red, and I'll fix it either way.</li>
+    <li><b>B</b> puts the way out on the reach line. Today it's a lone <i>Back</i>, and a lone way out is a primary (the precedent is the file surface's lone <i>Close</i>, ADR-0041 §3). Once granting access works, it becomes a primary <i>continue</i> with <i>Back</i> as a text action beside it, like the import gate.</li>
+  </ol>
+
+  <!-- =============================================================== -->
+  <h2>Your six questions</h2>
+  <p class="muted">We'll go through these in the talk-through. If you'd rather click, <i>Queue</i> collects your answers into the box at the bottom for you to paste.</p>
+
+  <form class="q" onsubmit="return queue(event,'q1','The two specimens')">
+    <div class="qhead">Q1 · The rendering and hand-off specimens <span class="muted">(section 1)</span></div>
+    <label class="opt"><input type="radio" name="q1" value="A — removed" checked> A · remove both <span class="rec">recommended</span><br><span class="muted">Their tickets (#97, #98) are closed, and the Kotlin client needs its own bench. The share call waits, without a caller, for the export screen.</span></label>
+    <label class="opt"><input type="radio" name="q1" value="B — moved into the development section"> B · move them into the development section with the bench</label>
+    <label class="opt"><input type="radio" name="q1" value="C — kept"> C · keep them where they are</label>
+    <textarea name="note" placeholder="anything else (optional)"></textarea>
+    <button type="submit">Queue answer</button><span class="state"></span>
+  </form>
+
+  <form class="q" onsubmit="return queue(event,'q2','Reset and the fixture bench')">
+    <div class="qhead">Q2 · Reset and the fixture bench <span class="muted">(section 1)</span></div>
+    <label class="opt"><input type="radio" name="q2" value="A — only in a bench build" checked> A · a development section that only a build with a <code>bench</code> switch draws <span class="rec">recommended</span><br><span class="muted">The shipped Settings never shows it. The phone keeps its fixture route in a bench build.</span></label>
+    <label class="opt"><input type="radio" name="q2" value="B — always, under a Development heading at the end"> B · always drawn, grouped under one <i>Development</i> heading at the very end</label>
+    <label class="opt"><input type="radio" name="q2" value="C — removed"> C · remove them (the phone loses its fixture route)</label>
+    <textarea name="note" placeholder="anything else (optional)"></textarea>
+    <button type="submit">Queue answer</button><span class="state"></span>
+  </form>
+
+  <form class="q" onsubmit="return queue(event,'q3','Order of the five blocks')">
+    <div class="qhead">Q3 · The order of the five real blocks <span class="muted">(section 1)</span></div>
+    <label class="opt"><input type="radio" name="q3" value="A — today's order"> A · today's: Appearance, New cards, Scheduler, Sync, Files</label>
+    <label class="opt"><input type="radio" name="q3" value="B — grouped: Studying, then This device" checked> B · two groups: <b>Studying</b> (New cards, Scheduler) then <b>This device</b> (Sync, Files, Appearance) <span class="rec">recommended</span><br><span class="muted">It shows which settings follow you to another device and which stay on this one.</span></label>
+    <label class="opt"><input type="radio" name="q3" value="C — studying first, no headings"> C · the same order as B, without the group headings</label>
+    <textarea name="note" placeholder="anything else (optional)"></textarea>
+    <button type="submit">Queue answer</button><span class="state"></span>
+  </form>
+
+  <form class="q" onsubmit="return queue(event,'q4','Where sync lives once set up')">
+    <div class="qhead">Q4 · Once sync is set up, where does it live? <span class="muted">(section 2)</span></div>
+    <label class="opt"><input type="radio" name="q4" value="A — inline block"> A · inline: the Sync block grows to hold all eight items</label>
+    <label class="opt"><input type="radio" name="q4" value="B — a row opening its own sync screen" checked> B · one row on Settings that opens its own sync screen, as enrolment already does <span class="rec">recommended</span></label>
+    <textarea name="note" placeholder="anything else (optional)"></textarea>
+    <button type="submit">Queue answer</button><span class="state"></span>
+  </form>
+
+  <form class="q" onsubmit="return queue(event,'q5','Enrolment screen')">
+    <div class="qhead">Q5 · The enrolment screen <span class="muted">(section 3)</span></div>
+    <label class="opt"><input type="radio" name="q5" value="A — as today, minus the double heading"> A · as today (with the double heading fixed): <i>Back</i> as a wide button right under the text</label>
+    <label class="opt"><input type="radio" name="q5" value="B — Back as a primary on the reach line" checked> B · <i>Back</i> on the reach line as the lone primary, and later a primary <i>continue</i> with <i>Back</i> beside it <span class="rec">recommended</span></label>
+    <textarea name="note" placeholder="anything else (optional)"></textarea>
+    <button type="submit">Queue answer</button><span class="state"></span>
+  </form>
+
+  <form class="q" onsubmit="return queue(event,'q6','ADR-0035 §1 on Settings')">
+    <div class="qhead">Q6 · What the reach line binds <span class="muted">(section 1) — the one I most want you to push back on</span></div>
+    <label class="opt"><input type="radio" name="q6" value="A — amend: binds a closing control; Settings places nothing" checked> A · amend ADR-0035 §1: the line binds a screen's <i>closing</i> control. Settings has none, so it places nothing there, and its sub-states do <span class="rec">recommended</span><br><span class="muted">This agrees with the Notes slice (ADR-0039 §8: a scrolling screen meets the line only by pinning) and adds that a page with no closing control has nothing to pin.</span></label>
+    <label class="opt"><input type="radio" name="q6" value="B — pin the last control as written"> B · keep §1 as written and pin Settings' last control outside the scroll</label>
+    <textarea name="note" placeholder="anything else (optional)"></textarea>
+    <button type="submit">Queue answer</button><span class="state"></span>
+  </form>
+
+  <p class="muted" style="font-size:13px">Your queued answers:</p>
+  <textarea id="answers" readonly></textarea>
+
+  <h2>Settled already, or a defect I'll just fix</h2>
+  <div class="grid2">
+    <div class="box"><h4><span class="tag t-decided">decided</span></h4><ul>
+      <li>The file list stays on Settings (ADR-0022 §9, ADR-0041 §5), and so do its words.</li>
+      <li>The sync wording (the promise, the scope, the disclosure, the removal route) is fixed by ADR-0015 §3, §7, §10.</li>
+      <li>What the sync surface holds once set up (ADR-0015 §12, ADR-0019 §1). Only its place is Q4.</li>
+      <li>Appearance stays on this machine only (ADR-0036 §3). New cards a day syncs (ADR-0011 §5), and so do the scheduler parameters.</li>
+      <li>A lone way out is a primary (ADR-0041 §3's <i>Close</i>).</li>
+      <li>Enrolment is a sub-state of Settings, not a nav entry.</li>
+    </ul></div>
+    <div class="box"><h4><span class="tag t-defect">defect</span></h4><ul>
+      <li>Enrolment draws two headings.</li>
+      <li>The Sync block is the only real block with no grey label. It gets <i>Sync</i>, like the others.</li>
+      <li>The code comment claiming <i>everything below Appearance syncs</i> is wrong and gets corrected.</li>
+    </ul></div>
+  </div>
+  <div class="box" style="margin-top:16px"><h4>Out of scope, named here so it isn't lost</h4><ul>
+    <li>The export screen. It's the share call's next caller, and the file list's empty state will point to it.</li>
+    <li>The sync screen's live contents. They wait for a build that can enrol.</li>
+  </ul></div>
+</div>
+
+<script>
+  const st = { w: 'desk', sync: 'off', q1: 'a', q2: 'a', build: 'ship', q3: 'b', q6: 'a', q4: 'b', q4v: 'settings', q5: 'b' };
+  const H = { desk: 800, hand: 915 };
+  const NAV = 24;
+
+  // ---------- pieces ----------
+  const nav = on => `<div class="nav">${['Review','Notes','Settings'].map(x => `<span class="${x===on?'on':''}">${x}</span>`).join('')}</div>`;
+  const sepr = `<div class="gap3"></div><div class="hair"></div><div class="gap2"></div>`;
+  const label = t => `<div class="fieldlabel">${t}</div><div class="gap1"></div>`;
+  const p = (t, cls = '') => `<div class="line ${cls}">${t}</div>`;
+  const ctl = (t, cls = '', id = '') => `<div class="ctl ${cls}" ${id ? `data-last="${id}"` : ''}>${t}</div>`;
+  const PROMISE = 'Your devices catch up when you open the app.';
+  const REVOKE = 'Disconnect stops syncing on this device and deletes nothing — reconnect any time. To remove the published data, delete this app\'s data from your drive\'s connected-apps settings, where it appears as “Cairn”. Revoking access there signs out every device you own.';
+
+  const B = {
+    appearance: () => `<div data-blk>${label('Appearance')}<div class="sl" data-last="appearance"><span>System</span><span>Light</span><span class="on">Dark</span></div><div class="gap1"></div>${p('This machine only — your appearance does not follow the collection to another device.')}</div>`,
+    newcards: () => `${label('New cards a day')}${ctl('10', 'field')}<div class="gap1"></div>${p('The only limit in the app. Set it to zero to clear a backlog, then turn it back on.')}`,
+    scheduler: () => `${label('Scheduler')}${ctl('Optimise')}<div class="gap1"></div>${p('Using the standard parameters. You\'ve reviewed 1,240 times.')}`,
+    sync: (today) => {
+      if (st.sync === 'on') {
+        if (st.q4 === 'b') return `${label('Sync')}<div class="rowband chev wire"><div><div>Sync</div><div class="c">Last caught up 2 minutes ago · 3 devices</div></div><div class="weak">›</div></div>`;
+        return `<div class="wire">${syncInline()}</div>`;
+      }
+      return `${today ? '' : label('Sync')}${p(PROMISE)}<div class="gap2"></div>${ctl('Set up sync', '', 'sync')}<div class="gap3"></div>${p(REVOKE)}`;
+    },
+    files: () => `${label('Files')}${p('The files this app wrote. Open one to see what importing it would do.')}<div class="gap2"></div>
+      <div class="rowband"><div>Chapters 1-4.cdeck</div><div class="c">unreadable</div></div>
+      <div class="rowband"><div>collection.ccoll</div><div class="c">collection archive · 1 September 2026 · 25 notes, 50 reviews</div></div>
+      <div class="rowband" data-last="files"><div>French A1.cdeck</div><div class="c">deck · 18 notes · 3 retractions</div></div>`,
+    reset: () => `<div class="dev">${p('Development control — returns this device to a first launch, seed and all. Rows other devices hold come back on the next sync.')}<div class="gap1"></div>${ctl('Reset the collection (temporary)')}</div>`,
+    bench: () => `<div class="dev">${label('Fixtures (temporary)')}${p('Development control — replaces the collection with a pre-made one, to reach a screen the shipping seed cannot. Rows other devices hold come back on the next sync.')}<div class="gap1"></div>
+      <div>${['Nothing due','Leeches','About to leech','A backlog','Cloze cards','Due, with leeches','Decks, and Persian','Dormant cards'].map(t => `<span class="ctl compact">${t}</span>`).join('')}</div>
+      <div><span class="ctl compact">Files to import</span><span class="ctl compact">…</span></div><div class="gap1"></div>${ctl('Shorten the checkpoint (temporary)')}</div>`,
+    rendering: () => `<div class="dev">${p('Development control — every script the shipped faces exist for, in every family. Each line below is the same text drawn by a different family; check it against the caption above it.')}<div class="gap2"></div>
+      ${['Latin','Persian','Greek','Cyrillic'].map(s => `<div class="fieldlabel">${s} · proportional / monospace / bold</div><div class="line weak">The quick brown fox · Δ · Ж · فارسی</div><div class="gap1"></div>`).join('')}</div>`,
+    handoff: () => `<div class="dev">${p('Development control — the two user-files calls, one per button. Write puts a real .cdeck where the platform keeps this app\'s files; Hand it off opens the share sheet for it, and only when pressed: writing never opens anything.')}<div class="gap1"></div>${ctl('Write a deck file (temporary)')}<div class="gap1"></div>${ctl('Hand it off (temporary)')}</div>`,
+  };
+
+  function syncInline() {
+    return `${label('Sync')}${p('Last caught up 2 minutes ago')}${p('Connected as you@example.com', 'weak')}<div class="gap2"></div>${ctl('Sync now')}<div class="gap2"></div>
+      <div class="fieldlabel">Devices</div><div class="gap1"></div>${p('This phone · last published 2 minutes ago')}${p('Laptop · last published yesterday')}${p('Desk computer · last published 3 weeks ago')}<div class="gap2"></div>
+      ${ctl('Disconnect')}<div class="gap1"></div>${p(REVOKE)}<div class="gap2"></div>
+      ${p('[The history cutoff, behind its explanation — ADR-0015 §11]', 'weak')}<div class="gap1"></div>${p('[The desktop-authoring statement — ADR-0015 §9]', 'weak')}`;
+  }
+
+  // ---------- Settings, composed from the selectors ----------
+  function settingsBody() {
+    const today = st.q3 === 'a';
+    let parts = [];
+    if (st.q3 === 'a') parts = ['appearance', 'newcards', 'scheduler', 'sync', 'files'];
+    else parts = ['newcards', 'scheduler', 'sync', 'files', 'appearance'];
+    const blocks = parts.map(k => B[k](today));
+    let html = '';
+    if (st.q3 === 'b') {
+      html = `<div class="group">Studying</div><div class="small weak">Follows your collection to every device.</div><div class="gap2"></div>${blocks[0]}${sepr}${blocks[1]}
+        <div class="gap4"></div><div class="group">This device</div><div class="small weak">Stays on this machine.</div><div class="gap2"></div>${blocks[2]}${sepr}${blocks[3]}${sepr}${blocks[4]}`;
+    } else {
+      html = blocks.join(sepr);
+    }
+    // development blocks
+    const showDev = st.q2 === 'b' || (st.q2 === 'a' && st.build === 'bench');
+    const devBlocks = [];
+    if (showDev) devBlocks.push(B.reset(), B.bench());
+    if (st.q1 === 'b' && (showDev || st.q2 === 'c')) devBlocks.push(B.rendering(), B.handoff());
+    if (st.q1 === 'c' && st.q2 !== 'b') {
+      // specimens left in place, after whatever else is drawn
+      html += sepr + B.rendering() + sepr + B.handoff();
+    }
+    if (devBlocks.length) {
+      const devHead = (st.q2 === 'a' || st.q2 === 'b' || st.q1 === 'b') && !(st.q2 === 'a' && st.q3 === 'a' && false);
+      html += `<div class="gap4"></div><div class="hair"></div><div class="gap3"></div>${devHead ? '<div class="group dev">Development</div><div class="gap2"></div>' : ''}${devBlocks.join(sepr)}`;
+    }
+    if (st.q1 === 'c' && st.q2 === 'b') html += sepr + B.rendering() + sepr + B.handoff();
+    return `<div class="heading">Settings</div><div class="gap2"></div>${html}`;
+  }
+
+  function tallShell(body, navOn) {
+    return `<div class="win ${st.w} tall">${nav(navOn)}<div class="screen"><div class="scroll"><div class="col">${body}</div></div></div></div>`;
+  }
+  function shell(body, gateHtml, navOn) {
+    const band = gateHtml ? `<div class="band" style="bottom:0"><div class="col">${gateHtml}</div></div><div class="reachmark" style="bottom:var(--reach)"></div>` : '';
+    return `<div class="win ${st.w}">${nav(navOn)}<div class="screen"><div class="scroll"><div class="col">${body}</div></div>${band}</div></div>`;
+  }
+
+  // after a tall window is in the document: the fold, the shading under it, and Q6 B's pinned band
+  function decorateTall(win) {
+    const h = H[st.w];
+    if (win.offsetHeight <= h) win.style.height = h + 'px';
+    const fold = document.createElement('div'); fold.className = 'fold'; fold.style.top = h + 'px'; win.appendChild(fold);
+    const below = document.createElement('div'); below.className = 'below'; below.style.top = h + 'px'; win.appendChild(below);
+    if (st.q6 === 'b') {
+      const lasts = win.querySelectorAll('[data-last]');
+      const last = lasts[lasts.length - 1];
+      if (!last) return;
+      const bandH = 165 + 36 + 8;
+      const band = document.createElement('div');
+      band.className = 'band'; band.style.top = (h - bandH) + 'px';
+      const col = document.createElement('div'); col.className = 'col';
+      col.appendChild(last.cloneNode(true)); band.appendChild(col); win.appendChild(band);
+      last.classList.add('bad'); last.style.opacity = '.35';
+      const mark = document.createElement('div'); mark.className = 'reachmark'; mark.style.top = (h - 165) + 'px'; win.appendChild(mark);
+    }
+  }
+
+  const screens = {
+    settings() { return tallShell(settingsBody(), 'Settings'); },
+    synced() {
+      const save = st.sync; st.sync = 'on';
+      let out;
+      if (st.q4 === 'b' && st.q4v === 'screen') {
+        out = shell(`<div class="heading">Sync</div><div class="gap2"></div><div class="wire">${syncInline().replace(/^<div class="fieldlabel">Sync<\/div><div class="gap1"><\/div>/, '')}</div>`,
+          `<div class="ctl primary">Back</div>`, 'Settings');
+      } else {
+        out = tallShell(settingsBody(), 'Settings');
+      }
+      st.sync = save;
+      return out;
+    },
+    enrol() {
+      const words = `<div class="gap2"></div>${p('This grants access to your email address and to a private folder only this app can see — never your own files.')}${p(PROMISE)}${p('Your review history is published to that folder in plain text. Nothing published is encrypted.')}<div class="gap2"></div><div class="fieldlabel">Granting access uses the device flow, which needs a network connection — not available in this build.</div>`;
+      if (st.q5 === 'a') {
+        return shell(`<div class="bad"><div class="heading">Settings</div><div class="gap2"></div></div><div class="heading">Set up sync</div>${words}<div class="gap3"></div>${ctl('Back')}`, null, 'Settings');
+      }
+      return shell(`<div class="heading">Set up sync</div>${words}`, `<div class="ctl primary">Back</div>`, 'Settings');
+    },
+  };
+
+  // ---------- render + fit ----------
+  function render() {
+    document.getElementById('buildsel').classList.toggle('hidden', st.q2 !== 'a');
+    document.getElementById('q4view').classList.toggle('hidden', st.q4 !== 'b');
+    document.querySelectorAll('.stage').forEach(stage => {
+      stage.innerHTML = screens[stage.dataset.screen]();
+      const win = stage.firstElementChild;
+      if (win.classList.contains('tall')) decorateTall(win);
+      fit(stage);
+    });
+  }
+  function fit(stage) {
+    const win = stage.firstElementChild;
+    const w = win.offsetWidth, h = win.offsetHeight;
+    const s = Math.min(1, stage.clientWidth / w);
+    win.style.transform = `scale(${s})`;
+    win.style.left = `${Math.max(0, (stage.clientWidth - w * s) / 2)}px`;
+    stage.style.height = `${h * s}px`;
+  }
+  window.addEventListener('resize', () => document.querySelectorAll('.stage').forEach(fit));
+  document.querySelectorAll('.bar input, .variants input').forEach(i =>
+    i.addEventListener('change', () => { st[i.name] = i.value; render(); }));
+  document.fonts.ready.then(render);
+  render();
+
+  // ---------- answers ----------
+  const answers = {};
+  function queue(ev, key, title) {
+    ev.preventDefault();
+    const f = ev.currentTarget, d = new FormData(f);
+    const answer = d.get(key), note = (d.get('note') || '').trim();
+    answers[key] = `${key.toUpperCase()} (${title}): ${answer}${note ? ' — note: ' + note : ''}`;
+    document.getElementById('answers').value = Object.keys(answers).sort().map(k => answers[k]).join('\n');
+    f.querySelector('.state').textContent = 'queued — change and re-queue to replace';
+    return false;
+  }
+</script>
+</body>
+</html>
