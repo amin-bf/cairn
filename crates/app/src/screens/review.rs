@@ -445,13 +445,13 @@ fn leech_screen(
             }
             // The cost, made concrete (ADR-0010 §6): failure days and how many reviews they took.
             //
-            // **The wording is still one rank key and one non-key, and #173 is what changes it.**
+            // **The wording is still one rank key and one non-key, and #156 is what changes it.**
             // `leeches` ranks by failure days, then by the most recent failure, then by card
             // identity — so this line states the *first* key, spends its other half on
             // `review_count`, **which orders nothing**, and never draws the second key at all. The
             // sitting chose ADR-0010 §6's duration sentence to replace it and made a bench that can
-            // produce a real duration its precondition, because every fixture writes a constant
-            // 4,200ms and §6's own example draws as `0 minutes`.
+            // produce a real duration its precondition; #173 met it — replay carries
+            // `CardState::answer_ms`, and the fixture's three leeches take unequal times.
             leech_row(
                 ui,
                 preview,

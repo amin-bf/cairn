@@ -645,6 +645,7 @@ mod tests {
                     },
                     box_: 2,
                     review_count: 1,
+                    answer_ms: 6_000,
                     first_day: 0,
                     last_grade: Grade::Good,
                     last_day: 0,

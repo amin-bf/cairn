@@ -364,8 +364,7 @@ impl Fixture {
                 // differ from each other on purpose; [`LEECHES`] is where that is argued.
                 for leech in &LEECHES {
                     let card = note(coll, leech.front, leech.back)?;
-                    history.fails(card, leech.fails);
-                    history.passes(card, leech.passes);
+                    history.leech(card, leech);
                 }
             }
             Fixture::Crossing => {
@@ -386,8 +385,7 @@ impl Fixture {
                 backlog(coll, &mut history)?;
                 for leech in &LEECHES {
                     let card = note(coll, leech.front, leech.back)?;
-                    history.fails(card, leech.fails);
-                    history.passes(card, leech.passes);
+                    history.leech(card, leech);
                 }
             }
             Fixture::Cloze => {
@@ -739,22 +737,38 @@ pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
 /// names. It was [`Fixture::check`] that caught it, which is the argument for that check in one line.
 #[derive(Default)]
 struct History {
-    /// `(days before now, card, grade)`, in whatever order the fixture happened to build them.
-    rows: Vec<(i64, CardRef, Grade)>,
+    /// `(days before now, card, grade, answer ms)`, in whatever order the fixture happened to build
+    /// them.
+    rows: Vec<(i64, CardRef, Grade, u64)>,
 }
 
 impl History {
     /// Grade this card *Forgot* on each of these days — one **failure day** apiece (ADR-0010 §2).
     fn fails(&mut self, card: CardRef, days_ago: &[i64]) {
         for &day in days_ago {
-            self.rows.push((day, card, Grade::Forgot));
+            let ms = Pace::TYPICAL.ms(Grade::Forgot, self.rows.len() as u64);
+            self.rows.push((day, card, Grade::Forgot, ms));
         }
     }
 
     /// Grade this card at the given days and grades, oldest first.
     fn passes(&mut self, card: CardRef, reviews: &[(i64, Grade)]) {
         for &(day, grade) in reviews {
-            self.rows.push((day, card, grade));
+            let ms = Pace::TYPICAL.ms(grade, self.rows.len() as u64);
+            self.rows.push((day, card, grade, ms));
+        }
+    }
+
+    /// A leech's whole record, at its own [`Pace`].
+    ///
+    /// The variation is seeded from the row's **day**, not from where it falls in the gathering as
+    /// [`History::passes`]'s is. Two fixtures carry [`LEECHES`] behind different filler, and a leech's
+    /// answer time is asserted — it must come out the same in both.
+    fn leech(&mut self, card: CardRef, spec: &LeechSpec) {
+        let fails = spec.fails.iter().map(|&day| (day, Grade::Forgot));
+        for (day, grade) in fails.chain(spec.passes.iter().copied()) {
+            let ms = spec.pace.ms(grade, day as u64);
+            self.rows.push((day, card, grade, ms));
         }
     }
 
@@ -765,14 +779,51 @@ impl History {
     /// bump them harmlessly, but so the log has a total order that does not depend on it. The offsets
     /// run *backwards* from the anchor, so no fixture row is ever stamped in the future.
     fn write(mut self, coll: &mut Collection, now_ms: i64) -> Result<(), String> {
-        self.rows.sort_by_key(|(days_ago, _, _)| -*days_ago);
+        self.rows.sort_by_key(|(days_ago, _, _, _)| -*days_ago);
         let last = self.rows.len().saturating_sub(1) as i64;
-        for (index, (days_ago, card, grade)) in self.rows.into_iter().enumerate() {
+        for (index, (days_ago, card, grade, ms)) in self.rows.into_iter().enumerate() {
             let instant = now_ms - days_ago * DAY_MS - (last - index as i64);
-            coll.append_review(card, grade, instant, DayScale::default(), 4_200)
+            coll.append_review(card, grade, instant, DayScale::default(), ms)
                 .map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+}
+
+/// How long a card takes to answer — what each written row records as its `duration_ms`.
+///
+/// **A fixture fabricates every field it writes, including the ones nothing draws yet.** Every row
+/// here used to take a constant 4,200ms, so a card's answer time was its review count times a
+/// constant and ADR-0010 §6's *"22 reviews, 14 minutes, still failing"* drew as *"0 minutes"* — a
+/// fact the bench could not reach, and one nobody had chosen
+/// ([#173](https://github.com/amin-bf/cairn/issues/173)).
+///
+/// A *Forgot* is the slowest answer (the stare before giving up), *Hard* slower than *Good*, *Easy*
+/// quickest. Each row then varies by ±20% on a seed, never on randomness, so a fixture installs the
+/// same durations on every build.
+#[derive(Clone, Copy)]
+struct Pace {
+    /// A *Forgot*.
+    forgot_ms: u64,
+    /// A *Good*; *Hard* and *Easy* are scaled from it.
+    good_ms: u64,
+}
+
+impl Pace {
+    /// Everything that is not a leech.
+    const TYPICAL: Pace = Pace {
+        forgot_ms: 16_000,
+        good_ms: 7_000,
+    };
+
+    fn ms(self, grade: Grade, seed: u64) -> u64 {
+        let base = match grade {
+            Grade::Forgot => self.forgot_ms,
+            Grade::Barely => self.good_ms * 3 / 2,
+            Grade::Good => self.good_ms,
+            Grade::Easy => self.good_ms * 3 / 5,
+        };
+        base * (80 + (seed * 37 + 11) % 41) / 100
     }
 }
 
@@ -1211,6 +1262,9 @@ struct LeechSpec {
     /// grade is a failure is due whatever its interval says, so every leech here has to pass its
     /// way out; the count also feeds the caption's second number, which is **not** a rank key.
     passes: &'static [(i64, Grade)],
+    /// How long this card takes to answer, which is what its answer time — the cost ADR-0010 §6
+    /// draws beside the counts — is summed from. **Not** a rank key either (§3).
+    pace: Pace,
 }
 
 /// The three leeches, **deliberately unequal, and unequal in two different ways**.
@@ -1233,6 +1287,13 @@ struct LeechSpec {
 /// *"4 bad days · 9 reviews"* above *"4 bad days · 10 reviews"*, so one picture shows that the
 /// caption's second number is context and not the key that ordered the list. Ordering them the
 /// other way would have let a reader read the screen correctly for the wrong reason.
+///
+/// Answer times differ for the same reason and in the same direction
+/// ([#173](https://github.com/amin-bf/cairn/issues/173)). `d'ailleurs`, **last**, is the card eating
+/// the evenings — about eleven minutes, every failure a long stare; `désormais`, second, is answered
+/// in about a minute, wrongly and quickly. So the order the time would suggest is not the order on
+/// screen, and a caption that draws it cannot be read as what ranked the list: duration is noisy (a
+/// phone put down) and ADR-0010 §3 refuses it as a trigger for exactly that.
 ///
 /// # The recoveries are sized, not guessed
 ///
@@ -1258,8 +1319,12 @@ const LEECHES: [LeechSpec; 3] = [
             (4, Grade::Easy),
             (1, Grade::Easy),
         ],
+        pace: Pace {
+            forgot_ms: 30_000,
+            good_ms: 12_000,
+        },
     },
-    // Four failure days, the more recent last failure — second, on nine reviews.
+    // Four failure days, the more recent last failure — second, on nine reviews, and the quickest.
     LeechSpec {
         front: "désormais",
         back: "from now on",
@@ -1271,9 +1336,13 @@ const LEECHES: [LeechSpec; 3] = [
             (8, Grade::Easy),
             (3, Grade::Easy),
         ],
+        pace: Pace {
+            forgot_ms: 10_000,
+            good_ms: 5_000,
+        },
     },
     // Four failure days, the older last failure — third, on *more* reviews than the row above it,
-    // and the screen cannot say why it is third.
+    // and the screen cannot say why it is third. Also the slowest by far: the time-eater ranks last.
     LeechSpec {
         front: "d'ailleurs",
         back: "besides",
@@ -1286,6 +1355,10 @@ const LEECHES: [LeechSpec; 3] = [
             (3, Grade::Good),
             (1, Grade::Easy),
         ],
+        pace: Pace {
+            forgot_ms: 100_000,
+            good_ms: 45_000,
+        },
     },
 ];
 
@@ -1351,6 +1424,32 @@ mod tests {
             assert!(
                 reached.cards > 0,
                 "{}: a fixture with no cards is not a fixture",
+                fixture.key()
+            );
+        }
+    }
+
+    /// **No fixture writes a constant answer time.** One did, everywhere, until
+    /// [#173](https://github.com/amin-bf/cairn/issues/173): 4,200ms a row, so a card's answer time was
+    /// its review count in disguise and the leech list's cost could not be judged from a capture.
+    #[test]
+    fn no_fixture_writes_one_duration_for_every_review() {
+        use cairn_core::log::{ParsedLine, Row, parse_line};
+        for fixture in Fixture::ALL {
+            let (_d, _s, mut coll) = empty();
+            fixture.install(&mut coll, NOW_MS).unwrap();
+            let durations: HashSet<u64> = coll
+                .log_lines()
+                .unwrap()
+                .iter()
+                .filter_map(|line| match parse_line(line) {
+                    ParsedLine::Row(Row::Reviewed(row)) => Some(row.duration_ms),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                durations.len() != 1,
+                "{}: every review took the same time, which nobody does",
                 fixture.key()
             );
         }
@@ -1470,13 +1569,14 @@ mod tests {
     }
 
     /// One ranked leech, read the way `screens::review` reads it — the prompt, the two rank keys,
-    /// and the review count the caption's second number comes from.
+    /// the review count the caption's second number comes from, and the answer time beside it.
     #[derive(Debug, PartialEq, Eq)]
     struct RankedLeech {
         prompt: String,
         failure_days: u32,
         last_failure_day: i64,
         reviews: u32,
+        answer_ms: u64,
     }
 
     fn ranked_leeches(coll: &Collection, now_ms: i64) -> Vec<RankedLeech> {
@@ -1487,17 +1587,18 @@ mod tests {
         let replayed = replay(&current, &refs);
         leeches(&replayed, today)
             .into_iter()
-            .map(|leech| RankedLeech {
-                prompt: deck::render(coll, leech.card)
-                    .unwrap()
-                    .expect("a leech's card is still generated")
-                    .prompt,
-                failure_days: leech.failure_days,
-                last_failure_day: leech.last_failure_day,
-                reviews: replayed
-                    .cards
-                    .get(&leech.card)
-                    .map_or(0, |state| state.review_count),
+            .map(|leech| {
+                let state = &replayed.cards[&leech.card];
+                RankedLeech {
+                    prompt: deck::render(coll, leech.card)
+                        .unwrap()
+                        .expect("a leech's card is still generated")
+                        .prompt,
+                    failure_days: leech.failure_days,
+                    last_failure_day: leech.last_failure_day,
+                    reviews: state.review_count,
+                    answer_ms: state.answer_ms,
+                }
             })
             .collect()
     }
@@ -1545,6 +1646,28 @@ mod tests {
             "the screen draws '{{days}} bad days · {{reviews}} reviews' and nothing else per row: \
              three distinct strings, and the review count deliberately *ascending* across the \
              tied pair so it cannot be mistaken for what ordered them"
+        );
+
+        let answer_ms: Vec<u64> = ranked.iter().map(|l| l.answer_ms).collect();
+        assert_eq!(
+            answer_ms,
+            [245_508, 61_000, 632_440],
+            "ADR-0010 §6's cost, per leech — about four minutes, one, and ten and a half: the \
+             last-ranked one is the time-eater and the second the quickest, so the time cannot be \
+             read as what ordered them (§3)"
+        );
+
+        let (_d3, _s3, mut composed) = empty();
+        Fixture::DueWithLeeches
+            .install(&mut composed, NOW_MS)
+            .unwrap();
+        let composed: Vec<u64> = ranked_leeches(&composed, NOW_MS)
+            .iter()
+            .map(|l| l.answer_ms)
+            .collect();
+        assert_eq!(
+            composed, answer_ms,
+            "the leeches are `LEECHES` entire in both fixtures, answer times included"
         );
 
         let (_d2, _s2, mut again) = empty();

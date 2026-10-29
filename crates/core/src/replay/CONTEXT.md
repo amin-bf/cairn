@@ -67,6 +67,13 @@ A never-introduced card that is eligible today: not suspended (ADR-0010 §8), an
 had no card introduced today (ADR-0011 §8). Candidates are taken in `(position, ordinal)` order up to
 the new-card rate. **This is queue composition, never a due-date adjustment** — see the rules below.
 
+**Answer time**:
+A card's `duration_ms` summed over its projected reviews — the same rows its review count counts, so a
+dormant, cut-off or repeated row adds nothing. It is the cost ADR-0010 §6 says makes a leech
+**concrete**, and the signal §3 refuses as a **trigger**: read on the leech list, never a rank key, a
+floor or an input to memory state.
+_Avoid_: Study time, time spent — both suggest a clock running between cards, which nothing records.
+
 **Leech**:
 A card with **four or more failure days in the trailing ninety**, measured with the device's local
 day as the right edge (ADR-0010 §2). **Derived, never stored** — a query over replayed history, so
