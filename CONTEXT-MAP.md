@@ -122,7 +122,7 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md), [0041 §2 §5](./docs/adr/0041-the-file-surface.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
 | `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md), [0036](./docs/adr/0036-the-light-palette.md), [0037](./docs/adr/0037-motion-and-elevation.md), [0038](./docs/adr/0038-the-mark-and-the-icon-rule.md), [0039](./docs/adr/0039-the-list-row.md), [0040](./docs/adr/0040-the-note-editor.md), [0041](./docs/adr/0041-the-file-surface.md), [0042](./docs/adr/0042-the-settings-screen.md), [0043](./docs/adr/0043-the-leech-screen.md), [0044](./docs/adr/0044-the-ambient-hit-target.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
-| *the Android client* (Kotlin, not yet built) | [0045](./docs/adr/0045-the-native-android-client.md) | 0007 §6, 0016 §7, 0021 §7, 0023, 0024, 0031–0044 |
+| *the Android client* (Kotlin, not yet built) | [0045](./docs/adr/0045-the-native-android-client.md), [0047](./docs/adr/0047-the-file-surface-on-android.md) | 0007 §6, 0016 §7, 0021 §7, 0022, 0023, 0024, 0031–0044 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -401,6 +401,14 @@ factor, since it is a height and not a count.
 becomes Kotlin and Compose over the shared Rust core, in this repository, under the same package id;
 the egui Android build is retired at parity. On Android only, it lifts ADR-0016 §5's picker and
 filename refusals. Where Android has an established practice, the app follows it without a decision.
+
+**[0047](./docs/adr/0047-the-file-surface-on-android.md) is the file surface on Android. Read it
+before carrying a desktop file rule into the Kotlin app.** The system picker **replaces** the file
+list — there is no list on Android — and asks for any type, so the bytes decide what was opened.
+Export and the archive go through the system save dialog, pre-filled with the derived name (an
+archive's carries its date), and the report states the name written with no location line; the
+hand-off stays beside it. The Kotlin app calls none of `cairn-export::platform`; who reads the
+document's bytes is [the Kotlin/Rust line](https://github.com/amin-bf/cairn/issues/195)'s.
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.
