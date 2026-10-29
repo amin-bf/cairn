@@ -39,7 +39,8 @@ shot 04-notes-list
 mousemove %LX+140% 11 click 1
 sleep 1.2
 shot 06-settings-top
-# Settings is longer than any window this pass uses, so the font specimen needs scrolling to.
+# Settings is longer than any window this pass uses. Eight notches show where *This device* ends and
+# the Development section begins; `light.txt` goes on to the specimens at the end of the page.
 mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1.2
 shot 07-settings-scrolled
