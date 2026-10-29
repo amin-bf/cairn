@@ -95,6 +95,18 @@ pub fn row_wrapped<R>(ui: &mut egui::Ui, units: u32, add: impl FnOnce(&mut egui:
     .inner
 }
 
+/// A horizontal row of **text**, as tall as its text and no taller.
+///
+/// `ui.horizontal` opens every row at the ambient control height (`interact_size.y`) and centres its
+/// contents in that band. Once [`crate::controls::install`] set that height to the hit target's 36
+/// (#175), a row holding only a line of text drew it in a 36px band — the import preview's lines came
+/// out double-spaced. A row of text is not a control, so it is laid out here at its contents' height,
+/// top-aligned, and never reads the control height at all.
+pub fn text_row<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), add)
+        .inner
+}
+
 /// The item spacing an egui **composite** draws its own internals with — a combo-box dropdown, a
 /// scroll area — restored locally inside the widget that needs it.
 ///

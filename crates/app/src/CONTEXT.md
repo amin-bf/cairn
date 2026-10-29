@@ -303,9 +303,9 @@ or it is not a fixture**: the bench exists so a re-run is comparable to the run 
 a fixture photographs may depend on the card *identity*, which is `uuid_v4` and therefore fresh on
 every build. Four things read it on the way to a screen — the leech rank tie-break, the **due
 queue's** tie-break, the interval fuzz and the suspended section — and #160 found the `leeches`
-fixture landing on the first, so two widths of one run ranked the same three cards differently. The
-second is still live in `backlog`, whose twenty-five cards share one history (AGENTS.md, capture
-rule 22).
+fixture landing on the first, so two widths of one run ranked the same three cards differently.
+#171 found `backlog` landing on the second — twenty-five cards on one history, so every run opened
+its sitting on a different card (AGENTS.md, capture rule 22).
 _Avoid_: Seed, for a fixture — the seed is the six cards a real first install meets, and conflating
 the two is how "just extend the seed" gets proposed again; capture mode, which is the route this
 deliberately is not.

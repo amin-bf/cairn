@@ -26,11 +26,11 @@ shot 01-review-start
 # card (#133) and the controls (#134). A storyboard cannot tell you it missed — it photographs
 # whatever is on screen under the name it was asked for — so each one here was re-measured off the
 # capture rather than adjusted by eye.
-mousemove %LX+39% 112 click 1
+mousemove %LX+39% 129 click 1
 sleep 1.5
 shot 02-review-question
 # Reveal is tap-the-card (review.rs: "the prompt is one wide button").
-mousemove %CX% 131 click 1
+mousemove %CX% 148 click 1
 sleep 1.5
 shot 03-review-revealed
 mousemove %LX+86% 11 click 1
@@ -39,7 +39,8 @@ shot 04-notes-list
 mousemove %LX+140% 11 click 1
 sleep 1.2
 shot 06-settings-top
-# Settings is longer than any window this pass uses, so the font specimen needs scrolling to.
+# Settings is longer than any window this pass uses. Eight notches show where *This device* ends and
+# the Development section begins; `light.txt` goes on to the specimens at the end of the page.
 mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1.2
 shot 07-settings-scrolled
@@ -52,6 +53,6 @@ sleep 1
 # Open the first note — `chien`, which has a card — rather than *Create note*. A fresh draft has no
 # cards, so the editor's card pane would read "No cards yet" and the two-column layout this pass
 # exists to photograph would have nothing in half of it.
-mousemove %LX+19% 252 click 1
+mousemove %LX+19% 286 click 1
 sleep 1.5
 shot 05-notes-editor

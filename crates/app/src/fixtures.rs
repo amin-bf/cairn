@@ -375,25 +375,14 @@ impl Fixture {
                 let card = note(coll, "l'écureuil", "the squirrel")?;
                 history.fails(card, &[40, 30, 20]);
             }
-            Fixture::Backlog => {
-                // One pass, long enough ago that the interval it bought has expired several times
-                // over. Nothing here is a leech: a backlog is a person who stopped reviewing, not a
-                // person who kept failing.
-                for (front, back) in BACKLOG_WORDS {
-                    let card = note(coll, front, back)?;
-                    history.passes(card, &[(60, Grade::Good)]);
-                }
-            }
+            Fixture::Backlog => backlog(coll, &mut history)?,
             // **A composition of the two above, deliberately re-tuning neither.** The leeches are
             // `Leeches`'s exactly — [`LEECHES`] entire, ranks and all — so they are leeches *and not
             // due*, which is what lets due cards decide the screen. The due half is `Backlog`'s
-            // expired pass. Both sets of intervals are already asserted by their own fixtures, so
-            // this one adds no third claim about `fsrs` to keep true.
+            // expired passes, order and all. Both sets of intervals are already asserted by their
+            // own fixtures, so this one adds no third claim about `fsrs` to keep true.
             Fixture::DueWithLeeches => {
-                for (front, back) in BACKLOG_WORDS {
-                    let card = note(coll, front, back)?;
-                    history.passes(card, &[(60, Grade::Good)]);
-                }
+                backlog(coll, &mut history)?;
                 for leech in &LEECHES {
                     let card = note(coll, leech.front, leech.back)?;
                     history.leech(card, leech);
@@ -889,6 +878,40 @@ fn caught_up(coll: &mut Collection, history: &mut History, count: usize) -> Resu
     Ok(())
 }
 
+/// [`BACKLOG_WORDS`], each passed once **on a day of its own**, the first word longest ago — so the
+/// due queue runs in table order and a sitting opens on `l'aube`, on every build.
+///
+/// Nothing here is a leech: a backlog is a person who stopped reviewing, not a person who kept
+/// failing. And it is a person who stopped *gradually*, which is why the passes are spread rather
+/// than stacked.
+///
+/// They were stacked until [#171](https://github.com/amin-bf/cairn/issues/171): all twenty-five
+/// passed sixty days ago, so all twenty-five were due on **one** day and `session::compose` had
+/// nothing but the card-identity tie-break to order them by. `checkpoint.txt` run twice photographed
+/// `le phare` and then `la marée`.
+///
+/// **The fuzz was never part of it.** Measured over 300 installs, a single *Good* on a new card buys
+/// two days on every build — under the 2.5 days below which `scheduling` does not fuzz at all — so
+/// any step of a day would order the queue today. [`BACKLOG_PASS_STEP`] is three so the order
+/// survives the interval growing into the fuzz's first band, where it moves by at most a day either
+/// way, without anyone having to notice that it did.
+fn backlog(coll: &mut Collection, history: &mut History) -> Result<(), String> {
+    for (index, (front, back)) in BACKLOG_WORDS.into_iter().enumerate() {
+        let card = note(coll, front, back)?;
+        let days_ago = BACKLOG_FIRST_PASS - index as i64 * BACKLOG_PASS_STEP;
+        history.passes(card, &[(days_ago, Grade::Good)]);
+    }
+    Ok(())
+}
+
+/// How long ago the backlog's first word was passed. The last is passed `BACKLOG_PASS_STEP × 24`
+/// days later — twelve days ago — and its interval has still expired well before today.
+const BACKLOG_FIRST_PASS: i64 = 84;
+
+/// Days between one backlog word's pass and the next. Three is the smallest step the fuzz's first
+/// band cannot close: there, two neighbours' intervals differ by two days at most.
+const BACKLOG_PASS_STEP: i64 = 3;
+
 /// One `basic` note and the single card it generates (`content::BASIC` declares one slot, ordinal 0).
 fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, String> {
     let id: NoteId = coll
@@ -1339,6 +1362,7 @@ const LEECHES: [LeechSpec; 3] = [
     },
 ];
 
+/// The backlog, **in the order a sitting offers it** — see [`backlog`], which makes it so.
 const BACKLOG_WORDS: [(&str, &str); 25] = [
     ("l'aube", "dawn"),
     ("le crépuscule", "dusk"),
@@ -1749,6 +1773,96 @@ mod tests {
         };
         assert!(backlog, "past a comfortable sitting, so Review frames it");
         assert!(due > 20, "past the longest shorter sitting: {due}");
+    }
+
+    /// The due queue as a sitting would offer it: each card's prompt and its `due_day`.
+    fn due_queue(coll: &Collection, now_ms: i64) -> Vec<(String, i64)> {
+        let today = cairn_core::log::day_number(now_ms, DayScale::default());
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let cards = deck::current_cards(coll).unwrap();
+        let replayed = replay(&cards, &refs);
+        let positions = deck::note_positions(coll).unwrap();
+        let queue = session::compose(
+            &cards,
+            &positions,
+            &replayed,
+            today,
+            DEFAULT_NEW_CARD_RATE as usize,
+            &HashSet::new(),
+        );
+        queue
+            .due
+            .iter()
+            .map(|o| {
+                let prompt = deck::render(coll, o.card).unwrap().unwrap().prompt;
+                (prompt, replayed.cards[&o.card].due_day)
+            })
+            .collect()
+    }
+
+    /// **The backlog's queue order is a fact about the collection, and the same fact on every
+    /// build** — so a sitting opens on the same card every run (#171).
+    ///
+    /// The order is stated, and every pair of neighbours is a day apart in `due_day`, which is the
+    /// property that keeps `session::compose` off its card-identity tie-break. The second install is
+    /// the half that can see the old defect: twenty-five cards on one history are one `due_day`
+    /// apiece, so their order *is* the tie-break, and no two builds draw the same one.
+    #[test]
+    fn the_backlog_opens_on_a_stated_card_and_the_same_one_every_build() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
+        let queue = due_queue(&coll, NOW_MS);
+
+        let order = prompts(&queue);
+        let table: Vec<&str> = BACKLOG_WORDS.iter().map(|(front, _)| *front).collect();
+        assert_eq!(
+            order, table,
+            "the sitting offers the backlog in table order"
+        );
+
+        for pair in queue.windows(2) {
+            assert!(
+                pair[1].1 > pair[0].1,
+                "{} and {} are due on days {} and {} — a tie hands the order to a per-build \
+                 random id",
+                pair[0].0,
+                pair[1].0,
+                pair[0].1,
+                pair[1].1
+            );
+        }
+
+        let (_d2, _s2, mut again) = empty();
+        Fixture::Backlog.install(&mut again, NOW_MS).unwrap();
+        assert_eq!(
+            prompts(&due_queue(&again, NOW_MS)),
+            order,
+            "the same definition installed twice must queue the same way"
+        );
+    }
+
+    fn prompts(queue: &[(String, i64)]) -> Vec<&str> {
+        queue.iter().map(|(prompt, _)| prompt.as_str()).collect()
+    }
+
+    /// [`Fixture::DueWithLeeches`] composes the backlog unchanged, so its picker offers the same
+    /// queue — the leeches are not due and add nothing to it. The order is compared, not the
+    /// `due_day`s: the leeches' rows are newer than any backlog row, which moves where `History`
+    /// anchors its millisecond offsets and so can move a backlog row across the test clock's
+    /// rollover. The order survives that by construction; the days are not what this pins.
+    #[test]
+    fn the_composed_fixture_queues_its_backlog_the_same_way() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
+        let (_d2, _s2, mut composed) = empty();
+        Fixture::DueWithLeeches
+            .install(&mut composed, NOW_MS)
+            .unwrap();
+        assert_eq!(
+            prompts(&due_queue(&composed, NOW_MS)),
+            prompts(&due_queue(&coll, NOW_MS))
+        );
     }
 
     /// **The deck fixture's ids are the ids the collection holds** — the property the whole fixture

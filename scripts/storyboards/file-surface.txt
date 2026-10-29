@@ -8,8 +8,9 @@
 #
 # **Run it at 1280×800 and nowhere else.** The list is a block in the middle of Settings, below sync
 # prose that wraps at one width and not the other, so the row y's are measured at this size after ten
-# notches of scroll: `Chapters 1-4.cdeck` 265, `French A1.cdeck` 312, `collection.ccoll` 359,
-# `فارسی and 2 more.cdeck` 406. Every shot is self-evidencing — a preview's heading is the name of the
+# notches of scroll: `Chapters 1-4.cdeck` 310, `French A1.cdeck` 357, `collection.ccoll` 404,
+# `فارسی and 2 more.cdeck` 451 (re-measured for #152's group headings, and again for #175's ambient
+# hit target, which grew the rows above the list). Every shot is self-evidencing — a preview's heading is the name of the
 # file it previews, so a row click that landed on the wrong row says so.
 #
 # **The preview opens at its top** however far down Settings the row was (`Band::scroll_to_top`), so
@@ -29,7 +30,7 @@ sleep 1.2
 mousemove %CX% 700 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1
 shot 01-list
-mousemove %CX% 312
+mousemove %CX% 357
 sleep 0.5
 click 1
 sleep 1.5
@@ -43,7 +44,7 @@ mousemove %LX+140% 11 click 1
 sleep 1.2
 mousemove %CX% 700 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1
-mousemove %CX% 406
+mousemove %CX% 451
 sleep 0.5
 click 1
 sleep 1.5
@@ -57,7 +58,7 @@ mousemove %LX+140% 11 click 1
 sleep 1.2
 mousemove %CX% 700 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1
-mousemove %CX% 359
+mousemove %CX% 404
 sleep 0.5
 click 1
 sleep 1.5
@@ -71,7 +72,7 @@ mousemove %LX+140% 11 click 1
 sleep 1.2
 mousemove %CX% 700 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1
-mousemove %CX% 265
+mousemove %CX% 310
 sleep 0.5
 click 1
 sleep 1.5
@@ -85,7 +86,7 @@ mousemove %LX+140% 11 click 1
 sleep 1.2
 mousemove %CX% 700 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1
-mousemove %CX% 312
+mousemove %CX% 357
 sleep 0.5
 click 1
 sleep 1.5
@@ -103,7 +104,7 @@ mousemove %LX+140% 11 click 1
 sleep 1.2
 mousemove %CX% 700 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5 click 5
 sleep 1
-mousemove %CX% 312
+mousemove %CX% 357
 sleep 0.5
 click 1
 sleep 1.5

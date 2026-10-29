@@ -28,7 +28,7 @@ mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+86% 11 click 1
 sleep 1.2
-mousemove %LX+200% 259 click 1
+mousemove %LX+200% 293 click 1
 sleep 1.5
 # The editor's Front field starts at the editor frame's own left edge, so `%EX+30%` is inside it at
 # every width — 110 at 1280 and 58 at 560 — where `%LX+30%` is inside it only above the two-column
@@ -42,14 +42,16 @@ sleep 1.5
 # ticket's **own** decision rather than by a stale coordinate (#155 had the first).
 #
 # **And *Back* moved down 16px with ADR-0040 §6**, which put the stated `gap(2)` between a field and the
-# next field's label — so Back's centre is 281, not 265. Front's is unchanged: the gap goes *between*
-# fields, never above the first.
-mousemove %EX+30% 229 click 1
+# next field's label. Front's is unchanged: the gap goes *between* fields, never above the first.
+#
+# **Then both moved down 66px with #175**, which made the 36px hit target ambient: the nav row, the
+# *Kind* and *Deck* combos and *New deck* above the fields each grew to it. Front is at 295, Back 346.
+mousemove %EX+30% 295 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 80 'سپیده‌دم'
 sleep 0.8
-mousemove %EX+30% 281 click 1
+mousemove %EX+30% 346 click 1
 sleep 0.5
 key ctrl+a
 sh xdotool type --delay 80 'آغاز روز، پیش از برآمدن خورشید'

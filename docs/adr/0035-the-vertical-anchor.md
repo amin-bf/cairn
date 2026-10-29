@@ -77,6 +77,12 @@ comfortable and a stretch depending on which hand holds the phone.
 > rather than as the way onward. The entrance now lands on the reach line like any other last
 > control, and a third screen ending in a control inherits this without a decision.
 
+> **Amended by [ADR-0042 §1](0042-the-settings-screen.md): the *closing* control, not the last one.**
+> The line places the control pressed to finish or go on — the grades, *Done*, the import gate, the
+> leech entrance. Settings is a page of peer settings with none, so it places nothing on the line, and
+> its sub-states take it: enrolment's *Back* is there. This replaces ADR-0040 §4's *the last control
+> on the page*, which held on the editor only because *Done* was both.
+
 **165 is measured, not chosen, and the measurement is the finding.** The prototype made the cluster
 *draggable* rather than offering fixed candidates, because the round before it came back as "closer,
 but the very bottom is still a stretch" — which is an answer about a distance nobody had a number
