@@ -17,7 +17,8 @@
 # `11-bench-verdict`. At 560×860 it misses.
 #
 # **Re-measured for #152**, which moved the bench under the Development heading at the end of
-# Settings: fourteen notches, then `Nothing due` at y=551.
+# Settings: fourteen notches, then `Nothing due` at y=551 — and 586 since #175 made the hit target ambient,
+# which grew the nav row and Appearance's rows above it.
 mousemove %CX% 600 click 1
 sleep 1
 # Settings, then down to the bench.
@@ -28,7 +29,7 @@ sleep 1.2
 # `Nothing due`, the first of the seven — the leftmost, so its x is the one in the row that survives
 # the row wrapping. That wrapping is no longer hypothetical: since #161 the block draws two lines,
 # and every button but this one has moved at least once.
-mousemove %LX+60% 551 click 1
+mousemove %LX+60% 586 click 1
 sleep 1.5
 # Installing a fixture lands you on Review, because looking at the state is the whole purpose. The
 # caught-up floor here is the proof the tap did what it says.

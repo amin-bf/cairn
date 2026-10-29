@@ -382,6 +382,10 @@ impl CairnApp {
         // egui and the duration is not, so a slot left unwritten is stock's 0.2 waiting for a theme
         // switch — the same shape as the two above, a third value family on.
         motion::install(&cc.egui_ctx);
+        // And the hit target (#175): `interact_size` is per-theme and the 36px control is not, so
+        // it goes to every slot like the three above — or a bare `ui.button` is half a target again
+        // after a theme switch.
+        controls::install(&cc.egui_ctx);
         Self {
             store,
             dest: Destination::Review,
