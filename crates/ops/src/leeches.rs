@@ -53,7 +53,7 @@ pub struct LeechList {
 
 /// Whole minutes in `answer_ms`, rounded half up — the cost line's rounding.
 pub fn answer_minutes(answer_ms: u64) -> u32 {
-    (answer_ms.saturating_add(30_000) / 60_000) as u32
+    u32::try_from(answer_ms.saturating_add(30_000) / 60_000).unwrap_or(u32::MAX)
 }
 
 /// The leech list against the day of `now_wall_ms`.
@@ -152,6 +152,8 @@ mod tests {
         assert_eq!(answer_minutes(30_000), 1);
         assert_eq!(answer_minutes(89_999), 1);
         assert_eq!(answer_minutes(90_000), 2);
+        // A foreign row can saturate the sum (`CardState::answer_ms`); the figure must not wrap.
+        assert_eq!(answer_minutes(u64::MAX), u32::MAX);
     }
 
     #[test]
