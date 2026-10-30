@@ -307,21 +307,21 @@ class NoteListTest {
     private fun near(a: Int, b: Int, tol: Int = 6) =
         abs(Color.red(a) - Color.red(b)) <= tol && abs(Color.green(a) - Color.green(b)) <= tol && abs(Color.blue(a) - Color.blue(b)) <= tol
 
-    private fun apart(a: Int, b: Int) =
+    private fun colourDistanceSquared(a: Int, b: Int) =
         (Color.red(a) - Color.red(b)).let { it * it } + (Color.green(a) - Color.green(b)).let { it * it } + (Color.blue(a) - Color.blue(b)).let { it * it }
 
     private fun inside(bitmap: Bitmap, r: Rect, inset: Int = 2) = Rect(
         r.left + inset, r.top + inset, r.right - inset, r.bottom - inset,
     ).let { Rect(it.left.coerceAtLeast(0f), it.top.coerceAtLeast(0f), it.right.coerceAtMost(bitmap.width.toFloat()), it.bottom.coerceAtMost(bitmap.height.toFloat())) }
 
-    /** The pixels of [argb] in [r], as a share of its area and as the mean x of those pixels. */
+    /** The pixels of [argb] in [r] (with a [ground], those nearer [argb] than it, however faint), as a share of its area and as the mean x of those pixels. */
     private fun inkIn(bitmap: Bitmap, r: Rect, argb: Int, tol: Int = 6, ground: Int? = null): Triple<Int, Double, Double> {
         val box = inside(bitmap, r)
         var n = 0
         var sumX = 0.0
         for (y in box.top.toInt() until box.bottom.toInt()) for (x in box.left.toInt() until box.right.toInt()) {
             val p = bitmap.getPixel(x, y)
-            if (if (ground == null) near(p, argb, tol) else apart(p, argb) < apart(p, ground)) { n++; sumX += x }
+            if (if (ground == null) near(p, argb, tol) else colourDistanceSquared(p, argb) < colourDistanceSquared(p, ground)) { n++; sumX += x }
         }
         val area = (box.width * box.height).toDouble().coerceAtLeast(1.0)
         return Triple(n, n / area, if (n == 0) 0.0 else sumX / n)
@@ -354,7 +354,9 @@ class NoteListTest {
             assertTrue("$at row $i is a control surface ($share)", share > 0.4)
             // The title reads inside the band the action column leaves it, so the column's glyphs are not its ink.
             val actionsLeft = actions.filter { it.top >= r.top && it.bottom <= r.bottom }.minOfOrNull { it.left } ?: r.right
-            val text = Rect(r.left, r.top, actionsLeft, r.bottom)
+            // Only the row's upper part: the caption (weak ink, which is nearer the title ink than the surface)
+            // and the row's border sit outside it.
+            val text = Rect(r.left + 8, r.top + 8, actionsLeft, r.top + (r.bottom - r.top) * 0.6f)
             // A glyph's stroke is a pixel or two wide at the test device's density and Persian's is thinner
             // than Latin's, so few of its pixels reach the ink colour exactly: a pixel is ink once it is nearer
             // the ink than the control surface it is drawn on.
