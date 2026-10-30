@@ -18,6 +18,7 @@ pub mod fixtures;
 pub mod inbound;
 pub mod leeches;
 pub mod listing;
+pub mod new_card_rate;
 pub mod markdown;
 pub mod notes;
 pub mod optimise;

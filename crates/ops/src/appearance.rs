@@ -49,3 +49,28 @@ pub fn theme_choice(coll: &Collection) -> Result<ThemeChoice, String> {
     let stored = coll.theme_preference().map_err(|e| e.to_string())?;
     Ok(ThemeChoice::parse(stored.as_deref()))
 }
+
+/// Record the choice in its stored form, [`ThemeChoice::as_str`]. Device-local: it rides the
+/// `local` table and never syncs (`Collection::set_theme_preference`).
+pub fn set_theme_choice(coll: &mut Collection, choice: ThemeChoice) -> Result<(), String> {
+    coll.set_theme_preference(choice.as_str())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn a_set_choice_round_trips_through_the_read() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        assert_eq!(theme_choice(&coll).unwrap(), ThemeChoice::System);
+        for choice in [ThemeChoice::Dark, ThemeChoice::Light, ThemeChoice::System] {
+            set_theme_choice(&mut coll, choice).unwrap();
+            assert_eq!(theme_choice(&coll).unwrap(), choice);
+        }
+    }
+}
