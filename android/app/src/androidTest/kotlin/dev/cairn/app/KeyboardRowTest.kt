@@ -1,5 +1,6 @@
 package dev.cairn.app
 
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -11,6 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -26,13 +28,26 @@ class KeyboardRowTest {
     @get:Rule
     val rule = createAndroidComposeRule<MainActivity>()
 
+    private val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    private var hardKeyboardSetting = "null"
+
+    /** Runs a shell command and reads it to the end, so it has taken effect when this returns. */
+    private fun shell(command: String): String =
+        ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use { it.readBytes().decodeToString().trim() }
+
     @Before
     fun letTheKeyboardShowOnAnEmulatorWithAHardwareKeyboard() {
         // An emulator reports a hardware keyboard, and the platform then keeps the soft one down.
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("settings put secure show_ime_with_hard_keyboard 1").close()
+        hardKeyboardSetting = shell("settings get secure show_ime_with_hard_keyboard")
+        shell("settings put secure show_ime_with_hard_keyboard 1")
         val app = rule.activity.application as CairnApplication
         runBlocking { app.collection.use { it.installFixture("decks", System.currentTimeMillis()) } }
+    }
+
+    @After
+    fun putTheKeyboardSettingBack() {
+        if (hardKeyboardSetting == "null") shell("settings delete secure show_ime_with_hard_keyboard")
+        else shell("settings put secure show_ime_with_hard_keyboard $hardKeyboardSetting")
     }
 
     private fun waitFor(tag: String) =

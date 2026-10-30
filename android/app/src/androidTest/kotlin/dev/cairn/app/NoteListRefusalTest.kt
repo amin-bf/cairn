@@ -82,7 +82,7 @@ class NoteListRefusalTest {
         rule.onAllNodesWithTag("note-row")[0].assertIsDisplayed()
         rule.onNodeWithTag("new-deck-name").assertIsDisplayed()
         assertEquals(4, facts().decks.size)
-        // Typing again clears it, and the same press then goes through.
+        // The next press goes through, and a create that succeeds clears the refusal.
         rule.onNodeWithTag("new-deck").performClick()
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("new-deck-refused")).fetchSemanticsNodes().isEmpty() }
         rule.waitUntil(10_000) { facts().decks.size == 5 }
