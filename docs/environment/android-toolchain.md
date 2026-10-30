@@ -160,6 +160,47 @@ emulator -avd cairn-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu sw
 cd android && ./gradlew connectedDebugAndroidTest
 ```
 
+**The minified release build** ([#208](https://github.com/amin-bf/cairn/issues/208)). `release` runs
+R8 (`isMinifyEnabled`, `isShrinkResources`) with `android/app/proguard-rules.pro`, whose every rule
+says where it comes from: JNA's documented set (research §8 of `docs/research/kotlin-binding/`) and a
+keep for the whole of `dev.cairn.ffi`, whose direct-mapped native methods are bound to the library's
+symbols by name. It is signed with the debug key — a real release key is not part of this build, and
+none is in the repository. Without the `dev.cairn.ffi` keep the minified app crashes at launch
+(checked by removing it); with it the binding survives.
+
+The proof runs the instrumented `ReleaseBuildTest` — a collection opened under `files/` and
+`no_backup/`, a Review sitting to its end, and a Rust error arriving as `CairnException` — against
+the `minified` build type: the release configuration plus the keeps the test runner needs in the
+app's own dex (`proguard-minified-rules.pro`; the runner shares the app's process and R8 would strip
+what only it calls). The other instrumented classes call the app's own classes, which R8 renames, so
+they are run against debug only:
+
+```sh
+cd android && ./gradlew -Pcairn.testMinified -Pandroid.testInstrumentationRunnerArguments.class=dev.cairn.app.ReleaseBuildTest connectedMinifiedAndroidTest
+```
+
+`panic-probe` is a debug-only cargo feature, so its test lives in `androidTestDebug`.
+
+**Sizes** (30.10.2026, minified `release`, `libcairn_ffi.so` built `opt-level = "z"`, LTO, stripped),
+beside the research's unminified two-ABI APK of 5,402,986 B (its `classes.dex` 3,439,612 B):
+
+| Item | Bytes |
+| --- | --- |
+| minified release APK, both ABIs | 6,511,831 |
+| `classes.dex` after R8 (1,410,500 B stored; 682,546 B deflated) | 682,546 |
+| `libcairn_ffi.so` `arm64-v8a` / `x86_64` | 2,008,000 / 2,087,136 |
+| `libjnidispatch.so` `arm64-v8a` / `x86_64` | 165,992 / 116,904 |
+| App Bundle (`app-release.aab`, all ABIs) | 7,527,432 |
+| delivered to one handset, `arm64-v8a` (derived) | 4,297,031 |
+| delivered to one emulator, `x86_64` (derived) | 4,327,743 |
+
+The two per-ABI figures are the APK less the other ABI's three libraries, not a `bundletool`
+measurement (it is not installed); an install delivers the base split plus that ABI's split, so the
+real figure differs by the split containers' overhead. **The minified APK is larger than the
+research's unminified one** because it is not the same app: it carries Compose, the design module
+with its bundled faces and the generated bindings, which the spike did not; the two APKs are not
+comparable beyond the dex, which R8 took from 3.4 MB to 1.4 MB despite the larger app.
+
 **The egui build on the emulator.** The upgrade check installs the egui APK first. Two things
 differ from the handset: `cargo apk` packages only `aarch64-linux-android` by default, which the
 x86_64 emulator cannot run, so build it with `--target x86_64-linux-android`; and the **debug**
