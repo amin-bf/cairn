@@ -1,0 +1,103 @@
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// The ABIs the build packages. `x86_64` is the emulator, `arm64-v8a` the handset (ADR-0045).
+val targetAbis = listOf("arm64-v8a", "x86_64")
+
+android {
+    namespace = "dev.cairn.app"
+    compileSdk = 36
+    // Pinned, never AGP's default: the binding was measured on this NDK, and the cargo-ndk task below
+    // builds with the directory AGP resolves from it.
+    ndkVersion = "29.0.14206865"
+
+    defaultConfig {
+        applicationId = "dev.cairn.app"
+        minSdk = 24
+        targetSdk = 36
+        // ADR-0045 §4: an upgrade over the egui build, whose emitted manifest carries 16777472 (the
+        // packager derives it from the crate version, 0.1.0). Android refuses an install -r that does
+        // not raise it. Debug builds are signed with ~/.android/debug.keystore, which is the key the
+        // egui build's packager signs with too, so the upgrade keeps the app's data.
+        versionCode = 20_000_000
+        versionName = "0.2.0"
+        ndk { abiFilters += targetAbis }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures { compose = true }
+
+    // The launcher mark is the egui build's, shared rather than copied, so the upgrade keeps its icon.
+    sourceSets["main"].res.directories.add("../../crates/app/res")
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        // The Rust library is stored uncompressed and page aligned (16 KB), as AGP does by default.
+        jniLibs { useLegacyPackaging = false }
+    }
+}
+
+kotlin { jvmToolchain(17) }
+
+dependencies {
+    val composeBom = platform("androidx.compose:compose-bom:2026.04.01")
+    implementation(composeBom)
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.activity:activity-compose:1.12.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+
+    // What the uniffi-generated Kotlin needs (research §1): JNA as an aar, which carries
+    // libjnidispatch.so per ABI, coroutines, and androidx.annotation for `android = true`.
+    implementation("net.java.dev.jna:jna:5.19.1@aar")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.annotation:annotation:1.9.1")
+
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// ADR-0045 §3: one `assemble` builds the Rust core for every ABI, generates the Kotlin bindings and
+// packages both. The two tasks are registered through the Variant API and their outputs joined to the
+// `jniLibs` and Kotlin source sets, so AGP orders them before packaging with no hand-written
+// `dependsOn`, and nothing generated is committed.
+val repositoryRoot = rootProject.layout.projectDirectory.dir("..")
+
+val androidComponents = extensions.getByType<ApplicationAndroidComponentsExtension>()
+
+androidComponents.onVariants { variant ->
+    val name = variant.name.replaceFirstChar { it.uppercase() }
+    // `panic-probe` is the one export that panics on purpose, for the test that proves a Rust panic
+    // reaches Kotlin as an exception. A release build never carries it.
+    val variantFeatures = if (variant.buildType == "debug") listOf("panic-probe") else emptyList()
+
+    val cargoNdk = tasks.register<CargoNdkTask>("cargoNdk$name") {
+        workspace.set(repositoryRoot)
+        features.set(variantFeatures)
+        ndkDirectory.set(androidComponents.sdkComponents.ndkDirectory.map { it.asFile.absolutePath })
+        abis.set(targetAbis)
+        minSdk.set(24)
+        outputDir.set(layout.buildDirectory.dir("generated/cairn/jniLibs/${variant.name}"))
+    }
+    variant.sources.jniLibs!!.addGeneratedSourceDirectory(cargoNdk, CargoNdkTask::outputDir)
+
+    val bindgen = tasks.register<UniffiBindgenTask>("uniffiBindgen$name") {
+        workspace.set(repositoryRoot)
+        features.set(variantFeatures)
+        outputDir.set(layout.buildDirectory.dir("generated/cairn/kotlin/${variant.name}"))
+    }
+    variant.sources.kotlin!!.addGeneratedSourceDirectory(bindgen, UniffiBindgenTask::outputDir)
+}
