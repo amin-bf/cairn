@@ -300,7 +300,7 @@ _Avoid_: Leech notification, session summary, a per-session dismissal marker.
 
 **Fixture** / **The fixture bench**:
 A **pre-made collection**, named by the screen it makes reachable — `caught-up`, `leeches`,
-`crossing`, `backlog`, `cloze` — and the module that defines them (`fixtures`). The fifth names a
+`crossing`, `backlog`, `cloze`, `history` (enough kept reviews for an Optimise run to fit a vector of its own) — and the module that defines them (`fixtures`). The fifth names a
 card *shape* rather than a queue state, and it is the one that shows the bench is not only about
 scheduling: ADR-0033 §4's step-down needs a card whose two faces overflow the budget, which the
 seed's six French words cannot produce at any width. Test scaffolding, not a
@@ -482,7 +482,7 @@ You've reviewed M times since."* or *"Using the standard parameters. You've revi
 carrying no threshold, no colour and no verb, and appearing **only in settings, never at session
 end** (that slot is the end-of-session pointer's, ADR-0010 §9). The distinction between the two
 sentences is the **absence** of a parameter row, not a default-valued one (`replay::optimisation_nudge`,
-ADR-0004 §6). Pressing it runs a **worker thread the frame loop polls** (`OptimiseJob`) with a
+ADR-0004 §6). Pressing it runs a **worker thread the screen polls** (`OptimiseJob`, through `cairn-ops`' nudge, start and finish — the frame loop in the egui app, a lifecycle-bound tick on Android) with a
 **two-phase display** — an indeterminate `Preparing` lead-in over the uncancellable corpus build, then
 a determinate bar — and a **Cancel** that sets the crate's abort flag. **Nothing is persisted until it
 completes** (client-stack rule 10): a frozen or killed run holds no partial state and the recovery

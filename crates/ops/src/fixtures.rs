@@ -285,7 +285,7 @@ pub enum Fixture {
     /// **Enough kept history for an optimise run to fit a vector of its own** — Settings' *Optimise*
     /// through to a write and the completion sentence (ADR-0014), which no other fixture reaches:
     /// the fixtures above carry two reviews a card, and a run over them fits the vector the
-    /// collection already holds and writes nothing. Twelve cards at seven reviews each, nothing due
+    /// collection already holds and writes nothing. Twenty-five cards at nine reviews each, nothing due
     /// and no leech, so Review is the caught-up floor behind it.
     History,
 }
@@ -733,7 +733,7 @@ impl Fixture {
                     leeches: 0,
                     ..
                 } => None,
-                _ => Some("nothing due and no leeches, behind seven reviews a card"),
+                _ => Some("nothing due and no leeches, behind nine reviews a card"),
             },
             Fixture::Dormant => match reached {
                 Reached {
