@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
@@ -17,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -140,6 +143,57 @@ class NoteRowActionsTest {
         assertTrue(said, said.contains(preview))
         // Asking leaves the note where it is.
         assertEquals(25, facts().rows.size)
+    }
+
+    /** Scroll the list by [dy] pixels (positive moves the content up), as a drag would. */
+    private fun scrollBy(dy: Float) {
+        rule.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+        rule.waitForIdle()
+    }
+
+    private fun visibleTop(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+    private fun visibleBottom(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.bottom
+
+    /** The whole question — the sentence, *Delete* and *Keep it* — shows above the pinned *Create note*. */
+    private fun assertQuestionAboveCreateNote() {
+        waitFor("row-keep")
+        rule.waitForIdle()
+        for (tag in listOf("row-delete-warning", "row-delete-confirm", "row-keep")) {
+            rule.onNodeWithTag(tag).assertIsDisplayed()
+            assertTrue("$tag clears Create note", visibleBottom(tag) <= visibleTop("create-note"))
+        }
+    }
+
+    /** A row's laid-out extent: `boundsInRoot` is cut to what is visible, which is what these tests ask about. */
+    private fun SemanticsNode.laidOutTop() = positionInRoot.y
+    private fun SemanticsNode.laidOutBottom() = positionInRoot.y + size.height
+
+    @Test
+    fun asking_on_the_last_whole_row_brings_keep_it_in_above_create_note() {
+        fixture("decks")
+        showNotes()
+        rule.onNode(hasScrollAction()).performScrollToIndex(8)
+        rule.waitForIdle()
+        val band = visibleTop("create-note")
+        val last = rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().indexOfLast { it.laidOutBottom() <= band }
+        rule.onAllNodesWithTag("row-delete")[last].performClick()
+        assertQuestionAboveCreateNote()
+    }
+
+    @Test
+    fun asking_on_a_row_half_hidden_under_the_band_brings_keep_it_in_above_create_note() {
+        fixture("decks")
+        showNotes()
+        rule.onNode(hasScrollAction()).performScrollToIndex(8)
+        rule.waitForIdle()
+        // Put a row's centre two dp above the band, so its actions can be pressed and its lower half is cut.
+        val band = visibleTop("create-note")
+        val row = rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().last { it.laidOutTop() < band }
+        scrollBy((row.laidOutTop() + row.size.height / 2f) - (band - rule.density.run { 2.dp.toPx() }))
+        val half = rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().indexOfFirst { it.laidOutBottom() > band }
+        assertTrue("a row is cut by the band", half >= 0)
+        rule.onAllNodesWithTag("row-delete")[half].performClick()
+        assertQuestionAboveCreateNote()
     }
 
     @Test
