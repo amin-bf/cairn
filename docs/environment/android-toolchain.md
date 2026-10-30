@@ -29,7 +29,7 @@ agent must export them itself).
 
 | Component | Version | Location |
 | --- | --- | --- |
-| JDK (Eclipse Temurin) | **17.0.20+8** | `~/.local/share/jdk-17.0.20+8`, symlinked as `~/.local/share/jdk17` |
+| JDK (system OpenJDK, the newest installed) | **27.0.1** | `/usr/lib/jvm/java-27-openjdk` (the `jdk` package, not user-installed) |
 | Android SDK cmdline-tools | **15859902** | `~/Android/Sdk/cmdline-tools/latest` |
 | Android SDK Platform | **android-34**, **android-36**, **android-37.0** | `~/Android/Sdk/platforms` |
 | Android build-tools | **34.0.0**, **35.0.0**, **36.1.0**, **37.0.0** | `~/Android/Sdk/build-tools` |
@@ -56,9 +56,8 @@ API 37 is installed because **the physical test device runs it** (see below). AG
 accepts `compileSdk = 37` / `targetSdk = 37` without complaint despite the
 `android-37.0` directory name.
 
-The symlink `~/.local/share/jdk17` exists so `JAVA_HOME` contains no `+` character —
-some build tooling mishandles it in paths — and so a future JDK bump is a symlink
-swap rather than an edit to every consumer.
+`JAVA_HOME` is the system JDK's directory, set in `scripts/android-env.sh`; a JDK bump is that one
+line plus the two `jvmToolchain(...)` calls.
 
 ### Rust targets
 
@@ -85,10 +84,12 @@ The two candidate stacks in
 have different requirements, and this toolchain must satisfy **both**, since #8 has to
 build each one on the same machine.
 
-- **JDK 17.** Dioxus's generated Gradle module sets `jvmTarget = "17"`, so 17 is a hard
-  floor; and Tauri **breaks cryptically on JDK 25/26**. 17 is the version both accept.
-  (`dx` autodetects JDK 11 on Linux and would fail — hence setting `JAVA_HOME`
-  explicitly is mandatory, not optional.)
+- **JDK 27, the newest installed** (it was 17 while Dioxus and Tauri were candidates; neither is
+  now). Gradle 9.7.1 runs on it and the build compiles with it as the `jvmToolchain`. **The bytecode
+  target is 24, not 27:** the Kotlin Gradle plugin AGP 9.4.1 brings (2.2.10) knows JVM targets only up
+  to 24 and fails configuration on `jvmTarget` 27 ("Unknown Kotlin JVM target: 27"), and Java's
+  `sourceCompatibility` must equal it. So `compileOptions` say `VERSION_24`. Raising it needs a
+  Kotlin that knows a later target, which comes with a newer AGP.
 - **SDK 34 and 36.** Dioxus generates `compileSdk`/`targetSdk` 34; the Tauri CLI uses
   SDK 36. Both platforms are installed so neither stack triggers a download mid-build.
 - **NDK 29.0.14206865 (r29 stable), pinned as `ndkVersion`.** It replaced the
@@ -100,7 +101,7 @@ build each one on the same machine.
   because nothing was measured on it. The Gradle build builds with the directory AGP resolves from
   `ndkVersion`, so Gradle and cargo cannot disagree. The beta may stay installed — nothing selects
   it any more — and can be removed with `sdkmanager --uninstall "ndk;29.0.13846066"`.
-- **Gradle 9.7.1 and AGP 9.4.1.** AGP 9.4 needs Gradle 9.6 or later, JDK 17 and Build Tools 36,
+- **Gradle 9.7.1 and AGP 9.4.1.** AGP 9.4 needs Gradle 9.6 or later, JDK 17 or later and Build Tools 36,
   and has Kotlin built in. The wrapper in `android/` carries the Gradle version, so no Gradle is
   installed system-wide (the 8.14.3 install was the Tauri CLI's, and Gradle 8 cannot load an AGP 9
   project at all).
@@ -136,7 +137,7 @@ The debug variant also builds the `panic-probe` cargo feature (an export that pa
 for the test that a Rust panic arrives as an exception); a release build never carries it. The
 release profile has no `panic = "abort"`, and a Rust test fails if one is added.
 
-**Pins:** uniffi `=0.32.2` and JNA 5.19.1 (`@aar`), AGP 9.4.1, Gradle 9.7.1, JDK 17, Compose
+**Pins:** uniffi `=0.32.2` and JNA 5.19.1 (`@aar`), AGP 9.4.1, Gradle 9.7.1, JDK 27 (toolchain; bytecode target 24), Compose
 through its BOM, NDK `29.0.14206865`, cargo-ndk 4.1.2, `compileSdk` and `targetSdk` 36, `minSdk`
 24, ABIs `arm64-v8a` and `x86_64`.
 
@@ -376,11 +377,7 @@ declared `minSdk` 24 needs an API 24–29 system image installed separately.
 ## Reproducing this setup elsewhere
 
 ```sh
-# JDK 17 (Temurin), no root
-curl -L -o jdk17.tar.gz \
-  "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20%2B8/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20_8.tar.gz"
-tar -xzf jdk17.tar.gz -C ~/.local/share/
-ln -sfn ~/.local/share/jdk-17.0.20+8 ~/.local/share/jdk17
+# JDK 27: the system's OpenJDK (Arch package `jdk-openjdk`), at /usr/lib/jvm/java-27-openjdk
 
 # Android SDK cmdline-tools -> must land at $ANDROID_HOME/cmdline-tools/latest
 curl -L -o cmdline-tools.zip \
@@ -388,7 +385,7 @@ curl -L -o cmdline-tools.zip \
 mkdir -p ~/Android/Sdk/cmdline-tools && unzip -q cmdline-tools.zip -d /tmp/ct
 mv /tmp/ct/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
 
-export JAVA_HOME=~/.local/share/jdk17 ANDROID_HOME=~/Android/Sdk
+export JAVA_HOME=/usr/lib/jvm/java-27-openjdk ANDROID_HOME=~/Android/Sdk
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 yes | sdkmanager --licenses
 sdkmanager "platform-tools" "platforms;android-34" "platforms;android-36" \

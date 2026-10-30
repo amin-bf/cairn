@@ -59,8 +59,8 @@ android {
     sourceSets["main"].res.directories.add("../../crates/app/res")
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_24
+        targetCompatibility = JavaVersion.VERSION_24
     }
 
     packaging {
@@ -69,7 +69,8 @@ android {
     }
 }
 
-kotlin { jvmToolchain(17) }
+// Compiles on JDK 27; the bytecode target stops at 24, the newest JVM target Kotlin 2.2.10 knows.
+kotlin { jvmToolchain(27) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.04.01")
