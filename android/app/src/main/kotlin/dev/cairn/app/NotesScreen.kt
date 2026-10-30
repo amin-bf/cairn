@@ -157,7 +157,7 @@ fun NoteList(
                 items(facts.rows, key = { it.noteId }) { row ->
                     Spacer(Modifier.height(gap(1)))
                     if (row.noteId == state.confirmingNote) {
-                        DeleteQuestion(row.preview, rows)
+                        DeleteQuestion(row.preview, state.refusal == NotesScreenState.Refusal.DeleteNote, rows)
                     } else {
                         val move = stringResource(R.string.notes_move)
                         val delete = stringResource(R.string.notes_delete)
@@ -195,7 +195,11 @@ fun NoteList(
 
 /** *Delete ⟨preview⟩? It cannot be undeleted.* in the note's own row, the preview bidi-isolated (ADR-0048 §4). */
 @Composable
-private fun DeleteQuestion(preview: String, rows: RowCallbacks) {
+private fun DeleteQuestion(preview: String, refused: Boolean, rows: RowCallbacks) {
+    if (refused) {
+        CairnText(stringResource(R.string.notes_delete_note_refused), Modifier.testTag("row-delete-refused"), color = Cairn.colors.error)
+        Spacer(Modifier.height(gap(1)))
+    }
     CairnConfirmRow(
         question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(preview)),
         confirm = stringResource(R.string.notes_delete),
