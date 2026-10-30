@@ -63,7 +63,7 @@
     <string name="destination_review">Review</string>
     <string name="destination_notes">Notes</string>
     <string name="notes_heading">Notes</string>
-    <string name="notes_empty">Nothing here yet — create a deck, import one, or set up sync</string>
+    <string name="notes_empty">Nothing here yet — create a deck, or import one</string>
     <string name="notes_no_match">No notes match.</string>
     <string name="notes_search">Search</string>
     <string name="notes_deck">Deck</string>
