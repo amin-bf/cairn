@@ -202,6 +202,10 @@ pub enum Fixture {
     /// card's height; one has two blanks, so a single note generates two cards and the second card's
     /// prompt shows the first blank already filled.
     Cloze,
+    /// Five new cards, the first three with **Persian prompts**: the Review card in a right-to-left
+    /// script, which the Kotlin tests need on the card itself (the note list's Persian rows, in
+    /// [`Fixture::Decks`], sit behind the new-card rate and never reach the queue).
+    Persian,
     /// Cards **due** *and* leeches at the same time — the picker with the durable entrance under it,
     /// which is the second screen [ADR-0038 §5](../../../docs/adr/0038-the-mark-and-the-icon-rule.md)
     /// moved and the only one it moved without anybody looking.
@@ -274,7 +278,7 @@ pub enum Fixture {
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 8] = [
+    pub const ALL: [Fixture; 9] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
@@ -282,6 +286,7 @@ impl Fixture {
         Fixture::Cloze,
         Fixture::DueWithLeeches,
         Fixture::Decks,
+        Fixture::Persian,
         Fixture::Dormant,
     ];
 
@@ -296,6 +301,7 @@ impl Fixture {
             Fixture::Cloze => "cloze",
             Fixture::DueWithLeeches => "due-with-leeches",
             Fixture::Decks => "decks",
+            Fixture::Persian => "persian",
             Fixture::Dormant => "dormant",
         }
     }
@@ -310,6 +316,7 @@ impl Fixture {
             Fixture::Cloze => "Cloze cards",
             Fixture::DueWithLeeches => "Due, with leeches",
             Fixture::Decks => "Decks, and Persian",
+            Fixture::Persian => "Persian cards",
             Fixture::Dormant => "Dormant cards",
         }
     }
@@ -324,6 +331,7 @@ impl Fixture {
             Fixture::Cloze => "a card that steps down, and a reveal that grows by a whole face",
             Fixture::DueWithLeeches => "the picker with the leech entrance on the reach line",
             Fixture::Decks => "the deck filter with decks in it, and a right-to-left row",
+            Fixture::Persian => "a right-to-left prompt on the Review card, and its badge side",
             Fixture::Dormant => "a dormant line, a pane with nothing live, and the edit warning",
         }
     }
@@ -434,6 +442,15 @@ impl Fixture {
             // The edits below reach past `editor::commit_field` to `mutable_set` for the same reason
             // `deck` reaches past `create_deck`: the editor is what a person uses and a fixture must
             // not need one. What is written is byte-identical to what the editor writes.
+            // **No history, like `Cloze`**, and for the same reason: what this reaches is a card's
+            // *script*, and a new card is the cheapest way to put one on screen. Three Persian
+            // prompts then two French, so the first card Review offers is right-to-left and the
+            // rate introduces all five.
+            Fixture::Persian => {
+                for (front, back) in PERSIAN_NOTES {
+                    note(coll, front, back)?;
+                }
+            }
             Fixture::Dormant => {
                 // Filler, so the collection is a collection and Review has a screen to draw.
                 caught_up(coll, &mut history, 6)?;
@@ -620,6 +637,19 @@ impl Fixture {
             // of its kind would leave a `vocab` note generating two cards with empty faces — four
             // dormant entries collection-wide, `dormant` satisfied, and §6 nowhere on screen. That is
             // the exact shape #163 walked into by hand before this fixture existed.
+            Fixture::Persian => match reached {
+                Reached {
+                    cards: 5,
+                    new: 5,
+                    due: 0,
+                    leeches: 0,
+                    state: ReviewState::NewDeck { new: 5 },
+                    ..
+                } => None,
+                _ => Some(
+                    "five new cards, three of them Persian, on a deck nothing has been reviewed on",
+                ),
+            },
             Fixture::Dormant => match reached {
                 Reached {
                     dormant: 4,
@@ -1214,6 +1244,18 @@ pub(crate) const DECK_NOTES: [(Option<usize>, &str, &str); 25] = [
     (Some(0), "le paillasson", "the doormat"),
     (Some(0), "la véranda", "the veranda"),
     (None, "l'arrière-boutique", "the back room of a shop"),
+];
+
+/// [`Fixture::Persian`]'s notes: Persian first, so the first card offered is right-to-left.
+const PERSIAN_NOTES: [(&str, &str); 5] = [
+    ("کتاب", "book"),
+    ("پنجره", "window"),
+    (
+        "هر که بامش بیش، برفش بیشتر",
+        "the higher the roof, the more the snow",
+    ),
+    ("le carrefour", "the crossroads"),
+    ("la serrure", "the lock"),
 ];
 
 /// The id [`Fixture::Decks`] gives the note at `index` in [`DECK_NOTES`] — **fixed, for the reason

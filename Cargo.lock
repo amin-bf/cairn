@@ -648,6 +648,7 @@ dependencies = [
  "cairn-export",
  "cairn-store",
  "tempfile",
+ "unicode-bidi",
 ]
 
 [[package]]
