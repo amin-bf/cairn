@@ -22,8 +22,12 @@
 
 use std::thread::JoinHandle;
 
-use cairn_core::replay::training_histories;
+use cairn_core::log::DayScale;
+use cairn_core::replay::{optimisation_nudge, training_histories};
 use cairn_core::scheduling::{OptimisationOutcome, OptimisationProgress, optimise};
+use cairn_store::{Collection, StoreError};
+
+pub use cairn_core::replay::OptimisationNudge;
 
 /// What the settings screen says on completion (ADR-0014 §4). Two facts and no third: the parameters
 /// changed, and — the half that is not decoration — **every due date moved**, because the current
@@ -107,17 +111,95 @@ impl OptimiseJob {
     /// writes the vector (if any) and drops the job. A worker-thread panic reads as "nothing to
     /// write", the same recovery as a cancel.
     pub fn poll(&mut self) -> Option<Option<OptimisationOutcome>> {
-        if !self.handle.as_ref().is_some_and(JoinHandle::is_finished) {
+        // A run already collected has nothing further to hand back, and says so every time.
+        let Some(handle) = self.handle.as_ref() else {
+            return Some(None);
+        };
+        if !handle.is_finished() {
             return None;
         }
         let handle = self.handle.take()?;
-        Some(handle.join().unwrap_or(None))
+        let outcome = handle.join().unwrap_or(None);
+        // A Cancel that came after the worker was done still means no write.
+        Some(if self.progress.is_aborted() { None } else { outcome })
     }
+}
+
+/// How a call to [`finish`] found the run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Finish {
+    /// The worker thread has not finished: call again on the next tick.
+    StillRunning,
+    /// The run is over and the store was not touched: it was cancelled, it produced nothing, or the
+    /// vector it fitted is the one already held (ADR-0014 §5).
+    NothingWritten,
+    /// The run fitted a different vector and it was written; every due date has moved.
+    Written,
+}
+
+/// The nudge's fact for this collection (ADR-0014 §2).
+pub fn nudge(coll: &Collection) -> Result<OptimisationNudge, StoreError> {
+    let lines = coll.log_lines()?;
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    Ok(optimisation_nudge(&refs))
+}
+
+/// Snapshot the log and start a run over it (ADR-0014 §3). Nothing is written until [`finish`].
+pub fn start(coll: &Collection) -> Result<OptimiseJob, StoreError> {
+    Ok(OptimiseJob::start(coll.log_lines()?))
+}
+
+/// Poll the run, and when it has finished write its outcome — **the one write of a run**. `now_ms` is
+/// the wall clock the `config-set` row is stamped with. An unchanged vector writes nothing (the store
+/// skips it, ADR-0014 §5) and a cancelled run writes nothing. Once a run has finished, later calls
+/// find nothing to write.
+pub fn finish(
+    coll: &mut Collection,
+    job: &mut OptimiseJob,
+    now_ms: i64,
+) -> Result<Finish, StoreError> {
+    let Some(result) = job.poll() else {
+        return Ok(Finish::StillRunning);
+    };
+    let Some(outcome) = result else {
+        return Ok(Finish::NothingWritten);
+    };
+    let written = coll.set_scheduler_parameters(
+        outcome.parameters.weights(),
+        outcome.fitted_over,
+        now_ms,
+        DayScale::default(),
+    )?;
+    Ok(if written.is_some() {
+        Finish::Written
+    } else {
+        Finish::NothingWritten
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fixtures::Fixture;
+    use tempfile::TempDir;
+
+    const NOW: i64 = 1_700_000_000_000;
+
+    fn open() -> (Collection, TempDir, TempDir) {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let coll = Collection::open(data.path(), state.path()).unwrap();
+        (coll, data, state)
+    }
+
+    fn run_to_the_end(coll: &mut Collection, job: &mut OptimiseJob) -> Finish {
+        loop {
+            match finish(coll, job, NOW).unwrap() {
+                Finish::StillRunning => std::thread::yield_now(),
+                done => return done,
+            }
+        }
+    }
 
     #[test]
     fn the_completion_message_states_the_due_date_move_and_claims_no_quality() {
@@ -199,5 +281,86 @@ mod tests {
             std::thread::yield_now();
         };
         assert!(outcome.is_none(), "a cancelled run writes nothing");
+    }
+
+    #[test]
+    fn a_collection_never_fitted_reads_standard_with_the_review_total() {
+        let (mut coll, _d, _s) = open();
+        assert_eq!(
+            nudge(&coll).unwrap(),
+            OptimisationNudge::Standard { reviews_total: 0 }
+        );
+        Fixture::History.install(&mut coll, NOW).unwrap();
+        let OptimisationNudge::Standard { reviews_total } = nudge(&coll).unwrap() else {
+            panic!("no run has written a vector");
+        };
+        assert!(reviews_total > 0, "the fixture carries history");
+    }
+
+    #[test]
+    fn finishing_a_run_that_fitted_a_new_vector_writes_it_and_the_nudge_reads_fitted() {
+        let (mut coll, _d, _s) = open();
+        Fixture::History.install(&mut coll, NOW).unwrap();
+        let before = coll.current_scheduler_parameters().unwrap();
+        let OptimisationNudge::Standard { reviews_total } = nudge(&coll).unwrap() else {
+            panic!("standard before a run");
+        };
+
+        let mut job = start(&coll).unwrap();
+        assert_eq!(run_to_the_end(&mut coll, &mut job), Finish::Written);
+
+        assert_ne!(coll.current_scheduler_parameters().unwrap(), before);
+        assert_eq!(
+            nudge(&coll).unwrap(),
+            OptimisationNudge::Fitted {
+                fitted_over: reviews_total,
+                reviews_since: 0
+            }
+        );
+        // A run that has been collected has nothing further to write.
+        assert_eq!(finish(&mut coll, &mut job, NOW).unwrap(), Finish::NothingWritten);
+    }
+
+    #[test]
+    fn finishing_a_run_that_fitted_the_vector_already_held_writes_nothing() {
+        let (mut coll, _d, _s) = open();
+        Fixture::History.install(&mut coll, NOW).unwrap();
+        let mut first = start(&coll).unwrap();
+        assert_eq!(run_to_the_end(&mut coll, &mut first), Finish::Written);
+        let rows = coll.log_lines().unwrap().len();
+
+        let mut again = start(&coll).unwrap();
+        assert_eq!(run_to_the_end(&mut coll, &mut again), Finish::NothingWritten);
+        assert_eq!(coll.log_lines().unwrap().len(), rows, "no row was appended");
+    }
+
+    #[test]
+    fn finishing_a_cancelled_run_writes_nothing() {
+        let (mut coll, _d, _s) = open();
+        Fixture::History.install(&mut coll, NOW).unwrap();
+        let rows = coll.log_lines().unwrap().len();
+
+        let mut job = start(&coll).unwrap();
+        job.cancel();
+        assert_eq!(run_to_the_end(&mut coll, &mut job), Finish::NothingWritten);
+        assert_eq!(coll.log_lines().unwrap().len(), rows);
+        assert!(matches!(nudge(&coll).unwrap(), OptimisationNudge::Standard { .. }));
+    }
+
+    #[test]
+    fn cancelling_a_run_that_had_already_finished_still_writes_nothing() {
+        // The worker can be done before Cancel is pressed and before the next poll: the person asked
+        // for no write, so there is none (ADR-0014 §3).
+        let (mut coll, _d, _s) = open();
+        Fixture::History.install(&mut coll, NOW).unwrap();
+        let rows = coll.log_lines().unwrap().len();
+
+        let mut job = start(&coll).unwrap();
+        while !job.handle.as_ref().unwrap().is_finished() {
+            std::thread::yield_now();
+        }
+        job.cancel();
+        assert_eq!(finish(&mut coll, &mut job, NOW).unwrap(), Finish::NothingWritten);
+        assert_eq!(coll.log_lines().unwrap().len(), rows);
     }
 }

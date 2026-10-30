@@ -282,11 +282,17 @@ pub enum Fixture {
     /// the ordinary shape of an afternoon once the day's repeats are done (ADR-0011 §2). Three
     /// words passed and scheduled ahead (history, so it is not `NewDeck`), two never seen.
     NewOnly,
+    /// **Enough kept history for an optimise run to fit a vector of its own** — Settings' *Optimise*
+    /// through to a write and the completion sentence (ADR-0014), which no other fixture reaches:
+    /// the fixtures above carry two reviews a card, and a run over them fits the vector the
+    /// collection already holds and writes nothing. Twelve cards at seven reviews each, nothing due
+    /// and no leech, so Review is the caught-up floor behind it.
+    History,
 }
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 11] = [
+    pub const ALL: [Fixture; 12] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
@@ -298,6 +304,7 @@ impl Fixture {
         Fixture::Dormant,
         Fixture::Empty,
         Fixture::NewOnly,
+        Fixture::History,
     ];
 
     /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
@@ -315,6 +322,7 @@ impl Fixture {
             Fixture::Dormant => "dormant",
             Fixture::Empty => "empty",
             Fixture::NewOnly => "new-only",
+            Fixture::History => "history",
         }
     }
 
@@ -332,6 +340,7 @@ impl Fixture {
             Fixture::Dormant => "Dormant cards",
             Fixture::Empty => "No cards",
             Fixture::NewOnly => "New cards only",
+            Fixture::History => "Plenty of history",
         }
     }
 
@@ -349,6 +358,7 @@ impl Fixture {
             Fixture::Dormant => "a dormant line, a pane with nothing live, and the edit warning",
             Fixture::Empty => "Review's empty state, which a first-launch seed never reaches",
             Fixture::NewOnly => "Review with nothing due and only never-seen cards left",
+            Fixture::History => "an Optimise run that fits a new vector, and so writes one",
         }
     }
 
@@ -504,6 +514,30 @@ impl Fixture {
             }
             // Nothing to write: the collection is empty already.
             Fixture::Empty => {}
+            // **Every card has the same record, and that is deliberate.** The optimiser drops any
+            // first-review pairing fewer than six cards share, and trains at all only on sixty-four
+            // surviving items; a varied record falls under both and fits the published vector back.
+            // So each of the backlog's words passes, hesitates, lapses once and recovers, ending a day
+            // ago.
+            Fixture::History => {
+                for (front, back) in BACKLOG_WORDS {
+                    let card = note(coll, front, back)?;
+                    history.passes(
+                        card,
+                        &[
+                            (70, Grade::Good),
+                            (60, Grade::Good),
+                            (45, Grade::Barely),
+                            (30, Grade::Forgot),
+                            (22, Grade::Good),
+                            (14, Grade::Good),
+                            (8, Grade::Good),
+                            (4, Grade::Good),
+                            (1, Grade::Good),
+                        ],
+                    );
+                }
+            }
             // **History on three, none on two.** `caught_up` passes the first three words ahead; the
             // next two are plain new notes, which the rate introduces.
             Fixture::NewOnly => {
@@ -692,6 +726,14 @@ impl Fixture {
                     ..
                 } => None,
                 _ => Some("nothing due, two never-seen cards left, and history behind them"),
+            },
+            Fixture::History => match reached {
+                Reached {
+                    state: ReviewState::CaughtUp,
+                    leeches: 0,
+                    ..
+                } => None,
+                _ => Some("nothing due and no leeches, behind seven reviews a card"),
             },
             Fixture::Dormant => match reached {
                 Reached {
