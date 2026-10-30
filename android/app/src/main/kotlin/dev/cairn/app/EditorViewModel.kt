@@ -1,0 +1,218 @@
+package dev.cairn.app
+
+import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dev.cairn.ffi.CairnException
+import dev.cairn.ffi.DeckFact
+import dev.cairn.ffi.EditingHandle
+import dev.cairn.ffi.FieldValue
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+/** What the editor shows besides the text itself: the heading's fact, the dropdowns and the field list. */
+sealed interface EditorScreenState {
+    data object Loading : EditorScreenState
+
+    data class Field(val name: String, val multiline: Boolean)
+
+    data class Ready(
+        val isNew: Boolean,
+        val kinds: List<String>,
+        val kind: String,
+        val decks: List<DeckFact>,
+        val deck: String?,
+        val fields: List<Field>,
+    ) : EditorScreenState
+
+    data object Failed : EditorScreenState
+}
+
+/** The route's arguments: a stored note, or the draft's kind and deck. */
+const val ARG_NOTE = "note"
+const val ARG_KIND = "kind"
+const val ARG_DECK = "deck"
+
+/**
+ * The editor's state (ADR-0048, ADR-0021 §7). The text being typed is Compose's own: [values] holds
+ * each field's buffer and is written on the main thread, in the same call that Compose's field makes,
+ * so the field's composition is never round-tripped through the binding. Every call into the binding
+ * is queued here and run one at a time, in order, off the main thread; whether a field needs writing,
+ * when a draft is born and when the idle window falls due are the editing handle's rules.
+ *
+ * The route carries the note id, or the draft's kind and deck. Once a draft is born its id is put in
+ * [saved] too, so a process death returns to the same note rather than to a fresh draft.
+ */
+class EditorViewModel(
+    private val owner: CollectionOwner,
+    private val saved: SavedStateHandle,
+    private val monotonicClock: () -> Long = SystemClock::elapsedRealtime,
+) : ViewModel() {
+    private val _state = MutableStateFlow<EditorScreenState>(EditorScreenState.Loading)
+    val state: StateFlow<EditorScreenState> = _state
+
+    /** Each field's text by name. */
+    val values = mutableStateMapOf<String, String>()
+
+    /** The name being typed for *New deck*. */
+    var newDeck by mutableStateOf("")
+        private set
+
+    private var editing: EditingHandle? = null
+    private val queue = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+
+    init {
+        viewModelScope.launch {
+            for (job in queue) {
+                try {
+                    job()
+                } catch (_: CairnException) {
+                    _state.value = EditorScreenState.Failed
+                }
+            }
+        }
+        enqueue {
+            val handle = owner.use { collection ->
+                val note = saved.get<String>(ARG_NOTE)
+                if (note != null) {
+                    collection.editNote(note)
+                } else {
+                    collection.newDraft(saved.get<String>(ARG_KIND) ?: "basic", saved.get<String>(ARG_DECK))
+                }
+            }
+            editing = handle
+            show(handle, reload = true)
+        }
+    }
+
+    private fun enqueue(job: suspend () -> Unit) {
+        queue.trySend(job)
+    }
+
+    /**
+     * Read what the screen draws from the handle. The buffers are taken from the store only when
+     * [reload] says the fields are new (the first read, a kind change); otherwise what is typed stays.
+     */
+    private suspend fun show(handle: EditingHandle, reload: Boolean = false) {
+        val (ready, stored) = owner.use {
+            val fields = handle.fields()
+            EditorScreenState.Ready(
+                isNew = handle.isNew(),
+                kinds = handle.kindOptions(),
+                kind = handle.kind(),
+                decks = handle.decks(),
+                deck = handle.deck(),
+                fields = fields.map { EditorScreenState.Field(it.name, it.multiline) },
+            ) to fields
+        }
+        if (reload) {
+            values.clear()
+            stored.forEach { values[it.name] = it.value }
+        }
+        _state.value = ready
+    }
+
+    private fun remember(note: String?) {
+        if (note != null) saved[ARG_NOTE] = note
+    }
+
+    private fun typed() = values.map { FieldValue(it.key, it.value) }
+
+    /** A field's text changed: show it, and restart the idle window. */
+    fun typed(field: String, text: String) {
+        values[field] = text
+        val now = monotonicClock().toULong()
+        enqueue { editing?.let { h -> owner.use { h.touched(field, text, now) } } }
+    }
+
+    /** A field lost focus: commit it. */
+    fun blur(field: String) {
+        val text = values[field] ?: return
+        enqueue {
+            editing?.let { h ->
+                owner.use { h.commitField(field, text) }
+                remember(owner.use { h.noteId() })
+            }
+        }
+    }
+
+    /** The ticking check: settle once the typing has paused. */
+    fun tick() {
+        val now = monotonicClock().toULong()
+        enqueue {
+            editing?.let { h ->
+                owner.use { h.settleIfIdle(now) }
+                remember(owner.use { h.noteId() })
+            }
+        }
+    }
+
+    /** Settle every field, then [then]. Used on stopping, and by every way out. */
+    fun settleAll(then: () -> Unit = {}) {
+        val snapshot = typed()
+        enqueue {
+            editing?.let { h -> remember(owner.use { h.settleAll(snapshot) }) }
+            then()
+        }
+    }
+
+    /** *Done*, and the system Back: settle all, then leave. */
+    fun done(leave: () -> Unit) = settleAll(leave)
+
+    /** *New note*: settle this one, then hand the kind and deck forward to a fresh draft. */
+    fun newNote(open: (kind: String, deck: String?) -> Unit) {
+        val snapshot = typed()
+        enqueue {
+            val h = editing ?: return@enqueue
+            owner.use { h.settleAll(snapshot) }
+            val (kind, deck) = owner.use { h.kind() to h.deck() }
+            open(kind, deck)
+        }
+    }
+
+    /** A kind was chosen. A stored note is written; the fields rebuild, carrying the shared names. */
+    fun chooseKind(kind: String) {
+        val snapshot = typed()
+        enqueue {
+            val h = editing ?: return@enqueue
+            owner.use {
+                h.settleAll(snapshot)
+                h.switchKind(kind)
+            }
+            remember(owner.use { h.noteId() })
+            show(h, reload = true)
+        }
+    }
+
+    /** A deck was chosen, or none. A stored note is written; a draft holds it until it is born. */
+    fun chooseDeck(deck: String?) {
+        enqueue {
+            val h = editing ?: return@enqueue
+            owner.use { h.setDeck(deck) }
+            show(h)
+        }
+    }
+
+    fun typeNewDeck(text: String) {
+        newDeck = text
+    }
+
+    /** *New deck*: make it and file the note under it. A blank name makes nothing. */
+    fun createDeck() {
+        val name = newDeck.trim()
+        if (name.isEmpty()) return
+        newDeck = ""
+        enqueue {
+            val h = editing ?: return@enqueue
+            owner.use { h.setDeck(it.createDeck(name)) }
+            show(h)
+        }
+    }
+}

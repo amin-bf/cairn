@@ -52,4 +52,12 @@
         <item quantity="one">Delete %1$s? Its %2$d note is deleted with it, and cannot be undeleted.</item>
         <item quantity="other">Delete %1$s? Its %2$d notes are deleted with it, and cannot be undeleted.</item>
     </plurals>
+
+    <!-- The editor. The egui build's words. -->
+    <string name="notes_create">Create note</string>
+    <string name="editor_heading_new">New note</string>
+    <string name="editor_heading_edit">Edit note</string>
+    <string name="editor_kind">Kind</string>
+    <string name="editor_new_note">New note</string>
+    <string name="editor_done">Done</string>
 </resources>

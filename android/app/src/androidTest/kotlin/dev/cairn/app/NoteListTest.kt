@@ -58,9 +58,13 @@ class NoteListTest {
     private fun facts(selector: DeckSelector = DeckSelector.All, search: String = "") =
         runBlocking { owner.use { it.noteList(selector, search) } }
 
-    private fun showNotes(dark: MutableState<Boolean> = mutableStateOf(false)) {
+    private fun showNotes(
+        dark: MutableState<Boolean> = mutableStateOf(false),
+        onOpen: (String) -> Unit = {},
+        onCreate: (String?) -> Unit = {},
+    ) {
         val model = NotesViewModel(owner)
-        rule.setContent { CairnTheme(dark = dark.value) { NotesScreen(model) } }
+        rule.setContent { CairnTheme(dark = dark.value) { NotesScreen(model, onOpen, onCreate) } }
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("note-row") or hasTestTag("notes-empty")).fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -117,6 +121,22 @@ class NoteListTest {
         waitForText("کتابخانه")
         rule.onNodeWithText("کتاب").assertIsDisplayed()
         assertEquals(2, rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun tapping_a_row_opens_that_note_and_create_note_carries_the_filtered_deck() {
+        fixture("decks")
+        var opened: String? = null
+        val created = mutableListOf<String?>()
+        showNotes(onOpen = { opened = it }, onCreate = { created += it })
+        rule.onAllNodesWithTag("note-row")[0].performClick()
+        assertEquals(facts().rows[0].noteId, opened)
+        rule.onNodeWithTag("create-note").performClick()
+        chooseDeck(francais)
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("note-row")).fetchSemanticsNodes().size == 3 }
+        rule.onNodeWithTag("create-note").performClick()
+        val deck = facts().decks.first { it.name == "Français" }.id
+        assertEquals(listOf(null, deck), created)
     }
 
     @Test

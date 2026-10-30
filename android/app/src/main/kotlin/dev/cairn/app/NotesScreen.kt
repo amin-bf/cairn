@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnFieldLabel
@@ -29,6 +32,8 @@ import dev.cairn.design.CairnRule
 import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Tier
+import dev.cairn.design.rememberKeyboardUp
+import dev.cairn.design.tokens.Frame
 import dev.cairn.design.tokens.Spacing
 import dev.cairn.ffi.DeckSelector
 
@@ -36,8 +41,10 @@ private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
 @Composable
-fun NotesScreen(model: NotesViewModel) {
+fun NotesScreen(model: NotesViewModel, onOpen: (String) -> Unit = {}, onCreate: (deck: String?) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
+    // Coming back from the editor, the list is read again: a note was born, changed or filed.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
     when (val s = state) {
         is NotesScreenState.Loading -> CairnPage {}
         is NotesScreenState.Ready -> NoteList(
@@ -49,6 +56,8 @@ fun NotesScreen(model: NotesViewModel) {
             onAskDelete = model::askDeleteDeck,
             onKeep = model::keepDeck,
             onDelete = model::deleteDeck,
+            onOpen = onOpen,
+            onCreate = onCreate,
         )
         is NotesScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("notes-failed")) }
@@ -66,39 +75,56 @@ fun NoteList(
     onKeep: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpen: (String) -> Unit = {},
+    onCreate: (deck: String?) -> Unit = {},
 ) {
     val facts = state.facts
     CairnPage(modifier) {
-        LazyColumn(Modifier.fillMaxWidth().padding(top = gap(2))) {
-            item {
-                CairnText(stringResource(R.string.notes_heading), tier = Tier.Heading)
-                Spacer(Modifier.height(gap(2)))
+        Column(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(top = gap(2))) {
+                item {
+                    CairnText(stringResource(R.string.notes_heading), tier = Tier.Heading)
+                    Spacer(Modifier.height(gap(2)))
+                }
+                // The empty state is the empty *collection*, not a filter that matched nothing.
+                if (!facts.hasNotes) {
+                    item { CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty")) }
+                    return@LazyColumn
+                }
+                item {
+                    DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
+                    Spacer(Modifier.height(gap(2)))
+                    CairnFieldLabel(stringResource(R.string.notes_search))
+                    CairnTextField(state.search, onSearch, Modifier.testTag("notes-search"))
+                    Spacer(Modifier.height(gap(2)))
+                    CairnRule()
+                    Spacer(Modifier.height(gap(2)))
+                }
+                if (facts.rows.isEmpty()) {
+                    item { CairnText(stringResource(R.string.notes_no_match), Modifier.testTag("notes-no-match")) }
+                    return@LazyColumn
+                }
+                items(facts.rows, key = { it.noteId }) { row ->
+                    Spacer(Modifier.height(gap(1)))
+                    CairnListRow(
+                        title = row.preview,
+                        caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
+                        modifier = Modifier.testTag("note-row"),
+                        onClick = { onOpen(row.noteId) },
+                    )
+                }
             }
-            // The empty state is the empty *collection*, not a filter that matched nothing.
-            if (!facts.hasNotes) {
-                item { CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty")) }
-                return@LazyColumn
-            }
-            item {
-                DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
-                Spacer(Modifier.height(gap(2)))
-                CairnFieldLabel(stringResource(R.string.notes_search))
-                CairnTextField(state.search, onSearch, Modifier.testTag("notes-search"))
-                Spacer(Modifier.height(gap(2)))
-                CairnRule()
-                Spacer(Modifier.height(gap(2)))
-            }
-            if (facts.rows.isEmpty()) {
-                item { CairnText(stringResource(R.string.notes_no_match), Modifier.testTag("notes-no-match")) }
-                return@LazyColumn
-            }
-            items(facts.rows, key = { it.noteId }) { row ->
-                Spacer(Modifier.height(gap(1)))
-                CairnListRow(
-                    title = row.preview,
-                    caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
-                    modifier = Modifier.testTag("note-row"),
+            // Pinned outside the scroll on the reach line (ADR-0039 §8) while the keyboard is down, so
+            // the list keeps the room while one types: a new note is a `basic` draft filed to the deck
+            // the list is filtered to.
+            if (!rememberKeyboardUp()) {
+                CairnControl(
+                    stringResource(R.string.notes_create),
+                    onClick = { onCreate((state.selector as? DeckSelector.Deck)?.id) },
+                    modifier = Modifier.fillMaxWidth().testTag("create-note"),
+                    primary = true,
                 )
+                Spacer(Modifier.height(Frame.REACH_LINE.dp))
             }
         }
     }

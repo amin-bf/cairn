@@ -1,6 +1,12 @@
 package dev.cairn.app
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.createSavedStateHandle
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavController
@@ -20,6 +26,19 @@ private const val TICK_MS = 15_000L
 
 private const val REVIEW = "review"
 private const val NOTES = "notes"
+private const val EDITOR = "editor?$ARG_NOTE={$ARG_NOTE}&$ARG_KIND={$ARG_KIND}&$ARG_DECK={$ARG_DECK}"
+
+/** The kind of a draft made from the note list. */
+private const val NEW_KIND = "basic"
+
+/** The editor's route: a stored [note], or a draft of [kind] to be filed to [deck]. */
+internal fun editorRoute(note: String? = null, kind: String? = null, deck: String? = null): String =
+    buildString {
+        append("editor?")
+        listOf(ARG_NOTE to note, ARG_KIND to kind, ARG_DECK to deck)
+            .filter { it.second != null }
+            .joinTo(this, "&") { "${it.first}=${Uri.encode(it.second)}" }
+    }
 
 /**
  * The app's places on the Navigation back stack (ADR-0048 §1, §6): Review, where it starts, and Notes,
@@ -47,7 +66,31 @@ fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardU
                 ReviewScreen(model)
             }
             composable(NOTES) {
-                NotesScreen(viewModel { NotesViewModel(owner) })
+                NotesScreen(
+                    viewModel { NotesViewModel(owner) },
+                    onOpen = { nav.navigate(editorRoute(note = it)) },
+                    onCreate = { deck -> nav.navigate(editorRoute(kind = NEW_KIND, deck = deck)) },
+                )
+            }
+            composable(
+                EDITOR,
+                arguments = listOf(ARG_NOTE, ARG_KIND, ARG_DECK).map {
+                    navArgument(it) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                },
+            ) {
+                val model = viewModel { EditorViewModel(owner, createSavedStateHandle()) }
+                EditorScreen(
+                    model,
+                    onDone = { nav.popBackStack() },
+                    // The fresh draft takes this one's place, so Back from it returns to where this was opened from.
+                    onNewNote = { kind, deck ->
+                        nav.navigate(editorRoute(kind = kind, deck = deck)) { popUpTo(EDITOR) { inclusive = true } }
+                    },
+                )
             }
         }
     }
