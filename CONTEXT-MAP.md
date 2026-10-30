@@ -429,8 +429,8 @@ document and its bytes cross to Rust (ADR-0046 §5).
 
 **[0048](./docs/adr/0048-notes-and-the-editor-on-android.md) is Notes and the editor on Android. Read
 it before carrying an editor rule into the Kotlin app.** The egui specification carries; what changes
-is where the phone's input meets it. The destinations row stays words at the top (*Review · Notes*,
-Settings joining with its slice), because the bottom is the reach line's. The editor gains a visible
+is where the phone's input meets it. The destinations row stays words at the top (*Review · Notes ·
+Settings*, Settings having joined with its slice), because the bottom is the reach line's. The editor gains a visible
 *New note* above *Done*; the keyboard's action key is *Next* and closes the keyboard on the last field,
 committing nothing; a note's delete is confirmed in its row; Back is *Done*, and an editor opened from
 Review returns to the sitting. The panes always fold on a phone.

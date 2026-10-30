@@ -19,6 +19,7 @@ pub mod inbound;
 pub mod leeches;
 pub mod listing;
 pub mod markdown;
+pub mod new_card_rate;
 pub mod notes;
 pub mod optimise;
 pub mod review;

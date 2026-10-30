@@ -669,8 +669,7 @@ fn reset_control(ui: &mut egui::Ui) -> bool {
 /// Selection is drawn with `selectable_label`, the same way the nav row marks the current
 /// destination — the app's one existing way of saying *this is the one you are on*.
 fn theme_control(ui: &mut egui::Ui, coll: &mut Collection) {
-    let stored = coll.theme_preference().ok().flatten();
-    let current = crate::theme::ThemeChoice::parse(stored.as_deref());
+    let current = cairn_ops::appearance::theme_choice(coll).unwrap_or_default();
 
     field_label(ui, "Appearance");
     let mut chosen = None;
@@ -696,7 +695,7 @@ fn theme_control(ui: &mut egui::Ui, coll: &mut Collection) {
         // the next frame then shows the choice did not take. **The install happens either way** —
         // the palette the user just asked for is applied now, and a store that would not record it
         // reverts on the next launch rather than refusing the click.
-        let _ = coll.set_theme_preference(choice.as_str());
+        let _ = cairn_ops::appearance::set_theme_choice(coll, choice);
         crate::theme::install(ui.ctx(), choice);
     }
 
@@ -715,7 +714,7 @@ fn new_card_rate_control(
 ) {
     // Seed the buffer from the stored rate the first time this screen is shown.
     let buffer = rate_buffer.get_or_insert_with(|| {
-        coll.new_card_rate()
+        cairn_ops::new_card_rate::rate(coll)
             .unwrap_or(DEFAULT_NEW_CARD_RATE)
             .to_string()
     });
@@ -729,10 +728,9 @@ fn new_card_rate_control(
         // A failed write is dropped rather than surfaced: the re-read below then reflects the
         // unchanged stored value, so the field simply shows the edit did not take. Surfacing write
         // errors is a later ticket, as at the review grade site.
-        let _ = coll.set_new_card_rate(rate);
         // Reflect the clamp back into the buffer so an out-of-range entry shows what was stored.
-        *buffer = coll
-            .new_card_rate()
+        *buffer = cairn_ops::new_card_rate::set_rate(coll, rate)
+            .or_else(|_| cairn_ops::new_card_rate::rate(coll))
             .unwrap_or(DEFAULT_NEW_CARD_RATE)
             .to_string();
     }

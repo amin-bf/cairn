@@ -42,7 +42,7 @@ sealed interface ReviewScreenState {
  * milliseconds for the day and the review rows, a monotonic count for durations; a test hands its own.
  */
 class ReviewViewModel(
-    private val owner: CollectionOwner,
+    private val owner: CollectionAccess,
     private val wallClock: () -> Long = System::currentTimeMillis,
     private val monotonicClock: () -> Long = SystemClock::elapsedRealtime,
 ) : ViewModel() {

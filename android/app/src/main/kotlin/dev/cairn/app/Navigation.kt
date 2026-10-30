@@ -28,6 +28,7 @@ private const val TICK_MS = 15_000L
 
 private const val REVIEW = "review"
 private const val NOTES = "notes"
+private const val SETTINGS = "settings"
 private const val LEECHES = "leeches"
 private const val EDITOR = "editor?$ARG_NOTE={$ARG_NOTE}&$ARG_KIND={$ARG_KIND}&$ARG_DECK={$ARG_DECK}"
 
@@ -41,17 +42,18 @@ internal fun editorRoute(note: String? = null, kind: String? = null, deck: Strin
     }
 
 /**
- * The app's places on the Navigation back stack (ADR-0048 §1, §6): Review, where it starts, and Notes,
- * with the destinations row above them. Moving between the two keeps each one's state, and the system
- * Back from Notes returns to Review.
+ * The app's places on the Navigation back stack (ADR-0048 §1, §6): Review, where it starts, Notes and
+ * Settings, with the destinations row above them. Moving between them keeps each one's state, and the
+ * system Back from Notes or Settings returns to Review.
  */
 @Composable
-fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardUp()) {
+fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboardUp()) {
     val nav = rememberNavController()
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
         Destination(stringResource(R.string.destination_review), route == REVIEW || route == LEECHES, "destination-review") { nav.goTo(REVIEW) },
         Destination(stringResource(R.string.destination_notes), route == NOTES, "destination-notes") { nav.goTo(NOTES) },
+        Destination(stringResource(R.string.destination_settings), route == SETTINGS, "destination-settings") { nav.goTo(SETTINGS) },
     )
     val shell: @Composable () -> Unit = {
         NavHost(nav, startDestination = REVIEW) {
@@ -88,6 +90,13 @@ fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardU
                     onOpen = { nav.navigate(editorRoute(note = it)) },
                     onCreate = { deck -> nav.navigate(editorRoute(kind = NEW_KIND, deck = deck)) },
                 )
+            }
+            composable(SETTINGS) {
+                val appearance = LocalAppearance.current
+                val model = viewModel { SettingsViewModel(owner, appearance) }
+                // Coming back to the page it is read again; a field mid-edit keeps what was typed.
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
+                SettingsScreen(model)
             }
             composable(
                 EDITOR,

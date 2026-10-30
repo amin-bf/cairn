@@ -109,6 +109,16 @@ impl From<cairn_ops::appearance::ThemeChoice> for ThemeChoice {
     }
 }
 
+impl From<ThemeChoice> for cairn_ops::appearance::ThemeChoice {
+    fn from(choice: ThemeChoice) -> Self {
+        match choice {
+            ThemeChoice::System => Self::System,
+            ThemeChoice::Light => Self::Light,
+            ThemeChoice::Dark => Self::Dark,
+        }
+    }
+}
+
 /// The opened collection. Kotlin holds exactly one per process (ADR-0046 §7). Objects are shared
 /// through `Arc` so every method takes `&self`, and `Collection` is `Send` but not `Sync`, hence the
 /// `Mutex`: calls run one at a time.
@@ -230,6 +240,26 @@ impl CollectionHandle {
     /// Reading only: changing it is the Settings slice's. Unset or unrecognised is `System`.
     pub fn theme_choice(&self) -> Result<ThemeChoice, CairnError> {
         Ok(cairn_ops::appearance::theme_choice(&self.collection())?.into())
+    }
+
+    /// Record the appearance choice (ADR-0036 §3). Device-local; the read above decides what it means.
+    pub fn set_theme_choice(&self, choice: ThemeChoice) -> Result<(), CairnError> {
+        cairn_ops::appearance::set_theme_choice(&mut self.collection(), choice.into())?;
+        Ok(())
+    }
+
+    /// The new-card rate (ADR-0011 §3): the stored value, or the default when unset.
+    pub fn new_card_rate(&self) -> Result<u32, CairnError> {
+        Ok(cairn_ops::new_card_rate::rate(&self.collection())?)
+    }
+
+    /// Set the new-card rate and return **the value stored after the clamp**, so the field can show
+    /// what the app did with an out-of-range entry. Zero is kept (ADR-0011 §5).
+    pub fn set_new_card_rate(&self, rate: u32) -> Result<u32, CairnError> {
+        Ok(cairn_ops::new_card_rate::set_rate(
+            &mut self.collection(),
+            rate,
+        )?)
     }
 
     /// The note list under a deck selector and a search text (ADR-0021 §2): every row in list order,
@@ -1501,6 +1531,28 @@ mod tests {
         assert!(handle.note_count().unwrap() > 0, "a first launch seeds");
         // The seed is all new cards, none yet due.
         assert_eq!(handle.due_count(1_700_000_000_000).unwrap(), 0);
+    }
+
+    #[test]
+    fn the_new_card_rate_is_read_set_clamped_and_zero_is_kept() {
+        let (data, state) = dirs();
+        let handle = open(&data, &state);
+        assert_eq!(handle.new_card_rate().unwrap(), 5, "unset reads the default");
+        assert_eq!(handle.set_new_card_rate(20).unwrap(), 20);
+        assert_eq!(handle.new_card_rate().unwrap(), 20);
+        assert_eq!(handle.set_new_card_rate(100_000).unwrap(), 9_999, "the clamp");
+        assert_eq!(handle.set_new_card_rate(0).unwrap(), 0, "zero is kept");
+        assert_eq!(handle.new_card_rate().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_set_theme_choice_is_read_back_by_the_one_reader() {
+        let (data, state) = dirs();
+        let handle = open(&data, &state);
+        for choice in [ThemeChoice::Dark, ThemeChoice::Light, ThemeChoice::System] {
+            handle.set_theme_choice(choice).unwrap();
+            assert_eq!(handle.theme_choice().unwrap(), choice);
+        }
     }
 
     #[test]

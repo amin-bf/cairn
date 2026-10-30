@@ -7,13 +7,11 @@ import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
-import dev.cairn.design.CairnTheme
 import dev.cairn.design.pageArgb
 import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.ThemeChoice
@@ -31,7 +29,7 @@ fun isDark(choice: ThemeChoice, systemDark: Boolean): Boolean =
  * The base of every screen of the app. It reads the stored appearance choice through the binding
  * before anything is drawn: the window's first draw is held back until the choice is known, so a
  * handset set to dark never shows a light frame first (ADR-0036 §3). The choice is only read here;
- * changing it is the Settings slice's.
+ * Settings changes it through [AppearanceState].
  */
 abstract class CairnActivity : ComponentActivity() {
     private var ready = false
@@ -63,11 +61,8 @@ abstract class CairnActivity : ComponentActivity() {
             val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
                 Configuration.UI_MODE_NIGHT_YES
             window.setBackgroundDrawable(ColorDrawable(pageArgb(isDark(choice, systemDark))))
-            setContent {
-                val dark = isDark(choice, isSystemInDarkTheme())
-                SystemBarIcons(dark)
-                CairnTheme(dark = dark) { Screen() }
-            }
+            val appearance = AppearanceState(choice)
+            setContent { CairnAppearance(appearance) { Screen() } }
             ready = true
         }
     }
