@@ -148,7 +148,7 @@ the PR titles already use. Branch and PR then agree on which part of the system 
 
 ## Start with the context map
 
-**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the seven crates, the
+**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the eight crates, the
 eight contexts, and an index saying which ADR sections bind which context. `docs/adr/` is over 2,600
 lines; the index is what stops "read the ADRs" from meaning all of them.
 
@@ -157,11 +157,12 @@ Read this file first, then the context map, then the `CONTEXT.md` for the area y
 
 ## The workspace
 
-Seven crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
+Eight crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
 [ADR-0013 §11](./docs/adr/0013-the-sync-transport.md) and [ADR-0046 §2](./docs/adr/0046-the-line-between-kotlin-and-rust.md):
 `cairn-core` (the domain, pure), `cairn-store` (SQLite and the two directory lookups), `cairn-export`
 (the `.cdeck` container), `cairn-sync` (publishing to the remote; holds the network dependencies),
 `cairn-ops` (the operations both renderers call; no renderer, no binding),
+`cairn-ffi` (the one uniffi crate: the Kotlin binding, thin),
 `cairn-app` (egui, lib + cdylib), `cairn-desktop` (a shim, forced by `cargo-apk`).
 
 Contexts are **modules, not crates** — with two exceptions, both for the same reason: `export` and

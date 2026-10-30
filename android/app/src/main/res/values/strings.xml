@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cairn</string>
+    <!-- The placeholder screen of the walking skeleton: one fact read through the binding. -->
+    <plurals name="due_count">
+        <item quantity="one">%d card due</item>
+        <item quantity="other">%d cards due</item>
+    </plurals>
+    <string name="due_unavailable">The collection could not be opened</string>
+</resources>

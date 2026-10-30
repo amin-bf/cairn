@@ -3,7 +3,10 @@
 Record of the Android build environment set up for this repo, per
 [#7 "Set up the Android toolchain and prove it works"](https://github.com/amin-bf/cairn/issues/7).
 
-**Host**: CachyOS (Arch-based), x86_64, 16 cores. **Set up 2026-07-27.**
+**Host**: CachyOS (Arch-based), x86_64, 16 cores. **Set up 27.07.2026; moved to the native client's
+pins (AGP 9.4.1, Gradle 9.7.1, NDK r29 stable) on 30.10.2026** under
+[#203](https://github.com/amin-bf/cairn/issues/203) — see
+[Building the native client](#building-the-native-client).
 
 Everything below was installed **into `$HOME` without root.** Nothing was installed
 via `pacman`, so nothing here is shared with the system package manager or will be
@@ -16,7 +19,8 @@ source scripts/android-env.sh
 ```
 
 That sets `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `NDK_HOME`,
-`ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, `GRADLE_HOME` and prepends the tool
+`ANDROID_NDK_HOME` and `ANDROID_NDK_ROOT` (for `cargo apk` and a bare `cargo ndk`; the
+Gradle build uses AGP's own NDK) and prepends the tool
 directories to `PATH`. **None of these were set on the host before this ticket**, and
 nothing writes them to a shell profile — each build must source the script (or an
 agent must export them itself).
@@ -29,11 +33,12 @@ agent must export them itself).
 | Android SDK cmdline-tools | **15859902** | `~/Android/Sdk/cmdline-tools/latest` |
 | Android SDK Platform | **android-34**, **android-36**, **android-37.0** | `~/Android/Sdk/platforms` |
 | Android build-tools | **34.0.0**, **35.0.0**, **36.1.0**, **37.0.0** | `~/Android/Sdk/build-tools` |
-| Android NDK | **29.0.13846066** (`r29-beta3`, clang 21.0.0) | `~/Android/Sdk/ndk/29.0.13846066` |
+| Android NDK | **29.0.14206865** (`r29`, stable) | `~/Android/Sdk/ndk/29.0.14206865` |
 | platform-tools (`adb`, `fastboot`) | **r37.0.0** (`adb` 1.0.41) | `~/Android/Sdk/platform-tools` |
 | Emulator | bundled with SDK | `~/Android/Sdk/emulator` |
 | System image | `system-images;android-36;google_apis;x86_64` | `~/Android/Sdk/system-images` |
-| Gradle | **8.14.3** | `~/.local/share/gradle-8.14.3` |
+| Gradle | **9.7.1**, through the project's wrapper (`android/gradlew`), fetched on first use | `~/.gradle/wrapper/dists` |
+| Android Gradle Plugin | **9.4.1**, with Kotlin built in (no `org.jetbrains.kotlin.android` plugin) | resolved by Gradle |
 | `cargo-ndk` | **4.1.2** | `~/.cargo/bin/cargo-ndk` |
 
 Total SDK footprint: **~8.7 GB** under `~/Android/Sdk`.
@@ -86,20 +91,70 @@ build each one on the same machine.
   explicitly is mandatory, not optional.)
 - **SDK 34 and 36.** Dioxus generates `compileSdk`/`targetSdk` 34; the Tauri CLI uses
   SDK 36. Both platforms are installed so neither stack triggers a download mid-build.
-- **NDK 29.0.13846066 — and *only* this one.** This is the Tauri CLI's pinned NDK. The
-  CLI actually selects the **lexicographically highest installed NDK**, not its pin, so
-  installing any newer NDK (30.x is available) would silently displace it. Keeping
-  exactly one NDK makes the pin and the selection agree.
-- **Gradle 8.14.3.** The version the Tauri CLI uses. Dioxus generates Gradle **9.1.0** +
-  AGP 8.7.0 projects; those ship their own wrapper, which will download that
-  distribution on first use, so the two do not conflict.
+- **NDK 29.0.14206865 (r29 stable), pinned as `ndkVersion`.** It replaced the
+  `29.0.13846066` **beta** (`r29-beta3`) this document first recorded: that beta was kept only
+  because the Tauri CLI pinned it and selected the lexicographically highest installed NDK, and
+  Tauri is no longer a candidate ([ADR-0045](../adr/0045-the-native-android-client.md)). r29 stable
+  is the release line the Kotlin binding was measured on
+  ([research](../research/kotlin-binding/README.md)); AGP 9.4's own default (r28.2) is not taken
+  because nothing was measured on it. The Gradle build builds with the directory AGP resolves from
+  `ndkVersion`, so Gradle and cargo cannot disagree. The beta may stay installed — nothing selects
+  it any more — and can be removed with `sdkmanager --uninstall "ndk;29.0.13846066"`.
+- **Gradle 9.7.1 and AGP 9.4.1.** AGP 9.4 needs Gradle 9.6 or later, JDK 17 and Build Tools 36,
+  and has Kotlin built in. The wrapper in `android/` carries the Gradle version, so no Gradle is
+  installed system-wide (the 8.14.3 install was the Tauri CLI's, and Gradle 8 cannot load an AGP 9
+  project at all).
+- **`compileSdk` 36, and androidx versions that fit it.** The newest Compose, lifecycle and activity
+  releases require `compileSdk` 37; the spec pins 36 (as the egui build declares), so the project
+  pins the Compose BOM `2026.04.01`, lifecycle `2.10.0` and activity-compose `1.12.4`, the last
+  that compile against 36. Moving to 37 is a deliberate bump, not a drift.
 
-### Caveat: the pinned NDK is a beta
+## Building the native client
 
-`source.properties` reports `Pkg.Revision = 29.0.13846066-beta3`,
-`Pkg.ReleaseName = r29-beta3`. **Tauri's pinned NDK is a beta release**, not a stable
-one. It works (see below), but it is worth knowing before debugging anything strange in
-native code, and worth revisiting if #8 picks Tauri.
+The Gradle project is `android/`. **One `assemble` builds everything** — no step by hand:
+
+```sh
+source scripts/android-env.sh      # JAVA_HOME and the SDK; the build itself finds the NDK through AGP
+cd android && ./gradlew assemble   # debug and release APKs under app/build/outputs/apk/
+```
+
+What it runs, in order, joined to AGP through the Variant API
+(`addGeneratedSourceDirectory`), so nothing is ordered by a hand-written `dependsOn`:
+
+1. **`cargoNdk<Variant>`** — `cargo ndk -t arm64-v8a -t x86_64 -P 24 build --release --lib -p
+   cairn-ffi`, with `ANDROID_NDK_HOME` set to AGP's resolved NDK directory. Its output is the
+   `jniLibs` source set.
+2. **`uniffiBindgen<Variant>`** — builds `cairn-ffi` for the **host** with the `cli` feature and runs
+   `uniffi-bindgen` in library mode, writing Kotlin in `dev.cairn.ffi` into the Kotlin source set.
+   The `cli` feature is host-only: the cargo-ndk task never passes it, so it is absent from the
+   Android library. Nothing generated is committed (`android/app/build` is git-ignored).
+3. AGP compiles, merges and packages both ABIs and signs the debug APK with
+   `~/.android/debug.keystore` — the same key `cargo-apk` signs with — so `adb install -r` over
+   the egui build keeps its data.
+
+The debug variant also builds the `panic-probe` cargo feature (an export that panics on purpose,
+for the test that a Rust panic arrives as an exception); a release build never carries it. The
+release profile has no `panic = "abort"`, and a Rust test fails if one is added.
+
+**Pins:** uniffi `=0.32.2` and JNA 5.19.1 (`@aar`), AGP 9.4.1, Gradle 9.7.1, JDK 17, Compose
+through its BOM, NDK `29.0.14206865`, cargo-ndk 4.1.2, `compileSdk` and `targetSdk` 36, `minSdk`
+24, ABIs `arm64-v8a` and `x86_64`.
+
+**Tests on the emulator** (`cairn-test`, started headless so no window opens):
+
+```sh
+emulator -avd cairn-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
+cd android && ./gradlew connectedDebugAndroidTest
+```
+
+**The egui build on the emulator.** The upgrade check installs the egui APK first. Two things
+differ from the handset: `cargo apk` packages only `aarch64-linux-android` by default, which the
+x86_64 emulator cannot run, so build it with `--target x86_64-linux-android`; and the **debug**
+egui build crashes on the emulator's Vulkan (wgpu calls a debug-utils entry point the emulated
+driver lacks), so use `--release`. `cargo apk build --release` then stops at signing for want of
+a release keystore, and its unsigned APK lacks the library: add `lib/x86_64/libcairn_app.so` to it
+stored uncompressed (`zip -0`), `zipalign -P 16`, and sign with the debug keystore using
+`apksigner`.
 
 ## Proof the toolchain works
 
@@ -133,7 +188,8 @@ ANDSMOKE_OK sqlite=3.50.2 rows=2 ...
 `rows` incrementing across runs proves the database file is really created, written and
 **persisted** on device — not just that the binary starts.
 
-**3. APK packaging.** A minimal AGP project (Gradle 8.14.3, AGP 8.11.0, `compileSdk` 36,
+**3. APK packaging.** *(Recorded under the earlier pins; the native client now builds on AGP 9.4.1 and
+Gradle 9.7.1 — see above.)* A minimal AGP project (Gradle 8.14.3, AGP 8.11.0, `compileSdk` 36,
 `minSdk` 24, Java 17, no Kotlin) packaged the Rust `cdylib` into `jniLibs` and built in
 **30 s**. The APK carries `lib/arm64-v8a/libandsmoke.so` and `lib/x86_64/libandsmoke.so`.
 Installed and launched on the emulator, `System.loadLibrary("andsmoke")` succeeded:
@@ -282,7 +338,7 @@ export JAVA_HOME=~/.local/share/jdk17 ANDROID_HOME=~/Android/Sdk
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 yes | sdkmanager --licenses
 sdkmanager "platform-tools" "platforms;android-34" "platforms;android-36" \
-           "build-tools;34.0.0" "build-tools;36.1.0" "ndk;29.0.13846066" \
+           "build-tools;34.0.0" "build-tools;36.1.0" "ndk;29.0.14206865" \
            "emulator" "system-images;android-36;google_apis;x86_64"
 
 # API 37 (the test handset's level) is preview-channel and minor-versioned
@@ -292,9 +348,7 @@ rustup target add aarch64-linux-android x86_64-linux-android \
                   armv7-linux-androideabi i686-linux-android
 cargo install cargo-ndk --locked
 
-# Gradle 8.14.3
-curl -L -o gradle.zip "https://services.gradle.org/distributions/gradle-8.14.3-bin.zip"
-unzip -q gradle.zip -d ~/.local/share/
+# Gradle comes from the wrapper in android/ (9.7.1); nothing to install.
 
 avdmanager create avd -n cairn-test -k "system-images;android-36;google_apis;x86_64"
 ```

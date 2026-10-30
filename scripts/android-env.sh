@@ -10,13 +10,13 @@ export JAVA_HOME="$HOME/.local/share/jdk17"
 export ANDROID_HOME="$HOME/Android/Sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 
-# Exactly one NDK is installed on purpose: the Tauri CLI selects the
-# lexicographically highest installed NDK rather than its own pin, so a second
-# (newer) NDK would silently displace the pinned one.
-export NDK_HOME="$ANDROID_HOME/ndk/29.0.13846066"
+# NDK r29 stable, the release line the binding was measured on. The Gradle project pins the same
+# version as `ndkVersion` and builds with the directory AGP resolves from it; these variables serve
+# the egui build (`cargo apk`) and a bare `cargo ndk`.
+export NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 export ANDROID_NDK_HOME="$NDK_HOME"
 export ANDROID_NDK_ROOT="$NDK_HOME"
 
-export GRADLE_HOME="$HOME/.local/share/gradle-8.14.3"
-
-export PATH="$JAVA_HOME/bin:$GRADLE_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+# No Gradle on PATH: the native client builds through its own wrapper (`android/gradlew`, 9.7.1).
+# The Gradle build runs `cargo` and `cargo ndk` from its PATH, so rustup's bin directory must be on it.
+export PATH="$HOME/.cargo/bin:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"

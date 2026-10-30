@@ -1,4 +1,13 @@
 /target
 node_modules/
+# The native Android client's build output and Gradle's own state. The generated Kotlin bindings and
+# the cargo-ndk libraries live under android/app/build, so nothing generated is ever committed.
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/app/build/
+/android/buildSrc/build/
+/android/buildSrc/.gradle/
+/android/local.properties
 .claude/settings.local.json
 .claude/worktrees/
