@@ -1,5 +1,6 @@
 package dev.cairn.app
 
+import android.text.BidiFormatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -10,7 +11,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -19,6 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cairn.design.Cairn
+import dev.cairn.design.CairnConfirmRow
 import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnPage
 import dev.cairn.design.CairnRuns
@@ -45,10 +51,17 @@ fun LeechScreen(model: LeechViewModel, onEdit: (noteId: String) -> Unit, onBack:
         is LeechScreenState.Ready -> LeechList(
             s.facts,
             s.refusal,
-            onEdit = { onEdit(it.noteId) },
+            s.confirming,
+            onEdit = {
+                model.keep()
+                onEdit(it.noteId)
+            },
             onSuspend = model::suspend,
             onUnsuspend = model::unsuspend,
             onBack = onBack,
+            onAskDelete = model::askDelete,
+            onDelete = model::delete,
+            onKeep = model::keep,
         )
         is LeechScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("leech-failed")) }
@@ -65,12 +78,17 @@ fun LeechScreen(model: LeechViewModel, onEdit: (noteId: String) -> Unit, onBack:
 fun LeechList(
     facts: LeechListFacts,
     refusal: LeechRefusal?,
+    confirming: LeechRowKey? = null,
     onEdit: (LeechRowFact) -> Unit,
     onSuspend: (LeechRowFact) -> Unit,
     onUnsuspend: (LeechRowFact) -> Unit,
     onBack: () -> Unit,
+    onAskDelete: (LeechRowFact) -> Unit = {},
+    onDelete: (LeechRowFact) -> Unit = {},
+    onKeep: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val actions = RowActions(onEdit, onSuspend, onUnsuspend, onAskDelete, onDelete, onKeep)
     CairnPage(modifier.testTag("leech-screen")) {
         BoxWithConstraints {
             val page: Dp = maxHeight
@@ -84,13 +102,13 @@ fun LeechList(
                     if (facts.active.isNotEmpty()) {
                         CairnText(stringResource(R.string.leeches_statement), Modifier.testTag("leeches-statement"))
                         Spacer(Modifier.height(gap(1)))
-                        Rows(facts.active, refusal, onEdit, onSuspend, onUnsuspend)
+                        Rows(facts.active, refusal, confirming, actions)
                     }
                     if (facts.suspended.isNotEmpty()) {
                         if (facts.active.isNotEmpty()) Spacer(Modifier.height(gap(3)))
                         CairnText(stringResource(R.string.leeches_suspended_statement), Modifier.testTag("suspended-statement"))
                         Spacer(Modifier.height(gap(1)))
-                        Rows(facts.suspended, refusal, onEdit, onSuspend, onUnsuspend)
+                        Rows(facts.suspended, refusal, confirming, actions)
                     }
                     Spacer(Modifier.height(gap(2)))
                 }
@@ -108,29 +126,26 @@ fun LeechList(
     }
 }
 
+private class RowActions(
+    val onEdit: (LeechRowFact) -> Unit,
+    val onSuspend: (LeechRowFact) -> Unit,
+    val onUnsuspend: (LeechRowFact) -> Unit,
+    val onAskDelete: (LeechRowFact) -> Unit,
+    val onDelete: (LeechRowFact) -> Unit,
+    val onKeep: () -> Unit,
+)
+
 @Composable
-private fun Rows(
-    rows: List<LeechRowFact>,
-    refusal: LeechRefusal?,
-    onEdit: (LeechRowFact) -> Unit,
-    onSuspend: (LeechRowFact) -> Unit,
-    onUnsuspend: (LeechRowFact) -> Unit,
-) {
+private fun Rows(rows: List<LeechRowFact>, refusal: LeechRefusal?, confirming: LeechRowKey?, actions: RowActions) {
     for ((i, row) in rows.withIndex()) {
         if (i > 0) Spacer(Modifier.height(BetweenRows))
-        LeechRow(row, refusal?.takeIf { it.noteId == row.noteId && it.slot == row.slot }, onEdit, onSuspend, onUnsuspend)
+        LeechRow(row, refusal?.takeIf { it.row == row.key }, asking = confirming == row.key, actions)
     }
 }
 
 /** One card: its prompt (and cost) in a well, and what may be done to it underneath, in words. */
 @Composable
-private fun LeechRow(
-    row: LeechRowFact,
-    refusal: LeechRefusal?,
-    onEdit: (LeechRowFact) -> Unit,
-    onSuspend: (LeechRowFact) -> Unit,
-    onUnsuspend: (LeechRowFact) -> Unit,
-) {
+private fun LeechRow(row: LeechRowFact, refusal: LeechRefusal?, asking: Boolean, actions: RowActions) {
     val key = "${row.noteId}-${row.slot}"
     Column(Modifier.fillMaxWidth().testTag("leech-row-$key")) {
         CairnWell {
@@ -146,19 +161,45 @@ private fun LeechRow(
         }
         Spacer(Modifier.height(gap(1)))
         Row(horizontalArrangement = Arrangement.spacedBy(gap(1))) {
-            CairnControl(stringResource(R.string.leeches_edit), onClick = { onEdit(row) }, modifier = Modifier.testTag("leech-edit-$key"))
+            CairnControl(stringResource(R.string.leeches_edit), onClick = { actions.onEdit(row) }, modifier = Modifier.testTag("leech-edit-$key"))
             if (row.cost != null) {
-                CairnControl(stringResource(R.string.leeches_suspend), onClick = { onSuspend(row) }, modifier = Modifier.testTag("leech-suspend-$key"))
+                CairnControl(stringResource(R.string.leeches_suspend), onClick = { actions.onSuspend(row) }, modifier = Modifier.testTag("leech-suspend-$key"))
+                CairnControl(stringResource(R.string.notes_delete), onClick = { actions.onAskDelete(row) }, modifier = Modifier.testTag("leech-delete-$key"))
             } else {
-                CairnControl(stringResource(R.string.leeches_unsuspend), onClick = { onUnsuspend(row) }, modifier = Modifier.testTag("leech-unsuspend-$key"))
+                CairnControl(stringResource(R.string.leeches_unsuspend), onClick = { actions.onUnsuspend(row) }, modifier = Modifier.testTag("leech-unsuspend-$key"))
             }
         }
         if (refusal != null) {
             Spacer(Modifier.height(gap(1)))
             CairnText(
-                stringResource(if (refusal.suspending) R.string.leeches_suspend_refused else R.string.leeches_unsuspend_refused),
+                stringResource(
+                    when (refusal.write) {
+                        LeechWrite.Suspend -> R.string.leeches_suspend_refused
+                        LeechWrite.Unsuspend -> R.string.leeches_unsuspend_refused
+                        LeechWrite.Delete -> R.string.notes_delete_note_refused
+                    },
+                ),
                 Modifier.testTag("leech-refused-$key"),
                 tier = Tier.Small,
+                color = if (refusal.write == LeechWrite.Delete) Cairn.colors.error else Cairn.colors.body,
+            )
+        }
+        if (asking && row.cost != null) {
+            Spacer(Modifier.height(gap(1)))
+            // The question grows the row downwards; ask the list to show all of it, *Keep it* included (as the note list does).
+            val inView = remember { BringIntoViewRequester() }
+            LaunchedEffect(Unit) { inView.bringIntoView() }
+            // The note's preview, whole: the note is what goes, every card of it (ADR-0050 §2).
+            CairnConfirmRow(
+                modifier = Modifier.bringIntoViewRequester(inView),
+                question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(row.notePreview)),
+                confirm = stringResource(R.string.notes_delete),
+                keep = stringResource(R.string.notes_keep_it),
+                onConfirm = { actions.onDelete(row) },
+                onKeep = actions.onKeep,
+                questionModifier = Modifier.testTag("leech-delete-warning-$key"),
+                confirmModifier = Modifier.testTag("leech-delete-confirm-$key"),
+                keepModifier = Modifier.testTag("leech-keep-$key"),
             )
         }
     }
