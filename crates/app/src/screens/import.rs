@@ -239,7 +239,7 @@ fn deck_block(ui: &mut egui::Ui, deck: &DeckPlan) {
     );
 
     ui.add_space(spacing::gap(1));
-    ui.horizontal(|ui| {
+    spacing::text_row(ui, |ui| {
         ui.add_space(spacing::gap(2));
         ui.vertical(|ui| lines(ui, &effects(deck)));
     });
@@ -356,7 +356,7 @@ fn aligned(ui: &mut egui::Ui, text: &str, style: egui::TextStyle) {
 fn aligned_job(ui: &mut egui::Ui, mut job: egui::text::LayoutJob, rtl: bool) {
     job.wrap.max_width = ui.available_width();
     let galley = ui.fonts_mut(|f| f.layout_job(job));
-    ui.horizontal(|ui| {
+    spacing::text_row(ui, |ui| {
         if rtl {
             ui.add_space((ui.available_width() - galley.size().x).max(0.0));
         }

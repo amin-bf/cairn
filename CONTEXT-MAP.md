@@ -24,7 +24,9 @@ there and you will spend your budget before writing a line.
 
 ## Crates
 
-Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
+Seven crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1. `cairn-ops` is
+the seventh ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §2); `cairn-ffi` joins
+it when the binding is built.
 
 | Crate | Path | What it is |
 |---|---|---|
@@ -32,7 +34,8 @@ Six crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1.
 | `cairn-store` | [`crates/store/`](./crates/store) | SQLite persistence and the two-directory platform seam. |
 | `cairn-export` | [`crates/export/`](./crates/export) | The `.cdeck` and `.ccoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
 | `cairn-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
-| `cairn-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point. |
+| `cairn-ops` | [`crates/ops/`](./crates/ops) | The application's operations and the state they need, in plain Rust: the session and the sitting, cards, decks, the editor's settling, the note list, import planning, optimisation, the fixture bench, the restricted Markdown. Depends on `cairn-core`, `cairn-store` and `cairn-export` and on **no renderer** (`egui`, `eframe`, `winit`, `android-activity`) and no binding; time is passed in, never read in the sitting or the editor. The egui app calls it, and so will the binding. |
+| `cairn-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point — and the sentence helpers (`sentences`) and `sync`, which stay with it ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §2, §4). |
 | `cairn-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
 
 **And one directory that is not a crate.** [`vendor/egui-winit`](./vendor/PATCH.md) is third-party
@@ -121,7 +124,8 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `store` | [0007](./docs/adr/0007-the-local-store.md) | 0004 §11, 0003 §5, 0013 §9, 0016 §3, 0016 §7, 0019 §6, 0020 §3, 0020 §4, 0028 §5, 0036 §3 |
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md), [0041 §2 §5](./docs/adr/0041-the-file-surface.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
-| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md), [0036](./docs/adr/0036-the-light-palette.md), [0037](./docs/adr/0037-motion-and-elevation.md), [0038](./docs/adr/0038-the-mark-and-the-icon-rule.md), [0039](./docs/adr/0039-the-list-row.md), [0040](./docs/adr/0040-the-note-editor.md), [0041](./docs/adr/0041-the-file-surface.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
+| `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md), [0036](./docs/adr/0036-the-light-palette.md), [0037](./docs/adr/0037-motion-and-elevation.md), [0038](./docs/adr/0038-the-mark-and-the-icon-rule.md), [0039](./docs/adr/0039-the-list-row.md), [0040](./docs/adr/0040-the-note-editor.md), [0041](./docs/adr/0041-the-file-surface.md), [0042](./docs/adr/0042-the-settings-screen.md), [0043](./docs/adr/0043-the-leech-screen.md), [0044](./docs/adr/0044-the-ambient-hit-target.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
+| *the Android client* (Kotlin, not yet built) | [0045](./docs/adr/0045-the-native-android-client.md), [0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md), [0047](./docs/adr/0047-the-file-surface-on-android.md) | 0007 §6, 0016 §7, 0021 §7, 0022, 0023, 0024, 0031–0044 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -372,6 +376,53 @@ refusal and for a file that would change nothing; the nav row steps aside while 
 the preview opens at its top. And **0041 §4 settles the icon rule** 0039 left open: a picture stands
 alone only where the symbol already exists, and elsewhere may only accompany its word — the file
 row's picture sits **beside** *deck*, never instead of it.
+
+**[0042](./docs/adr/0042-the-settings-screen.md) is the Settings screen. Read it before placing a
+control on the reach line.** It amends 0035 §1: **the line binds a screen's *closing* control** —
+the one pressed to finish or go on — not whichever control is drawn last, so a page of peer settings
+places nothing there and its sub-states take it. Settings is grouped by **where a setting lives**:
+*Studying* follows the collection to every device, *This device* stays on the machine, and the
+development controls sit under their own heading at the end, in every build. Enrolled sync is decided
+as one row opening its own screen and not yet drawn. The storyboards reach Appearance by **keyboard
+focus**, because a coordinate below wrapping prose differs by width.
+
+**[0043](./docs/adr/0043-the-leech-screen.md) is the leech screen.** Each card is a **well** with
+*Edit*, *Suspend* and *Delete* worded underneath at the ordinary weight, rows sit 8 inside and 32
+apart, and *Back to review* is on the reach line. The cost line reads **`6 bad days · 12 reviews ·
+4 minutes`**: the rank key, the reviews and ADR-0010 §6's answer time, never *still failing*, which
+the app does not know.
+
+**[0044](./docs/adr/0044-the-ambient-hit-target.md) is the ambient hit target. Read it before drawing
+a row of anything.** `controls::install` writes `controls::HEIGHT` into `interact_size.y` in every
+theme slot, so a widget drawn as egui ships it — a bare button, a combo box and its entries, a
+selectable label — is 36px without asking, and the nav row with it, which the repository owner judged
+and kept. **`ui.horizontal` reads the same slot** and opens a row at 36px, so a row of *text* goes
+through `spacing::text_row` or comes out double-spaced. A combo box's popup cap grows by the same
+factor, since it is a height and not a count.
+
+**[0045](./docs/adr/0045-the-native-android-client.md) is the native Android client.** Android
+becomes Kotlin and Compose over the shared Rust core, in this repository, under the same package id;
+the egui Android build is retired at parity. On Android only, it lifts ADR-0016 §5's picker and
+filename refusals. Where Android has an established practice, the app follows it without a decision.
+
+**[0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) is the line between Kotlin and Rust.
+Read it before moving anything out of `cairn-app` or writing a Kotlin call into Rust.** The binding
+carries **operations**, not the domain: ids cross as canonical strings, and Kotlin composes no rule.
+Two crates arrive — **`cairn-ops`**, the egui-free logic both renderers call, and **`cairn-ffi`**,
+the only crate that touches uniffi — and `cairn-core` stays uniffi-free. Rule-bearing state (the
+sitting, its reveal gate) is Rust's; the text being typed is Kotlin's. **Facts cross, words do not**:
+a renderer says them in its own words. The platform — directories, the picker, `MediaStore`, the
+share sheet — is Kotlin's, so export crosses as bytes, and everything persisted still goes through
+the store. Never add `panic = "abort"` to the release profile: a panic would kill the process
+instead of reaching Kotlin as an exception.
+
+**[0047](./docs/adr/0047-the-file-surface-on-android.md) is the file surface on Android. Read it
+before carrying a desktop file rule into the Kotlin app.** The system picker **replaces** the file
+list — there is no list on Android — and asks for any type, so the bytes decide what was opened.
+Export and the archive go through the system save dialog, pre-filled with the derived name (an
+archive's carries its date), and the report states the name written with no location line; the
+hand-off stays beside it. The Kotlin app calls none of `cairn-export::platform`; Kotlin reads the
+document and its bytes cross to Rust (ADR-0046 §5).
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.

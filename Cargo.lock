@@ -520,6 +520,7 @@ dependencies = [
  "android-activity",
  "cairn-core",
  "cairn-export",
+ "cairn-ops",
  "cairn-store",
  "eframe",
  "egui",
@@ -553,6 +554,16 @@ dependencies = [
  "ndk-context",
  "tempfile",
  "zip",
+]
+
+[[package]]
+name = "cairn-ops"
+version = "0.1.0"
+dependencies = [
+ "cairn-core",
+ "cairn-export",
+ "cairn-store",
+ "tempfile",
 ]
 
 [[package]]

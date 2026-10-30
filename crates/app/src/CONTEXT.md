@@ -52,6 +52,15 @@ when it appears were answerable without knowing a single colour."*
 _Avoid_: The visual design pass, for either half alone — it is the word that lets a settled
 arrangement read as an open colour question, and an open colour question read as settled.
 
+**Renderer** / **Operation**:
+A **renderer** is what draws the application and speaks its platform: egui on the desktop (and on
+Android until parity), Compose on Android. An **operation** is what a screen asks the application to
+do — *grade this card*, *commit this field*, *plan this import* — implemented once, in Rust, for every
+renderer (ADR-0046 §1). The operation decides the rule and *which* statement applies; the renderer
+owns the words, the layout, the gesture and the text being typed (ADR-0046 §3 §4, ADR-0038 §6).
+_Avoid_: Frontend, backend, client for the renderer — the Kotlin app is a renderer over the same
+operations, not a second application.
+
 **Palette**:
 The app's colours, cool slate neutrals with **four desaturated accents**, named in **exactly one
 place** — a `theme` module producing an `egui::Visuals`, installed once — so every screen keeps
@@ -179,7 +188,9 @@ _Avoid_: Save, commit, draft, dirty state.
 **Session**:
 One sitting of review: a chosen card count, with a 10-minute timer running from the same moment.
 **Not a domain object** (ADR-0005 §6) — it exists only here, and its position is never stored, only
-derived from the log.
+derived from the log. *Here* is the application, not egui: ADR-0046 §3 moves the sitting into the
+operations every renderer shares, and **its home is now `cairn-ops`** (`crates/ops/`, the `session`
+and `sitting` modules) — this crate draws it and passes it the time.
 _Avoid_: Study session, cram session, queue.
 
 **Session count**:
@@ -303,9 +314,9 @@ or it is not a fixture**: the bench exists so a re-run is comparable to the run 
 a fixture photographs may depend on the card *identity*, which is `uuid_v4` and therefore fresh on
 every build. Four things read it on the way to a screen — the leech rank tie-break, the **due
 queue's** tie-break, the interval fuzz and the suspended section — and #160 found the `leeches`
-fixture landing on the first, so two widths of one run ranked the same three cards differently. The
-second is still live in `backlog`, whose twenty-five cards share one history (AGENTS.md, capture
-rule 22).
+fixture landing on the first, so two widths of one run ranked the same three cards differently.
+#171 found `backlog` landing on the second — twenty-five cards on one history, so every run opened
+its sitting on a different card (AGENTS.md, capture rule 22).
 _Avoid_: Seed, for a fixture — the seed is the six cards a real first install meets, and conflating
 the two is how "just extend the seed" gets proposed again; capture mode, which is the route this
 deliberately is not.
@@ -473,7 +484,7 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
 **Import preview**:
 The one gate in this specification (ADR-0022 §1), and **the one screen that belongs to no
 destination**. Three entry points — the file list, a desktop drop, an Android launch intent —
-produce **one** screen, which must be **cold-start capable**, because the intent can start the
+produce **one** screen (in the Kotlin app the **system picker** takes the list's place, ADR-0047 §2), which must be **cold-start capable**, because the intent can start the
 application directly into an import. So it is drawn without the nav row: there may not be a
 destination behind it. Applying returns to the **note list**, with the deck filter set to the
 imported deck when the file carried one and left unfiltered when it carried several; **cancelling
@@ -496,8 +507,12 @@ The **report** states the name the platform actually wrote and where, with ADR-0
 **beside** those lines rather than in place of them. The **file list** describes each file from its
 own manifest, inflating zero payloads, and says *"the files this application wrote"* — never anything
 implying a folder view, which on Android it is not (ADR-0024 §3).
+**In the Kotlin Android app there is no file list**: *Open a file…* opens the system picker in its
+place, export and the archive go through the system **save dialog** under a suggested name the user
+may edit, and the report states the name written with no location line (ADR-0047).
 _Avoid_: An *import screen* as a fourth member — import has no home, and the list is the only inbound
-surface that needed one.
+surface that needed one. *File list* for the picker — the list is ours and shows what we wrote; the
+picker is the platform's and shows everything.
 
 ## Rules that are easy to break silently
 

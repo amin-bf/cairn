@@ -9,23 +9,27 @@
 # **So this storyboard exists to keep the handset from being where the block is first found broken.**
 #
 # **Run it at 1280×800 and nowhere else.** It is a verification rather than a design capture, and
-# unlike every other storyboard here it is *not* width-independent: the bench sits below three
-# paragraphs of prose that wrap at one width and not the other, so both the scroll count and the y
+# unlike every other storyboard here it is *not* width-independent: the bench sits below every group
+# on the page, whose prose wraps at one width and not the other, so both the scroll count and the y
 # are measured at that size — the exact shape of the miss #143 hit. That is tolerated here because
 # both shots are **self-evidencing**: a tap that missed leaves `10-installed-from-settings` showing
 # Settings rather than the caught-up floor, and leaves the bench with nothing to say in
-# `11-bench-verdict`. Measured at 560×860, it misses — the row is at y=625 there.
+# `11-bench-verdict`. At 560×860 it misses.
+#
+# **Re-measured for #152**, which moved the bench under the Development heading at the end of
+# Settings: fourteen notches, then `Nothing due` at y=551 — and 586 since #175 made the hit target ambient,
+# which grew the nav row and Appearance's rows above it.
 mousemove %CX% 600 click 1
 sleep 1
-# Settings, then down to the specimens.
+# Settings, then down to the bench.
 mousemove %LX+140% 11 click 1
 sleep 1.2
-mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5
+mousemove %CX% 400 click --repeat 14 --delay 30 5
 sleep 1.2
 # `Nothing due`, the first of the seven — the leftmost, so its x is the one in the row that survives
 # the row wrapping. That wrapping is no longer hypothetical: since #161 the block draws two lines,
 # and every button but this one has moved at least once.
-mousemove %LX+60% 557 click 1
+mousemove %LX+60% 586 click 1
 sleep 1.5
 # Installing a fixture lands you on Review, because looking at the state is the whole purpose. The
 # caught-up floor here is the proof the tap did what it says.
@@ -34,6 +38,6 @@ shot 10-installed-from-settings
 # reached, or why it did not. A handset has no console to print it to.
 mousemove %LX+140% 11 click 1
 sleep 1.2
-mousemove %CX% 400 click 5 click 5 click 5 click 5 click 5 click 5
+mousemove %CX% 400 click --repeat 14 --delay 30 5
 sleep 1.2
 shot 11-bench-verdict

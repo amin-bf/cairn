@@ -148,7 +148,7 @@ the PR titles already use. Branch and PR then agree on which part of the system 
 
 ## Start with the context map
 
-**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the six crates, the
+**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the seven crates, the
 eight contexts, and an index saying which ADR sections bind which context. `docs/adr/` is over 2,600
 lines; the index is what stops "read the ADRs" from meaning all of them.
 
@@ -157,10 +157,11 @@ Read this file first, then the context map, then the `CONTEXT.md` for the area y
 
 ## The workspace
 
-Six crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
-[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
+Seven crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
+[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md) and [ADR-0046 §2](./docs/adr/0046-the-line-between-kotlin-and-rust.md):
 `cairn-core` (the domain, pure), `cairn-store` (SQLite and the two directory lookups), `cairn-export`
 (the `.cdeck` container), `cairn-sync` (publishing to the remote; holds the network dependencies),
+`cairn-ops` (the operations both renderers call; no renderer, no binding),
 `cairn-app` (egui, lib + cdylib), `cairn-desktop` (a shim, forced by `cargo-apk`).
 
 Contexts are **modules, not crates** — with two exceptions, both for the same reason: `export` and
@@ -536,10 +537,10 @@ because they are validated findings, not because a web build ships.
     never by extending the seed.** Every capture run is a first launch — the harness wipes the whole
     data directory — so the shipping seed's six due cards were once the only collection anything was
     ever photographed against, and #134 ended up shipping three decided states whose only pictures
-    were of something that is not the application. `crates/app/src/fixtures.rs` holds pre-made
+    were of something that is not the application. `crates/ops/src/fixtures.rs` holds pre-made
     collections instead, installed from outside by `cairn-fixture` on desktop and from a temporary
     Settings block on the handset, where `getFilesDir()` is unwritable from outside and an uninstall
-    is not a first launch either (#141). **`CairnApp::open_store` stays untouched**, which is what
+    is not a first launch either (#141). **`cairn_ops::open_collection` stays untouched**, which is what
     keeps every capture taken before a fixture existed a picture of the same thing. A storyboard
     **names its own fixture** on a `fixture <name>` line, because a storyboard run without the
     collection it needs produces a full set of valid captures of the seed under the fixture's names.
@@ -577,12 +578,15 @@ because they are validated findings, not because a web build ships.
       repository held showed an order the run had picked at random — two captures from *one* run
       disagreed with each other. A fixture whose screen shows an order must **break the real keys**.
     - `session::compose` breaks the **due queue's** tie the same way, so it decides *which card a
-      sitting opens on*. This is the one that is still live: `backlog`'s twenty-five cards share one
-      history, so `checkpoint.txt` run twice photographs two different cards — measured, `le phare`
-      and `la marée` from the same storyboard minutes apart.
+      sitting opens on*. #171 found `backlog`'s twenty-five cards sharing one history, so all were
+      due on one day and `checkpoint.txt` run twice photographed two different cards — `le phare`
+      and `la marée` from the same storyboard minutes apart. Its passes are now spread three days
+      apart and the queue runs in table order. A fixture whose screen shows a card must give the
+      card it opens on **a `due_day` of its own**.
     - `scheduling`'s interval fuzz is seeded from `CardRef::encode` (ADR-0027 §5, ADR-0001 §7), so a
       card scheduled close to due is due on some builds and not others — and, through `due_day`, it
-      also perturbs the queue order above. The pre-#160 leech recovery left as little as **two days**
+      can reorder the queue above. Not below 2.5 days, which it leaves unfuzzed: a single *Good* on
+      a new card buys two, so `backlog`'s tie in #171 was the tie-break alone. The pre-#160 leech recovery left as little as **two days**
       of margin against a fuzz that swings about three; it had simply not lost the toss yet. Fixtures
       now leave **at least five days**, asserted directly, because `Fixture::check` only ever sees
       the build it ran on and fails *intermittently* otherwise.
@@ -598,6 +602,13 @@ because they are validated findings, not because a web build ships.
     wrong, and the artifact is a valid picture of something nobody chose. **Measure, do not reason**
     — the intervals are `fsrs`'s, so a new fixture's margin is found by installing it a few hundred
     times, not by argument, and a fixture whose order matters is checked by *installing it twice*.
+23. **A fixture fabricates every field it writes, including the ones nothing draws yet.** A
+    placeholder in such a field is a fact nobody chose, and it surfaces the day a screen starts
+    reading it. Every review row took a constant 4,200ms until #173, so a card's answer time was its
+    review count times a constant, and ADR-0010 §6's *"22 reviews, 14 minutes"* could not be judged
+    from any capture — the leech caption's wording waited on it. Give a written field plausible,
+    **unequal** values (seeded, never random, per rule 22), and assert what came out, as
+    `fixtures::Pace` and the leech ranking test do.
 
 ## The local store
 

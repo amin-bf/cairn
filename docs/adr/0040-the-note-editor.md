@@ -165,6 +165,10 @@ when you are **finished**. §1 is read as *the last control on the page* rather 
 which is the reading that lets it mean anything on a screen with no way forward on it. This is its
 fourth call site and the first on Notes.
 
+> **Reading replaced by [ADR-0042 §1](0042-the-settings-screen.md): the *closing* control.** *Done* was
+> both the last control and the one pressed to finish, so this screen could not tell the readings
+> apart. Settings could: its last control is one of several peers, and it places nothing on the line.
+
 `done_sits_on_the_reach_line_whatever_the_note_holds` measures the lowest rect the frame drew against the
 clip rect it was handed, so a rearrangement that keeps the `slack_above` call and puts the button
 somewhere else still fails. Removing the anchor takes the clearance from 165 to 9703.

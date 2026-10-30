@@ -31,7 +31,7 @@ shot 01-list
 # The deck filter — the app's only overlay, and since ADR-0037 the one surface that floats. Under
 # this fixture it holds *All decks* and *Unfiled*, the two values that exist when no deck does
 # (ADR-0039 §5); `notes-decks.txt` is the run that has decks in it.
-mousemove %LX+50% 109 click 1
+mousemove %LX+50% 134 click 1
 sleep 1
 shot 02-list-deck-open
 key Escape
@@ -39,18 +39,21 @@ sleep 0.8
 # *Move* on the first row enters the two-tap placement state (ADR-0021 §4). **`+578` is every row's
 # move control, not just this one** — the action column lands on the same x whatever the preview
 # says (ADR-0039 §1), which is the finding this coordinate now demonstrates rather than dodges.
-mousemove %LX+578% 259 click 1
+mousemove %LX+578% 293 click 1
 sleep 1.2
 shot 03-placement
-# *Cancel move* is full-width at **y=257** — its top edge is 238, under the boundary hairline at
-# 222, where the rows would otherwise begin. Measured off `03-placement.png`: 225 is the empty page
+# *Cancel move* is full-width at **y=291** — its top edge is 272, under the boundary hairline at
+# 256, where the rows would otherwise begin. Measured off `03-placement.png`: 259 is the empty page
 # between the two, and aiming there leaves the app in the placement state, so the *next* click
 # **places the note** and the editor shot comes out as the list with the moved note at the top.
-mousemove %CX% 257 click 1
+#
+# **Every y on this page moved twice in #175**: 17 for the nav row and 17 more for the deck filter,
+# both of which became a 36px hit target once the control height was made ambient.
+mousemove %CX% 291 click 1
 sleep 1.2
 # The editor, opened from the first row's band — the band *is* the open affordance now, so this aims
 # at the middle of the row rather than at a button inside it. `l'aube` under `backlog`: a note that
 # **has a card**, so the Cards pane has something in it.
-mousemove %LX+200% 259 click 1
+mousemove %LX+200% 293 click 1
 sleep 1.5
 shot 04-editor

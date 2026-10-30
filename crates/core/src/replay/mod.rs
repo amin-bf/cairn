@@ -22,7 +22,7 @@ use crate::scheduling::{Grade, MemoryState, Review, Scheduler, SchedulerParamete
 /// migration path. Bump the `replay-N` half whenever a change here would make old cached state
 /// disagree with fresh arithmetic; the `fsrs-x.y.z` half must track the `=` pin in the workspace
 /// `Cargo.toml`, since a scheduler change re-derives every interval.
-pub const DERIVATION_VERSION: &str = "replay-1/fsrs-6.6.1";
+pub const DERIVATION_VERSION: &str = "replay-2/fsrs-6.6.1";
 
 /// The replayed state of one currently-generated card that has at least one projected review.
 ///
@@ -36,6 +36,11 @@ pub struct CardState {
     pub box_: u8,
     /// How many reviews were projected onto it.
     pub review_count: u32,
+    /// The summed `duration_ms` of every review projected onto it — its **answer time** (replay
+    /// `CONTEXT.md`). The one cost ADR-0010 §6 says makes a leech concrete, and the one it refuses as
+    /// a trigger (§3): it is read on the list and never feeds a rank, a floor or memory state. Counted
+    /// over exactly the rows `review_count` counts, so a dormant or cut-off row adds to neither.
+    pub answer_ms: u64,
     /// The frozen day number of the card's **earliest** projected review — the day it was
     /// *introduced* (ADR-0011 §5, replay `CONTEXT.md`). A card is "introduced today" when this equals
     /// the device-local day, which is how [`notes_introduced_today`] reads it. Never a lapse re-show:
@@ -73,6 +78,7 @@ struct Accumulator {
     last_grade: Grade,
     last_day: i64,
     count: u32,
+    answer_ms: u64,
     /// Distinct failure days, ascending. Rows arrive in day order, so a failure day is appended only
     /// when it differs from the last one already recorded — that dedup by day is the whole point of
     /// counting days rather than rows (ADR-0010 §2).
@@ -173,6 +179,7 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                                 last_grade: grade,
                                 last_day: rev.day,
                                 count: 1,
+                                answer_ms: rev.duration_ms,
                                 failure_days: if grade.is_failure() {
                                     vec![rev.day]
                                 } else {
@@ -187,6 +194,9 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                         existing.last_grade = grade;
                         existing.last_day = rev.day;
                         existing.count += 1;
+                        // Saturating: a row is foreign input, and one absurd duration must not
+                        // abort the replay that every other row depends on.
+                        existing.answer_ms = existing.answer_ms.saturating_add(rev.duration_ms);
                         // A failure day is recorded once per distinct day (ADR-0010 §2). Rows fold in
                         // day order, so a new failure day is simply one that differs from the last
                         // recorded — a same-day re-show never adds a second.
@@ -211,6 +221,7 @@ pub fn replay(current_cards: &HashSet<CardRef>, lines: &[&str]) -> Replayed {
                 memory: a.state,
                 box_: box_of(Some(a.state)),
                 review_count: a.count,
+                answer_ms: a.answer_ms,
                 first_day: a.first_day,
                 last_grade: a.last_grade,
                 last_day: a.last_day,
@@ -540,16 +551,30 @@ mod tests {
     /// Build a `reviewed` interchange line by hand — `cairn-core` writes no interchange form
     /// (ADR-0004 §11), so tests construct the bytes directly.
     fn rev(writer: &str, seq: u64, note: NoteId, ord: u16, grade: u8, day: i64) -> String {
+        rev_ms(writer, seq, note, ord, grade, day, 1000)
+    }
+
+    /// [`rev`] with the answer's duration stated, for the tests that read [`CardState::answer_ms`].
+    fn rev_ms(
+        writer: &str,
+        seq: u64,
+        note: NoteId,
+        ord: u16,
+        grade: u8,
+        day: i64,
+        ms: u64,
+    ) -> String {
         // The instant tie-break is derived from the day so ordering is well-defined in these tests.
         format!(
-            r#"{{"k":"rev","w":"{}","s":{},"n":"{}","o":{},"g":{},"t":"day-{:08}","d":{},"ms":1000}}"#,
+            r#"{{"k":"rev","w":"{}","s":{},"n":"{}","o":{},"g":{},"t":"day-{:08}","d":{},"ms":{}}}"#,
             writer,
             seq,
             note.to_canonical(),
             ord,
             grade,
             day,
-            day
+            day,
+            ms
         )
     }
 
@@ -858,6 +883,48 @@ mod tests {
             "disowned rows must not influence the projected state"
         );
         assert_eq!(cut.cards.get(&card).unwrap().review_count, 2);
+    }
+
+    /// **A card's answer time is the sum of its projected durations, and only those** — the rows
+    /// `review_count` counts, so a cut-off row, a dormant card's row and a repeated row add nothing.
+    /// The durations are unequal on purpose: equal ones would let a total that was secretly
+    /// `review_count × constant` pass, which is the fixture defect #173 found.
+    #[test]
+    fn answer_time_sums_the_projected_durations_and_nothing_else() {
+        let n = note(1);
+        let gone = note(2);
+        let cards = current_cards(&[n]);
+
+        let lines = [
+            rev_ms("w", 1, n, 0, 1, 0, 90_000), // disowned by the cutoff
+            r#"{"k":"cut","w":"w","s":2,"t":"day-00000010","d":10}"#.to_string(),
+            rev_ms("w", 3, n, 0, 1, 20, 41_500),
+            rev_ms("w", 4, n, 0, 3, 21, 6_200),
+            rev_ms("w", 4, n, 0, 3, 21, 6_200), // the same row merged twice (ADR-0004 §2)
+            rev_ms("w", 5, gone, 0, 1, 22, 50_000), // dormant: not projected
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let out = replay(&cards, &refs);
+
+        let card = &out.cards[&CardRef::new(n, 0)];
+        assert_eq!(card.review_count, 2);
+        assert_eq!(card.answer_ms, 47_700);
+        assert!(!out.cards.contains_key(&CardRef::new(gone, 0)));
+    }
+
+    /// One absurd duration — a foreign row, or a phone put down for a week mid-card (ADR-0010 §3) —
+    /// saturates the total rather than aborting the replay every other card depends on.
+    #[test]
+    fn an_absurd_duration_saturates_rather_than_overflowing() {
+        let n = note(1);
+        let cards = current_cards(&[n]);
+        let lines = [
+            rev_ms("w", 1, n, 0, 1, 0, u64::MAX),
+            rev_ms("w", 2, n, 0, 3, 1, 5_000),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let out = replay(&cards, &refs);
+        assert_eq!(out.cards[&CardRef::new(n, 0)].answer_ms, u64::MAX);
     }
 
     #[test]

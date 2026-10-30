@@ -17,11 +17,11 @@ sleep 1
 shot 04-crossing-entrance
 # `Start — the one card`. Every control here is full width, so `%CX%` reaches it at any width; the y
 # values are measured off the captures rather than adjusted by eye.
-mousemove %CX% 129 click 1
+mousemove %CX% 146 click 1
 sleep 1.5
 shot 05-crossing-card
 # Reveal is tap-the-card (ADR-0033 §1: one object with two faces).
-mousemove %CX% 131 click 1
+mousemove %CX% 148 click 1
 sleep 1.5
 shot 06-crossing-revealed
 # *Forgot*, held apart above the three passes (ADR-0034 §1). This is the fourth failure day, so it

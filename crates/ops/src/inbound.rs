@@ -10,9 +10,9 @@
 //! dropped onto the desktop window.
 //!
 //! **What is not here.** The two platform-specific *reads* are not: desktop drops are surfaced by
-//! egui directly — [`take_dropped`] reads them off the frame's raw input with **no seam function**
-//! ([ADR-0016 §5](../../../docs/adr/0016-backup-and-restore.md)) — and the Android launch intent is
-//! read from the activity handle in [`crate::platform`], the one crate that holds it (ADR-0016 §5,
+//! egui directly — `cairn_app::take_dropped` reads them off the frame's raw input with **no seam
+//! function** ([ADR-0016 §5](../../../docs/adr/0016-backup-and-restore.md)) — and the Android launch
+//! intent is read from the activity handle in `cairn_app::platform`, the one crate that holds it (ADR-0016 §5,
 //! [ADR-0023 §7](../../../docs/adr/0023-sending-a-written-file.md)). Both produce an [`Inbound`]; this
 //! module is where an `Inbound` becomes a [`Report`].
 //!
@@ -231,36 +231,6 @@ fn snapshot(coll: &Collection) -> Result<import::Collection, StoreError> {
 /// (they are UUIDv4, ADR-0005 §4). It matches no held deck, so the describe stage resolves its name
 /// to `None`, which is exactly "unfiled" (ADR-0005 §8).
 const UNFILED: DeckId = DeckId([0; 16]);
-
-/// Take a file dropped onto the desktop window this frame, if any — egui surfaces dropped files
-/// directly, with no operating-system dialog and **no seam function** (ADR-0016 §5). Returns `None`
-/// on a frame with no drop, and on Android, where there is nothing to drag.
-///
-/// A native drop carries a path; the bytes are read from it here. (The web backend, which does not
-/// ship — ADR-0007 §1 — would instead carry the bytes inline; both are handled so this reads the
-/// same on any egui backend.) The last file wins when several are dropped at once: this specimen
-/// reads one file, and the most-recently-listed is the least surprising choice.
-pub fn take_dropped(ctx: &egui::Context) -> Option<Inbound> {
-    let files = ctx.input(|i| i.raw.dropped_files.clone());
-    files.iter().rev().find_map(|f| {
-        let bytes = match &f.bytes {
-            Some(bytes) => bytes.to_vec(),
-            None => std::fs::read(f.path.as_ref()?).ok()?,
-        };
-        let name = f
-            .path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().into_owned())
-            .filter(|s| !s.is_empty())
-            .or_else(|| (!f.name.is_empty()).then(|| f.name.clone()));
-        Some(Inbound {
-            arrival: Arrival::Dropped,
-            name,
-            bytes,
-        })
-    })
-}
 
 #[cfg(test)]
 mod tests {

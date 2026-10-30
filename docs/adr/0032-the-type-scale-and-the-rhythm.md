@@ -131,6 +131,14 @@ rewritten. This matters concretely rather than in principle: the Android client 
 to leaving egui ([#121](https://github.com/amin-bf/cairn/issues/121), *Out of scope*), and it inherits
 these values rather than re-deciding them.
 
+> **On Android, type sizes are declared in `sp`, with the same numbers** — the repository owner,
+> 29.10.2026, in [Native Android: Spec — the Kotlin Skeleton and the Review
+> Slice](https://github.com/amin-bf/cairn/issues/201). At the default font scale an `sp` is a `dp`,
+> so §1's sizes are drawn exactly as written; above it, text follows the user's system font size, as
+> Android's own guidance asks (ADR-0045 §7). The frame, the rhythm, the card and the controls stay in
+> `dp`, so the layout does not grow with the text: where larger text overflows, ADR-0033 §4's
+> step-down and the page's scroll take it, as they do for a long card today.
+
 **A named tier that was never installed panics — it does not fall back.** Unlike the built-in
 variants, `TextStyle::Name` has nothing to resolve to, and that loudness is kept on purpose:
 resolving defensively at the call site would draw the 40px card face at stock's 13 on any path that

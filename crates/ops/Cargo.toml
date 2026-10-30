@@ -1,0 +1,19 @@
+[package]
+name = "cairn-ops"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# ADR-0046 §2: the application's operations and the state they need, in plain Rust. A crate rather
+# than a module behind a feature so the compiler states what it cannot do: this crate depends on
+# `cairn-core`, `cairn-store` and `cairn-export` and on **no renderer** — no `egui`, `eframe`,
+# `winit`, `android-activity` — and on no binding. The egui app and the binding both call it.
+[dependencies]
+cairn-core.workspace = true
+cairn-store.workspace = true
+cairn-export.workspace = true
+
+[dev-dependencies]
+# The session and deck logic is tested against a real store in a temp dir (there is no fake store).
+tempfile.workspace = true

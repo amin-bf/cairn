@@ -2,17 +2,19 @@
 //! (ADR-0010 §6), and the wording helpers each of those needs.
 
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use cairn_core::content::{CardRef, NoteId};
-use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
+use cairn_core::log::DEFAULT_NEW_CARD_RATE;
 use cairn_core::replay::{Leech, Replayed, leeches, replay};
 use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
+use cairn_ops::sitting::Sitting;
+
 use crate::session::{self, Offered, ReviewState};
 use crate::{
-    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
+    badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
 };
 use crate::{bidi, controls, fonts, frame, spacing, theme, typography};
 
@@ -33,6 +35,7 @@ pub(crate) fn review(
     showing_leeches: &mut bool,
     session_pointer: &mut Option<usize>,
     now_ms: i64,
+    mono_ms: u64,
     today: i64,
     touch: bool,
 ) -> Option<NoteId> {
@@ -117,7 +120,7 @@ pub(crate) fn review(
             // Snapshot the cards that are already leeches, so the pointer at this sitting's end covers
             // only what crosses during it (ADR-0010 §6).
             let before = ranked.iter().map(|l| l.card).collect();
-            *sitting = Some(Sitting::new(count, before));
+            *sitting = Some(Sitting::new(count, before, mono_ms));
         }
         // The durable way back to the leech screen (ADR-0010 §6): the notice is the discovery path,
         // this is the place to return to. Offered whenever any card is a leech or is suspended (whose
@@ -179,7 +182,7 @@ pub(crate) fn review(
     {
         let s = sitting.as_mut().expect("just checked it is Some");
 
-        if s.graded >= s.chosen {
+        if s.graded() >= s.chosen() {
             // Reaching the chosen count of **gradings** ends the sitting (ADR-0011 §9, issue #94).
             end_sitting = true;
         } else if let Some((offered, rendered)) = next {
@@ -196,10 +199,10 @@ pub(crate) fn review(
             // timer *"a courtesy check-in, not an enforcement mechanism"*, and a stack of
             // full-width controls above the card is how an application draws an enforcement — it
             // pushes the card 140px down the page to ask a question the reviewer did not raise.
-            if s.checkpoint_due() {
+            if s.checkpoint_due(mono_ms) {
                 match checkpoint(ui) {
                     Some(Checkpoint::Finish) => end_sitting = true,
-                    Some(Checkpoint::KeepGoing) => s.checkpoint_dismissed = true,
+                    Some(Checkpoint::KeepGoing) => s.keep_going(),
                     None => {}
                 }
                 ui.add_space(spacing::gap(3));
@@ -211,16 +214,11 @@ pub(crate) fn review(
             // the card changes. Keyed on the card instead, egui's animation map — which is never
             // evicted — would retain an entry per card for the life of the process; left unreset,
             // the next card's answer is drawn fading out for the whole duration.
-            let card_changed = s.shown != Some(offered.card);
-            if card_changed {
-                s.shown = Some(offered.card);
-                s.revealed = false;
-                s.card_shown = Instant::now();
-            }
+            let card_changed = s.offer(offered.card, mono_ms);
 
             // Progress counts gradings against the chosen count (ADR-0011 §9), so the bar moves on
             // every grade press — a lapse re-show included — never freezing when the user struggles.
-            body(ui, &format!("{} of {}", s.graded, s.chosen));
+            body(ui, &format!("{} of {}", s.graded(), s.chosen()));
             ui.add_space(spacing::gap(2));
 
             // **One card with two faces, not two cards** (ADR-0033 §1). Reveal is tap-the-card:
@@ -240,7 +238,7 @@ pub(crate) fn review(
             // tier across the reveal (§5). `t` is 0 until the tap, so nothing of the answer is on
             // screen before it — ADR-0006 §4, pinned by test.
             let badge_text = box_badge_wording(!offered.is_new, offered.box_);
-            let t = crate::motion::reveal_progress(ui, card_changed, s.revealed);
+            let t = crate::motion::reveal_progress(ui, card_changed, s.revealed());
             if surface::card(
                 ui,
                 &rendered.prompt,
@@ -251,10 +249,11 @@ pub(crate) fn review(
             )
             .clicked()
             {
-                s.revealed = true;
+                // A card is on screen (`offer` above), so the reveal cannot be refused.
+                let _ = s.reveal();
             }
 
-            if s.revealed {
+            if s.revealed() {
                 // **Edit note rides directly under the card, and the grades sit on the reach line**
                 // (ADR-0035 §1, §2). The order is still the reading order — prompt, answer, then
                 // the controls — but the *distance* is not: the page's leftover height falls
@@ -297,22 +296,11 @@ pub(crate) fn review(
                 let pressed = grade_buttons(ui, &offered, today, touch);
 
                 if let Some(grade) = pressed {
-                    let duration_ms = s.card_shown.elapsed().as_millis() as u64;
-                    // A failed append drops this one review rather than wedging the session: the next
-                    // frame re-derives the queue from whatever did commit. Surfacing write errors is
-                    // a later ticket.
-                    let _ = coll.append_review(
-                        offered.card,
-                        grade,
-                        now_ms,
-                        DayScale::default(),
-                        duration_ms,
-                    );
-                    // A grading advances the count whatever the grade — the re-derived queue decides
-                    // whether the card returns (a lapse) or leaves (a pass), not this counter.
-                    s.graded += 1;
-                    s.revealed = false;
-                    s.shown = None;
+                    // The grade buttons are drawn only inside the `revealed` branch, so the sitting
+                    // cannot refuse it here. A failed append drops this one review rather than
+                    // wedging the session: the next frame re-derives the queue from whatever did
+                    // commit. Surfacing write errors is a later ticket.
+                    let _ = s.grade(coll, grade, mono_ms, now_ms);
                 }
             }
         } else {
@@ -327,7 +315,7 @@ pub(crate) fn review(
         // the leeches now, minus those already crossed when it began. The `before` snapshot lived in
         // the sitting, which is in-memory, so this needs no stored dismissal or last-seen marker.
         if let Some(s) = sitting.as_ref() {
-            let crossed = session::crossed_this_session(&s.leeches_at_start, &ranked);
+            let crossed = session::crossed_this_session(s.leeches_at_start(), &ranked);
             *session_pointer = (!crossed.is_empty()).then_some(crossed.len());
         }
         *sitting = None;
@@ -381,6 +369,22 @@ fn leech_entry_wording(leeches: usize, suspended: usize) -> String {
     }
 }
 
+/// A leech row's cost line (ADR-0043 §4): the first rank key, the reviews it took, and the answer
+/// time ADR-0010 §6 says makes the cost concrete — *"6 bad days · 12 reviews · 4 minutes"*.
+///
+/// The time is a fact rather than a verdict: §6's own example ended *"still failing"*, and a card stays
+/// on this list after its latest answer was a pass, so that clause would say something the app does
+/// not know. Rounded to the nearest minute; below half a minute it reads *under a minute*, because
+/// *0 minutes* reads as none.
+fn cost_line(failure_days: u32, reviews: u32, answer_ms: u64) -> String {
+    let time = match answer_ms.saturating_add(30_000) / 60_000 {
+        0 => "under a minute".to_owned(),
+        1 => "1 minute".to_owned(),
+        m => format!("{m} minutes"),
+    };
+    format!("{failure_days} bad days · {reviews} reviews · {time}")
+}
+
 /// The leech screen (ADR-0010 §4, §6, §7, §8): the ranked list of cards costing the user, worst first,
 /// each offering **edit** (primary), **suspend** and **delete** — and never a tag, which would publish
 /// a private struggle into a deck (ADR-0010 §7); plus the **permanent** section of suspended cards,
@@ -401,19 +405,18 @@ fn leech_screen(
 ) -> Option<NoteId> {
     // Render each card's preview text up front, while the collection is only read; the owned strings
     // then outlive the immutable borrow so the action writes below are free to take `&mut coll`.
-    let active: Vec<(CardRef, String, u32, u32)> = ranked
+    let active: Vec<(CardRef, String, String)> = ranked
         .iter()
         .filter(|leech| !suspended.contains(&leech.card))
         .map(|leech| {
-            let reviews = replayed
+            let (reviews, answer_ms) = replayed
                 .cards
                 .get(&leech.card)
-                .map_or(0, |state| state.review_count);
+                .map_or((0, 0), |state| (state.review_count, state.answer_ms));
             (
                 leech.card,
                 card_preview(coll, leech.card),
-                leech.failure_days,
-                reviews,
+                cost_line(leech.failure_days, reviews, answer_ms),
             )
         })
         .collect();
@@ -439,35 +442,22 @@ fn leech_screen(
     if !active.is_empty() {
         body(ui, "These keep catching you out — worst first.");
         ui.add_space(spacing::gap(1));
-        for (i, (card, preview, days, reviews)) in active.iter().enumerate() {
+        for (i, (card, preview, cost)) in active.iter().enumerate() {
             if i > 0 {
                 ui.add_space(BETWEEN_ROWS);
             }
-            // The cost, made concrete (ADR-0010 §6): failure days and how many reviews they took.
-            //
-            // **The wording is still one rank key and one non-key, and #173 is what changes it.**
-            // `leeches` ranks by failure days, then by the most recent failure, then by card
-            // identity — so this line states the *first* key, spends its other half on
-            // `review_count`, **which orders nothing**, and never draws the second key at all. The
-            // sitting chose ADR-0010 §6's duration sentence to replace it and made a bench that can
-            // produce a real duration its precondition, because every fixture writes a constant
-            // 4,200ms and §6's own example draws as `0 minutes`.
-            leech_row(
-                ui,
-                preview,
-                Some(&format!("{days} bad days · {reviews} reviews")),
-                |ui| {
-                    if controls::snug(ui, "Edit").clicked() {
-                        edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
-                    }
-                    if controls::snug(ui, "Suspend").clicked() {
-                        suspend = Some(*card);
-                    }
-                    if controls::snug(ui, "Delete").clicked() {
-                        delete = Some(card.note);
-                    }
-                },
-            );
+            // The cost, made concrete (ADR-0010 §6, ADR-0043 §4).
+            leech_row(ui, preview, Some(cost), |ui| {
+                if controls::snug(ui, "Edit").clicked() {
+                    edit = Some(card.note); // edit is the primary action (ADR-0010 §7)
+                }
+                if controls::snug(ui, "Suspend").clicked() {
+                    suspend = Some(*card);
+                }
+                if controls::snug(ui, "Delete").clicked() {
+                    delete = Some(card.note);
+                }
+            });
         }
     }
 
@@ -988,7 +978,7 @@ mod tests {
         const TODAY: i64 = 20_514;
         let now_ms = TODAY * 86_400_000 + 4 * 3_600_000;
 
-        let mut sitting = Some(Sitting::new(10, HashSet::new()));
+        let mut sitting = Some(Sitting::new(10, HashSet::new(), 0));
         let mut showing_leeches = false;
         let mut pointer = None;
         let ctx = egui::Context::default();
@@ -1009,6 +999,7 @@ mod tests {
                     &mut showing_leeches,
                     &mut pointer,
                     now_ms,
+                    0,
                     TODAY,
                     false,
                 );
@@ -1030,7 +1021,7 @@ mod tests {
             "ADR-0029 §1: no route into the editor exists before the reveal — drew: {text}"
         );
 
-        sitting.as_mut().unwrap().revealed = true;
+        sitting.as_mut().unwrap().reveal().unwrap();
         let revealed = drawn_text(&frame(&mut sitting, &mut coll));
         assert!(
             revealed.contains("the dog"),
@@ -1062,15 +1053,14 @@ mod tests {
         const TODAY: i64 = 20_514;
         let now_ms = TODAY * 86_400_000 + 4 * 3_600_000;
 
-        let mut sitting = Sitting::new(10, HashSet::new());
-        // Wind the clock past the checkpoint rather than waiting for it — the whole point is that
+        // Pass a clock past the checkpoint rather than waiting for it — the whole point is that
         // waiting is what nobody ever did.
-        sitting.started = Instant::now() - Duration::from_secs(700);
+        const LATER_MS: u64 = 700_000;
+        let sitting = Sitting::new(10, HashSet::new(), 0);
         assert!(
-            sitting.checkpoint_due(),
+            sitting.checkpoint_due(LATER_MS),
             "the fixture must actually reach the checkpoint, or this test proves nothing"
         );
-        sitting.revealed = true;
 
         let ctx = egui::Context::default();
         crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
@@ -1089,6 +1079,7 @@ mod tests {
                     &mut showing_leeches,
                     &mut pointer,
                     now_ms,
+                    LATER_MS,
                     TODAY,
                     false,
                 );
@@ -1098,7 +1089,7 @@ mod tests {
         // The first frame binds the card to the sitting and clears `revealed`; the second is the one
         // to assert on, with the card shown and the checkpoint still up.
         let _ = frame(&mut sitting, &mut coll);
-        sitting.as_mut().unwrap().revealed = true;
+        sitting.as_mut().unwrap().reveal().unwrap();
         let drawn = drawn_text(&frame(&mut sitting, &mut coll));
 
         assert!(
@@ -1255,6 +1246,29 @@ mod tests {
         assert_eq!(leech_entry_wording(2, 0), "Leeches (2)");
         assert_eq!(leech_entry_wording(0, 3), "Suspended (3)");
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
+    }
+
+    #[test]
+    fn the_cost_line_adds_the_answer_time_in_whole_minutes() {
+        // ADR-0043 §4: the rank key, the reviews, then ADR-0010 §6's answer time, rounded to the
+        // nearest minute. The fixture's three leeches, as the screen draws them.
+        assert_eq!(
+            cost_line(6, 12, 245_508),
+            "6 bad days · 12 reviews · 4 minutes"
+        );
+        assert_eq!(cost_line(4, 9, 61_000), "4 bad days · 9 reviews · 1 minute");
+        assert_eq!(
+            cost_line(4, 10, 632_440),
+            "4 bad days · 10 reviews · 11 minutes"
+        );
+        // Below half a minute there is no whole minute to state, and "0 minutes" would read as none.
+        assert_eq!(
+            cost_line(4, 5, 29_999),
+            "4 bad days · 5 reviews · under a minute"
+        );
+        assert_eq!(cost_line(4, 5, 30_000), "4 bad days · 5 reviews · 1 minute");
+        // A foreign row can saturate the sum (`CardState::answer_ms`); the line must still draw.
+        assert!(cost_line(4, 5, u64::MAX).ends_with(" minutes"));
     }
 
     #[test]

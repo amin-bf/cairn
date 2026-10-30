@@ -5,7 +5,7 @@
 //!
 //! The desktop harness creates, redirects and wipes the app's entire data directory per run
 //! (`docs/environment/desktop-capture.md`), which is *why* every capture is a first launch and
-//! therefore always the same six due cards from [`CairnApp::open_store`](crate::CairnApp). Several
+//! therefore always the same six due cards from [`open_collection`](crate::open_collection). Several
 //! decided screens are unreachable from that one fixture — the caught-up floor needs a collection
 //! with nothing due, the end-of-session pointer needs a card failed repeatedly, and the entrance's
 //! shorter-sitting line needs a queue longer than five. #134 had to photograph the first two inside a
@@ -31,7 +31,7 @@
 //! **capture-mode entry point** is app code shaped by the harness's needs, where a state expressed as
 //! *data* is what a state actually is.
 //!
-//! [`CairnApp::open_store`](crate::CairnApp) is therefore untouched, and that is the whole value of
+//! [`open_collection`](crate::open_collection) is therefore untouched, and that is the whole value of
 //! the route: a fixture that worked by editing the seed would have solved a different problem.
 //!
 //! # Two ways in, one definition
@@ -56,7 +56,7 @@
 //!
 //! # The one state that is not data
 //!
-//! ADR-0006 §1's ten-minute checkpoint hangs off [`Sitting`](crate::Sitting)'s monotonic clock, not
+//! ADR-0006 §1's ten-minute checkpoint hangs off [`Sitting`](crate::sitting::Sitting)'s monotonic clock, not
 //! off the collection, so no pre-made collection can reach it — it needs ten real minutes that no
 //! capture run and no person holding a handset will ever wait for. [`checkpoint_after`] is the one
 //! lever this module offers that is not a fixture: a **shorter** checkpoint, set from the environment
@@ -364,8 +364,7 @@ impl Fixture {
                 // differ from each other on purpose; [`LEECHES`] is where that is argued.
                 for leech in &LEECHES {
                     let card = note(coll, leech.front, leech.back)?;
-                    history.fails(card, leech.fails);
-                    history.passes(card, leech.passes);
+                    history.leech(card, leech);
                 }
             }
             Fixture::Crossing => {
@@ -376,29 +375,17 @@ impl Fixture {
                 let card = note(coll, "l'écureuil", "the squirrel")?;
                 history.fails(card, &[40, 30, 20]);
             }
-            Fixture::Backlog => {
-                // One pass, long enough ago that the interval it bought has expired several times
-                // over. Nothing here is a leech: a backlog is a person who stopped reviewing, not a
-                // person who kept failing.
-                for (front, back) in BACKLOG_WORDS {
-                    let card = note(coll, front, back)?;
-                    history.passes(card, &[(60, Grade::Good)]);
-                }
-            }
+            Fixture::Backlog => backlog(coll, &mut history)?,
             // **A composition of the two above, deliberately re-tuning neither.** The leeches are
             // `Leeches`'s exactly — [`LEECHES`] entire, ranks and all — so they are leeches *and not
             // due*, which is what lets due cards decide the screen. The due half is `Backlog`'s
-            // expired pass. Both sets of intervals are already asserted by their own fixtures, so
-            // this one adds no third claim about `fsrs` to keep true.
+            // expired passes, order and all. Both sets of intervals are already asserted by their
+            // own fixtures, so this one adds no third claim about `fsrs` to keep true.
             Fixture::DueWithLeeches => {
-                for (front, back) in BACKLOG_WORDS {
-                    let card = note(coll, front, back)?;
-                    history.passes(card, &[(60, Grade::Good)]);
-                }
+                backlog(coll, &mut history)?;
                 for leech in &LEECHES {
                     let card = note(coll, leech.front, leech.back)?;
-                    history.fails(card, leech.fails);
-                    history.passes(card, leech.passes);
+                    history.leech(card, leech);
                 }
             }
             Fixture::Cloze => {
@@ -673,7 +660,17 @@ pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
     let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
     cairn_store::remove_files(&data, &state);
     let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
-    fixture.install(&mut coll, crate::now_ms())
+    fixture.install(&mut coll, now_ms())
+}
+
+/// Wall-clock milliseconds for the installer's stamp — an edge value read once per install, never
+/// reached from `cairn-core` (ADR-0009 §8) and nothing to do with a sitting's clocks. A clock before
+/// the epoch is not a real state; clamp rather than wrap.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// What the two destinations with state behind them would draw against this collection right now —
@@ -750,22 +747,38 @@ pub fn read(coll: &Collection, now_ms: i64) -> Result<Reached, String> {
 /// names. It was [`Fixture::check`] that caught it, which is the argument for that check in one line.
 #[derive(Default)]
 struct History {
-    /// `(days before now, card, grade)`, in whatever order the fixture happened to build them.
-    rows: Vec<(i64, CardRef, Grade)>,
+    /// `(days before now, card, grade, answer ms)`, in whatever order the fixture happened to build
+    /// them.
+    rows: Vec<(i64, CardRef, Grade, u64)>,
 }
 
 impl History {
     /// Grade this card *Forgot* on each of these days — one **failure day** apiece (ADR-0010 §2).
     fn fails(&mut self, card: CardRef, days_ago: &[i64]) {
         for &day in days_ago {
-            self.rows.push((day, card, Grade::Forgot));
+            let ms = Pace::TYPICAL.ms(Grade::Forgot, self.rows.len() as u64);
+            self.rows.push((day, card, Grade::Forgot, ms));
         }
     }
 
     /// Grade this card at the given days and grades, oldest first.
     fn passes(&mut self, card: CardRef, reviews: &[(i64, Grade)]) {
         for &(day, grade) in reviews {
-            self.rows.push((day, card, grade));
+            let ms = Pace::TYPICAL.ms(grade, self.rows.len() as u64);
+            self.rows.push((day, card, grade, ms));
+        }
+    }
+
+    /// A leech's whole record, at its own [`Pace`].
+    ///
+    /// The variation is seeded from the row's **day**, not from where it falls in the gathering as
+    /// [`History::passes`]'s is. Two fixtures carry [`LEECHES`] behind different filler, and a leech's
+    /// answer time is asserted — it must come out the same in both.
+    fn leech(&mut self, card: CardRef, spec: &LeechSpec) {
+        let fails = spec.fails.iter().map(|&day| (day, Grade::Forgot));
+        for (day, grade) in fails.chain(spec.passes.iter().copied()) {
+            let ms = spec.pace.ms(grade, day as u64);
+            self.rows.push((day, card, grade, ms));
         }
     }
 
@@ -776,14 +789,51 @@ impl History {
     /// bump them harmlessly, but so the log has a total order that does not depend on it. The offsets
     /// run *backwards* from the anchor, so no fixture row is ever stamped in the future.
     fn write(mut self, coll: &mut Collection, now_ms: i64) -> Result<(), String> {
-        self.rows.sort_by_key(|(days_ago, _, _)| -*days_ago);
+        self.rows.sort_by_key(|(days_ago, _, _, _)| -*days_ago);
         let last = self.rows.len().saturating_sub(1) as i64;
-        for (index, (days_ago, card, grade)) in self.rows.into_iter().enumerate() {
+        for (index, (days_ago, card, grade, ms)) in self.rows.into_iter().enumerate() {
             let instant = now_ms - days_ago * DAY_MS - (last - index as i64);
-            coll.append_review(card, grade, instant, DayScale::default(), 4_200)
+            coll.append_review(card, grade, instant, DayScale::default(), ms)
                 .map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+}
+
+/// How long a card takes to answer — what each written row records as its `duration_ms`.
+///
+/// **A fixture fabricates every field it writes, including the ones nothing draws yet.** Every row
+/// here used to take a constant 4,200ms, so a card's answer time was its review count times a
+/// constant and ADR-0010 §6's *"22 reviews, 14 minutes, still failing"* drew as *"0 minutes"* — a
+/// fact the bench could not reach, and one nobody had chosen
+/// ([#173](https://github.com/amin-bf/cairn/issues/173)).
+///
+/// A *Forgot* is the slowest answer (the stare before giving up), *Hard* slower than *Good*, *Easy*
+/// quickest. Each row then varies by ±20% on a seed, never on randomness, so a fixture installs the
+/// same durations on every build.
+#[derive(Clone, Copy)]
+struct Pace {
+    /// A *Forgot*.
+    forgot_ms: u64,
+    /// A *Good*; *Hard* and *Easy* are scaled from it.
+    good_ms: u64,
+}
+
+impl Pace {
+    /// Everything that is not a leech.
+    const TYPICAL: Pace = Pace {
+        forgot_ms: 16_000,
+        good_ms: 7_000,
+    };
+
+    fn ms(self, grade: Grade, seed: u64) -> u64 {
+        let base = match grade {
+            Grade::Forgot => self.forgot_ms,
+            Grade::Barely => self.good_ms * 3 / 2,
+            Grade::Good => self.good_ms,
+            Grade::Easy => self.good_ms * 3 / 5,
+        };
+        base * (80 + (seed * 37 + 11) % 41) / 100
     }
 }
 
@@ -837,6 +887,40 @@ fn caught_up(coll: &mut Collection, history: &mut History, count: usize) -> Resu
     }
     Ok(())
 }
+
+/// [`BACKLOG_WORDS`], each passed once **on a day of its own**, the first word longest ago — so the
+/// due queue runs in table order and a sitting opens on `l'aube`, on every build.
+///
+/// Nothing here is a leech: a backlog is a person who stopped reviewing, not a person who kept
+/// failing. And it is a person who stopped *gradually*, which is why the passes are spread rather
+/// than stacked.
+///
+/// They were stacked until [#171](https://github.com/amin-bf/cairn/issues/171): all twenty-five
+/// passed sixty days ago, so all twenty-five were due on **one** day and `session::compose` had
+/// nothing but the card-identity tie-break to order them by. `checkpoint.txt` run twice photographed
+/// `le phare` and then `la marée`.
+///
+/// **The fuzz was never part of it.** Measured over 300 installs, a single *Good* on a new card buys
+/// two days on every build — under the 2.5 days below which `scheduling` does not fuzz at all — so
+/// any step of a day would order the queue today. [`BACKLOG_PASS_STEP`] is three so the order
+/// survives the interval growing into the fuzz's first band, where it moves by at most a day either
+/// way, without anyone having to notice that it did.
+fn backlog(coll: &mut Collection, history: &mut History) -> Result<(), String> {
+    for (index, (front, back)) in BACKLOG_WORDS.into_iter().enumerate() {
+        let card = note(coll, front, back)?;
+        let days_ago = BACKLOG_FIRST_PASS - index as i64 * BACKLOG_PASS_STEP;
+        history.passes(card, &[(days_ago, Grade::Good)]);
+    }
+    Ok(())
+}
+
+/// How long ago the backlog's first word was passed. The last is passed `BACKLOG_PASS_STEP × 24`
+/// days later — twelve days ago — and its interval has still expired well before today.
+const BACKLOG_FIRST_PASS: i64 = 84;
+
+/// Days between one backlog word's pass and the next. Three is the smallest step the fuzz's first
+/// band cannot close: there, two neighbours' intervals differ by two days at most.
+const BACKLOG_PASS_STEP: i64 = 3;
 
 /// One `basic` note and the single card it generates (`content::BASIC` declares one slot, ordinal 0).
 fn note(coll: &mut Collection, front: &str, back: &str) -> Result<CardRef, String> {
@@ -1188,6 +1272,9 @@ struct LeechSpec {
     /// grade is a failure is due whatever its interval says, so every leech here has to pass its
     /// way out; the count also feeds the caption's second number, which is **not** a rank key.
     passes: &'static [(i64, Grade)],
+    /// How long this card takes to answer, which is what its answer time — the cost ADR-0010 §6
+    /// draws beside the counts — is summed from. **Not** a rank key either (§3).
+    pace: Pace,
 }
 
 /// The three leeches, **deliberately unequal, and unequal in two different ways**.
@@ -1207,9 +1294,17 @@ struct LeechSpec {
 /// have hidden that question behind a fixture rigged to answer it.
 ///
 /// Review counts differ too, and their **order is chosen against the rank**: the tied pair reads
-/// *"4 bad days · 9 reviews"* above *"4 bad days · 10 reviews"*, so one picture shows that the
-/// caption's second number is context and not the key that ordered the list. Ordering them the
-/// other way would have let a reader read the screen correctly for the wrong reason.
+/// *"4 bad days · 9 reviews · 1 minute"* above *"4 bad days · 10 reviews · 11 minutes"*, so one
+/// picture shows that the caption's second number is context and not the key that ordered the list.
+/// Ordering them the other way would have let a reader read the screen correctly for the wrong
+/// reason.
+///
+/// Answer times differ for the same reason and in the same direction
+/// ([#173](https://github.com/amin-bf/cairn/issues/173)). `d'ailleurs`, **last**, is the card eating
+/// the evenings — about eleven minutes, every failure a long stare; `désormais`, second, is answered
+/// in about a minute, wrongly and quickly. So the order the time would suggest is not the order on
+/// screen, and a caption that draws it cannot be read as what ranked the list: duration is noisy (a
+/// phone put down) and ADR-0010 §3 refuses it as a trigger for exactly that.
 ///
 /// # The recoveries are sized, not guessed
 ///
@@ -1235,8 +1330,12 @@ const LEECHES: [LeechSpec; 3] = [
             (4, Grade::Easy),
             (1, Grade::Easy),
         ],
+        pace: Pace {
+            forgot_ms: 30_000,
+            good_ms: 12_000,
+        },
     },
-    // Four failure days, the more recent last failure — second, on nine reviews.
+    // Four failure days, the more recent last failure — second, on nine reviews, and the quickest.
     LeechSpec {
         front: "désormais",
         back: "from now on",
@@ -1248,9 +1347,13 @@ const LEECHES: [LeechSpec; 3] = [
             (8, Grade::Easy),
             (3, Grade::Easy),
         ],
+        pace: Pace {
+            forgot_ms: 10_000,
+            good_ms: 5_000,
+        },
     },
     // Four failure days, the older last failure — third, on *more* reviews than the row above it,
-    // and the screen cannot say why it is third.
+    // and the screen cannot say why it is third. Also the slowest by far: the time-eater ranks last.
     LeechSpec {
         front: "d'ailleurs",
         back: "besides",
@@ -1263,9 +1366,14 @@ const LEECHES: [LeechSpec; 3] = [
             (3, Grade::Good),
             (1, Grade::Easy),
         ],
+        pace: Pace {
+            forgot_ms: 100_000,
+            good_ms: 45_000,
+        },
     },
 ];
 
+/// The backlog, **in the order a sitting offers it** — see [`backlog`], which makes it so.
 const BACKLOG_WORDS: [(&str, &str); 25] = [
     ("l'aube", "dawn"),
     ("le crépuscule", "dusk"),
@@ -1332,6 +1440,32 @@ mod tests {
         }
     }
 
+    /// **No fixture writes a constant answer time.** One did, everywhere, until
+    /// [#173](https://github.com/amin-bf/cairn/issues/173): 4,200ms a row, so a card's answer time was
+    /// its review count in disguise and the leech list's cost could not be judged from a capture.
+    #[test]
+    fn no_fixture_writes_one_duration_for_every_review() {
+        use cairn_core::log::{ParsedLine, Row, parse_line};
+        for fixture in Fixture::ALL {
+            let (_d, _s, mut coll) = empty();
+            fixture.install(&mut coll, NOW_MS).unwrap();
+            let durations: HashSet<u64> = coll
+                .log_lines()
+                .unwrap()
+                .iter()
+                .filter_map(|line| match parse_line(line) {
+                    ParsedLine::Row(Row::Reviewed(row)) => Some(row.duration_ms),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                durations.len() != 1,
+                "{}: every review took the same time, which nobody does",
+                fixture.key()
+            );
+        }
+    }
+
     /// **The three ways ADR-0018 §3 names a dormant entry, all reached by one fixture.** The install
     /// check counts them; only this can say they are *the three cases*, and the cases are the reason
     /// the fixture holds three notes rather than one with three dead slots.
@@ -1345,26 +1479,28 @@ mod tests {
         Fixture::Dormant.install(&mut coll, NOW_MS).unwrap();
 
         let rows = crate::notes::list(&coll, &crate::notes::Filter::default()).unwrap();
-        let mut names: Vec<String> = Vec::new();
+        let mut slots: Vec<u16> = Vec::new();
         for row in &rows {
             let pane = crate::cards::card_pane(&coll, row.id).unwrap();
             if let Some(warning) = &pane.warning {
-                names.extend(warning.dormant.iter().map(|d| d.name.clone()));
+                slots.extend(warning.dormant.iter().map(|d| d.slot));
             }
         }
-        names.sort();
+        slots.sort();
 
+        // The names these slots take are the renderer's words (ADR-0046 §4) and are pinned beside
+        // them, in `cairn-app`'s `sentences`.
         assert_eq!(
-            names,
+            slots,
             vec![
-                // Case 1 — the field **roles** of a slot a held definition declares, twice, because
-                // `vocab` asks in both directions. Roles and not content: the content is what is gone.
-                "Meaning → Term".to_owned(),
-                "Term → Meaning".to_owned(),
+                // Case 1 — a slot a held definition declares, twice, because `vocab` asks in both
+                // directions.
+                VOCAB_TERM_SLOT,
+                VOCAB_MEANING_SLOT,
+                // Case 3 — a slot in no definition. Shown, never hidden (ADR-0018 §3).
+                STRANGER_SLOT,
                 // Case 2 — the high bit set, so a cloze blank in no definition at all.
-                "blank 2".to_owned(),
-                // Case 3 — neither, so the bare slot. Shown, never hidden (ADR-0018 §3).
-                "card 7".to_owned(),
+                cairn_core::content::cloze_slot(2),
             ],
             "the fixture exists to reach these three cases and nothing else reaches case 3"
         );
@@ -1446,13 +1582,14 @@ mod tests {
     }
 
     /// One ranked leech, read the way `screens::review` reads it — the prompt, the two rank keys,
-    /// and the review count the caption's second number comes from.
+    /// the review count the caption's second number comes from, and the answer time beside it.
     #[derive(Debug, PartialEq, Eq)]
     struct RankedLeech {
         prompt: String,
         failure_days: u32,
         last_failure_day: i64,
         reviews: u32,
+        answer_ms: u64,
     }
 
     fn ranked_leeches(coll: &Collection, now_ms: i64) -> Vec<RankedLeech> {
@@ -1463,17 +1600,18 @@ mod tests {
         let replayed = replay(&current, &refs);
         leeches(&replayed, today)
             .into_iter()
-            .map(|leech| RankedLeech {
-                prompt: deck::render(coll, leech.card)
-                    .unwrap()
-                    .expect("a leech's card is still generated")
-                    .prompt,
-                failure_days: leech.failure_days,
-                last_failure_day: leech.last_failure_day,
-                reviews: replayed
-                    .cards
-                    .get(&leech.card)
-                    .map_or(0, |state| state.review_count),
+            .map(|leech| {
+                let state = &replayed.cards[&leech.card];
+                RankedLeech {
+                    prompt: deck::render(coll, leech.card)
+                        .unwrap()
+                        .expect("a leech's card is still generated")
+                        .prompt,
+                    failure_days: leech.failure_days,
+                    last_failure_day: leech.last_failure_day,
+                    reviews: state.review_count,
+                    answer_ms: state.answer_ms,
+                }
             })
             .collect()
     }
@@ -1518,9 +1656,31 @@ mod tests {
         assert_eq!(
             captions,
             [(6, 12), (4, 9), (4, 10)],
-            "the screen draws '{{days}} bad days · {{reviews}} reviews' and nothing else per row: \
-             three distinct strings, and the review count deliberately *ascending* across the \
-             tied pair so it cannot be mistaken for what ordered them"
+            "the screen draws '{{days}} bad days · {{reviews}} reviews · {{minutes}}' per row \
+             (ADR-0043 §4): the review count deliberately *ascending* across the tied pair so it \
+             cannot be mistaken for what ordered them"
+        );
+
+        let answer_ms: Vec<u64> = ranked.iter().map(|l| l.answer_ms).collect();
+        assert_eq!(
+            answer_ms,
+            [245_508, 61_000, 632_440],
+            "ADR-0010 §6's cost, per leech — about four minutes, one, and ten and a half: the \
+             last-ranked one is the time-eater and the second the quickest, so the time cannot be \
+             read as what ordered them (§3)"
+        );
+
+        let (_d3, _s3, mut composed) = empty();
+        Fixture::DueWithLeeches
+            .install(&mut composed, NOW_MS)
+            .unwrap();
+        let composed: Vec<u64> = ranked_leeches(&composed, NOW_MS)
+            .iter()
+            .map(|l| l.answer_ms)
+            .collect();
+        assert_eq!(
+            composed, answer_ms,
+            "the leeches are `LEECHES` entire in both fixtures, answer times included"
         );
 
         let (_d2, _s2, mut again) = empty();
@@ -1626,6 +1786,96 @@ mod tests {
         };
         assert!(backlog, "past a comfortable sitting, so Review frames it");
         assert!(due > 20, "past the longest shorter sitting: {due}");
+    }
+
+    /// The due queue as a sitting would offer it: each card's prompt and its `due_day`.
+    fn due_queue(coll: &Collection, now_ms: i64) -> Vec<(String, i64)> {
+        let today = cairn_core::log::day_number(now_ms, DayScale::default());
+        let lines = coll.log_lines().unwrap();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let cards = deck::current_cards(coll).unwrap();
+        let replayed = replay(&cards, &refs);
+        let positions = deck::note_positions(coll).unwrap();
+        let queue = session::compose(
+            &cards,
+            &positions,
+            &replayed,
+            today,
+            DEFAULT_NEW_CARD_RATE as usize,
+            &HashSet::new(),
+        );
+        queue
+            .due
+            .iter()
+            .map(|o| {
+                let prompt = deck::render(coll, o.card).unwrap().unwrap().prompt;
+                (prompt, replayed.cards[&o.card].due_day)
+            })
+            .collect()
+    }
+
+    /// **The backlog's queue order is a fact about the collection, and the same fact on every
+    /// build** — so a sitting opens on the same card every run (#171).
+    ///
+    /// The order is stated, and every pair of neighbours is a day apart in `due_day`, which is the
+    /// property that keeps `session::compose` off its card-identity tie-break. The second install is
+    /// the half that can see the old defect: twenty-five cards on one history are one `due_day`
+    /// apiece, so their order *is* the tie-break, and no two builds draw the same one.
+    #[test]
+    fn the_backlog_opens_on_a_stated_card_and_the_same_one_every_build() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
+        let queue = due_queue(&coll, NOW_MS);
+
+        let order = prompts(&queue);
+        let table: Vec<&str> = BACKLOG_WORDS.iter().map(|(front, _)| *front).collect();
+        assert_eq!(
+            order, table,
+            "the sitting offers the backlog in table order"
+        );
+
+        for pair in queue.windows(2) {
+            assert!(
+                pair[1].1 > pair[0].1,
+                "{} and {} are due on days {} and {} — a tie hands the order to a per-build \
+                 random id",
+                pair[0].0,
+                pair[1].0,
+                pair[0].1,
+                pair[1].1
+            );
+        }
+
+        let (_d2, _s2, mut again) = empty();
+        Fixture::Backlog.install(&mut again, NOW_MS).unwrap();
+        assert_eq!(
+            prompts(&due_queue(&again, NOW_MS)),
+            order,
+            "the same definition installed twice must queue the same way"
+        );
+    }
+
+    fn prompts(queue: &[(String, i64)]) -> Vec<&str> {
+        queue.iter().map(|(prompt, _)| prompt.as_str()).collect()
+    }
+
+    /// [`Fixture::DueWithLeeches`] composes the backlog unchanged, so its picker offers the same
+    /// queue — the leeches are not due and add nothing to it. The order is compared, not the
+    /// `due_day`s: the leeches' rows are newer than any backlog row, which moves where `History`
+    /// anchors its millisecond offsets and so can move a backlog row across the test clock's
+    /// rollover. The order survives that by construction; the days are not what this pins.
+    #[test]
+    fn the_composed_fixture_queues_its_backlog_the_same_way() {
+        let (_d, _s, mut coll) = empty();
+        Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
+        let (_d2, _s2, mut composed) = empty();
+        Fixture::DueWithLeeches
+            .install(&mut composed, NOW_MS)
+            .unwrap();
+        assert_eq!(
+            prompts(&due_queue(&composed, NOW_MS)),
+            prompts(&due_queue(&coll, NOW_MS))
+        );
     }
 
     /// **The deck fixture's ids are the ids the collection holds** — the property the whole fixture

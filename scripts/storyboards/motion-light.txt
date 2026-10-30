@@ -14,25 +14,23 @@
 # photograph a state the application cannot be put into — and this fails loudly if that control
 # stops working.
 #
-# y=93 for Appearance is the same at both widths, and it is that way on purpose: only the one-word
-# heading is above it, and a one-word heading cannot wrap. The control was moved there after a run
-# produced seven perfectly valid *dark* captures because prose above it wrapped at one width and not
-# the other (#143).
+# Appearance is reached by keyboard — eight Tabs and Space — because since #152 it sits below prose
+# that wraps at one width and not the other, so no single y reaches it at both. See `light.txt`.
 fixture cloze
 mousemove %CX% 600 click 1
 sleep 1
 mousemove %LX+140% 11 click 1
 sleep 1.2
-mousemove %LX+84% 93 click 1
+key --delay 150 Tab Tab Tab Tab Tab Tab Tab Tab space
 sleep 1.5
 
 # --- the reveal, on a card that fits ---------------------------------------------------------------
 mousemove %LX+27% 11 click 1
 sleep 1.2
-mousemove %CX% 129 click 1
+mousemove %CX% 146 click 1
 sleep 1.5
 shot 01-reveal-shut
-mousemove %CX% 254 click 1
+mousemove %CX% 271 click 1
 sleep 1.5
 shot 02-reveal-open
 
@@ -42,7 +40,7 @@ shot 02-reveal-open
 mousemove %CX% %BY-183% click 1
 sleep 1.5
 shot 03-stepdown-shut
-mousemove %CX% 254 click 1
+mousemove %CX% 271 click 1
 sleep 1.5
 shot 04-stepdown-open
 
@@ -52,18 +50,18 @@ shot 04-stepdown-open
 # 1.125 — so it is also where a wrong value has nowhere to hide.
 mousemove %LX+86% 11 click 1
 sleep 1.5
-mousemove %LX+300% 137 click 1
+mousemove %LX+300% 171 click 1
 sleep 0.5
 sh xdotool type --delay 40 'Cuisine'
 sleep 0.5
-mousemove %LX+36% 137 click 1
+mousemove %LX+36% 171 click 1
 sleep 1
-mousemove %LX+300% 137 click 1
+mousemove %LX+300% 171 click 1
 sleep 0.5
 sh xdotool type --delay 40 'Voyage'
 sleep 0.5
-mousemove %LX+36% 137 click 1
+mousemove %LX+36% 171 click 1
 sleep 1
-mousemove %LX+50% 109 click 1
+mousemove %LX+50% 134 click 1
 sleep 1
 shot 05-overlay

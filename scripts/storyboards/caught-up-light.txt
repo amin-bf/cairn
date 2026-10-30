@@ -18,11 +18,12 @@ sleep 1
 # Settings. The nav row sits above the frame's content but aligns to the same left edge.
 mousemove %LX+140% 11 click 1
 sleep 1.2
-# **Appearance: Light**, at y=93 — the same at both judging widths because only the one-word heading
-# is above it, and a one-word heading cannot wrap. `+84` is the centre of `Light` in the
-# `System Light Dark` row, frame-relative so the offset lands at either width.
-mousemove %LX+84% 93 click 1
+# **Appearance: Light**, by keyboard — eight Tabs and Space, then a click on the empty nav band to
+# clear the focus ring. See `light.txt` for why a coordinate no longer reaches it at both widths.
+key --delay 150 Tab Tab Tab Tab Tab Tab Tab Tab space
 sleep 1.2
+mousemove %CX% 11 click 1
+sleep 1
 shot 20-settings-light
 # Back to Review, which is now drawn light.
 mousemove %LX+20% 11 click 1

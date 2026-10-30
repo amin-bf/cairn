@@ -1,6 +1,6 @@
 //! The **Enrolment** destination: the enrolment screen's surface, reached from Settings.
 
-use crate::{body, field_label, full_width_button, heading, spacing, sync};
+use crate::{body, controls, field_label, frame, heading, spacing, sync};
 
 /// The enrolment screen's surface (ADR-0015 §7, ADR-0019 §4): what it states *before* the grant. The
 /// device flow, the credential file and the UserInfo fetch that would follow are the deferred network
@@ -30,8 +30,17 @@ pub(crate) fn enrolment_screen(ui: &mut egui::Ui, setting_up: &mut bool) {
          this build.",
     );
 
-    ui.add_space(spacing::gap(2));
-    if full_width_button(ui, "Back").clicked() {
+    // **The way out sits on the reach line, as the primary** (#152, ADR-0042). This page has a
+    // closing control where Settings has none, so the line is this sub-state's to take. Alone, the way
+    // out is the primary, as the file surface's lone *Close* is (ADR-0041 §3); once the grant can
+    // complete, a primary *continue* takes the line and *Back* becomes a text action beside it, as the
+    // import gate draws *Cancel*.
+    ui.add_space(frame::slack_above(
+        frame::page_room(ui),
+        controls::HEIGHT,
+        spacing::gap(2),
+    ));
+    if controls::wide_primary(ui, "Back").clicked() {
         *setting_up = false;
     }
 }
