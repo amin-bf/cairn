@@ -24,9 +24,11 @@ there and you will spend your budget before writing a line.
 
 ## Crates
 
-Seven crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1. `cairn-ops` is
-the seventh ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §2); `cairn-ffi` joins
-it when the binding is built.
+Eight crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §1. `cairn-ops` and
+`cairn-ffi` are the seventh and eighth ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md)
+§2). The Kotlin client that loads `cairn-ffi` is not a crate: it is the Gradle project in
+[`android/`](./android), which builds the Rust core itself
+([`docs/environment/android-toolchain.md`](./docs/environment/android-toolchain.md)).
 
 | Crate | Path | What it is |
 |---|---|---|
@@ -35,6 +37,7 @@ it when the binding is built.
 | `cairn-export` | [`crates/export/`](./crates/export) | The `.cdeck` and `.ccoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
 | `cairn-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
 | `cairn-ops` | [`crates/ops/`](./crates/ops) | The application's operations and the state they need, in plain Rust: the session and the sitting, cards, decks, the editor's settling, the note list, import planning, optimisation, the fixture bench, the restricted Markdown. Depends on `cairn-core`, `cairn-store` and `cairn-export` and on **no renderer** (`egui`, `eframe`, `winit`, `android-activity`) and no binding; time is passed in, never read in the sitting or the editor. The egui app calls it, and so will the binding. |
+| `cairn-ffi` | [`crates/ffi/`](./crates/ffi) | The Kotlin binding: **the only crate that depends on uniffi** (`=0.32.2`), `cdylib` + `lib`, library `cairn_ffi`, generated Kotlin in `dev.cairn.ffi`. **Thin**: an exported collection handle over `cairn-ops` behind a `Mutex`, the mirror records and enums, and one error crossing as `CairnException` (no field named `message`). Exports no platform function and calls none ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §5). Its `uniffi-bindgen` binary sits behind the host-only `cli` feature, which the Android build leaves off; the release profile never gains `panic = "abort"` (§7). |
 | `cairn-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point — and the sentence helpers (`sentences`) and `sync`, which stay with it ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §2, §4). |
 | `cairn-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
 
