@@ -80,7 +80,7 @@
     <string name="settings_appearance_note">This machine only — your appearance does not follow the collection to another device.</string>
     <string name="settings_appearance_refused">The appearance could not be saved.</string>
     <string name="notes_heading">Notes</string>
-    <string name="notes_empty">Nothing here yet — create a deck, import one, or set up sync</string>
+    <string name="notes_empty">Nothing here yet — create a deck, or import one</string>
     <string name="notes_no_match">No notes match.</string>
     <string name="notes_search">Search</string>
     <string name="notes_deck">Deck</string>
