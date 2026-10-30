@@ -140,6 +140,19 @@ release profile has no `panic = "abort"`, and a Rust test fails if one is added.
 through its BOM, NDK `29.0.14206865`, cargo-ndk 4.1.2, `compileSdk` and `targetSdk` 36, `minSdk`
 24, ABIs `arm64-v8a` and `x86_64`.
 
+**The design module** (`android/design`, a library the app depends on, and the app's only source of
+colour, type and spacing). Its tokens in `tokens/*.kt` restate the Rust modules' numbers in `dp`
+and `sp`, and `cargo test -p cairn-app kotlin_tokens` fails on any difference, any missing token
+and any extra one, so a change to a Rust token needs the Kotlin file edited in the same commit. The
+faces live under `src/main/assets/fonts` with their licences beside them in `licenses`; the same
+test holds each family's list, in order, byte-equal to what `fonts::definitions()` registers. Look
+at it on a handset or emulator with the debug-only specimen:
+
+```sh
+adb shell cmd uimode night yes   # or `no`: a stored Light or Dark choice overrides it
+adb shell am start -n dev.cairn.app/.SpecimenActivity
+```
+
 **Tests on the emulator** (`cairn-test`, started headless so no window opens):
 
 ```sh
