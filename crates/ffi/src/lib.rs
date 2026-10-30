@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::scheduling::Grade as CoreGrade;
+use cairn_ops::cards;
 use cairn_ops::editor::{self, Editing};
 use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::review::{self, Review};
@@ -540,12 +541,152 @@ impl EditingHandle {
         Ok(())
     }
 
+    /// The cards this note generates and the dormant ones it keeps, as the store holds them now (the
+    /// caller settles first). A draft not yet born has none.
+    pub fn card_pane(&self) -> Result<CardPaneFacts, CairnError> {
+        let Some(note) = self.editing().note else {
+            return Ok(CardPaneFacts {
+                entries: Vec::new(),
+                state: PaneState::Empty,
+                warning: Vec::new(),
+            });
+        };
+        Ok(cards::card_pane(&self.owner.collection(), note)?.into())
+    }
+
+    /// The number *Blank it* gives the next blank of `text`: one above the highest ever used, the
+    /// note's dormant blanks included (ADR-0012 §3).
+    pub fn next_blank_number(&self, text: String) -> Result<u32, CairnError> {
+        let Some(note) = self.editing().note else {
+            return Ok(u32::from(cairn_core::content::next_blank_number(&text)));
+        };
+        let pane = cards::card_pane(&self.owner.collection(), note)?;
+        Ok(u32::from(cards::next_blank_number(&pane, &text)))
+    }
+
     /// *New note*: settle this one, then open a fresh draft carrying its kind and deck.
     pub fn new_note(&self, values: Vec<FieldValue>) -> Result<Arc<EditingHandle>, CairnError> {
         let mut editing = self.editing();
         Self::take_values(&mut editing, &values);
         self.settle(&mut editing);
         Ok(Self::draft(self.owner.clone(), &editing.kind, editing.deck))
+    }
+}
+
+/// What a dormant entry is named by (ADR-0018 §3), as facts. The sentence around them is Kotlin's.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum DormantName {
+    /// A slot a kind declares: the field roles of its question.
+    Roles {
+        prompt: Vec<String>,
+        answer: Vec<String>,
+    },
+    /// A cloze blank, by its number.
+    Blank { number: u32 },
+    /// Neither: the bare slot.
+    Slot { slot: u32 },
+}
+
+impl From<cards::DormantName> for DormantName {
+    fn from(n: cards::DormantName) -> Self {
+        match n {
+            cards::DormantName::Roles { prompt, answer } => DormantName::Roles { prompt, answer },
+            cards::DormantName::Blank(number) => DormantName::Blank {
+                number: u32::from(number),
+            },
+            cards::DormantName::Slot(slot) => DormantName::Slot {
+                slot: u32::from(slot),
+            },
+        }
+    }
+}
+
+/// A card the note generates, as Review's card is: runs for both faces, the prompt's direction and
+/// the box badge's fact.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LiveCardFact {
+    pub slot: u32,
+    pub prompt: Vec<Run>,
+    pub answer: Vec<Run>,
+    pub rtl: bool,
+    /// Never reviewed: the badge reads *new*, not *box n*.
+    pub is_new: bool,
+    pub box_number: u8,
+}
+
+/// A dormant entry: what it is named by and how many reviews are kept.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DormantFact {
+    pub slot: u32,
+    pub name: DormantName,
+    pub reviews: u32,
+}
+
+/// One entry of the card pane.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum PaneEntry {
+    Live { card: LiveCardFact },
+    Dormant { entry: DormantFact },
+}
+
+/// Which of the pane's three states the note is in (ADR-0018 §6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PaneState {
+    Cards,
+    NoLiveCards,
+    Empty,
+}
+
+/// The card pane's facts: entries in raw slot order, the state, and the dormant entries the warning
+/// above the fields names.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CardPaneFacts {
+    pub entries: Vec<PaneEntry>,
+    pub state: PaneState,
+    pub warning: Vec<DormantFact>,
+}
+
+fn dormant_fact(d: &cards::DormantEntry) -> DormantFact {
+    DormantFact {
+        slot: u32::from(d.slot),
+        name: cards::dormant_name(d.slot).into(),
+        reviews: d.reviews,
+    }
+}
+
+impl From<cards::CardPane> for CardPaneFacts {
+    fn from(pane: cards::CardPane) -> Self {
+        let entries = pane
+            .entries
+            .iter()
+            .map(|e| match e {
+                cards::Entry::Live(c) => PaneEntry::Live {
+                    card: LiveCardFact {
+                        slot: u32::from(c.slot),
+                        prompt: runs(review::runs(&c.prompt)),
+                        answer: runs(review::runs(&c.answer)),
+                        rtl: review::is_rtl(&c.prompt),
+                        is_new: c.reviews == 0,
+                        box_number: c.box_,
+                    },
+                },
+                cards::Entry::Dormant(d) => PaneEntry::Dormant {
+                    entry: dormant_fact(d),
+                },
+            })
+            .collect();
+        CardPaneFacts {
+            entries,
+            state: match pane.state {
+                cards::State::Cards => PaneState::Cards,
+                cards::State::NoLiveCards => PaneState::NoLiveCards,
+                cards::State::Empty => PaneState::Empty,
+            },
+            warning: pane
+                .warning
+                .map(|w| w.dormant.iter().map(dormant_fact).collect())
+                .unwrap_or_default(),
+        }
     }
 }
 
@@ -1651,6 +1792,114 @@ mod tests {
     fn a_missing_note_is_refused() {
         let (handle, _d, _s) = blank_bench();
         assert!(handle.clone().edit_note("nonsense".into()).is_err());
+    }
+
+    /// Every note the bench holds, opened as Kotlin would, with its pane.
+    fn panes(handle: &Arc<CollectionHandle>) -> Vec<(Arc<EditingHandle>, CardPaneFacts)> {
+        handle
+            .note_list(DeckSelector::All, String::new())
+            .unwrap()
+            .rows
+            .into_iter()
+            .map(|row| {
+                let editing = handle.clone().edit_note(row.note_id).unwrap();
+                let pane = editing.card_pane().unwrap();
+                (editing, pane)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_draft_with_nothing_stored_has_the_empty_pane() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        let pane = editing.card_pane().unwrap();
+        assert_eq!(pane.state, PaneState::Empty);
+        assert!(pane.entries.is_empty() && pane.warning.is_empty());
+    }
+
+    #[test]
+    fn a_live_entry_is_drawn_as_review_draws_it_and_a_persian_prompt_is_right_to_left() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        editing
+            .settle_all(vec![value("Front", "**سلام**"), value("Back", "hello")])
+            .unwrap();
+        let pane = editing.card_pane().unwrap();
+        assert_eq!(pane.state, PaneState::Cards);
+        let [PaneEntry::Live { card }] = pane.entries.as_slice() else {
+            panic!("one live entry, got {:?}", pane.entries);
+        };
+        assert_eq!(card.slot, 0);
+        assert_eq!(text(&card.prompt), "سلام");
+        assert_eq!(card.prompt[0].style, RunStyle::Bold);
+        assert_eq!(text(&card.answer), "hello");
+        assert!(card.rtl);
+        assert!(card.is_new);
+    }
+
+    #[test]
+    fn the_dormant_fixture_gives_outlines_names_and_a_warning() {
+        let (handle, _d, _s) = benched("dormant");
+        let all = panes(&handle);
+
+        // The pruned cloze: blank 1 live, blank 2 dormant, in raw slot order.
+        let (_, pruned) = all
+            .iter()
+            .find(|(_, p)| matches!(p.entries.first(), Some(PaneEntry::Live { card }) if card.slot == 0x8001))
+            .expect("the pruned cloze");
+        assert_eq!(pruned.state, PaneState::Cards);
+        assert!(matches!(
+            &pruned.entries[1],
+            PaneEntry::Dormant { entry } if entry.name == DormantName::Blank { number: 2 } && entry.reviews == 2
+        ));
+        assert_eq!(pruned.warning.len(), 1);
+
+        // The emptied vocab: nothing live, two dormant, named by roles.
+        let (_, emptied) = all
+            .iter()
+            .find(|(_, p)| p.state == PaneState::NoLiveCards)
+            .expect("a pane with nothing live");
+        let names: Vec<_> = emptied
+            .warning
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                DormantName::Roles { prompt: vec!["Term".into()], answer: vec!["Meaning".into()] },
+                DormantName::Roles { prompt: vec!["Meaning".into()], answer: vec!["Term".into()] },
+            ]
+        );
+
+        // The stranger's slot is shown by its bare number beside the live card.
+        assert!(all.iter().any(|(_, p)| p
+            .warning
+            .iter()
+            .any(|d| d.name == DormantName::Slot { slot: 7 })));
+    }
+
+    #[test]
+    fn a_note_with_nothing_dormant_has_no_warning() {
+        let (handle, _d, _s) = benched("caught-up");
+        assert!(panes(&handle).iter().all(|(_, p)| p.warning.is_empty()));
+    }
+
+    #[test]
+    fn the_next_blank_is_one_above_the_highest_ever_used_dormant_included() {
+        let (handle, _d, _s) = benched("dormant");
+        let all = panes(&handle);
+        let (pruned, _) = all
+            .iter()
+            .find(|(_, p)| matches!(p.entries.first(), Some(PaneEntry::Live { card }) if card.slot == 0x8001))
+            .unwrap();
+        // The text holds only blank 1; blank 2 is dormant with kept reviews, so the next is 3.
+        assert_eq!(pruned.next_blank_number("Le {{1::x}} y".into()).unwrap(), 3);
+        // A fresh draft has no history: the text alone decides.
+        let draft = handle.clone().new_draft("cloze".into(), None).unwrap();
+        assert_eq!(draft.next_blank_number("a {{4::b}}".into()).unwrap(), 5);
+        assert_eq!(draft.next_blank_number(String::new()).unwrap(), 1);
     }
 
     /// A cloze note first in authored order and a basic one after it, both stored.

@@ -102,6 +102,10 @@ private fun TextMeasurer.heightAt(text: AnnotatedString, size: Float, width: Int
  *
  * A new card is a new composition (key it by the card): the animation starts where it should and the
  * next card appears without a fade.
+ *
+ * [minHeight] is the card's floor: the review card's by default; a list of cards passes
+ * [Surface.FIT], so each is only as tall as its content (the type tier is still chosen against the
+ * review card's budget).
  */
 @Composable
 fun CairnCard(
@@ -112,6 +116,7 @@ fun CairnCard(
     revealed: Boolean,
     onReveal: () -> Unit,
     modifier: Modifier = Modifier,
+    minHeight: Float = Surface.REVIEW_HEIGHT,
 ) {
     val colors = Cairn.colors
     val faces = LocalFaces.current
@@ -133,6 +138,7 @@ fun CairnCard(
         BoxWithConstraints(modifier.fillMaxWidth()) {
             val innerWidth = with(density) { (maxWidth - pad * 2).roundToPx() }.coerceAtLeast(1)
             val budget = with(density) { (Surface.REVIEW_HEIGHT.dp - pad * 2).toPx() }
+            val floor = with(density) { (minHeight.dp - pad * 2).toPx() }
             val badgeLine = with(density) { (Typography.SMALL * 1.4f).sp.toPx() }
             val faceGap = with(density) { gap(3).toPx() }
             val answerBlock = faceGap * 2 + with(density) { 1.dp.toPx() }
@@ -152,7 +158,7 @@ fun CairnCard(
                 }
                 CardPlan(size, promptHeight, answerHeight, content)
             }
-            val inner = maxOf(plan.content, budget)
+            val inner = maxOf(plan.content, floor)
             val shut = plan.prompt
             // Shut, the prompt is centred as though it were alone; open, it sits above the answer.
             val closed = ((inner - shut) / 2 - badgeLine).coerceAtLeast(0f)

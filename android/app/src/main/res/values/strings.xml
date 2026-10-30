@@ -70,4 +70,17 @@
     <string name="editor_kind">Kind</string>
     <string name="editor_new_note">New note</string>
     <string name="editor_done">Done</string>
+    <string name="editor_blank_it">Blank it</string>
+
+    <!-- The panes, the Cards pane and the dormancy warning. The egui build's words (ADR-0018). -->
+    <string name="editor_pane_write">Write</string>
+    <string name="editor_pane_cards">Cards</string>
+    <string name="editor_cards_none">No cards yet.</string>
+    <string name="editor_cards_no_live">This note currently generates no cards.</string>
+    <string name="editor_dormant_lead">This edit made cards dormant:</string>
+    <string name="editor_dormant_undo">Nothing is deleted — the reviews stay in the log and reattach if the content returns.</string>
+    <string name="editor_dormant_roles">%1$s → %2$s</string>
+    <string name="editor_dormant_blank">blank %1$d</string>
+    <string name="editor_dormant_slot">card %1$d</string>
+    <string name="editor_dormant_history">%1$s · dormant · %2$d reviews kept</string>
 </resources>
