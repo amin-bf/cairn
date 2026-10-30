@@ -4,7 +4,7 @@
 //! are not specified features — each keeps the doc comment marking it so.
 
 use cairn_core::content::{DeckId, NoteId};
-use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
+use cairn_core::log::DEFAULT_NEW_CARD_RATE;
 use cairn_store::Collection;
 
 use crate::screens::enrolment::enrolment_screen;
@@ -788,19 +788,15 @@ fn optimise_control(
         // Poll once this frame. On completion, write the vector (unchanged ones write nothing, §5) and
         // drop the job. A cancelled or failed run yields `None`: nothing to write, recover by pressing
         // the button again.
-        if let Some(result) = running.poll() {
-            if let Some(outcome) = result {
-                // A failed write is dropped rather than surfaced, matching the review-grade site; the
-                // nudge simply re-reads the unchanged row next frame.
-                let _ = coll.set_scheduler_parameters(
-                    outcome.parameters.weights(),
-                    outcome.fitted_over,
-                    now_ms,
-                    DayScale::default(),
-                );
+        // A failed write is dropped rather than surfaced, matching the review-grade site; the nudge
+        // simply re-reads the unchanged row next frame.
+        match optimise::finish(coll, running, now_ms) {
+            Ok(optimise::Finish::StillRunning) => {}
+            Ok(optimise::Finish::Written) => {
                 *done = true;
+                *job = None;
             }
-            *job = None;
+            Ok(optimise::Finish::NothingWritten) | Err(_) => *job = None,
         }
         return;
     }
@@ -809,18 +805,13 @@ fn optimise_control(
     // just finished (ADR-0014 §2, §4).
     if full_width_button(ui, "Optimise").clicked() {
         *done = false;
-        let lines = coll.log_lines().unwrap_or_default();
-        *job = Some(optimise::OptimiseJob::start(lines));
+        *job = optimise::start(coll).ok();
         ui.ctx().request_repaint();
     }
     ui.add_space(spacing::gap(1));
 
-    let nudge = coll
-        .log_lines()
-        .map(|lines| {
-            let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-            crate::sentences::nudge_text(&cairn_core::replay::optimisation_nudge(&refs))
-        })
+    let nudge = optimise::nudge(coll)
+        .map(|fact| crate::sentences::nudge_text(&fact))
         .unwrap_or_default();
     body(ui, &nudge);
 
