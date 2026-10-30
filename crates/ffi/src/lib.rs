@@ -116,6 +116,9 @@ impl CollectionHandle {
     /// installs only into an empty collection, and `open` would seed one), so nothing of the old
     /// collection survives. An unknown name is refused and touches nothing. Any sitting begun before
     /// is stale after this and should be dropped.
+    ///
+    /// **This destroys the collection under the two directories `open` was given.** It is the bench:
+    /// only a debug or test build may call it, never a path a user reaches.
     pub fn install_fixture(&self, name: String, now_ms: i64) -> Result<(), CairnError> {
         let fixture = cairn_ops::fixtures::Fixture::parse(&name)
             .ok_or_else(|| CairnError::from(format!("no fixture is named {name:?}")))?;
@@ -509,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn the_empty_and_new_only_states_are_reached_too() {
+    fn the_fresh_deck_and_new_only_states_are_reached_by_reviewing() {
         let (data, state) = dirs();
         let handle = open(&data, &state);
         // A first launch seeds: a fresh deck.

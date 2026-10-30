@@ -432,6 +432,15 @@ impl Fixture {
                     history.passes(card, &SCHEDULED_AHEAD);
                 }
             }
+            // **No history, like `Cloze`**, and for the same reason: what this reaches is a card's
+            // *script*, and a new card is the cheapest way to put one on screen. Three Persian
+            // prompts and two French, all five introduced by the rate; a test must not lean on the
+            // order they are offered in.
+            Fixture::Persian => {
+                for (front, back) in PERSIAN_NOTES {
+                    note(coll, front, back)?;
+                }
+            }
             // **The history is written against the content that generated it, and the content is
             // then changed** — which is the whole mechanism, and the reason this fixture cannot be
             // expressed as rows the way the others can. A dormant slot is not a value anybody
@@ -442,15 +451,6 @@ impl Fixture {
             // The edits below reach past `editor::commit_field` to `mutable_set` for the same reason
             // `deck` reaches past `create_deck`: the editor is what a person uses and a fixture must
             // not need one. What is written is byte-identical to what the editor writes.
-            // **No history, like `Cloze`**, and for the same reason: what this reaches is a card's
-            // *script*, and a new card is the cheapest way to put one on screen. Three Persian
-            // prompts then two French, so the first card Review offers is right-to-left and the
-            // rate introduces all five.
-            Fixture::Persian => {
-                for (front, back) in PERSIAN_NOTES {
-                    note(coll, front, back)?;
-                }
-            }
             Fixture::Dormant => {
                 // Filler, so the collection is a collection and Review has a screen to draw.
                 caught_up(coll, &mut history, 6)?;
@@ -1246,7 +1246,8 @@ pub(crate) const DECK_NOTES: [(Option<usize>, &str, &str); 25] = [
     (None, "l'arrière-boutique", "the back room of a shop"),
 ];
 
-/// [`Fixture::Persian`]'s notes: Persian first, so the first card offered is right-to-left.
+/// [`Fixture::Persian`]'s notes: three Persian, then two French. The order they are offered in is not
+/// pinned, so a test looks at all five.
 const PERSIAN_NOTES: [(&str, &str); 5] = [
     ("کتاب", "book"),
     ("پنجره", "window"),
