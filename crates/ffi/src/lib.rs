@@ -166,7 +166,11 @@ mod tests {
             ("sepia", ThemeChoice::System),
         ] {
             handle.collection().set_theme_preference(stored).unwrap();
-            assert_eq!(handle.theme_choice().unwrap(), expected, "stored {stored:?}");
+            assert_eq!(
+                handle.theme_choice().unwrap(),
+                expected,
+                "stored {stored:?}"
+            );
         }
     }
 
