@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,7 +21,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.cairn.design.CairnConfirmRow
 import dev.cairn.design.CairnControl
+import dev.cairn.design.CairnInertRow
+import dev.cairn.design.CairnQuietTarget
+import dev.cairn.design.RowAction
+import dev.cairn.design.RowIcon
+import dev.cairn.ffi.NoteRowFact
 import dev.cairn.design.CairnFieldLabel
 import dev.cairn.design.CairnDropdown
 import dev.cairn.design.CairnListRow
@@ -49,11 +56,29 @@ fun NotesScreen(model: NotesViewModel) {
             onAskDelete = model::askDeleteDeck,
             onKeep = model::keepDeck,
             onDelete = model::deleteDeck,
+            rows = RowCallbacks(
+                onAskDelete = model::askDeleteNote,
+                onKeep = model::keepNote,
+                onDelete = model::deleteNote,
+                onMove = model::startMove,
+                onCancelMove = model::cancelMove,
+                onPlace = model::placeAt,
+            ),
         )
         is NotesScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("notes-failed")) }
     }
 }
+
+/** What a row's actions and the placement state do: each takes the note (or gap) it was pressed on. */
+class RowCallbacks(
+    val onAskDelete: (String) -> Unit,
+    val onKeep: () -> Unit,
+    val onDelete: () -> Unit,
+    val onMove: (String) -> Unit,
+    val onCancelMove: () -> Unit,
+    val onPlace: (Int) -> Unit,
+)
 
 @Composable
 fun NoteList(
@@ -65,6 +90,7 @@ fun NoteList(
     onAskDelete: () -> Unit,
     onKeep: () -> Unit,
     onDelete: () -> Unit,
+    rows: RowCallbacks,
     modifier: Modifier = Modifier,
 ) {
     val facts = state.facts
@@ -92,13 +118,71 @@ fun NoteList(
                 item { CairnText(stringResource(R.string.notes_no_match), Modifier.testTag("notes-no-match")) }
                 return@LazyColumn
             }
+            val held = facts.rows.firstOrNull { it.noteId == state.moving }
+            if (held != null) {
+                placement(facts.rows, held, rows)
+                return@LazyColumn
+            }
             items(facts.rows, key = { it.noteId }) { row ->
                 Spacer(Modifier.height(gap(1)))
-                CairnListRow(
-                    title = row.preview,
-                    caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
-                    modifier = Modifier.testTag("note-row"),
-                )
+                if (row.noteId == state.confirmingNote) {
+                    DeleteQuestion(row.preview, rows)
+                } else {
+                    val move = stringResource(R.string.notes_move)
+                    val delete = stringResource(R.string.notes_delete)
+                    CairnListRow(
+                        title = row.preview,
+                        caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
+                        modifier = Modifier.testTag("note-row"),
+                        actions = listOf(
+                            RowAction(RowIcon.Move, move, "row-move") { rows.onMove(row.noteId) },
+                            RowAction(RowIcon.Delete, delete, "row-delete") { rows.onAskDelete(row.noteId) },
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** *Delete ⟨preview⟩? It cannot be undeleted.* in the note's own row, the preview bidi-isolated (ADR-0048 §4). */
+@Composable
+private fun DeleteQuestion(preview: String, rows: RowCallbacks) {
+    CairnConfirmRow(
+        question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(preview)),
+        confirm = stringResource(R.string.notes_delete),
+        keep = stringResource(R.string.notes_keep_it),
+        onConfirm = rows.onDelete,
+        onKeep = rows.onKeep,
+        questionModifier = Modifier.testTag("row-delete-warning"),
+        confirmModifier = Modifier.testTag("row-delete-confirm"),
+        keepModifier = Modifier.testTag("row-keep"),
+    )
+}
+
+/**
+ * The placement state (ADR-0039 §7): *Cancel move*, *Placing* over the held note, then a quiet
+ * *Place here* in every gap between the other visible notes, which are real rows that offer nothing.
+ */
+private fun LazyListScope.placement(all: List<NoteRowFact>, held: NoteRowFact, rows: RowCallbacks) {
+    val others = all.filter { it.noteId != held.noteId }
+    item {
+        CairnControl(stringResource(R.string.notes_cancel_move), onClick = rows.onCancelMove, modifier = Modifier.fillMaxWidth().testTag("cancel-move"))
+        Spacer(Modifier.height(gap(2)))
+        CairnFieldLabel(stringResource(R.string.notes_placing))
+        Spacer(Modifier.height(gap(1)))
+        CairnInertRow(held.preview, Modifier.testTag("held-row"), held = true)
+        Spacer(Modifier.height(gap(2)))
+    }
+    for (at in 0..others.size) {
+        item(key = "gap-$at") {
+            CairnQuietTarget(stringResource(R.string.notes_place_here), onClick = { rows.onPlace(at) }, modifier = Modifier.testTag("place-here"))
+        }
+        others.getOrNull(at)?.let { row ->
+            item(key = row.noteId) {
+                Spacer(Modifier.height(gap(1)))
+                CairnInertRow(row.preview, Modifier.testTag("inert-row"))
+                Spacer(Modifier.height(gap(1)))
             }
         }
     }
