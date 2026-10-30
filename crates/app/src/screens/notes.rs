@@ -261,9 +261,8 @@ fn note_list(
         *moving = Some(id);
     }
     if let Some(id) = delete {
-        // ADR-0004 §7's delete: a marker on the mutable surface that discards the content. There is no
-        // undelete here — recovery is ADR-0016's restore (ADR-0021 §2).
-        let _ = coll.mutable_set("note", &id.0, "deleted", Some("true"));
+        // No undelete here (ADR-0021 §2).
+        let _ = notes::delete_note(coll, id);
     }
     if let Some(id) = open {
         *editing = Some(Editing::for_note(coll, id));
@@ -376,7 +375,7 @@ fn deck_controls(ui: &mut egui::Ui, coll: &mut Collection, deck: &mut notes::Dec
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
         if created
             && !deck.new_name.trim().is_empty()
-            && let Ok(id) = coll.create_deck(deck.new_name.trim())
+            && let Ok(id) = notes::create_deck(coll, deck.new_name.trim())
         {
             deck.filter = DeckFilter::Deck(id);
             deck.new_name.clear();
@@ -404,7 +403,7 @@ fn deck_controls(ui: &mut egui::Ui, coll: &mut Collection, deck: &mut notes::Dec
         ui.add_space(spacing::gap(1));
         spacing::row(ui, 1, |ui| {
             if controls::snug(ui, "Delete the deck and its notes").clicked() {
-                let _ = coll.mutable_set("deck", &id.0, "deleted", Some("true"));
+                let _ = notes::delete_deck(coll, id);
                 deck.filter = DeckFilter::All;
                 deck.confirming = None;
             }
@@ -470,7 +469,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
         text_field(ui, &mut ed.new_deck);
         if created
             && !ed.new_deck.trim().is_empty()
-            && let Ok(id) = coll.create_deck(ed.new_deck.trim())
+            && let Ok(id) = notes::create_deck(coll, ed.new_deck.trim())
         {
             ed.deck = Some(id);
             ed.new_deck.clear();
@@ -569,7 +568,7 @@ fn editor_header(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
         // On a stored note a kind change is an ordinary edit (ADR-0017 §5); on a draft it only
         // re-shapes the buffers, and the note is still born on its first non-empty field.
         if let Some(id) = ed.note {
-            let _ = coll.mutable_set("note", &id.0, "kind", Some(&chosen));
+            let _ = notes::set_kind(coll, id, &chosen);
         }
     }
 

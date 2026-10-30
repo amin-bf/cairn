@@ -10,6 +10,7 @@ use cairn_core::replay::{Leech, Replayed, leeches, replay};
 use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
+use cairn_ops::notes;
 use cairn_ops::sitting::Sitting;
 
 use crate::session::{self, Offered, ReviewState};
@@ -494,7 +495,7 @@ fn leech_screen(
         let _ = coll.unsuspend(card);
     }
     if let Some(note) = delete {
-        let _ = coll.mutable_set("note", &note.0, "deleted", Some("true"));
+        let _ = notes::delete_note(coll, note);
     }
     edit
 }
