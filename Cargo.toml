@@ -5,6 +5,7 @@ members = [
   "crates/store",
   "crates/export",
   "crates/sync",
+  "crates/ops",
   "crates/app",
   "crates/desktop",
 ]
@@ -43,6 +44,7 @@ license = "MIT"
 cairn-core = { path = "crates/core" }
 cairn-store = { path = "crates/store" }
 cairn-export = { path = "crates/export" }
+cairn-ops = { path = "crates/ops" }
 cairn-app = { path = "crates/app" }
 
 # `fsrs` is `cairn-core`'s one dependency (ADR-0027 §1), pinned exactly per ADR-0001 §1: the 6.x

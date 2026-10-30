@@ -10,9 +10,9 @@
 
 #![cfg(not(target_os = "android"))]
 
-use cairn_app::file_bench::FileSet;
-use cairn_app::fixtures::Fixture;
 use cairn_export::platform;
+use cairn_ops::file_bench::FileSet;
+use cairn_ops::fixtures::Fixture;
 use cairn_store::Collection;
 
 #[test]

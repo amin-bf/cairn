@@ -2,17 +2,19 @@
 //! (ADR-0010 §6), and the wording helpers each of those needs.
 
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use cairn_core::content::{CardRef, NoteId};
-use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale};
+use cairn_core::log::DEFAULT_NEW_CARD_RATE;
 use cairn_core::replay::{Leech, Replayed, leeches, replay};
 use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
+use cairn_ops::sitting::Sitting;
+
 use crate::session::{self, Offered, ReviewState};
 use crate::{
-    Sitting, badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
+    badge, body, box_badge_wording, deck, field_label, full_width_button, heading, surface,
 };
 use crate::{bidi, controls, fonts, frame, spacing, theme, typography};
 
@@ -33,6 +35,7 @@ pub(crate) fn review(
     showing_leeches: &mut bool,
     session_pointer: &mut Option<usize>,
     now_ms: i64,
+    mono_ms: u64,
     today: i64,
     touch: bool,
 ) -> Option<NoteId> {
@@ -117,7 +120,7 @@ pub(crate) fn review(
             // Snapshot the cards that are already leeches, so the pointer at this sitting's end covers
             // only what crosses during it (ADR-0010 §6).
             let before = ranked.iter().map(|l| l.card).collect();
-            *sitting = Some(Sitting::new(count, before));
+            *sitting = Some(Sitting::new(count, before, mono_ms));
         }
         // The durable way back to the leech screen (ADR-0010 §6): the notice is the discovery path,
         // this is the place to return to. Offered whenever any card is a leech or is suspended (whose
@@ -196,10 +199,10 @@ pub(crate) fn review(
             // timer *"a courtesy check-in, not an enforcement mechanism"*, and a stack of
             // full-width controls above the card is how an application draws an enforcement — it
             // pushes the card 140px down the page to ask a question the reviewer did not raise.
-            if s.checkpoint_due() {
+            if s.checkpoint_due(mono_ms) {
                 match checkpoint(ui) {
                     Some(Checkpoint::Finish) => end_sitting = true,
-                    Some(Checkpoint::KeepGoing) => s.checkpoint_dismissed = true,
+                    Some(Checkpoint::KeepGoing) => s.keep_going(),
                     None => {}
                 }
                 ui.add_space(spacing::gap(3));
@@ -211,12 +214,7 @@ pub(crate) fn review(
             // the card changes. Keyed on the card instead, egui's animation map — which is never
             // evicted — would retain an entry per card for the life of the process; left unreset,
             // the next card's answer is drawn fading out for the whole duration.
-            let card_changed = s.shown != Some(offered.card);
-            if card_changed {
-                s.shown = Some(offered.card);
-                s.revealed = false;
-                s.card_shown = Instant::now();
-            }
+            let card_changed = s.offer(offered.card, mono_ms);
 
             // Progress counts gradings against the chosen count (ADR-0011 §9), so the bar moves on
             // every grade press — a lapse re-show included — never freezing when the user struggles.
@@ -251,7 +249,8 @@ pub(crate) fn review(
             )
             .clicked()
             {
-                s.revealed = true;
+                // A card is on screen (`offer` above), so the reveal cannot be refused.
+                let _ = s.reveal();
             }
 
             if s.revealed {
@@ -297,22 +296,11 @@ pub(crate) fn review(
                 let pressed = grade_buttons(ui, &offered, today, touch);
 
                 if let Some(grade) = pressed {
-                    let duration_ms = s.card_shown.elapsed().as_millis() as u64;
-                    // A failed append drops this one review rather than wedging the session: the next
-                    // frame re-derives the queue from whatever did commit. Surfacing write errors is
-                    // a later ticket.
-                    let _ = coll.append_review(
-                        offered.card,
-                        grade,
-                        now_ms,
-                        DayScale::default(),
-                        duration_ms,
-                    );
-                    // A grading advances the count whatever the grade — the re-derived queue decides
-                    // whether the card returns (a lapse) or leaves (a pass), not this counter.
-                    s.graded += 1;
-                    s.revealed = false;
-                    s.shown = None;
+                    // The grade buttons are drawn only inside the `revealed` branch, so the sitting
+                    // cannot refuse it here. A failed append drops this one review rather than
+                    // wedging the session: the next frame re-derives the queue from whatever did
+                    // commit. Surfacing write errors is a later ticket.
+                    let _ = s.grade(coll, grade, mono_ms, now_ms);
                 }
             }
         } else {
@@ -990,7 +978,7 @@ mod tests {
         const TODAY: i64 = 20_514;
         let now_ms = TODAY * 86_400_000 + 4 * 3_600_000;
 
-        let mut sitting = Some(Sitting::new(10, HashSet::new()));
+        let mut sitting = Some(Sitting::new(10, HashSet::new(), 0));
         let mut showing_leeches = false;
         let mut pointer = None;
         let ctx = egui::Context::default();
@@ -1011,6 +999,7 @@ mod tests {
                     &mut showing_leeches,
                     &mut pointer,
                     now_ms,
+                    0,
                     TODAY,
                     false,
                 );
@@ -1064,15 +1053,14 @@ mod tests {
         const TODAY: i64 = 20_514;
         let now_ms = TODAY * 86_400_000 + 4 * 3_600_000;
 
-        let mut sitting = Sitting::new(10, HashSet::new());
-        // Wind the clock past the checkpoint rather than waiting for it — the whole point is that
+        // Pass a clock past the checkpoint rather than waiting for it — the whole point is that
         // waiting is what nobody ever did.
-        sitting.started = Instant::now() - Duration::from_secs(700);
+        const LATER_MS: u64 = 700_000;
+        let sitting = Sitting::new(10, HashSet::new(), 0);
         assert!(
-            sitting.checkpoint_due(),
+            sitting.checkpoint_due(LATER_MS),
             "the fixture must actually reach the checkpoint, or this test proves nothing"
         );
-        sitting.revealed = true;
 
         let ctx = egui::Context::default();
         crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
@@ -1091,6 +1079,7 @@ mod tests {
                     &mut showing_leeches,
                     &mut pointer,
                     now_ms,
+                    LATER_MS,
                     TODAY,
                     false,
                 );
@@ -1100,7 +1089,7 @@ mod tests {
         // The first frame binds the card to the sitting and clears `revealed`; the second is the one
         // to assert on, with the card shown and the checkpoint still up.
         let _ = frame(&mut sitting, &mut coll);
-        sitting.as_mut().unwrap().revealed = true;
+        sitting.as_mut().unwrap().reveal().unwrap();
         let drawn = drawn_text(&frame(&mut sitting, &mut coll));
 
         assert!(

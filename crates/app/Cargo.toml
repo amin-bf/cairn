@@ -9,6 +9,7 @@ license.workspace = true
 cairn-core.workspace = true
 cairn-store.workspace = true
 cairn-export.workspace = true
+cairn-ops.workspace = true
 egui.workspace = true
 unicode-bidi.workspace = true
 

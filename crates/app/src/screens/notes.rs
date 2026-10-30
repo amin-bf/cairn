@@ -1,8 +1,6 @@
 //! The **Notes** destination: the note list and deck controls, and the editor pane — its form and
 //! card bodies, the pane toggle, the cloze field and blank selection, and the warning banner.
 
-use std::time::Instant;
-
 use cairn_core::content::NoteId;
 use cairn_store::Collection;
 
@@ -677,7 +675,7 @@ fn editor_form_body(
         // The idle window runs from the last change to any buffer. A bare Enter changes none, so it
         // cannot start one — §8's inert Enter stays inert here too.
         if resp.changed() {
-            ed.touched(Instant::now());
+            ed.touched(crate::mono_ms());
         }
         // Autosave on blur (ADR-0021 §7): a field settles as one row when it loses focus, and the
         // note is created here if this is its first non-empty field.
@@ -697,7 +695,7 @@ fn editor_form_body(
 
     // Autosave on a short idle (ADR-0021 §7) — the half of it with no blur and no exit, which is the
     // phone put down mid-note. Until it is due, ask for the frame that will find it due.
-    if let Some(wait) = ed.settle_if_idle(coll, Instant::now(), editor::SETTLE_AFTER_IDLE) {
+    if let Some(wait) = ed.settle_if_idle(coll, crate::mono_ms(), editor::SETTLE_AFTER_IDLE) {
         ui.ctx().request_repaint_after(wait);
     }
 
@@ -800,7 +798,7 @@ fn warning_banner(ui: &mut egui::Ui, warning: &cards::Warning) {
             ui.add_space(spacing::gap(1));
             for entry in &warning.dormant {
                 // **The names take body**, which is what ADR-0018 §4 says the warning *is*.
-                body(ui, &entry.history());
+                body(ui, &crate::sentences::dormant_history(entry));
             }
             ui.add_space(spacing::gap(1));
             // The reassurance is the aside, so it takes the aside's weight.
@@ -849,7 +847,9 @@ fn editor_cards_body(ui: &mut egui::Ui, pane: Option<&cards::CardPane>) {
                 ui.add_space(spacing::gap(2));
             }
             // A dormant entry is a single line — its name, *dormant*, its kept history (ADR-0018 §2).
-            cards::Entry::Dormant(dormant) => dormant_entry(ui, &dormant.history()),
+            cards::Entry::Dormant(dormant) => {
+                dormant_entry(ui, &crate::sentences::dormant_history(dormant))
+            }
         }
     }
     if pane.state == cards::State::NoLiveCards {
@@ -963,7 +963,6 @@ mod tests {
         let warning = cards::Warning {
             dormant: vec![cards::DormantEntry {
                 slot: 7,
-                name: "card 7".to_owned(),
                 reviews: 2,
             }],
         };

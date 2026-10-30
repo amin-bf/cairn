@@ -5,7 +5,7 @@
 //!
 //! The desktop harness creates, redirects and wipes the app's entire data directory per run
 //! (`docs/environment/desktop-capture.md`), which is *why* every capture is a first launch and
-//! therefore always the same six due cards from [`CairnApp::open_store`](crate::CairnApp). Several
+//! therefore always the same six due cards from [`open_collection`](crate::open_collection). Several
 //! decided screens are unreachable from that one fixture — the caught-up floor needs a collection
 //! with nothing due, the end-of-session pointer needs a card failed repeatedly, and the entrance's
 //! shorter-sitting line needs a queue longer than five. #134 had to photograph the first two inside a
@@ -31,7 +31,7 @@
 //! **capture-mode entry point** is app code shaped by the harness's needs, where a state expressed as
 //! *data* is what a state actually is.
 //!
-//! [`CairnApp::open_store`](crate::CairnApp) is therefore untouched, and that is the whole value of
+//! [`open_collection`](crate::open_collection) is therefore untouched, and that is the whole value of
 //! the route: a fixture that worked by editing the seed would have solved a different problem.
 //!
 //! # Two ways in, one definition
@@ -56,7 +56,7 @@
 //!
 //! # The one state that is not data
 //!
-//! ADR-0006 §1's ten-minute checkpoint hangs off [`Sitting`](crate::Sitting)'s monotonic clock, not
+//! ADR-0006 §1's ten-minute checkpoint hangs off [`Sitting`](crate::sitting::Sitting)'s monotonic clock, not
 //! off the collection, so no pre-made collection can reach it — it needs ten real minutes that no
 //! capture run and no person holding a handset will ever wait for. [`checkpoint_after`] is the one
 //! lever this module offers that is not a fixture: a **shorter** checkpoint, set from the environment
@@ -660,7 +660,17 @@ pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
     let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
     cairn_store::remove_files(&data, &state);
     let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
-    fixture.install(&mut coll, crate::now_ms())
+    fixture.install(&mut coll, now_ms())
+}
+
+/// Wall-clock milliseconds for the installer's stamp — an edge value read once per install, never
+/// reached from `cairn-core` (ADR-0009 §8) and nothing to do with a sitting's clocks. A clock before
+/// the epoch is not a real state; clamp rather than wrap.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// What the two destinations with state behind them would draw against this collection right now —
@@ -1469,26 +1479,28 @@ mod tests {
         Fixture::Dormant.install(&mut coll, NOW_MS).unwrap();
 
         let rows = crate::notes::list(&coll, &crate::notes::Filter::default()).unwrap();
-        let mut names: Vec<String> = Vec::new();
+        let mut slots: Vec<u16> = Vec::new();
         for row in &rows {
             let pane = crate::cards::card_pane(&coll, row.id).unwrap();
             if let Some(warning) = &pane.warning {
-                names.extend(warning.dormant.iter().map(|d| d.name.clone()));
+                slots.extend(warning.dormant.iter().map(|d| d.slot));
             }
         }
-        names.sort();
+        slots.sort();
 
+        // The names these slots take are the renderer's words (ADR-0046 §4) and are pinned beside
+        // them, in `cairn-app`'s `sentences`.
         assert_eq!(
-            names,
+            slots,
             vec![
-                // Case 1 — the field **roles** of a slot a held definition declares, twice, because
-                // `vocab` asks in both directions. Roles and not content: the content is what is gone.
-                "Meaning → Term".to_owned(),
-                "Term → Meaning".to_owned(),
+                // Case 1 — a slot a held definition declares, twice, because `vocab` asks in both
+                // directions.
+                VOCAB_TERM_SLOT,
+                VOCAB_MEANING_SLOT,
+                // Case 3 — a slot in no definition. Shown, never hidden (ADR-0018 §3).
+                STRANGER_SLOT,
                 // Case 2 — the high bit set, so a cloze blank in no definition at all.
-                "blank 2".to_owned(),
-                // Case 3 — neither, so the bare slot. Shown, never hidden (ADR-0018 §3).
-                "card 7".to_owned(),
+                cairn_core::content::cloze_slot(2),
             ],
             "the fixture exists to reach these three cases and nothing else reaches case 3"
         );

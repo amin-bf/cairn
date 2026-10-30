@@ -189,7 +189,8 @@ _Avoid_: Save, commit, draft, dirty state.
 One sitting of review: a chosen card count, with a 10-minute timer running from the same moment.
 **Not a domain object** (ADR-0005 §6) — it exists only here, and its position is never stored, only
 derived from the log. *Here* is the application, not egui: ADR-0046 §3 moves the sitting into the
-operations every renderer shares.
+operations every renderer shares, and **its home is now `cairn-ops`** (`crates/ops/`, the `session`
+and `sitting` modules) — this crate draws it and passes it the time.
 _Avoid_: Study session, cram session, queue.
 
 **Session count**:

@@ -15,35 +15,24 @@
 //! [ADR-0006](../../../docs/adr/0006-the-review-session-experience.md).
 
 pub mod bidi;
-pub mod cards;
 pub mod controls;
-pub mod deck;
-pub mod editor;
-pub mod file_bench;
-pub mod fixtures;
 pub mod fonts;
 pub mod frame;
-pub mod inbound;
 pub mod keyboard;
-pub mod listing;
-pub mod markdown;
 pub mod motion;
-pub mod notes;
-pub mod optimise;
 pub mod platform;
 mod screens;
-pub mod session;
+pub mod sentences;
 pub mod spacing;
 pub mod surface;
 pub mod sync;
 pub mod theme;
 pub mod typography;
 
-use std::collections::HashSet;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use cairn_core::content::{CardRef, DeckId, NoteId};
-use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
+use cairn_core::content::NoteId;
+use cairn_core::log::{DayScale, day_number};
 use cairn_store::Collection;
 
 use screens::notes::notes_screen;
@@ -55,71 +44,50 @@ use screens::settings::{Bench, BenchRequest, FileList, HandOff, settings_screen}
 /// grow real code unnoticed.
 pub use eframe;
 
-/// How long a sitting runs before the 10-minute checkpoint surfaces (ADR-0006 §1). Named rather than
-/// inlined so the bench's override reads as *shorter than this* rather than as a second number.
-const CHECKPOINT_AFTER: Duration = Duration::from_secs(600);
+use cairn_ops::editor::Editing;
+use cairn_ops::sitting::Sitting;
+/// The application's operations live in `cairn-ops` (ADR-0046 §2) and are re-exported under the
+/// paths the screens already use, so the egui app and the binding call one implementation.
+pub use cairn_ops::{
+    cards, deck, editor, file_bench, fixtures, inbound, listing, markdown, notes, optimise, session,
+};
 
-/// A sitting of review, held **only in memory** (ADR-0006 §6, issue #94): nothing about it is stored,
-/// so a force-quit loses nothing — relaunch re-derives the queue from the log and every already-graded
-/// card is simply no longer due. The queue is **re-derived every frame** rather than snapshotted, so
-/// a card failed mid-sitting returns the same session (ADR-0011 §9) and an edit that makes a card
-/// dormant drops it without ceremony.
-///
-/// The size the user picked counts **gradings, not distinct cards** (ADR-0011 §9): every graded event
-/// advances `graded`, re-shows included, so the progress bar always moves when the user acts. A
-/// sitting ends when `graded` reaches `chosen` or the queue empties, whichever comes first.
-pub(crate) struct Sitting {
-    /// The count the user chose — the number of **gradings** this sitting runs to.
-    pub(crate) chosen: usize,
-    /// Gradings performed so far. This is the progress numerator, and it counts every grade press,
-    /// including a lapsed card's same-session re-show (ADR-0011 §9).
-    pub(crate) graded: usize,
-    /// The card currently on screen, so a reveal survives a frame and resets when the card changes.
-    pub(crate) shown: Option<CardRef>,
-    pub(crate) revealed: bool,
-    /// When the sitting began — the quiet 10-minute timer runs from here (issue #94).
-    started: Instant,
-    /// When the current card came on screen, so the row can record how long the answer took
-    /// (ADR-0004 §5).
-    pub(crate) card_shown: Instant,
-    /// Set once the user answers the 10-minute checkpoint's "keep going", so it does not nag again.
-    pub(crate) checkpoint_dismissed: bool,
-    /// The set of cards that were already leeches when this sitting began — the `before` half of the
-    /// end-of-session pointer (ADR-0010 §6). Held **in memory only**, like everything else about a
-    /// sitting: the pointer covers cards that crossed *this* session, which is exactly `leeches now`
-    /// minus this snapshot, and it needs no stored dismissal or last-seen state.
-    pub(crate) leeches_at_start: HashSet<CardRef>,
+/// The monotonic clock the egui app hands `cairn-ops` (ADR-0046 §3): milliseconds since the first
+/// call in this process. Every sitting and editor duration is a difference of two of these, so only
+/// that they never run backwards matters, not the origin.
+pub(crate) fn mono_ms() -> u64 {
+    static ORIGIN: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    ORIGIN.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
-impl Sitting {
-    pub(crate) fn new(chosen: usize, leeches_at_start: HashSet<CardRef>) -> Self {
-        let now = Instant::now();
-        Sitting {
-            chosen,
-            graded: 0,
-            shown: None,
-            revealed: false,
-            started: now,
-            card_shown: now,
-            checkpoint_dismissed: false,
-            leeches_at_start,
-        }
-    }
-
-    /// The checkpoint is due once ten minutes have passed and the user has not already waved it away.
-    /// It is a **courtesy**, never an enforcement — reaching the chosen count is what ends a session
-    /// (issue #94).
-    ///
-    /// **The ten minutes are ADR-0006 §1's and are written here**, where the behaviour is; the bench
-    /// only ever *shortens* what it is handed ([`fixtures::checkpoint_after`]). That direction is the
-    /// point: this is the one decided state no pre-made collection can reach — it hangs off a
-    /// monotonic clock rather than off the log — so the alternative to a lever is ten real minutes
-    /// that no capture run and nobody holding a handset ever waits for, which is precisely why the
-    /// checkpoint contradicted its own ADR for ten months without anything failing.
-    pub(crate) fn checkpoint_due(&self) -> bool {
-        !self.checkpoint_dismissed
-            && self.started.elapsed() >= fixtures::checkpoint_after(CHECKPOINT_AFTER)
-    }
+/// Take a file dropped onto the desktop window this frame, if any — egui surfaces dropped files
+/// directly, with no operating-system dialog and **no seam function** (ADR-0016 §5). Returns `None`
+/// on a frame with no drop, and on Android, where there is nothing to drag.
+///
+/// A native drop carries a path; the bytes are read from it here. (The web backend, which does not
+/// ship — ADR-0007 §1 — would instead carry the bytes inline; both are handled so this reads the
+/// same on any egui backend.) The last file wins when several are dropped at once: this specimen
+/// reads one file, and the most-recently-listed is the least surprising choice.
+pub fn take_dropped(ctx: &egui::Context) -> Option<inbound::Inbound> {
+    let files = ctx.input(|i| i.raw.dropped_files.clone());
+    files.iter().rev().find_map(|f| {
+        let bytes = match &f.bytes {
+            Some(bytes) => bytes.to_vec(),
+            None => std::fs::read(f.path.as_ref()?).ok()?,
+        };
+        let name = f
+            .path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .or_else(|| (!f.name.is_empty()).then(|| f.name.clone()));
+        Some(inbound::Inbound {
+            arrival: inbound::Arrival::Dropped,
+            name,
+            bytes,
+        })
+    })
 }
 
 /// The three top-level destinations (ADR-0021 §1, `ui` `CONTEXT.md`): the smallest set that makes
@@ -132,139 +100,6 @@ enum Destination {
     Review,
     Notes,
     Settings,
-}
-
-/// The editor's live state (ADR-0012 §2, ADR-0021 §7): one editor, four entrances. `note` is `None`
-/// for an uncommitted new draft — under autosave the note is not born until its first non-empty field
-/// (ADR-0021 §7), so before that there is nothing for a kill to lose. `fields` are the per-field text
-/// buffers in kind-definition order.
-pub(crate) struct Editing {
-    pub(crate) note: Option<NoteId>,
-    pub(crate) kind: String,
-    pub(crate) fields: Vec<(String, String)>,
-    /// The deck this note is filed under, chosen in the editor's deck dropdown beside the kind one
-    /// (ADR-0021 §9). `None` is unfiled — a legal, still-reviewable state (ADR-0005 §8). On a draft
-    /// the choice is held here until the note is born on its first non-empty field, then written once.
-    pub(crate) deck: Option<DeckId>,
-    /// The new-deck name buffer for *create a new deck*, available from the deck dropdown (ADR-0021
-    /// §9): the moment you need a deck that does not exist is while filing the note that wants it.
-    pub(crate) new_deck: String,
-    /// Which of the two panes is showing when the screen is too narrow to hold both — the phone's
-    /// `Write | Cards` toggle (ADR-0012 §1, ADR-0025 §5). `false` is *Write*, the form. On a wide
-    /// screen both panes show and this is ignored.
-    pub(crate) show_cards: bool,
-    /// When a buffer last changed, while that change may not yet be settled — the start of ADR-0021
-    /// §7's idle window ([`Editing::settle_if_idle`]). `None` when nothing has been typed since the
-    /// last idle settle, which is what keeps an untouched editor from asking the store anything.
-    edited_at: Option<Instant>,
-}
-
-impl Editing {
-    /// A fresh draft of `kind`, carrying that kind's fields as empty buffers. Used by **create** and
-    /// by the *New note* chord. Unfiled; each caller sets the deck — *create* from the list's filter
-    /// (ADR-0021 §9), the chord from the note it leaves (§8 carries the kind and the deck forward).
-    pub(crate) fn new_draft(kind: &str) -> Self {
-        Editing {
-            note: None,
-            kind: kind.to_owned(),
-            fields: editor::field_names(kind)
-                .into_iter()
-                .map(|name| (name.to_owned(), String::new()))
-                .collect(),
-            deck: None,
-            new_deck: String::new(),
-            show_cards: false,
-            edited_at: None,
-        }
-    }
-
-    /// Load a stored note into the editor — the **edit** entrance from the note list, the leech
-    /// screen, or the review screen (ADR-0021 §5). Reads the note's kind and each declared field's
-    /// current value; a value replay never denies, since the editor reads the same mutable surface.
-    pub(crate) fn for_note(coll: &Collection, note: NoteId) -> Self {
-        let kind = coll
-            .mutable_get("note", &note.0, "kind")
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        let fields = editor::field_names(&kind)
-            .into_iter()
-            .map(|name| {
-                let value = coll
-                    .mutable_get("note", &note.0, name)
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default();
-                (name.to_owned(), value)
-            })
-            .collect();
-        let deck = coll
-            .mutable_get("note", &note.0, "deck")
-            .ok()
-            .flatten()
-            .and_then(|d| DeckId::parse_canonical(&d));
-        Editing {
-            note: Some(note),
-            kind,
-            fields,
-            deck,
-            new_deck: String::new(),
-            show_cards: false,
-            edited_at: None,
-        }
-    }
-
-    /// Note that a buffer changed at `now`. Every change **restarts** the idle window, so the window
-    /// measures a pause in the typing and never a rate of it — which is the difference between §7's
-    /// idle and the per-keystroke save it rules out.
-    pub(crate) fn touched(&mut self, now: Instant) {
-        self.edited_at = Some(now);
-    }
-
-    /// ADR-0021 §7's idle trigger: once `idle` has passed since the last change with no blur and no
-    /// exit, settle the buffers **while the caret is still in the field**. Returns how long until it
-    /// falls due, so the caller can request that frame — egui repaints on demand, and without the
-    /// request the settle waits for something unrelated to redraw. `None` once nothing is pending.
-    ///
-    /// It goes through [`editor::settle_all`], so each field is asked on its own whether the store
-    /// already holds it and only those that disagree are written, one row and one stamp each
-    /// (ADR-0004 §7) — a pause after a blur has already settled everything writes nothing. It fires
-    /// once per pause: the mark is cleared here and set again only by the next change.
-    ///
-    /// `now` and `idle` are the caller's, as every clock in this workspace is (ADR-0009 §8), so a test
-    /// crosses the window by passing a later instant rather than by waiting it out.
-    pub(crate) fn settle_if_idle(
-        &mut self,
-        coll: &mut Collection,
-        now: Instant,
-        idle: Duration,
-    ) -> Option<Duration> {
-        let quiet = now.saturating_duration_since(self.edited_at?);
-        if quiet < idle {
-            return Some(idle - quiet);
-        }
-        self.edited_at = None;
-        self.note = editor::settle_all(coll, self.note, &self.kind, &self.fields, self.deck);
-        None
-    }
-
-    /// Rebuild the field buffers for a newly chosen kind, carrying forward any value whose field name
-    /// the new kind shares (ADR-0012 §2). A kind change is an ordinary edit — the cards it makes
-    /// dormant are §5's ambient warning's concern, not a special mechanism (ADR-0017 §5).
-    pub(crate) fn switch_kind(&mut self, kind: &str) {
-        let carried = std::mem::take(&mut self.fields);
-        self.kind = kind.to_owned();
-        self.fields = editor::field_names(kind)
-            .into_iter()
-            .map(|name| {
-                let prior = carried
-                    .iter()
-                    .find(|(n, _)| n == name)
-                    .map_or_else(String::new, |(_, v)| v.clone());
-                (name.to_owned(), prior)
-            })
-            .collect();
-    }
 }
 
 /// The application: an open collection (or the message saying why it would not open), the current
@@ -413,34 +248,12 @@ impl CairnApp {
     }
 
     /// Open the collection under the platform's two directories (ADR-0007 §6) and, on a first launch,
-    /// seed a few `basic` notes so the walking skeleton has cards to review — issue #94's opening line.
-    ///
-    /// **More than one note, deliberately.** A single card cannot exercise the session at all: the count
-    /// picker collapses to one `All 1` button with none of ADR-0006 §1's choices reachable, and a sitting
-    /// ends on the first grading — so §2's *position is derived, never stored* cannot be demonstrated,
-    /// because there is no mid-session to be force-quit out of (issue #96). One note past
-    /// [`DEFAULT_NEW_CARD_RATE`] keeps the rate itself visible as the binding limit rather than the
-    /// seed's size.
+    /// seed it — through [`cairn_ops::open_collection`], the one operation the Kotlin app calls too
+    /// with `filesDir` and `noBackupFilesDir` (ADR-0046 §5), so both renderers seed alike.
     fn open_store() -> Result<Collection, String> {
-        const SEED: [(&str, &str); DEFAULT_NEW_CARD_RATE as usize + 1] = [
-            ("chien", "dog"),
-            ("chat", "cat"),
-            ("livre", "book"),
-            ("eau", "water"),
-            ("pain", "bread"),
-            ("maison", "house"),
-        ];
-
         let data = cairn_store::platform::data_dir().map_err(|e| e.to_string())?;
         let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
-        let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
-        if coll.is_empty().map_err(|e| e.to_string())? {
-            for (front, back) in SEED {
-                coll.create_note("basic", &[("Front", front), ("Back", back)])
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-        Ok(coll)
+        cairn_ops::open_collection(&data, &state)
     }
 
     /// **Temporary** — the other half of [`reset_control`]. Return this device to a first launch: the
@@ -622,7 +435,7 @@ impl eframe::App for CairnApp {
                 self.inbound = Some(launched);
             }
         }
-        if let Some(dropped) = inbound::take_dropped(ui.ctx()) {
+        if let Some(dropped) = take_dropped(ui.ctx()) {
             self.inbound = Some(dropped);
         }
 
@@ -854,6 +667,7 @@ impl eframe::App for CairnApp {
                             &mut self.showing_leeches,
                             &mut self.session_pointer,
                             now_ms,
+                            mono_ms(),
                             today,
                             touch,
                         )
@@ -1345,122 +1159,6 @@ mod tests {
                 && visuals.panel_fill.g() > stock.g()
                 && visuals.panel_fill.b() > stock.b(),
             "the palette's page must be lighter than eframe's default, or a card cannot be a well"
-        );
-    }
-
-    fn open_collection() -> (Collection, tempfile::TempDir, tempfile::TempDir) {
-        let data = tempfile::TempDir::new().unwrap();
-        let state = tempfile::TempDir::new().unwrap();
-        let coll = Collection::open(data.path(), state.path()).unwrap();
-        (coll, data, state)
-    }
-
-    /// **The idle half of ADR-0021 §7** (#179): a field settles after a pause with no blur and no
-    /// exit, so the note is in the store while the caret is still in the field. Deferred from #82 for
-    /// thirteen months, and the one case §7 argued hardest about — a phone put down mid-note, which
-    /// never exits the editor and so never reached [`editor::settle_all`]'s exits.
-    ///
-    /// The window is crossed by passing a later instant, never by waiting it out.
-    #[test]
-    fn a_field_settles_after_a_short_idle_with_the_caret_still_in_it() {
-        let (mut coll, _d, _s) = open_collection();
-        let idle = Duration::from_secs(2);
-        let deck = coll.create_deck("Français").unwrap();
-        let mut ed = Editing::new_draft("basic");
-        ed.deck = Some(deck);
-
-        let typed = Instant::now();
-        ed.fields[0].1 = "l'aube".to_owned();
-        ed.touched(typed);
-
-        // Mid-pause: nothing yet, and the caller is told how long until the frame it must request.
-        let early = ed.settle_if_idle(&mut coll, typed + Duration::from_millis(500), idle);
-        assert_eq!(early, Some(Duration::from_millis(1500)));
-        assert!(
-            ed.note.is_none(),
-            "a pause shorter than the window settles nothing"
-        );
-        assert!(!crate::notes::any_notes(&coll).unwrap());
-
-        // Past the window: the draft is born on its first non-empty field, under its deck (§9).
-        assert_eq!(ed.settle_if_idle(&mut coll, typed + idle, idle), None);
-        let id = ed.note.expect("the idle settle commits the draft");
-        assert_eq!(
-            coll.mutable_get("note", &id.0, "Front").unwrap().as_deref(),
-            Some("l'aube")
-        );
-        assert_eq!(
-            coll.mutable_get("note", &id.0, "deck").unwrap().as_deref(),
-            Some(deck.to_canonical().as_str())
-        );
-
-        // Typing on in the same note lands on the same note at the next pause.
-        let later = typed + Duration::from_secs(10);
-        ed.fields[1].1 = "dawn".to_owned();
-        ed.touched(later);
-        ed.settle_if_idle(&mut coll, later + idle, idle);
-        assert_eq!(ed.note, Some(id));
-        assert_eq!(
-            coll.mutable_get("note", &id.0, "Back").unwrap().as_deref(),
-            Some("dawn")
-        );
-    }
-
-    /// **The idle does not fire per keystroke.** §7 accepts that a field mid-edit can publish and
-    /// relies on blur-or-idle to keep that rare, so every change restarts the window: a sentence typed
-    /// with gaps shorter than it is settled once, at the end, not word by word.
-    #[test]
-    fn each_keystroke_restarts_the_idle_window_rather_than_settling() {
-        let (mut coll, _d, _s) = open_collection();
-        let idle = Duration::from_secs(2);
-        let mut ed = Editing::new_draft("basic");
-
-        let start = Instant::now();
-        let mut at = start;
-        for word in ["le", "le chien", "le chien dort"] {
-            ed.fields[0].1 = word.to_owned();
-            ed.touched(at);
-            at += Duration::from_millis(1500);
-            assert!(ed.settle_if_idle(&mut coll, at, idle).is_some());
-            assert!(
-                !crate::notes::any_notes(&coll).unwrap(),
-                "{word:?} settled mid-sentence"
-            );
-        }
-        ed.settle_if_idle(&mut coll, at + idle, idle);
-        let id = ed.note.expect("the pause after the sentence settles it");
-        assert_eq!(
-            coll.mutable_get("note", &id.0, "Front").unwrap().as_deref(),
-            Some("le chien dort")
-        );
-    }
-
-    /// **An untouched editor never settles on idle**, however long it sits — there is no pending mark,
-    /// so the store is not even asked. And a settle fires once per pause: after it, nothing is pending
-    /// until the next change, so the frame loop stops requesting frames for it.
-    #[test]
-    fn an_untouched_editor_is_never_idle_settled_and_a_settle_fires_once() {
-        let (mut coll, _d, _s) = open_collection();
-        let idle = Duration::from_secs(2);
-        let id = coll.create_note("basic", &[("Front", "chien")]).unwrap();
-        let mut ed = Editing::for_note(&coll, id);
-        // A buffer that disagrees with the store but was never *typed* into here is not this
-        // trigger's business — blur and the exits own it.
-        ed.fields[1].1 = "dog".to_owned();
-
-        let now = Instant::now() + Duration::from_secs(3600);
-        assert_eq!(ed.settle_if_idle(&mut coll, now, idle), None);
-        assert!(coll.mutable_get("note", &id.0, "Back").unwrap().is_none());
-
-        ed.touched(now);
-        assert_eq!(ed.settle_if_idle(&mut coll, now + idle, idle), None);
-        assert_eq!(
-            coll.mutable_get("note", &id.0, "Back").unwrap().as_deref(),
-            Some("dog")
-        );
-        assert!(
-            ed.edited_at.is_none(),
-            "the mark clears, so the next tick asks nothing"
         );
     }
 }

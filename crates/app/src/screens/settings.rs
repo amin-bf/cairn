@@ -821,7 +821,7 @@ fn optimise_control(
         .log_lines()
         .map(|lines| {
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-            optimise::nudge_text(&cairn_core::replay::optimisation_nudge(&refs))
+            crate::sentences::nudge_text(&cairn_core::replay::optimisation_nudge(&refs))
         })
         .unwrap_or_default();
     body(ui, &nudge);

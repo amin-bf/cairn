@@ -54,22 +54,14 @@ pub struct LiveCard {
 }
 
 /// A **dormant entry**: one line for a `CardRef` with history the current content no longer generates
-/// (ADR-0018 §2). It carries its slot (the sort key), the name resolved by [`dormant_name`], and how
-/// many reviews are **kept** — never *lost* (ADR-0018 §3), since nothing is deleted and they reattach
-/// if the content returns.
+/// (ADR-0018 §2). It carries its slot (the sort key) and how many reviews are **kept** — never *lost*
+/// (ADR-0018 §3), since nothing is deleted and they reattach if the content returns. **Its name and
+/// its one-line history are words, so they are the renderer's** (ADR-0046 §4): `cairn-app` words them
+/// from the slot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DormantEntry {
     pub slot: u16,
-    pub name: String,
     pub reviews: u32,
-}
-
-impl DormantEntry {
-    /// The one-line history, worded *kept* (ADR-0018 §3, ADR-0012 §5): the reviews stay in the log and
-    /// reattach by themselves if the content returns, so nothing is lost.
-    pub fn history(&self) -> String {
-        format!("{} · dormant · {} reviews kept", self.name, self.reviews)
-    }
 }
 
 /// One entry in the pane, in raw-slot order (ADR-0018 §1). Live and dormant are **not partitioned** —
@@ -210,7 +202,6 @@ pub fn card_pane(coll: &Collection, note: NoteId) -> Result<CardPane, StoreError
         }
         dormant.push(DormantEntry {
             slot,
-            name: dormant_name(slot),
             reviews: kept,
         });
     }
@@ -278,43 +269,6 @@ fn logged_slots(lines: &[&str], note: NoteId) -> HashSet<u16> {
         }
     }
     slots
-}
-
-/// Name a dormant entry (ADR-0018 §3), in the section's order of precedence:
-///
-/// 1. **A slot declared in a held definition** → its **field roles**, *"Term → Meaning"* — roles, not
-///    content, because the content is exactly what may be gone. The lookup spans every shipped kind
-///    (and, when the store grows them, acquired ones), which is well-formed only because a slot means
-///    one question collection-wide (ADR-0017 §1).
-/// 2. **The high bit set** → a cloze blank, in no definition at all → the **masked blank number**,
-///    *"blank 3"*.
-/// 3. **Neither** → the **bare slot**, *"card 7"* — **shown, never hidden** (ADR-0018 §3): an
-///    unnameable dormant card is still history attached to this note, and omitting it is the
-///    header-counter failure taken to its limit.
-pub fn dormant_name(slot: u16) -> String {
-    if slot & CLOZE_SLOT_BIT != 0 {
-        return format!("blank {}", cloze_blank(slot));
-    }
-    if let Some(roles) = slot_roles(slot) {
-        return roles;
-    }
-    format!("card {slot}")
-}
-
-/// The field-role name of a fixed-arity slot — *"prompt → answer"* — looked up across every held kind
-/// definition, or `None` when no definition declares it (ADR-0018 §3 case 3). A slot means one
-/// question collection-wide (ADR-0017 §1), so the first match is canonical.
-fn slot_roles(slot: u16) -> Option<String> {
-    for kind in SHIPPED_KINDS {
-        if let Some(card) = kind.cards.iter().find(|c| c.slot == slot) {
-            return Some(format!(
-                "{} → {}",
-                card.prompt.join(", "),
-                card.answer.join(", ")
-            ));
-        }
-    }
-    None
 }
 
 /// The number a new blank takes, widened past `content::next_blank_number` to include this note's
@@ -435,35 +389,10 @@ mod tests {
         match &pane.entries[2] {
             Entry::Dormant(d) => {
                 assert_eq!(d.slot, cloze_slot(3));
-                assert_eq!(d.name, "blank 3");
                 assert_eq!(d.reviews, 6);
             }
             other => panic!("expected the dormant blank 3, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn a_dormant_entry_is_named_three_ways_and_reads_kept() {
-        // ADR-0018 §3: field roles for a held slot, masked number for a cloze blank, bare slot when
-        // neither resolves — and the history reads *kept*, never *lost*.
-        assert_eq!(dormant_name(2), "Term → Meaning", "a held fixed-arity slot");
-        assert_eq!(dormant_name(0), "Front → Back");
-        assert_eq!(dormant_name(cloze_slot(3)), "blank 3", "a cloze blank");
-        assert_eq!(
-            dormant_name(7),
-            "card 7",
-            "an unnameable slot is shown by bare number, never hidden"
-        );
-
-        let entry = DormantEntry {
-            slot: 2,
-            name: dormant_name(2),
-            reviews: 23,
-        };
-        let history = entry.history();
-        assert!(history.contains("kept"), "history reads kept");
-        assert!(!history.contains("lost"), "never lost");
-        assert!(history.contains("23"));
     }
 
     #[test]
@@ -487,7 +416,7 @@ mod tests {
             })
             .collect();
         assert_eq!(dormant.len(), 1);
-        assert_eq!(dormant[0].name, "card 9");
+        assert_eq!(dormant[0].slot, 9);
         assert_eq!(dormant[0].reviews, 12);
     }
 
@@ -507,7 +436,7 @@ mod tests {
         let pane = card_pane(&coll, id).unwrap();
         let warning = pane.warning.expect("a dormant card warns");
         assert_eq!(warning.dormant.len(), 1);
-        assert_eq!(warning.dormant[0].name, "Back → Front");
+        assert_eq!(warning.dormant[0].slot, 1);
         assert_eq!(warning.dormant[0].reviews, 5);
         assert!(UNDO_COPY.contains("Nothing is deleted"));
     }

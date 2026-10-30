@@ -22,7 +22,7 @@
 
 use std::thread::JoinHandle;
 
-use cairn_core::replay::{OptimisationNudge, training_histories};
+use cairn_core::replay::training_histories;
 use cairn_core::scheduling::{OptimisationOutcome, OptimisationProgress, optimise};
 
 /// What the settings screen says on completion (ADR-0014 §4). Two facts and no third: the parameters
@@ -31,55 +31,6 @@ use cairn_core::scheduling::{OptimisationOutcome, OptimisationProgress, optimise
 /// makes **no quality claim**: the population-average benefit is someone else's benchmark, and the
 /// application has no instrument that tells *this* user whether *their* collection improved.
 pub const COMPLETION_MESSAGE: &str = "Parameters updated. Due dates have been recalculated.";
-
-/// The nudge sentence for the settings screen (ADR-0014 §2), from the fact `replay` derived. Carries
-/// only the counts — no threshold, no badge, no verb — so the user infers "that sounds like a lot"
-/// without the application making a claim it cannot support.
-pub fn nudge_text(nudge: &OptimisationNudge) -> String {
-    match nudge {
-        OptimisationNudge::Standard { reviews_total } => format!(
-            "Using the standard parameters. You've reviewed {} {}.",
-            grouped(*reviews_total),
-            times(*reviews_total),
-        ),
-        OptimisationNudge::Fitted {
-            fitted_over,
-            reviews_since,
-        } => format!(
-            "Fitted over {} {}. You've reviewed {} {} since.",
-            grouped(*fitted_over),
-            reviews(*fitted_over),
-            grouped(*reviews_since),
-            times(*reviews_since),
-        ),
-    }
-}
-
-/// `"review"` or `"reviews"` for a count — the nudge reads as a sentence, so a one-review fit is not
-/// "1 reviews".
-fn reviews(n: u64) -> &'static str {
-    if n == 1 { "review" } else { "reviews" }
-}
-
-/// `"time"` or `"times"`, the same courtesy for the review tally.
-fn times(n: u64) -> &'static str {
-    if n == 1 { "time" } else { "times" }
-}
-
-/// A count with thousands separators — the nudge's numbers are large enough that "3,120" reads where
-/// "3120" does not (ADR-0014 §2's own examples group this way).
-fn grouped(n: u64) -> String {
-    let digits = n.to_string();
-    let len = digits.len();
-    let mut out = String::with_capacity(len + len / 3);
-    for (i, ch) in digits.char_indices() {
-        if i > 0 && (len - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(ch);
-    }
-    out
-}
 
 /// Which phase the two-phase progress display is in (ADR-0014 §4, and the corpus-build open item).
 /// The scheduler crate's progress covers **training only**, so the corpus build and pre-training
@@ -167,72 +118,6 @@ impl OptimiseJob {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_standard_nudge_states_the_total_and_no_verb() {
-        // ADR-0014 §2: "Using the standard parameters. You've reviewed 4,200 times." — a fact, no
-        // threshold, no verb, no claim.
-        let text = nudge_text(&OptimisationNudge::Standard {
-            reviews_total: 4_200,
-        });
-        assert_eq!(
-            text,
-            "Using the standard parameters. You've reviewed 4,200 times."
-        );
-    }
-
-    #[test]
-    fn the_fitted_nudge_states_both_counts() {
-        // ADR-0014 §2: "Fitted over 3,120 reviews. You've reviewed 1,400 times since."
-        let text = nudge_text(&OptimisationNudge::Fitted {
-            fitted_over: 3_120,
-            reviews_since: 1_400,
-        });
-        assert_eq!(
-            text,
-            "Fitted over 3,120 reviews. You've reviewed 1,400 times since."
-        );
-    }
-
-    #[test]
-    fn the_nudge_carries_no_threshold_or_quality_claim() {
-        // ADR-0014 §2: no badge, no colour, no verb — and nothing that reads as a judgement.
-        for nudge in [
-            OptimisationNudge::Standard { reviews_total: 900 },
-            OptimisationNudge::Fitted {
-                fitted_over: 900,
-                reviews_since: 30,
-            },
-        ] {
-            let lower = nudge_text(&nudge).to_lowercase();
-            for banned in [
-                "should",
-                "recommend",
-                "accurate",
-                "better",
-                "improve",
-                "optimal",
-                "stale",
-                "due",
-            ] {
-                assert!(
-                    !lower.contains(banned),
-                    "the nudge made a claim ({banned:?}): {lower}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn a_one_review_nudge_reads_singular() {
-        assert_eq!(
-            nudge_text(&OptimisationNudge::Fitted {
-                fitted_over: 1,
-                reviews_since: 1,
-            }),
-            "Fitted over 1 review. You've reviewed 1 time since."
-        );
-    }
 
     #[test]
     fn the_completion_message_states_the_due_date_move_and_claims_no_quality() {
