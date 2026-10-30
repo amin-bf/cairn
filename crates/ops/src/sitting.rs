@@ -161,6 +161,14 @@ impl Sitting {
         true
     }
 
+    /// Take the card off the screen **without grading it**: its content no longer generates (an edit
+    /// removed it). Nothing is written and `graded` does not move; the reveal goes with the card, so
+    /// the same card coming back later is a fresh showing.
+    pub fn drop_shown(&mut self) {
+        self.shown = None;
+        self.revealed = false;
+    }
+
     /// Show the answer of the card on screen (ADR-0006 §3). The one cause of a reveal: the person
     /// tapping the card. Revealing twice is harmless.
     pub fn reveal(&mut self) -> Result<(), RevealRefused> {

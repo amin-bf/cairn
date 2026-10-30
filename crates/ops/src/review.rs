@@ -264,6 +264,28 @@ impl Review {
         }))
     }
 
+    /// Re-read the card on screen after the person edited its note (ADR-0048 §6) and return what is
+    /// shown now. The same card, if it still generates, comes back with its new content and its
+    /// reveal kept. A card the edit stopped generating is **dropped, not graded**: nothing is
+    /// recorded and the gradings count does not move (ADR-0021 §6, ADR-0011 §9), and the next card
+    /// in the live queue is shown unrevealed — or `None` if the queue is now empty. This is the
+    /// sitting's rule rather than the renderer's, so both renderers inherit it.
+    pub fn refresh(
+        &mut self,
+        coll: &Collection,
+        now_wall_ms: i64,
+        now_mono_ms: u64,
+    ) -> Result<Option<Shown>, String> {
+        if let Some(card) = self.sitting.shown()
+            && deck::render(coll, card)
+                .map_err(|e| e.to_string())?
+                .is_none()
+        {
+            self.sitting.drop_shown();
+        }
+        self.card(coll, now_wall_ms, now_mono_ms)
+    }
+
     /// Show the answer of the card on screen (ADR-0006 §3).
     pub fn reveal(&mut self) -> Result<(), RevealRefused> {
         self.sitting.reveal()
@@ -333,6 +355,8 @@ fn previews(offered: &Offered, today: i64) -> [u32; 4] {
 mod tests {
     use super::*;
     use crate::fixtures::Fixture;
+    use cairn_core::content::NoteId;
+    use cairn_core::log::{ParsedLine, Row, parse_line};
     use tempfile::TempDir;
 
     #[test]
@@ -624,5 +648,104 @@ mod tests {
         let shown = review.card(&coll, NOW, 10).unwrap().unwrap();
         let rendered = deck::render(&coll, shown.card).unwrap().unwrap();
         assert_eq!(shown.rtl, is_rtl(&rendered.prompt));
+    }
+
+    /// Two stored notes in authored order: a cloze one first (its blank is what an edit can remove),
+    /// then a basic one. A real store, edited through the same write the editor makes.
+    fn cloze_then_basic() -> (Collection, NoteId, TempDir, TempDir) {
+        let (mut coll, d, s) = fresh();
+        let cloze = coll
+            .create_note("cloze", &[("Text", "Paris is in {{1::France}}")])
+            .unwrap();
+        coll.create_note("basic", &[("Front", "chien"), ("Back", "dog")])
+            .unwrap();
+        (coll, cloze, d, s)
+    }
+
+    fn reviewed_rows(coll: &Collection) -> usize {
+        coll.log_lines()
+            .unwrap()
+            .iter()
+            .filter(|line| matches!(parse_line(line), ParsedLine::Row(Row::Reviewed(_))))
+            .count()
+    }
+
+    /// ADR-0048 §6: the edit shows on the same card, and the reveal survives the round trip.
+    #[test]
+    fn refreshing_after_an_edit_shows_the_edited_card_still_revealed() {
+        let (mut coll, note, _d, _s) = cloze_then_basic();
+        let mut review = Review::start(&coll, 5, 0, NOW).unwrap();
+        let before = review.card(&coll, NOW, 10).unwrap().unwrap();
+        assert_eq!(before.card.note, note);
+        review.reveal().unwrap();
+
+        coll.mutable_set("note", &note.0, "Text", Some("Lyon is in {{1::France}}"))
+            .unwrap();
+        let after = review.refresh(&coll, NOW, 20).unwrap().unwrap();
+
+        assert_eq!(after.card, before.card, "the same card");
+        let prompt: String = after.prompt.iter().map(|r| r.text.as_str()).collect();
+        assert!(prompt.starts_with("Lyon is in"), "{prompt}");
+        assert!(after.revealed, "still revealed");
+        assert_eq!(review.graded(), 0);
+    }
+
+    /// ADR-0021 §6, ADR-0011 §9: a card the edit stops generating is dropped — the next card is on
+    /// screen, no `reviewed` row was written and the gradings count did not move.
+    #[test]
+    fn a_card_the_edit_stops_generating_moves_on_with_no_grade_and_no_count() {
+        let (mut coll, note, _d, _s) = cloze_then_basic();
+        let mut review = Review::start(&coll, 5, 0, NOW).unwrap();
+        review.card(&coll, NOW, 10).unwrap().unwrap();
+        review.reveal().unwrap();
+        let rows_before = reviewed_rows(&coll);
+
+        coll.mutable_set("note", &note.0, "Text", Some("no blank any more"))
+            .unwrap();
+        let next = review.refresh(&coll, NOW, 20).unwrap().unwrap();
+
+        assert_ne!(next.card.note, note, "the sitting moved on");
+        assert!(!next.revealed, "the next card starts unrevealed");
+        assert_eq!(review.graded(), 0, "no count advanced");
+        assert_eq!(reviewed_rows(&coll), rows_before, "no review row written");
+        assert!(!review.ended(&coll, NOW).unwrap());
+    }
+
+    /// When the dropped card was the last one the sitting ends, still without a grade.
+    #[test]
+    fn dropping_the_last_card_ends_the_sitting_with_no_grade() {
+        let (mut coll, _d, _s) = fresh();
+        let note = coll
+            .create_note("cloze", &[("Text", "only {{1::one}}")])
+            .unwrap();
+        let mut review = Review::start(&coll, 5, 0, NOW).unwrap();
+        review.card(&coll, NOW, 10).unwrap().unwrap();
+        review.reveal().unwrap();
+
+        coll.mutable_set("note", &note.0, "Text", Some("none"))
+            .unwrap();
+
+        assert!(review.refresh(&coll, NOW, 20).unwrap().is_none());
+        assert!(review.ended(&coll, NOW).unwrap());
+        assert_eq!((review.graded(), reviewed_rows(&coll)), (0, 0));
+    }
+
+    /// The dropped card's reveal does not leak: if its blank comes back, it is a fresh showing.
+    #[test]
+    fn a_dropped_card_that_returns_starts_unrevealed() {
+        let (mut coll, note, _d, _s) = cloze_then_basic();
+        let mut review = Review::start(&coll, 5, 0, NOW).unwrap();
+        review.card(&coll, NOW, 10).unwrap().unwrap();
+        review.reveal().unwrap();
+        coll.mutable_set("note", &note.0, "Text", Some("gone"))
+            .unwrap();
+        review.refresh(&coll, NOW, 20).unwrap().unwrap();
+
+        coll.mutable_set("note", &note.0, "Text", Some("back {{1::again}}"))
+            .unwrap();
+        let shown = review.refresh(&coll, NOW, 30).unwrap().unwrap();
+
+        assert_eq!(shown.card.note, note);
+        assert!(!shown.revealed);
     }
 }

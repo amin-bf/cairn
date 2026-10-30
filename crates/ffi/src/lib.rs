@@ -830,6 +830,20 @@ impl SittingHandle {
         Ok(shown.map(ShownCard::from))
     }
 
+    /// Re-read the card on screen after its note was edited: the same card with its new content and
+    /// reveal, or the next card if the edit stopped it generating (no grade recorded, no count
+    /// advanced), or `None` once the queue is empty. The rule is cairn-ops'.
+    pub fn refresh(
+        &self,
+        now_wall_ms: i64,
+        now_mono_ms: u64,
+    ) -> Result<Option<ShownCard>, CairnError> {
+        let shown = self
+            .review()
+            .refresh(&self.owner.collection(), now_wall_ms, now_mono_ms)?;
+        Ok(shown.map(ShownCard::from))
+    }
+
     /// Show the answer of the card on screen.
     pub fn reveal(&self) -> Result<(), CairnError> {
         Ok(self.review().reveal()?)
@@ -1637,6 +1651,71 @@ mod tests {
     fn a_missing_note_is_refused() {
         let (handle, _d, _s) = blank_bench();
         assert!(handle.clone().edit_note("nonsense".into()).is_err());
+    }
+
+    /// A cloze note first in authored order and a basic one after it, both stored.
+    fn cloze_then_basic() -> (Arc<CollectionHandle>, String, TempDir, TempDir) {
+        let (handle, d, s) = blank_bench();
+        let cloze = handle.clone().new_draft("cloze".into(), None).unwrap();
+        cloze
+            .commit_field("Text".into(), "Paris is in {{1::France}}".into())
+            .unwrap();
+        let id = cloze.note_id().unwrap();
+        let basic = handle.clone().new_draft("basic".into(), None).unwrap();
+        basic
+            .commit_field("Front".into(), "chien".into())
+            .unwrap();
+        (handle, id, d, s)
+    }
+
+    fn reviewed_rows(handle: &CollectionHandle) -> usize {
+        handle
+            .collection()
+            .log_lines()
+            .unwrap()
+            .iter()
+            .filter(|line| line.contains("reviewed"))
+            .count()
+    }
+
+    #[test]
+    fn the_sittings_refresh_shows_an_edit_on_the_same_card_still_revealed() {
+        let (handle, id, _d, _s) = cloze_then_basic();
+        let sitting = handle.clone().start_sitting(5, 0, NOW).unwrap();
+        let before = sitting.card(NOW, 10).unwrap().unwrap();
+        assert_eq!(before.note_id, id);
+        sitting.reveal().unwrap();
+
+        let editing = handle.clone().edit_note(id.clone()).unwrap();
+        editing
+            .commit_field("Text".into(), "Lyon is in {{1::France}}".into())
+            .unwrap();
+        let after = sitting.refresh(NOW, 20).unwrap().unwrap();
+
+        assert_eq!((&after.note_id, after.ordinal), (&id, before.ordinal));
+        assert!(text(&after.prompt).starts_with("Lyon is in"));
+        assert!(after.revealed);
+    }
+
+    #[test]
+    fn an_edit_that_stops_the_card_generating_moves_on_with_no_review_row_and_no_count() {
+        let (handle, id, _d, _s) = cloze_then_basic();
+        let sitting = handle.clone().start_sitting(5, 0, NOW).unwrap();
+        sitting.card(NOW, 10).unwrap().unwrap();
+        sitting.reveal().unwrap();
+        let rows = reviewed_rows(&handle);
+
+        let editing = handle.clone().edit_note(id.clone()).unwrap();
+        editing
+            .commit_field("Text".into(), "no blank any more".into())
+            .unwrap();
+        let next = sitting.refresh(NOW, 20).unwrap().unwrap();
+
+        assert_ne!(next.note_id, id);
+        assert!(!next.revealed);
+        assert_eq!(sitting.graded(), 0);
+        assert_eq!(reviewed_rows(&handle), rows);
+        assert!(!sitting.ended(NOW).unwrap());
     }
 
     #[cfg(feature = "panic-probe")]
