@@ -58,7 +58,7 @@ internal const val NEW_KIND = "basic"
  * [saved] too, so a process death returns to the same note rather than to a fresh draft.
  */
 class EditorViewModel(
-    private val owner: CollectionOwner,
+    private val owner: CollectionAccess,
     private val saved: SavedStateHandle,
     private val monotonicClock: () -> Long = SystemClock::elapsedRealtime,
 ) : ViewModel() {

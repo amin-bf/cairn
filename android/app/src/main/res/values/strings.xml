@@ -62,6 +62,23 @@
     <!-- The destinations row and the note list. The sentences are the egui build's, word for word. -->
     <string name="destination_review">Review</string>
     <string name="destination_notes">Notes</string>
+    <string name="destination_settings">Settings</string>
+
+    <!-- Settings (#234). The sentences are the egui build's, word for word; the two refusals are new. -->
+    <string name="settings_heading">Settings</string>
+    <string name="settings_studying">Studying</string>
+    <string name="settings_studying_caption">Follows your collection to every device.</string>
+    <string name="settings_rate_label">New cards a day</string>
+    <string name="settings_rate_consequence">The only limit in the app. Set it to zero to clear a backlog, then turn it back on.</string>
+    <string name="settings_rate_refused">The new-card rate could not be saved.</string>
+    <string name="settings_device">This device</string>
+    <string name="settings_device_caption">Stays on this machine.</string>
+    <string name="settings_appearance_label">Appearance</string>
+    <string name="settings_appearance_system">System</string>
+    <string name="settings_appearance_light">Light</string>
+    <string name="settings_appearance_dark">Dark</string>
+    <string name="settings_appearance_note">This machine only — your appearance does not follow the collection to another device.</string>
+    <string name="settings_appearance_refused">The appearance could not be saved.</string>
     <string name="notes_heading">Notes</string>
     <string name="notes_empty">Nothing here yet — create a deck, import one, or set up sync</string>
     <string name="notes_no_match">No notes match.</string>
