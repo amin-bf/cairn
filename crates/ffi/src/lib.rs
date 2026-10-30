@@ -729,7 +729,7 @@ mod tests {
 
         // Every cloze card the fixture offers: the blank is masked as "[…]" on the prompt, and the
         // answer shows the word the fixture's own text hides, with no mask left.
-        let blanks = ["mange", "1889", "Bonjour", "Alliés"];
+        let blanks = ["mange", "1889", "Bonjour", "travaille", "Alliés"];
         for _ in 0..4 {
             let shown = sitting.card(NOW, 10).unwrap().unwrap();
             let (prompt, answer) = (text(&shown.prompt), text(&shown.answer));
