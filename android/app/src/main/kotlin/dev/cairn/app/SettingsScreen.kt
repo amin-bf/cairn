@@ -20,13 +20,17 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cairn.design.CairnDestinationsRow
 import dev.cairn.design.CairnFieldLabel
+import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnPage
+import dev.cairn.design.CairnProgress
+import dev.cairn.design.CairnRule
 import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Destination
@@ -46,6 +50,8 @@ fun SettingsScreen(model: SettingsViewModel, development: @Composable () -> Unit
             onRateChange = model::editRate,
             onCommitRate = model::commitRate,
             onChoose = model::chooseAppearance,
+            onOptimise = model::optimise,
+            onCancelOptimise = model::cancelOptimise,
             development = development,
         )
         is SettingsScreenState.Failed ->
@@ -65,6 +71,8 @@ fun SettingsPage(
     onRateChange: (String) -> Unit,
     onCommitRate: () -> Unit,
     onChoose: (ThemeChoice) -> Unit,
+    onOptimise: () -> Unit,
+    onCancelOptimise: () -> Unit,
     development: @Composable () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
@@ -82,7 +90,11 @@ fun SettingsPage(
 
             GroupHeading(stringResource(R.string.settings_studying), stringResource(R.string.settings_studying_caption), "group-studying")
             RateBlock(state, onRateChange, onCommitRate)
-            // Optimise joins this group later (ADR-0014), after a block rule; the group ends here until then.
+            // The rule between two blocks of a group: three units, a line, two units (as the egui build draws it).
+            Spacer(Modifier.height(gap(3)))
+            CairnRule()
+            Spacer(Modifier.height(gap(2)))
+            OptimiseBlock(state, onOptimise, onCancelOptimise)
 
             Spacer(Modifier.height(gap(2)))
             GroupHeading(stringResource(R.string.settings_device), stringResource(R.string.settings_device_caption), "group-device")
@@ -150,3 +162,52 @@ private fun AppearanceBlock(state: SettingsScreenState.Ready, onChoose: (ThemeCh
     Spacer(Modifier.height(gap(1)))
     CairnText(stringResource(R.string.settings_appearance_note), Modifier.testTag("appearance-note"))
 }
+
+/**
+ * Optimise under the field label *Scheduler* (ADR-0014 §2-§4): at rest the full-width button, the nudge
+ * and, after a write, the completion sentence; in flight the progress in the button's place and a
+ * full-width Cancel. The nudge is a fact; the sentence is said here from the string resources.
+ */
+@Composable
+private fun OptimiseBlock(state: SettingsScreenState.Ready, onOptimise: () -> Unit, onCancel: () -> Unit) {
+    CairnFieldLabel(stringResource(R.string.settings_scheduler_label), Modifier.testTag("label-Scheduler"))
+    when (val run = state.run) {
+        is OptimiseRun.Idle -> {
+            CairnControl(stringResource(R.string.settings_optimise), onOptimise, Modifier.fillMaxWidth().testTag("optimise-button"))
+            Spacer(Modifier.height(gap(1)))
+            state.nudge?.let { CairnText(nudgeSentence(it), Modifier.testTag("nudge-text")) }
+            if (state.updated) {
+                Spacer(Modifier.height(gap(1)))
+                CairnText(stringResource(R.string.settings_optimise_done), Modifier.testTag("optimise-done"))
+            }
+        }
+        is OptimiseRun.Preparing -> {
+            CairnText(stringResource(R.string.settings_optimise_preparing), Modifier.testTag("optimise-preparing"))
+            Spacer(Modifier.height(gap(1)))
+            CairnProgress(null, Modifier.testTag("optimise-indicator"))
+            Spacer(Modifier.height(gap(1)))
+            CairnControl(stringResource(R.string.settings_optimise_cancel), onCancel, Modifier.fillMaxWidth().testTag("optimise-cancel"))
+        }
+        is OptimiseRun.Training -> {
+            val fraction = if (run.total == 0L) 0f else run.current.toFloat() / run.total.toFloat()
+            CairnProgress(fraction, Modifier.testTag("optimise-progress"))
+            Spacer(Modifier.height(gap(1)))
+            CairnControl(stringResource(R.string.settings_optimise_cancel), onCancel, Modifier.fillMaxWidth().testTag("optimise-cancel"))
+        }
+    }
+}
+
+/** The nudge in words (ADR-0014 §2): the counts grouped by thousands and the nouns agreeing with them. */
+@Composable
+private fun nudgeSentence(nudge: Nudge): String = when (nudge) {
+    is Nudge.Standard -> stringResource(R.string.nudge_standard, counted(R.plurals.nudge_times, nudge.reviewsTotal))
+    is Nudge.Fitted -> stringResource(
+        R.string.nudge_fitted,
+        counted(R.plurals.nudge_reviews, nudge.fittedOver),
+        counted(R.plurals.nudge_times, nudge.reviewsSince),
+    )
+}
+
+@Composable
+private fun counted(plural: Int, n: Long): String =
+    pluralStringResource(plural, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), String.format(java.util.Locale.ENGLISH, "%,d", n))

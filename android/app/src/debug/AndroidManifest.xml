@@ -5,5 +5,7 @@
         <activity
             android:name=".SpecimenActivity"
             android:exported="true" />
+        <!-- Launched by SettingsRotationTest -->
+        <activity android:name=".RotatingActivity" android:exported="false" />
     </application>
 </manifest>

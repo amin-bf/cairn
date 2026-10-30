@@ -5,6 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.createSavedStateHandle
 import androidx.navigation.NavType
@@ -32,6 +34,9 @@ import kotlinx.coroutines.launch
 /** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
 private const val TICK_MS = 15_000L
 
+/** How often Settings polls an Optimise run while the screen is started (client-stack rule 10): short, so the bar moves. */
+const val SETTINGS_TICK_MS = 250L
+
 private const val REVIEW = "review"
 private const val NOTES = "notes"
 private const val SETTINGS = "settings"
@@ -53,7 +58,11 @@ internal fun editorRoute(note: String? = null, kind: String? = null, deck: Strin
  * system Back from Notes or Settings returns to Review.
  */
 @Composable
-fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboardUp()) {
+fun CairnNavHost(
+    owner: CollectionAccess,
+    keyboardUp: Boolean = rememberKeyboardUp(),
+    settingsTickMs: Long = SETTINGS_TICK_MS,
+) {
     // After a reset or a fixture install the app starts afresh (#237): the whole graph is composed again
     // under a new key, so the back stack is Review and no place keeps a ViewModel of the replaced
     // collection, and the appearance is read again from the new one.
@@ -61,7 +70,7 @@ fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboard
     val appearance = LocalAppearance.current
     val scope = rememberCoroutineScope()
     key(generation) {
-        CairnPlaces(owner, keyboardUp) {
+        CairnPlaces(owner, keyboardUp, settingsTickMs) {
             scope.launch {
                 appearance.choice = owner.themeChoiceOrSystem()
                 generation++
@@ -71,7 +80,7 @@ fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboard
 }
 
 @Composable
-private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, onRestart: () -> Unit) {
+private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, settingsTickMs: Long, onRestart: () -> Unit) {
     val nav = rememberNavController()
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
@@ -120,6 +129,16 @@ private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, onRestart:
                 val model = viewModel { SettingsViewModel(owner, appearance) }
                 // Coming back to the page it is read again; a field mid-edit keeps what was typed.
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
+                // A run is polled while the screen is started, and not while it is stopped or left (client-stack rule 10).
+                val lifecycle = LocalLifecycleOwner.current.lifecycle
+                LaunchedEffect(model, settingsTickMs) {
+                    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        while (true) {
+                            delay(settingsTickMs)
+                            model.tick()
+                        }
+                    }
+                }
                 SettingsScreen(model, development = { DevelopmentBlock(owner, onRestart) })
             }
             composable(

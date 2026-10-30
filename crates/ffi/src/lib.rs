@@ -18,6 +18,7 @@ use cairn_ops::cards;
 use cairn_ops::editor::{self, Editing};
 use cairn_ops::leeches;
 use cairn_ops::notes::{self, DeckFilter, Filter};
+use cairn_ops::optimise;
 use cairn_ops::review::{self, Review};
 use cairn_ops::session::ReviewState as CoreState;
 use cairn_ops::sitting::{GradeRefused, RevealRefused};
@@ -290,6 +291,22 @@ impl CollectionHandle {
             &mut self.collection(),
             rate,
         )?)
+    }
+
+    /// The fact Settings' nudge states (ADR-0014 §2): either the standard parameters with the review
+    /// total, or the fit with the reviews since. Kotlin words it; no sentence crosses.
+    pub fn optimisation_nudge(&self) -> Result<OptimisationNudge, CairnError> {
+        Ok(optimise::nudge(&self.collection())?.into())
+    }
+
+    /// Snapshot the log and start an optimise run on a Rust thread (ADR-0014 §3). The handle outlives
+    /// the call: Kotlin polls it, and nothing is written until its `finish` finds the run over.
+    pub fn start_optimise(self: Arc<Self>) -> Result<Arc<OptimiseHandle>, CairnError> {
+        let job = optimise::start(&self.collection())?;
+        Ok(Arc::new(OptimiseHandle {
+            owner: self,
+            job: Mutex::new(job),
+        }))
     }
 
     /// The note list under a deck selector and a search text (ADR-0021 §2): every row in list order,
@@ -1082,6 +1099,92 @@ pub struct GradeOutcome {
     /// Whether the review row was appended. A failed append still counts the grading and moves the
     /// card off the screen (`Graded::NotRecorded`).
     pub recorded: bool,
+}
+
+/// What the optimise nudge states (ADR-0014 §2): the mirror of `cairn_ops::optimise::OptimisationNudge`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum OptimisationNudge {
+    /// No run has written a vector: the standard parameters, over this many reviews in all.
+    Standard { reviews_total: u64 },
+    /// A run fitted the vector over `fitted_over` reviews, and `reviews_since` have been done since.
+    Fitted { fitted_over: u64, reviews_since: u64 },
+}
+
+impl From<optimise::OptimisationNudge> for OptimisationNudge {
+    fn from(nudge: optimise::OptimisationNudge) -> Self {
+        match nudge {
+            optimise::OptimisationNudge::Standard { reviews_total } => {
+                Self::Standard { reviews_total }
+            }
+            optimise::OptimisationNudge::Fitted {
+                fitted_over,
+                reviews_since,
+            } => Self::Fitted {
+                fitted_over,
+                reviews_since,
+            },
+        }
+    }
+}
+
+/// Where a run is (ADR-0014 §4): the uncancellable lead-in, or the determinate training loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum OptimisePhase {
+    Preparing,
+    Training { current: u64, total: u64 },
+}
+
+/// What `finish` found: the run going on, over with nothing written (cancelled, or the vector it
+/// fitted is the one already held), or over with a new vector written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum OptimiseFinish {
+    StillRunning,
+    NothingWritten,
+    Written,
+}
+
+/// One optimise run over the collection it was started on. Kotlin never holds a parameter: `finish`
+/// does the write itself.
+#[derive(uniffi::Object)]
+pub struct OptimiseHandle {
+    owner: Arc<CollectionHandle>,
+    job: Mutex<optimise::OptimiseJob>,
+}
+
+impl OptimiseHandle {
+    fn job(&self) -> MutexGuard<'_, optimise::OptimiseJob> {
+        self.job.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+#[uniffi::export]
+impl OptimiseHandle {
+    /// *Preparing*, or *training* with the steps done and the steps in all.
+    pub fn phase(&self) -> OptimisePhase {
+        match self.job().phase() {
+            optimise::Phase::Preparing => OptimisePhase::Preparing,
+            optimise::Phase::Training { current, total } => OptimisePhase::Training {
+                current: current as u64,
+                total: total as u64,
+            },
+        }
+    }
+
+    /// Ask the run to stop; it writes nothing.
+    pub fn cancel(&self) {
+        self.job().cancel();
+    }
+
+    /// Collect the run if it is over and write its outcome, stamped `now_wall_ms`.
+    pub fn finish(&self, now_wall_ms: i64) -> Result<OptimiseFinish, CairnError> {
+        let mut coll = self.owner.collection();
+        let found = optimise::finish(&mut coll, &mut self.job(), now_wall_ms)?;
+        Ok(match found {
+            optimise::Finish::StillRunning => OptimiseFinish::StillRunning,
+            optimise::Finish::NothingWritten => OptimiseFinish::NothingWritten,
+            optimise::Finish::Written => OptimiseFinish::Written,
+        })
+    }
 }
 
 /// One sitting: the cairn-ops sitting over the collection it was begun on. Every time is passed in.
@@ -2277,5 +2380,63 @@ mod tests {
         }));
         assert!(caught.is_err());
         assert_eq!(handle.due_count(1_700_000_000_000).unwrap(), 0);
+    }
+
+    /// Call the handle as Kotlin's tick does until the run is over.
+    fn finish_the_run(run: &OptimiseHandle) -> OptimiseFinish {
+        loop {
+            match run.finish(NOW).unwrap() {
+                OptimiseFinish::StillRunning => std::thread::yield_now(),
+                over => return over,
+            }
+        }
+    }
+
+    #[test]
+    fn the_nudge_reads_standard_with_the_total_until_a_run_writes_and_fitted_after() {
+        let (handle, _d, _s) = benched("history");
+        let OptimisationNudge::Standard { reviews_total } = handle.optimisation_nudge().unwrap()
+        else {
+            panic!("no run has written a vector");
+        };
+        assert_eq!(reviews_total, 225, "25 cards at nine reviews each");
+
+        let run = handle.clone().start_optimise().unwrap();
+        assert_eq!(finish_the_run(&run), OptimiseFinish::Written);
+        assert_eq!(
+            handle.optimisation_nudge().unwrap(),
+            OptimisationNudge::Fitted {
+                fitted_over: 225,
+                reviews_since: 0
+            }
+        );
+    }
+
+    #[test]
+    fn a_run_reports_its_phase_and_a_second_run_over_the_same_history_writes_nothing() {
+        let (handle, _d, _s) = benched("history");
+        let run = handle.clone().start_optimise().unwrap();
+        match run.phase() {
+            OptimisePhase::Preparing => {}
+            OptimisePhase::Training { current, total } => assert!(current <= total),
+        }
+        assert_eq!(finish_the_run(&run), OptimiseFinish::Written);
+        // Finished: the handle keeps saying so.
+        assert_eq!(run.finish(NOW).unwrap(), OptimiseFinish::NothingWritten);
+
+        let again = handle.clone().start_optimise().unwrap();
+        assert_eq!(finish_the_run(&again), OptimiseFinish::NothingWritten);
+    }
+
+    #[test]
+    fn a_cancelled_run_writes_nothing_and_leaves_the_nudge_standard() {
+        let (handle, _d, _s) = benched("history");
+        let run = handle.clone().start_optimise().unwrap();
+        run.cancel();
+        assert_eq!(finish_the_run(&run), OptimiseFinish::NothingWritten);
+        assert!(matches!(
+            handle.optimisation_nudge().unwrap(),
+            OptimisationNudge::Standard { .. }
+        ));
     }
 }
