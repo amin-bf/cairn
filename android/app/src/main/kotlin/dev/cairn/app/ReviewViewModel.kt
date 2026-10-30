@@ -24,6 +24,13 @@ sealed interface ReviewScreenState {
      */
     data class Sitting(val chosen: Int, val graded: Int, val card: ShownCard, val checkpoint: Boolean) : ReviewScreenState
 
+    /**
+     * A sitting ended with [crossed] cards over the leech floor: shown in the entrance's place until it is
+     * answered. Held here only, never in saved state, so a rotation keeps it and a process death drops it
+     * (ADR-0050 §4). [facts] are the entrance's, shown once it is answered.
+     */
+    data class Pointer(val facts: ReviewFacts, val crossed: Int) : ReviewScreenState
+
     data object Failed : ReviewScreenState
 }
 
@@ -77,11 +84,22 @@ class ReviewViewModel(
             val now = wallClock()
             val mono = monotonicClock().toULong()
             // One trip off the main thread: every call on the handle blocks the thread it is made on.
+            var crossed = 0
             val shown = owner.use {
                 val card = if (handle.ended(now)) null else handle.card(now, mono)
+                if (card == null) crossed = handle.leechesCrossed(now).toInt()
                 card?.let { sittingOf(handle, it, mono) }
             }
-            if (shown == null) load() else _state.value = shown
+            if (shown != null) {
+                _state.value = shown
+                return
+            }
+            load()
+            // The sitting ended with cards over the leech floor: the pointer takes the entrance's place.
+            val entrance = _state.value
+            if (crossed > 0 && entrance is ReviewScreenState.Entrance) {
+                _state.value = ReviewScreenState.Pointer(entrance.facts, crossed)
+            }
         } catch (_: CairnException) {
             _state.value = ReviewScreenState.Failed
         }
@@ -145,6 +163,12 @@ class ReviewViewModel(
                 _state.value = ReviewScreenState.Failed
             }
         }
+    }
+
+    /** *Show me* or *Not now*: either answer clears the pointer for good and the entrance takes its place. */
+    fun answerPointer() {
+        val pointer = _state.value as? ReviewScreenState.Pointer ?: return
+        _state.value = ReviewScreenState.Entrance(pointer.facts)
     }
 
     /** *Keep going*: the check-in does not come back this sitting. */

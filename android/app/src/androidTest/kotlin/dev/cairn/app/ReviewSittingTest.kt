@@ -160,6 +160,10 @@ class ReviewSittingTest {
         assertFalse("the re-show starts shut", exists("grades"))
         reveal()
         grade("grade-easy")
+        // The lapse took the card over the leech floor, so the pointer stands in the entrance's place
+        // (#230); answering it shows the entrance, caught up.
+        waitFor("leech-pointer")
+        rule.onNodeWithTag("pointer-dismiss").performClick()
         waitFor("state-caught-up")
     }
 

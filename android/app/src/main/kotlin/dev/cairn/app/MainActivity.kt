@@ -25,7 +25,15 @@ fun ReviewScreen(model: ReviewViewModel, onEditNote: (noteId: String) -> Unit = 
     when (val s = state) {
         is ReviewScreenState.Loading -> CairnPage {}
         is ReviewScreenState.Entrance -> ReviewEntrance(s.facts, onStart = model::start, onLeeches = onLeeches)
-        is ReviewScreenState.Sitting -> ReviewSitting(
+        is ReviewScreenState.Pointer -> LeechPointer(
+            s.crossed,
+            onShow = {
+                model.answerPointer()
+                onLeeches()
+            },
+            onDismiss = model::answerPointer,
+        )
+        is ReviewScreenState.Sitting ->ReviewSitting(
             chosen = s.chosen,
             graded = s.graded,
             card = s.card,
