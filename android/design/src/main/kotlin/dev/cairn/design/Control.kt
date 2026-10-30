@@ -17,6 +17,24 @@ import dev.cairn.design.tokens.Controls
 import dev.cairn.design.tokens.Spacing
 
 /**
+ * A text action: a label with no surface, in the link colour at the small tier (ADR-0034 §2). The one
+ * frameless control, for a short set of alternatives sitting beside a primary. It keeps the 36 dp
+ * height every control has, so it is as easy to hit as the framed ones.
+ */
+@Composable
+fun CairnTextAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .defaultMinSize(minWidth = Controls.HEIGHT.dp, minHeight = Controls.HEIGHT.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.UNIT.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CairnText(label, tier = Tier.Small, color = Cairn.colors.link)
+    }
+}
+
+/**
  * A control: the ordinary one by default, the primary when [primary] (ADR-0033). The primary is the
  * one that is pressed to go on; it is a heavier fill, not a different shape.
  */
