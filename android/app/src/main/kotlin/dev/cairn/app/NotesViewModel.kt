@@ -17,7 +17,9 @@ sealed interface NotesScreenState {
     /**
      * The list under [selector] and [search], the [newDeck] name being typed, and — when a deck's
      * delete has been asked for and not yet confirmed — how many notes it would take
-     * ([confirmingCount], the binding's count, never counted here).
+     * ([confirmingCount], the binding's count, never counted here). [confirmingNote] is the note
+     * whose row is asking *Delete …?*, and [moving] the note held in the placement state; at most
+     * one of them is set, and each names a row the list still shows.
      */
     data class Ready(
         val facts: NoteListFacts,
@@ -25,6 +27,8 @@ sealed interface NotesScreenState {
         val search: String,
         val newDeck: String,
         val confirmingCount: Long?,
+        val confirmingNote: String? = null,
+        val moving: String? = null,
     ) : NotesScreenState
 
     data object Failed : NotesScreenState
@@ -44,6 +48,8 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
     private var search = ""
     private var newDeck = ""
     private var confirming: String? = null
+    private var confirmingNote: String? = null
+    private var moving: String? = null
     private var reading: Job? = null
 
     init {
@@ -59,7 +65,11 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
                     val facts = handle.noteList(selector, search)
                     facts to confirming?.let { handle.notesInDeck(it).toLong() }
                 }
-                NotesScreenState.Ready(facts, selector, search, newDeck, count)
+                // A question or a move stands only while its note is on screen: a filter or a search
+                // that hides it leaves nothing to name or place against (ADR-0021 §4, ADR-0039 §7).
+                if (facts.rows.none { it.noteId == confirmingNote }) confirmingNote = null
+                if (facts.rows.none { it.noteId == moving }) moving = null
+                NotesScreenState.Ready(facts, selector, search, newDeck, count, confirmingNote, moving)
             } catch (_: CairnException) {
                 NotesScreenState.Failed
             }
@@ -127,6 +137,65 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
             } catch (_: CairnException) {
                 _state.value = NotesScreenState.Failed
             }
+        }
+    }
+
+    /** A row's *Delete*: ask in that row first (ADR-0048 §4). One question at a time, and no move under it. */
+    fun askDeleteNote(id: String) {
+        confirmingNote = id
+        moving = null
+        refresh()
+    }
+
+    /** *Keep it* on a note's question. */
+    fun keepNote() {
+        confirmingNote = null
+        refresh()
+    }
+
+    /** *Delete*, confirmed: the note goes through the operation, and there is no undelete (ADR-0021 §2). */
+    fun deleteNote() {
+        val note = confirmingNote ?: return
+        viewModelScope.launch {
+            try {
+                owner.use { it.deleteNote(note) }
+                confirmingNote = null
+                refresh()
+            } catch (_: CairnException) {
+                _state.value = NotesScreenState.Failed
+            }
+        }
+    }
+
+    /** A row's *Move*: enter the placement state holding that note (ADR-0039 §7). */
+    fun startMove(id: String) {
+        moving = id
+        confirmingNote = null
+        refresh()
+    }
+
+    /** *Cancel move*: the order is untouched. */
+    fun cancelMove() {
+        moving = null
+        refresh()
+    }
+
+    /**
+     * *Place here* at [gap] among the visible notes with the held one taken out: gap `i` sits before
+     * the `i`-th of them and the last gap is the end. One tap writes the one position value
+     * (ADR-0021 §3); the neighbours are the visible ones, so a hidden note keeps its place (§4).
+     */
+    fun placeAt(gap: Int) {
+        val held = moving ?: return
+        val visible = (_state.value as? NotesScreenState.Ready)?.facts?.rows?.map { it.noteId }?.filter { it != held } ?: return
+        viewModelScope.launch {
+            try {
+                owner.use { it.placeNote(held, visible, gap.toUInt()) }
+            } catch (_: CairnException) {
+                // A failed write drops the state too: there is no half-move to recover from.
+            }
+            moving = null
+            refresh()
         }
     }
 }
