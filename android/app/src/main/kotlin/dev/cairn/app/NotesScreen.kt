@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.cairn.design.Cairn
 import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnFieldLabel
 import dev.cairn.design.CairnDropdown
@@ -73,7 +74,18 @@ fun NoteList(
             }
             // The empty state is the empty *collection*, not a filter that matched nothing.
             if (!facts.hasNotes) {
-                item { CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty")) }
+                item {
+                    CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty"))
+                    Spacer(Modifier.height(gap(2)))
+                    // The sentence's first verb is *create a deck*, so the control for it is here too
+                    // (ADR-0021 §2 puts a surface behind each of the three). Once a deck exists the
+                    // whole deck surface returns with it, so the new deck can be seen and deleted.
+                    if (facts.decks.isEmpty()) {
+                        NewDeck(state, onNewDeck, onCreateDeck)
+                    } else {
+                        DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
+                    }
+                }
                 return@LazyColumn
             }
             item {
@@ -127,14 +139,15 @@ private fun DeckControls(
     CairnFieldLabel(stringResource(R.string.notes_deck))
     CairnDropdown(selectedName, labels, onSelect = { onSelect(choices[it]) }, tag = "deck-filter")
     Spacer(Modifier.height(gap(1)))
-    Row(horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
-        CairnControl(stringResource(R.string.notes_new_deck), onClick = onCreateDeck, modifier = Modifier.testTag("new-deck"))
-        CairnTextField(state.newDeck, onNewDeck, Modifier.weight(1f).testTag("new-deck-name"))
-    }
+    NewDeck(state, onNewDeck, onCreateDeck)
 
     // Delete exists only for the deck the filter names, and asks first, with the count.
     if (state.selector !is DeckSelector.Deck) return
     Spacer(Modifier.height(gap(1)))
+    if (state.refusal == NotesScreenState.Refusal.DeleteDeck) {
+        CairnText(stringResource(R.string.notes_delete_deck_refused), Modifier.testTag("delete-deck-refused"), color = Cairn.colors.error)
+        Spacer(Modifier.height(gap(1)))
+    }
     val count = state.confirmingCount
     if (count == null) {
         CairnControl(stringResource(R.string.notes_delete_deck), onClick = onAskDelete, modifier = Modifier.testTag("delete-deck"))
@@ -151,5 +164,18 @@ private fun DeckControls(
             CairnControl(stringResource(R.string.notes_delete_deck_confirm), onClick = onDelete, modifier = Modifier.testTag("delete-deck-confirm"))
             CairnControl(stringResource(R.string.notes_keep_it), onClick = onKeep, modifier = Modifier.testTag("keep-deck"))
         }
+    }
+}
+
+/** *New deck* beside the name being typed, and — when the collection refused it — the refusal under them. */
+@Composable
+private fun NewDeck(state: NotesScreenState.Ready, onNewDeck: (String) -> Unit, onCreateDeck: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
+        CairnControl(stringResource(R.string.notes_new_deck), onClick = onCreateDeck, modifier = Modifier.testTag("new-deck"))
+        CairnTextField(state.newDeck, onNewDeck, Modifier.weight(1f).testTag("new-deck-name"))
+    }
+    if (state.refusal == NotesScreenState.Refusal.CreateDeck) {
+        Spacer(Modifier.height(gap(1)))
+        CairnText(stringResource(R.string.notes_new_deck_refused), Modifier.testTag("new-deck-refused"), color = Cairn.colors.error)
     }
 }
