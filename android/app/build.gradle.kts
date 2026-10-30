@@ -5,6 +5,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Read through Gradle's providers, so the variable is a configuration-cache input; independent of the
+// build type. Only the exact value `1` compiles the Development block in.
+val developmentBuild = providers.environmentVariable("CAIRN_DEVELOPMENT").orNull == "1"
+
 // The ABIs the build packages. `x86_64` is the emulator, `arm64-v8a` the handset (ADR-0045).
 val targetAbis = listOf("arm64-v8a", "x86_64")
 
@@ -57,6 +61,15 @@ android {
 
     // The launcher mark is the egui build's, shared rather than copied, so the upgrade keeps its icon.
     sourceSets["main"].res.directories.add("../../crates/app/res")
+
+    // ADR-0051 §1: the Development block exists only in a build made with CAIRN_DEVELOPMENT=1. Its
+    // Kotlin, its strings and its tests are a source set added only then; otherwise a source set of the
+    // same shape supplies a block that draws nothing, so the code and its strings are not in the APK.
+    // Both builds keep the package id and the signing key, so one installs over the other (§2).
+    val flavour = if (developmentBuild) "development" else "shipping"
+    sourceSets["main"].kotlin.directories.add("src/$flavour/kotlin")
+    sourceSets["main"].res.directories.add("src/$flavour/res")
+    sourceSets["androidTest"].kotlin.directories.add("src/androidTest${flavour.replaceFirstChar { it.uppercase() }}/kotlin")
 
     compileOptions {
         val bytecode = JavaVersion.toVersion(property("cairn.bytecode").toString())

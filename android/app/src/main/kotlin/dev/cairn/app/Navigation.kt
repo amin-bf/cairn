@@ -13,6 +13,11 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,6 +29,7 @@ import dev.cairn.design.CairnShell
 import dev.cairn.design.Destination
 import dev.cairn.design.rememberKeyboardUp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
 private const val TICK_MS = 15_000L
@@ -57,6 +63,24 @@ fun CairnNavHost(
     keyboardUp: Boolean = rememberKeyboardUp(),
     settingsTickMs: Long = SETTINGS_TICK_MS,
 ) {
+    // After a reset or a fixture install the app starts afresh (#237): the whole graph is composed again
+    // under a new key, so the back stack is Review and no place keeps a ViewModel of the replaced
+    // collection, and the appearance is read again from the new one.
+    var generation by remember { mutableIntStateOf(0) }
+    val appearance = LocalAppearance.current
+    val scope = rememberCoroutineScope()
+    key(generation) {
+        CairnPlaces(owner, keyboardUp, settingsTickMs) {
+            scope.launch {
+                appearance.choice = owner.themeChoiceOrSystem()
+                generation++
+            }
+        }
+    }
+}
+
+@Composable
+private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, settingsTickMs: Long, onRestart: () -> Unit) {
     val nav = rememberNavController()
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
@@ -115,7 +139,7 @@ fun CairnNavHost(
                         }
                     }
                 }
-                SettingsScreen(model)
+                SettingsScreen(model, development = { DevelopmentBlock(owner, onRestart) })
             }
             composable(
                 EDITOR,

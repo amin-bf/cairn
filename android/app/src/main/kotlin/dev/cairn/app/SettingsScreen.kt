@@ -41,7 +41,7 @@ import dev.cairn.ffi.ThemeChoice
 
 /** Settings over its model: the page, or the failure page when the collection cannot be read. */
 @Composable
-fun SettingsScreen(model: SettingsViewModel) {
+fun SettingsScreen(model: SettingsViewModel, development: @Composable () -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
         is SettingsScreenState.Loading -> CairnPage {}
@@ -52,6 +52,7 @@ fun SettingsScreen(model: SettingsViewModel) {
             onChoose = model::chooseAppearance,
             onOptimise = model::optimise,
             onCancelOptimise = model::cancelOptimise,
+            development = development,
         )
         is SettingsScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("settings-failed")) }
@@ -72,6 +73,7 @@ fun SettingsPage(
     onChoose: (ThemeChoice) -> Unit,
     onOptimise: () -> Unit,
     onCancelOptimise: () -> Unit,
+    development: @Composable () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
     CairnPage(Modifier.testTag("settings-screen")) {
@@ -97,6 +99,9 @@ fun SettingsPage(
             Spacer(Modifier.height(gap(2)))
             GroupHeading(stringResource(R.string.settings_device), stringResource(R.string.settings_device_caption), "group-device")
             AppearanceBlock(state, onChoose)
+
+            // A development build only: the shipping source set draws nothing here (ADR-0051 §1).
+            development()
         }
     }
 }

@@ -2,7 +2,9 @@ package dev.cairn.app
 
 import android.content.Context
 import android.os.Looper
+import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.CollectionHandle
+import dev.cairn.ffi.ThemeChoice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -13,6 +15,14 @@ import java.io.File
 interface CollectionAccess {
     suspend fun <T> use(block: (CollectionHandle) -> T): T
 }
+
+/** The stored appearance; a failed read follows the platform rather than leaving a window blank. */
+suspend fun CollectionAccess.themeChoiceOrSystem(): ThemeChoice =
+    try {
+        use { it.themeChoice() }
+    } catch (_: CairnException) {
+        ThemeChoice.SYSTEM
+    }
 
 /**
  * The one collection of the process (ADR-0046 §7): opened once, held for the process's life, and

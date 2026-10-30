@@ -146,7 +146,7 @@ class SettingsTest {
             .assertTextEquals("The only limit in the app. Set it to zero to clear a backlog, then turn it back on.")
         rule.onNodeWithTag("appearance-note")
             .assertTextEquals("This machine only — your appearance does not follow the collection to another device.")
-        for (absent in listOf("Files", "Open a file", "sync", "Sync", "Development")) {
+        for (absent in listOf("Files", "Open a file", "sync", "Sync")) {
             assertEquals("nothing on the page says '$absent'", 0, rule.onAllNodesWithText(absent, substring = true).fetchSemanticsNodes().size)
         }
     }

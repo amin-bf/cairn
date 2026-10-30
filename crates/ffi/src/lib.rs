@@ -187,7 +187,10 @@ impl CollectionHandle {
     ///
     /// **This destroys the collection under the two directories `open` was given.** It is the bench:
     /// only a debug or test build may call it, never a path a user reaches.
-    pub fn install_fixture(&self, name: String, now_ms: i64) -> Result<(), CairnError> {
+    ///
+    /// Returns what the install reached, in the bench's own words (`Reached`'s display), recomputed
+    /// from the rows it wrote.
+    pub fn install_fixture(&self, name: String, now_ms: i64) -> Result<String, CairnError> {
         let fixture = cairn_ops::fixtures::Fixture::parse(&name)
             .ok_or(CairnError::UnknownFixture { name })?;
         let mut slot = self
@@ -201,7 +204,34 @@ impl CollectionHandle {
         let mut coll = Collection::open(&self.data_dir, &self.state_dir)?;
         let installed = fixture.install(&mut coll, now_ms);
         *slot = Some(coll);
-        installed?;
+        Ok(installed?.to_string())
+    }
+
+    /// Return the device to a first launch: close the collection, remove its files and open it again
+    /// through `open_collection`, so it is seeded as a fresh install is. Any sitting begun before is
+    /// stale after this and should be dropped.
+    ///
+    /// **This destroys the collection under the two directories `open` was given**, like
+    /// [`install_fixture`](CollectionHandle::install_fixture): the Kotlin block that reaches it exists
+    /// only in a development build.
+    pub fn reset(&self) -> Result<(), CairnError> {
+        let mut slot = self
+            .collection
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let Some(coll) = slot.take() else {
+            // Only a refused reopen below leaves the slot empty; try again from the files.
+            *slot = Some(cairn_ops::fixtures::reset_files(
+                &self.data_dir,
+                &self.state_dir,
+            )?);
+            return Ok(());
+        };
+        *slot = Some(cairn_ops::fixtures::reset(
+            coll,
+            &self.data_dir,
+            &self.state_dir,
+        )?);
         Ok(())
     }
 
@@ -1164,6 +1194,31 @@ pub struct SittingHandle {
     review: Mutex<Review>,
 }
 
+/// One fixture on the development bench: the key `install_fixture` takes and what it reaches.
+///
+/// `label` and `reaches` are the bench's own text, as in the egui build, so they cross as they are
+/// and are not a Kotlin string resource: the bench is a development tool, not a user-facing screen,
+/// so ADR-0046 §4's words-stay-in-Kotlin rule is not applied to it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BenchFixture {
+    pub key: String,
+    pub label: String,
+    pub reaches: String,
+}
+
+/// The development bench, in its own order: every fixture with its key and what it reaches.
+#[uniffi::export]
+pub fn fixtures() -> Vec<BenchFixture> {
+    cairn_ops::fixtures::Fixture::ALL
+        .into_iter()
+        .map(|f| BenchFixture {
+            key: f.key().to_owned(),
+            label: f.label().to_owned(),
+            reaches: f.reaches().to_owned(),
+        })
+        .collect()
+}
+
 impl SittingHandle {
     fn review(&self) -> MutexGuard<'_, Review> {
         self.review.lock().unwrap_or_else(PoisonError::into_inner)
@@ -1381,6 +1436,49 @@ mod tests {
             "{refused:?}"
         );
         assert_eq!(handle.note_count().unwrap(), before);
+    }
+
+    #[test]
+    fn reset_returns_the_handle_to_a_first_launch() {
+        let (data, state) = dirs();
+        let handle = open(&data, &state);
+        let seeded = handle.note_count().unwrap();
+        handle.install_fixture("backlog".to_owned(), NOW).unwrap();
+        assert_ne!(handle.note_count().unwrap(), seeded);
+
+        handle.reset().unwrap();
+
+        assert_eq!(handle.note_count().unwrap(), seeded);
+        // The handle is usable afterwards: it holds the reopened collection.
+        assert!(handle.due_count(NOW).is_ok());
+    }
+
+    #[test]
+    fn the_bench_lists_every_fixture_with_its_key_and_what_it_reaches() {
+        let listed = fixtures();
+        assert_eq!(listed.len(), cairn_ops::fixtures::Fixture::ALL.len());
+        let caught_up = listed.iter().find(|f| f.key == "caught-up").unwrap();
+        assert_eq!(
+            caught_up.reaches,
+            cairn_ops::fixtures::Fixture::CaughtUp.reaches()
+        );
+        // Each key installs, so the list is the bench and not a copy of it.
+        for f in &listed {
+            assert!(
+                cairn_ops::fixtures::Fixture::parse(&f.key).is_some(),
+                "{}",
+                f.key
+            );
+        }
+    }
+
+    #[test]
+    fn an_install_says_what_it_reached() {
+        let (data, state) = dirs();
+        let handle = open(&data, &state);
+        let reached = handle.install_fixture("backlog".to_owned(), NOW).unwrap();
+        let expected = cairn_ops::fixtures::read(&handle.collection(), NOW).unwrap();
+        assert_eq!(reached, expected.to_string());
     }
 
     #[test]
