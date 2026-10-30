@@ -85,6 +85,9 @@ Their reasons have not gone: a script is judged only by a reader on the device, 
 verified only against a real platform, and the fixture bench is the handset's only route to a
 fixture. The heading is what keeps them from reading as settings.
 
+*Amended on Android only by [ADR-0051](0051-settings-on-android.md):* the Kotlin app carries reset and
+the bench, in a development build only, and no sync block until sync is built.
+
 ### 4. Enrolment is a sub-state with **one** heading and *Back* on the line
 
 > Enrolment replaces the whole screen and draws its own heading only. *Back* is the lone primary,

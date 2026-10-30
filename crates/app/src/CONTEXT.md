@@ -326,6 +326,14 @@ _Avoid_: Seed, for a fixture — the seed is the six cards a real first install 
 the two is how "just extend the seed" gets proposed again; capture mode, which is the route this
 deliberately is not.
 
+**Development build**:
+A build of the Kotlin app made with the development variable set, and the only one that carries the
+*Development* block (reset and the fixture bench, ADR-0051 §1). Its opposite is the **everyday
+build**, which the handset is left on when development ends. The gate is the variable, never the
+debug or release build type.
+_Avoid_: Debug build, for this — a debug build may be an everyday one; dev mode, which suggests a
+switch inside one app rather than two builds.
+
 **File set** / **The file bench**:
 A set of **files an import arrives from**, named by what planning them reaches — `imports` — and the
 module that defines them (`file_bench`). A fixture is what is inside the application; a file set is
