@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
@@ -200,9 +201,16 @@ fun NoteList(
 @Composable
 private fun DeleteQuestion(preview: String, refused: Boolean, rows: RowCallbacks) {
     // The question grows the row downwards, so on a row near the list's end *Keep it* opens cut off by
-    // the list's edge — Delete in view and the safe answer hidden. Ask the list to show the whole thing.
+    // the list's edge — Delete in view and the safe answer hidden. Ask the list to show the whole thing,
+    // once when it opens and again if the refusal grows it; scrolling the row away and back is not asking.
     val inView = remember { BringIntoViewRequester() }
-    LaunchedEffect(Unit) { inView.bringIntoView() }
+    var shown by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(refused) {
+        if (shown != refused) {
+            shown = refused
+            inView.bringIntoView()
+        }
+    }
     Column(Modifier.bringIntoViewRequester(inView)) {
         if (refused) {
             CairnText(stringResource(R.string.notes_delete_note_refused), Modifier.testTag("row-delete-refused"), color = Cairn.colors.error)

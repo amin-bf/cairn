@@ -7,7 +7,6 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
@@ -20,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -151,8 +151,8 @@ class NoteRowActionsTest {
         rule.waitForIdle()
     }
 
-    private fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
-    private fun bottom(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.bottom
+    private fun visibleTop(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+    private fun visibleBottom(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.bottom
 
     /** The whole question — the sentence, *Delete* and *Keep it* — shows above the pinned *Create note*. */
     private fun assertQuestionAboveCreateNote() {
@@ -160,7 +160,7 @@ class NoteRowActionsTest {
         rule.waitForIdle()
         for (tag in listOf("row-delete-warning", "row-delete-confirm", "row-keep")) {
             rule.onNodeWithTag(tag).assertIsDisplayed()
-            assertTrue("$tag clears Create note", bottom(tag) <= top("create-note"))
+            assertTrue("$tag clears Create note", visibleBottom(tag) <= visibleTop("create-note"))
         }
     }
 
@@ -174,7 +174,7 @@ class NoteRowActionsTest {
         showNotes()
         rule.onNode(hasScrollAction()).performScrollToIndex(8)
         rule.waitForIdle()
-        val band = top("create-note")
+        val band = visibleTop("create-note")
         val last = rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().indexOfLast { it.laidOutBottom() <= band }
         rule.onAllNodesWithTag("row-delete")[last].performClick()
         assertQuestionAboveCreateNote()
@@ -187,7 +187,7 @@ class NoteRowActionsTest {
         rule.onNode(hasScrollAction()).performScrollToIndex(8)
         rule.waitForIdle()
         // Put a row's centre two dp above the band, so its actions can be pressed and its lower half is cut.
-        val band = top("create-note")
+        val band = visibleTop("create-note")
         val row = rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().last { it.laidOutTop() < band }
         scrollBy((row.laidOutTop() + row.size.height / 2f) - (band - rule.density.run { 2.dp.toPx() }))
         val half = rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().indexOfFirst { it.laidOutBottom() > band }
