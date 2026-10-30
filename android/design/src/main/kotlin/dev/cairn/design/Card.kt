@@ -138,6 +138,7 @@ fun CairnCard(
         BoxWithConstraints(modifier.fillMaxWidth()) {
             val innerWidth = with(density) { (maxWidth - pad * 2).roundToPx() }.coerceAtLeast(1)
             val budget = with(density) { (Surface.REVIEW_HEIGHT.dp - pad * 2).toPx() }
+            val floor = with(density) { (minHeight.dp - pad * 2).toPx() }
             val badgeLine = with(density) { (Typography.SMALL * 1.4f).sp.toPx() }
             val faceGap = with(density) { gap(3).toPx() }
             val answerBlock = faceGap * 2 + with(density) { 1.dp.toPx() }
@@ -157,7 +158,7 @@ fun CairnCard(
                 }
                 CardPlan(size, promptHeight, answerHeight, content)
             }
-            val inner = maxOf(plan.content, with(density) { (minHeight.dp - pad * 2).toPx() })
+            val inner = maxOf(plan.content, floor)
             val shut = plan.prompt
             // Shut, the prompt is centred as though it were alone; open, it sits above the answer.
             val closed = ((inner - shut) / 2 - badgeLine).coerceAtLeast(0f)

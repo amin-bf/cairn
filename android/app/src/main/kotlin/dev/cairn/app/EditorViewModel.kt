@@ -180,9 +180,9 @@ class EditorViewModel(
         val now = monotonicClock().toULong()
         enqueue {
             editing?.let { h ->
-                val left = owner.use { h.settleIfIdle(now) }
+                val stillWaiting = owner.use { h.settleIfIdle(now) }
                 persistNoteId(owner.use { h.noteId() })
-                if (left != null) {
+                if (stillWaiting != null) {
                     settlePending = true
                 } else if (settlePending) {
                     settlePending = false

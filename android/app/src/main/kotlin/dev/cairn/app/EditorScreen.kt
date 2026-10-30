@@ -271,7 +271,9 @@ private fun List<Run>.toCardRuns(): List<CardRun> = map {
 private fun CardsPane(pane: CardPaneFacts?) {
     CairnFieldLabel(stringResource(R.string.editor_pane_cards))
     Spacer(Modifier.height(gap(1)))
-    if (pane == null || pane.entries.isEmpty()) {
+    // Not read yet: say nothing rather than a false "No cards yet."
+    if (pane == null) return
+    if (pane.entries.isEmpty()) {
         CairnText(stringResource(R.string.editor_cards_none), Modifier.testTag("cards-empty"))
         return
     }
