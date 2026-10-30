@@ -40,7 +40,6 @@ import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnDestinationsRow
 import dev.cairn.design.CairnLeftRule
 import dev.cairn.design.CairnOutlineEntry
-import dev.cairn.design.CardRun
 import dev.cairn.design.Destination
 import dev.cairn.design.tokens.Surface
 import dev.cairn.ffi.CardPaneFacts
@@ -48,8 +47,6 @@ import dev.cairn.ffi.DormantFact
 import dev.cairn.ffi.DormantName
 import dev.cairn.ffi.PaneEntry
 import dev.cairn.ffi.PaneState
-import dev.cairn.ffi.Run
-import dev.cairn.ffi.RunStyle
 import dev.cairn.design.CairnDropdown
 import dev.cairn.design.CairnFieldLabel
 import dev.cairn.design.CairnLabeledField
@@ -251,15 +248,6 @@ private fun DormancyWarning(dormant: List<DormantFact>) {
         Spacer(Modifier.height(gap(1)))
         CairnText(stringResource(R.string.editor_dormant_undo), tier = Tier.Small, color = Cairn.colors.weak)
     }
-}
-
-private fun List<Run>.toCardRuns(): List<CardRun> = map {
-    CardRun(
-        it.text,
-        bold = it.style == RunStyle.BOLD || it.style == RunStyle.BOLD_ITALIC,
-        italic = it.style == RunStyle.ITALIC || it.style == RunStyle.BOLD_ITALIC,
-        code = it.style == RunStyle.CODE,
-    )
 }
 
 /**

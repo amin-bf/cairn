@@ -65,7 +65,7 @@ private var SemanticsPropertyReceiver.cardTier by CardTierKey
 private val RevealEasing = Easing { Motion.easing(it) }
 
 /** The runs as one string, every glyph in the face that has it and each run in its own style. */
-private fun FaceSet.annotate(runs: List<CardRun>): AnnotatedString = buildAnnotatedString {
+internal fun FaceSet.annotate(runs: List<CardRun>): AnnotatedString = buildAnnotatedString {
     for (run in runs) {
         val family = when {
             run.code -> Family.Monospace

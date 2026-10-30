@@ -125,9 +125,14 @@ class ReviewViewModel(
      * The note on screen may have been edited (the editor was popped, or the app resumed): ask the
      * sitting to re-read the card. It is the same card edited, or the next one if the edit stopped it
      * generating, with nothing graded or counted; both are the sitting's rule (ADR-0048 §6). Does
-     * nothing outside a sitting.
+     * nothing outside a sitting, but on the entrance it reads the facts again: the leech screen, which
+     * is reached from there, may have changed what the entrance counts (ADR-0050).
      */
     fun refresh() {
+        if (_state.value is ReviewScreenState.Entrance) {
+            viewModelScope.launch { load() }
+            return
+        }
         val handle = sitting ?: return
         if (_state.value !is ReviewScreenState.Sitting) return
         viewModelScope.launch {

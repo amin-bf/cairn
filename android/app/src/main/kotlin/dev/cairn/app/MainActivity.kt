@@ -20,11 +20,11 @@ class MainActivity : CairnActivity() {
 
 /** Review: the entrance until a sitting is begun, then the sitting until it ends. */
 @Composable
-fun ReviewScreen(model: ReviewViewModel, onEditNote: (noteId: String) -> Unit = {}) {
+fun ReviewScreen(model: ReviewViewModel, onEditNote: (noteId: String) -> Unit = {}, onLeeches: () -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
         is ReviewScreenState.Loading -> CairnPage {}
-        is ReviewScreenState.Entrance -> ReviewEntrance(s.facts, onStart = model::start)
+        is ReviewScreenState.Entrance -> ReviewEntrance(s.facts, onStart = model::start, onLeeches = onLeeches)
         is ReviewScreenState.Sitting -> ReviewSitting(
             chosen = s.chosen,
             graded = s.graded,
