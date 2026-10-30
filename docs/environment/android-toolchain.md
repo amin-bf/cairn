@@ -157,6 +157,24 @@ emulator -avd cairn-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu sw
 cd android && ./gradlew connectedDebugAndroidTest
 ```
 
+**The development build** ([#237](https://github.com/amin-bf/cairn/issues/237),
+[ADR-0051](../adr/0051-settings-on-android.md) §1). `CAIRN_DEVELOPMENT=1` in the environment of the
+Gradle build adds the *Development* block (reset and the fixture bench) to Settings: its Kotlin and
+strings are `app/src/development`, its tests `app/src/androidTestDevelopment`. Any other value, or
+none, adds `app/src/shipping` and `app/src/androidTestShipping` instead, whose block draws nothing and
+whose tests assert that none of it is in the APK. The variable is read through Gradle's providers and
+is independent of the build type; both builds keep `dev.cairn.app` and the debug key, so one installs
+over the other as an upgrade. Run the suite both ways, and finish a handset session on the build made
+without it:
+
+```sh
+cd android
+CAIRN_DEVELOPMENT=1 ./gradlew :app:connectedDebugAndroidTest   # development block and its tests
+./gradlew :app:connectedDebugAndroidTest                       # no block, and the test that says so
+```
+
+Set `ANDROID_SERIAL` when a handset is also attached, or Gradle installs on both.
+
 **The minified release build** ([#208](https://github.com/amin-bf/cairn/issues/208)). `release` runs
 R8 (`isMinifyEnabled`, `isShrinkResources`) with `android/app/proguard-rules.pro`, whose every rule
 says where it comes from: JNA's documented set (research §8 of `docs/research/kotlin-binding/`) and a

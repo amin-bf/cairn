@@ -13,7 +13,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import dev.cairn.design.pageArgb
-import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.ThemeChoice
 import kotlinx.coroutines.launch
 
@@ -50,12 +49,7 @@ abstract class CairnActivity : ComponentActivity() {
             },
         )
         lifecycleScope.launch {
-            // A failed read follows the platform rather than leaving the window blank.
-            val choice = try {
-                (application as CairnApplication).collection.use { it.themeChoice() }
-            } catch (_: CairnException) {
-                ThemeChoice.SYSTEM
-            }
+            val choice = (application as CairnApplication).collection.themeChoiceOrSystem()
             // The window theme follows the platform, so a stored choice that differs from it is
             // put behind the first frame here.
             val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==

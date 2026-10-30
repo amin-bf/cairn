@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Development block's words (ADR-0051 §1). A source set of a development build only. -->
+<resources>
+    <string name="development_heading">Development</string>
+    <string name="development_reset_sentence">Development control — returns this device to a first launch, seed and all.</string>
+    <string name="development_reset_control">Reset the collection</string>
+    <string name="development_reset_question">Reset the collection to a first launch?</string>
+    <string name="development_reset_confirm">Reset</string>
+    <string name="development_bench_sentence">Development control — replaces the collection with a pre-made one, to reach a screen the shipping seed cannot.</string>
+    <string name="development_install_question">Replace the collection with %1$s?</string>
+    <string name="development_install_confirm">Replace</string>
+    <string name="development_keep">Keep it</string>
+</resources>
