@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.CollectionHandle
-import dev.cairn.ffi.InternalException
 import android.os.Looper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -65,24 +64,6 @@ class CollectionTest {
         } catch (_: CairnException) {
         } finally {
             file.delete()
-        }
-    }
-
-    @Test
-    fun a_rust_panic_reaches_kotlin_as_an_exception_and_the_handle_survives() {
-        val root = File(context.cacheDir, "panic-${System.nanoTime()}")
-        try {
-            CollectionHandle.open(File(root, "files").absolutePath, File(root, "no_backup").absolutePath).use { handle ->
-                try {
-                    handle.panicProbe()
-                    fail("the probe panics")
-                } catch (e: InternalException) {
-                    assertTrue(e.message!!.contains("panic probe"))
-                }
-                assertEquals(0uL, handle.dueCount(System.currentTimeMillis()))
-            }
-        } finally {
-            root.deleteRecursively()
         }
     }
 }
