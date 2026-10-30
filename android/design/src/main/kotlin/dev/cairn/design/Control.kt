@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +42,13 @@ fun CairnTextAction(label: String, onClick: () -> Unit, modifier: Modifier = Mod
  * one that is pressed to go on; it is a heavier fill, not a different shape.
  */
 @Composable
-fun CairnControl(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false) {
+fun CairnControl(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    aside: String? = null,
+) {
     val colors = Cairn.colors
     val shape = RoundedCornerShape(Controls.WIDGET_RADIUS.dp)
     Box(
@@ -52,6 +61,13 @@ fun CairnControl(label: String, onClick: () -> Unit, modifier: Modifier = Modifi
             .padding(horizontal = (Spacing.UNIT * 2).dp),
         contentAlignment = Alignment.Center,
     ) {
-        CairnText(label, color = colors.onControl)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CairnText(label, color = colors.onControl)
+            // An aside is a second, quieter fact about the same choice: small and dimmed (ADR-0034 §1).
+            if (aside != null) {
+                Spacer(Modifier.width(Spacing.UNIT.dp))
+                CairnText(aside, tier = Tier.Small, color = colors.weak)
+            }
+        }
     }
 }

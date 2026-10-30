@@ -19,7 +19,17 @@
     <string name="review_start_one">Start — the one card</string>
     <string name="review_shorter">or a shorter sitting:</string>
 
-    <!-- Until the sitting is drawn: what beginning one shows. -->
-    <string name="review_sitting_stub">A sitting of %1$d</string>
+    <!-- A sitting. Also the egui build's words. -->
+    <string name="review_progress">%1$d of %2$d</string>
+    <string name="review_badge_new">new</string>
+    <string name="review_badge_box">box %1$d</string>
+    <string name="review_checkpoint">10 minutes so far.</string>
+    <string name="review_finish_here">Finish here</string>
+    <string name="review_keep_going">Keep going</string>
+    <string name="review_grade_forgot">Forgot</string>
+    <string name="review_grade_barely">Barely</string>
+    <string name="review_grade_good">Good</string>
+    <string name="review_grade_easy">Easy</string>
+    <string name="review_interval_days">%1$dd</string>
     <string name="review_unavailable">The collection could not be opened</string>
 </resources>
