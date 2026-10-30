@@ -1,5 +1,6 @@
 package dev.cairn.app
 
+import android.app.Activity
 import android.content.res.Configuration
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -8,6 +9,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import dev.cairn.design.CairnTheme
 import dev.cairn.design.pageArgb
@@ -60,9 +64,29 @@ abstract class CairnActivity : ComponentActivity() {
                 Configuration.UI_MODE_NIGHT_YES
             window.setBackgroundDrawable(ColorDrawable(pageArgb(isDark(choice, systemDark))))
             setContent {
-                CairnTheme(dark = isDark(choice, isSystemInDarkTheme())) { Screen() }
+                val dark = isDark(choice, isSystemInDarkTheme())
+                SystemBarIcons(dark)
+                CairnTheme(dark = dark) { Screen() }
             }
             ready = true
         }
+    }
+}
+
+/**
+ * The system bars' icons follow the theme, as the platform's practice is (ADR-0045 §7): dark icons
+ * on the light page, light icons on the dark one. The window theme asks for neither, and the
+ * activity draws edge to edge, so the page shows behind the bars. It runs on every change of
+ * [dark], so a switch of the phone's theme while the app is open changes them too.
+ */
+@Composable
+fun SystemBarIcons(dark: Boolean) {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    SideEffect {
+        val window = (view.context as Activity).window
+        val bars = WindowCompat.getInsetsController(window, view)
+        bars.isAppearanceLightStatusBars = !dark
+        bars.isAppearanceLightNavigationBars = !dark
     }
 }
