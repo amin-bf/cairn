@@ -145,14 +145,19 @@ is load-bearing, not a convenience, because without it "find note 200 of 500" is
 suspended cards (ADR-0010 §8). Carries **no schedule information at all**: a note generates several
 cards in several boxes, so any per-note figure is boxes *counted*, which ADR-0001 §3 forbids. Deleted
 notes are not listed — ADR-0004 §7's delete discards the content, so there is nothing to list.
-**Create sits at the top of the list, and that is a position rather than a taste** (ADR-0021 §10's
-handoff, taken by the layout pass): a new note goes to the end of the **collection's** order, never
-the end of the filtered view, and ADR-0021 §4 names *"the end of the deck I am looking at"* as the
-intuitive misreading that is not even expressible. A create control at the foot of a filtered list
-asserts that misreading with its position. In the editor the same action sits at the **bottom of the
-form pane**, which is free under ADR-0021 §7's autosave — no Save button competes for it — and is the
-one control there a phone cannot reach by accelerator.
+**Create is pinned outside the scroll on the reach line** (ADR-0039 §8), and a new note still goes to
+the end of the **collection's** order, never the end of the filtered view — ADR-0021 §4 names *"the
+end of the deck I am looking at"* as the intuitive misreading that is not even expressible. In the
+editor the same rhythm is **New note**, which carries the kind and the deck forward: a modifier chord
+on the desktop, and on Android a visible action above *Done* (ADR-0048 §2), since a phone has no
+accelerator.
 _Avoid_: Browser, card browser, deck view.
+
+**Text search**:
+The note list's text filter: a substring match of the query against each field value, both **folded**
+first — case, and Persian letter variants that look alike and differ in code point (ADR-0049). Folding
+is how two strings are compared, never a change to what is stored.
+_Avoid_: Normalised text, cleaned text — the stored text is neither.
 
 **List order**:
 The note list has **exactly one order — `position` — and no sort control** (ADR-0021 §4). Filters
