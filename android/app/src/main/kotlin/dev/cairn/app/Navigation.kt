@@ -28,7 +28,7 @@ import kotlinx.coroutines.delay
 /** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
 private const val TICK_MS = 15_000L
 
-/** How often Settings polls an Optimise run while the screen is started (ADR-0051 §4): short, so the bar moves. */
+/** How often Settings polls an Optimise run while the screen is started (client-stack rule 10): short, so the bar moves. */
 const val SETTINGS_TICK_MS = 250L
 
 private const val REVIEW = "review"
@@ -105,7 +105,7 @@ fun CairnNavHost(
                 val model = viewModel { SettingsViewModel(owner, appearance) }
                 // Coming back to the page it is read again; a field mid-edit keeps what was typed.
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
-                // A run is polled while the screen is started, and not while it is stopped or left (ADR-0051 §4).
+                // A run is polled while the screen is started, and not while it is stopped or left (client-stack rule 10).
                 val lifecycle = LocalLifecycleOwner.current.lifecycle
                 LaunchedEffect(model, settingsTickMs) {
                     lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {

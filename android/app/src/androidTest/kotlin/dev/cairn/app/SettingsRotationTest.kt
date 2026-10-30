@@ -18,7 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
-/** An Optimise run through a recreation of the activity (#236, ADR-0051 §4): the model holds the run. */
+/** An Optimise run through a recreation of the activity (#236, client-stack rule 10): the model holds the run. */
 @RunWith(AndroidJUnit4::class)
 class SettingsRotationTest {
     @get:Rule

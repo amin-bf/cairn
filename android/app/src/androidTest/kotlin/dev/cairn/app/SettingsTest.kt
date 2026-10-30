@@ -418,4 +418,22 @@ class SettingsTest {
         rule.waitForIdle()
         assertEquals(updated, text("optimise-done"))
     }
+
+    @Test
+    fun two_quick_requests_to_optimise_start_one_run() {
+        withHistory()
+        val started = AtomicInteger()
+        val counting = object : CollectionAccess {
+            override suspend fun <T> use(block: (CollectionHandle) -> T): T =
+                owner.use(block).also { if (it is dev.cairn.ffi.OptimiseHandle) started.incrementAndGet() }
+        }
+        val model = SettingsViewModel(counting, AppearanceState(ThemeChoice.LIGHT))
+        rule.runOnUiThread {
+            model.optimise()
+            model.optimise()
+        }
+        rule.waitUntil(10_000) { (model.state.value as? SettingsScreenState.Ready)?.run != OptimiseRun.Idle }
+        runBlocking { model.cancelOptimise(); kotlinx.coroutines.delay(300) }
+        assertEquals(1, started.get())
+    }
 }

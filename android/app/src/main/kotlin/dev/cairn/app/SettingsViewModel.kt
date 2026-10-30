@@ -61,7 +61,7 @@ private fun OptimisationNudge.toNudge(): Nudge = when (this) {
  * finishes, and reads the block again after a refusal. A write to Appearance updates [appearance], so
  * the whole app changes theme at once.
  *
- * It also holds the Optimise run (ADR-0014, ADR-0051 §4): the handle lives here, so a run outlives a
+ * It also holds the Optimise run (ADR-0014, client-stack rule 10): the handle lives here, so a run outlives a
  * rotation and a switch of destination. [tick] polls it; the screen calls that on a short interval
  * while its lifecycle is started. No service, no wakelock, no scheduled work: a run that nobody
  * watches is simply not seen to finish until the screen is back.
@@ -79,6 +79,9 @@ class SettingsViewModel(
 
     /** The run in flight, if any. Touched from the main thread and from [tick]'s coroutine, one at a time. */
     private var run: OptimiseHandle? = null
+
+    /** Whether a run is being started, so a second request before the first has a handle starts nothing. */
+    private var starting = false
 
     /** Whether a [tick] is under way, so a slow poll is not overtaken by the next one. */
     private var ticking = false
@@ -155,7 +158,8 @@ class SettingsViewModel(
 
     /** *Optimise*: start a run from the foreground (client-stack rule 10). The completion sentence clears. */
     fun optimise() {
-        if (run != null) return
+        if (run != null || starting) return
+        starting = true
         viewModelScope.launch {
             try {
                 run = owner.use { it.startOptimise() }
@@ -164,6 +168,8 @@ class SettingsViewModel(
                 }
             } catch (_: CairnException) {
                 // The run could not start: the page stays at rest, as it was.
+            } finally {
+                starting = false
             }
         }
     }
