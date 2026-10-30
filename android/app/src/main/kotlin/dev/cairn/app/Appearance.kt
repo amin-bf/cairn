@@ -28,6 +28,7 @@ val LocalAppearance = staticCompositionLocalOf { AppearanceState(ThemeChoice.SYS
 /**
  * The theme of every screen, derived from [appearance] in one place: the page colours, the window
  * behind them and the system bars' icons all follow the same value, so they switch on the same frame.
+ * The activity sets the same window background once before the first frame; this keeps it in step after.
  */
 @Composable
 fun CairnAppearance(appearance: AppearanceState, content: @Composable () -> Unit) {

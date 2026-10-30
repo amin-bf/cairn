@@ -54,7 +54,8 @@ fun SettingsScreen(model: SettingsViewModel) {
 
 /**
  * The page (ADR-0042): the heading, then two groups, each a bold name at body size over a caption,
- * with the same rule between blocks the egui build draws. Nothing is pinned to the reach line.
+ * (the egui build's rule between two blocks of a group is drawn when a group holds a second block).
+ * Nothing is pinned to the reach line.
  * *This device* holds Appearance alone: no Files block and no sync block (ADR-0051 §3, §5).
  */
 @Composable
@@ -79,7 +80,7 @@ fun SettingsPage(
 
             GroupHeading(stringResource(R.string.settings_studying), stringResource(R.string.settings_studying_caption), "group-studying")
             RateBlock(state, onRateChange, onCommitRate)
-            // Optimise joins this group later (ADR-0014), after a rule; the group ends here until then.
+            // Optimise joins this group later (ADR-0014), after a block rule; the group ends here until then.
 
             Spacer(Modifier.height(gap(2)))
             GroupHeading(stringResource(R.string.settings_device), stringResource(R.string.settings_device_caption), "group-device")

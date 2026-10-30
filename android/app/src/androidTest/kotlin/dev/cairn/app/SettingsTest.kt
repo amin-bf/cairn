@@ -135,12 +135,8 @@ class SettingsTest {
         rule.onNodeWithTag("appearance-note")
             .assertTextEquals("This machine only — your appearance does not follow the collection to another device.")
         for (absent in listOf("Files", "Open a file", "sync", "Sync", "Development", "Optimise")) {
-            rule.onAllNodesWithText(absent, substring = true).assertCountEquals0(absent)
+            assertEquals("nothing on the page says '$absent'", 0, rule.onAllNodesWithText(absent, substring = true).fetchSemanticsNodes().size)
         }
-    }
-
-    private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEquals0(what: String) {
-        assertEquals("nothing on the page says '$what'", 0, fetchSemanticsNodes().size)
     }
 
     @Test
@@ -176,6 +172,16 @@ class SettingsTest {
         showApp()
         openSettings()
         typeRate("123456")
+        rule.onNodeWithTag("rate-field").performImeAction()
+        rule.waitUntil(10_000) { textOf("rate-field") == "9999" }
+        assertEquals(9999u, storedRate())
+    }
+
+    @Test
+    fun a_number_too_long_for_the_binding_is_clamped_like_any_other_above_the_limit() {
+        showApp()
+        openSettings()
+        typeRate("99999999999999999999")
         rule.onNodeWithTag("rate-field").performImeAction()
         rule.waitUntil(10_000) { textOf("rate-field") == "9999" }
         assertEquals(9999u, storedRate())
@@ -240,7 +246,7 @@ class SettingsTest {
     }
 
     @Test
-    fun the_chosen_appearance_is_kept_across_a_relaunch() {
+    fun the_chosen_appearance_is_stored_and_a_fresh_state_reads_it_back() {
         showApp(initial = ThemeChoice.SYSTEM)
         openSettings()
         rule.onNodeWithTag("appearance-light").performClick()

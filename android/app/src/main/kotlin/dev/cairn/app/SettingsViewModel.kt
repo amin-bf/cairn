@@ -74,7 +74,9 @@ class SettingsViewModel(
     /** *Done*, or the field losing focus: commit what is typed if it parses, and show the value stored. */
     fun commitRate() {
         val ready = _state.value as? SettingsScreenState.Ready ?: return
-        val rate = ready.rate.trim().toUIntOrNull() ?: return
+        val typed = ready.rate.trim()
+        // Digits too many for the binding's integer are still a number above the limit: the clamp answers it.
+        val rate = typed.toUIntOrNull() ?: if (typed.isNotEmpty() && typed.all { it in '0'..'9' }) UInt.MAX_VALUE else return
         viewModelScope.launch {
             try {
                 val stored = owner.use { it.setNewCardRate(rate) }

@@ -33,8 +33,8 @@ class AppearanceTest {
             fun read() = CollectionHandle.open(data.absolutePath, state.absolutePath).use { it.themeChoice() }
 
             assertEquals("unset", ThemeChoice.SYSTEM, read())
-            // The setter only writes the three valid forms, so the row is written the way an earlier
-            // session of the desktop app would have left it (an unknown value included), with the collection closed.
+            // The setter writes only the three valid forms, so the row is written the way an earlier
+            // session of the desktop app would have left it (an unknown value too), collection closed.
             for ((stored, expected) in listOf(
                 "dark" to ThemeChoice.DARK,
                 "light" to ThemeChoice.LIGHT,

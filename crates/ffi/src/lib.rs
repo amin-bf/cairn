@@ -109,6 +109,16 @@ impl From<cairn_ops::appearance::ThemeChoice> for ThemeChoice {
     }
 }
 
+impl From<ThemeChoice> for cairn_ops::appearance::ThemeChoice {
+    fn from(choice: ThemeChoice) -> Self {
+        match choice {
+            ThemeChoice::System => Self::System,
+            ThemeChoice::Light => Self::Light,
+            ThemeChoice::Dark => Self::Dark,
+        }
+    }
+}
+
 /// The opened collection. Kotlin holds exactly one per process (ADR-0046 §7). Objects are shared
 /// through `Arc` so every method takes `&self`, and `Collection` is `Send` but not `Sync`, hence the
 /// `Mutex`: calls run one at a time.
@@ -234,12 +244,7 @@ impl CollectionHandle {
 
     /// Record the appearance choice (ADR-0036 §3). Device-local; the read above decides what it means.
     pub fn set_theme_choice(&self, choice: ThemeChoice) -> Result<(), CairnError> {
-        let choice = match choice {
-            ThemeChoice::System => cairn_ops::appearance::ThemeChoice::System,
-            ThemeChoice::Light => cairn_ops::appearance::ThemeChoice::Light,
-            ThemeChoice::Dark => cairn_ops::appearance::ThemeChoice::Dark,
-        };
-        cairn_ops::appearance::set_theme_choice(&mut self.collection(), choice)?;
+        cairn_ops::appearance::set_theme_choice(&mut self.collection(), choice.into())?;
         Ok(())
     }
 
