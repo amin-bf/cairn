@@ -145,8 +145,8 @@ class ReviewEntranceTest {
         fixture("backlog")
         show()
         rule.onNodeWithTag("shorter-10").performClick()
-        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("sitting-stub")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithTag("sitting-stub").assertTextEquals("A sitting of 10")
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("progress")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("progress").assertTextEquals("0 of 10")
     }
 
     @Test
@@ -154,7 +154,7 @@ class ReviewEntranceTest {
         fixture("backlog")
         show()
         rule.onNodeWithTag("start-all").performClick()
-        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("sitting-stub")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("progress")).fetchSemanticsNodes().isNotEmpty() }
         val app = ApplicationProvider.getApplicationContext<CairnApplication>()
         assertEquals(
             "StrictMode saw work of ours on the main thread:\n${app.strictModeViolations.joinToString("\n---\n")}",
