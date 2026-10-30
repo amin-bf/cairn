@@ -14,6 +14,9 @@ import kotlinx.coroutines.launch
 sealed interface NotesScreenState {
     data object Loading : NotesScreenState
 
+    /** Which write the collection refused, shown where the person did it. */
+    enum class Refusal { CreateDeck, DeleteDeck }
+
     /**
      * The list under [selector] and [search], the [newDeck] name being typed, and — when a deck's
      * delete has been asked for and not yet confirmed — how many notes it would take
@@ -29,6 +32,7 @@ sealed interface NotesScreenState {
         val confirmingCount: Long?,
         val confirmingNote: String? = null,
         val moving: String? = null,
+        val refusal: Refusal? = null,
     ) : NotesScreenState
 
     data object Failed : NotesScreenState
@@ -40,7 +44,7 @@ sealed interface NotesScreenState {
  * for the list under them. Which rows match, whether a caption applies and whether the collection is
  * empty are the binding's facts (ADR-0046 §1).
  */
-class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
+class NotesViewModel(private val owner: CollectionAccess) : ViewModel() {
     private val _state = MutableStateFlow<NotesScreenState>(NotesScreenState.Loading)
     val state: StateFlow<NotesScreenState> = _state
 
@@ -48,6 +52,7 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
     private var search = ""
     private var newDeck = ""
     private var confirming: String? = null
+    private var refusal: NotesScreenState.Refusal? = null
     private var confirmingNote: String? = null
     private var moving: String? = null
     private var reading: Job? = null
@@ -69,7 +74,7 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
                 // that hides it leaves nothing to name or place against (ADR-0021 §4, ADR-0039 §7).
                 if (facts.rows.none { it.noteId == confirmingNote }) confirmingNote = null
                 if (facts.rows.none { it.noteId == moving }) moving = null
-                NotesScreenState.Ready(facts, selector, search, newDeck, count, confirmingNote, moving)
+                NotesScreenState.Ready(facts, selector, search, newDeck, count, confirmingNote, moving, refusal)
             } catch (_: CairnException) {
                 NotesScreenState.Failed
             }
@@ -87,28 +92,32 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
     fun selectDeck(choice: DeckSelector) {
         selector = choice
         confirming = null
+        refusal = null
         refresh()
     }
 
     fun setNewDeck(text: String) {
         newDeck = text
+        refusal = null
         (_state.value as? NotesScreenState.Ready)?.let { _state.value = it.copy(newDeck = text) }
     }
 
-    /** *New deck*: create it and filter to it — it was made to be used (ADR-0021 §9). A blank name makes nothing. */
+    /**
+     * *New deck*: create it and filter to it — it was made to be used (ADR-0021 §9). A blank name makes
+     * nothing: that is the operation's rule, and it answers with no id. A refusal is shown in place.
+     */
     fun createDeck() {
-        val name = newDeck.trim()
-        if (name.isEmpty()) return
         viewModelScope.launch {
             try {
-                val id = owner.use { it.createDeck(name) }
+                val id = owner.use { it.createDeck(newDeck) } ?: return@launch
                 newDeck = ""
                 selector = DeckSelector.Deck(id)
                 confirming = null
-                refresh()
+                refusal = null
             } catch (_: CairnException) {
-                _state.value = NotesScreenState.Failed
+                refusal = NotesScreenState.Refusal.CreateDeck
             }
+            refresh()
         }
     }
 
@@ -116,12 +125,14 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
     fun askDeleteDeck() {
         val deck = (selector as? DeckSelector.Deck)?.id ?: return
         confirming = deck
+        refusal = null
         refresh()
     }
 
     /** *Keep it*. */
     fun keepDeck() {
         confirming = null
+        refusal = null
         refresh()
     }
 
@@ -133,10 +144,12 @@ class NotesViewModel(private val owner: CollectionOwner) : ViewModel() {
                 owner.use { it.deleteDeck(deck) }
                 confirming = null
                 selector = DeckSelector.All
-                refresh()
+                refusal = null
             } catch (_: CairnException) {
-                _state.value = NotesScreenState.Failed
+                // The warning stays up, so the person can try again or keep the deck.
+                refusal = NotesScreenState.Refusal.DeleteDeck
             }
+            refresh()
         }
     }
 

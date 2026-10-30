@@ -1,6 +1,5 @@
 package dev.cairn.design
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -22,11 +21,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Spacing
 
 /** The pictures a row's action column can hold (ADR-0039 §1): the 24 dp grid, 1.5 stroke, round caps. */
 enum class RowIcon(internal val path: String) {
@@ -91,17 +87,14 @@ fun CairnListRow(
         Row(
             modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = Controls.HEIGHT.dp)
-                .clip(bandShape)
-                .background(colors.control)
-                .border(BorderStroke(1.dp, colors.separator), bandShape),
+                .controlSurface(colors.control, colors.separator),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
                 Modifier
                     .weight(1f)
                     .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                    .padding(horizontal = (Spacing.UNIT * 2).dp, vertical = Spacing.UNIT.dp),
+                    .padding(horizontal = gap(2), vertical = gap(1)),
             ) {
                 CairnText(title, Modifier.fillMaxWidth(), color = colors.onControl, maxLines = 2)
                 if (caption != null) {
@@ -136,11 +129,8 @@ fun CairnInertRow(title: String, modifier: Modifier = Modifier, held: Boolean = 
         modifier
             .semantics(mergeDescendants = true) {}
             .fillMaxWidth()
-            .defaultMinSize(minHeight = Controls.HEIGHT.dp)
-            .clip(bandShape)
-            .background(if (held) colors.popup else colors.control)
-            .border(BorderStroke(1.dp, if (held) colors.popupStroke else colors.separator), bandShape)
-            .padding(horizontal = (Spacing.UNIT * 2).dp, vertical = Spacing.UNIT.dp),
+            .controlSurface(if (held) colors.popup else colors.control, if (held) colors.popupStroke else colors.separator)
+            .padding(horizontal = gap(2), vertical = gap(1)),
     ) {
         CairnText(title, Modifier.fillMaxWidth(), color = colors.onControl, maxLines = 2)
     }
@@ -187,11 +177,9 @@ fun CairnConfirmRow(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(bandShape)
-            .background(colors.control)
-            .border(BorderStroke(1.dp, colors.separator), bandShape)
-            .padding(horizontal = (Spacing.UNIT * 2).dp, vertical = Spacing.UNIT.dp),
-        verticalArrangement = Arrangement.spacedBy(Spacing.UNIT.dp),
+            .controlSurface(colors.control, colors.separator)
+            .padding(horizontal = gap(2), vertical = gap(1)),
+        verticalArrangement = Arrangement.spacedBy(gap(1)),
     ) {
         CairnText(question, Modifier.fillMaxWidth().then(questionModifier), color = colors.onControl)
         CairnControl(confirm, onClick = onConfirm, modifier = confirmModifier)

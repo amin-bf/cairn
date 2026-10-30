@@ -47,6 +47,8 @@
     <string name="notes_delete_deck">Delete deck</string>
     <string name="notes_delete_deck_confirm">Delete the deck and its notes</string>
     <string name="notes_keep_it">Keep it</string>
+    <string name="notes_new_deck_refused">The deck could not be created.</string>
+    <string name="notes_delete_deck_refused">The deck could not be deleted.</string>
     <string name="notes_delete_deck_empty">Delete %1$s? It has no notes in it.</string>
     <string name="notes_move">Move</string>
     <string name="notes_delete">Delete</string>

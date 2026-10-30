@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.cairn.design.tokens.Frame
-import dev.cairn.design.tokens.Spacing
 
 /**
  * The specimen: a heading, French and Persian body text, a primary and an ordinary control, and the
@@ -34,12 +33,12 @@ fun Specimen(modifier: Modifier = Modifier) {
     ) {
         Column(
             Modifier.widthIn(max = Frame.MEASURE.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(Spacing.UNIT.dp),
+            verticalArrangement = Arrangement.spacedBy(gap(1)),
         ) {
             CairnText("Cairn", Modifier.testTag("specimen-heading"), tier = Tier.Heading)
             CairnText("Le chien est dans la maison, et le chat dort sur le livre.", Modifier.testTag("specimen-french"))
             CairnText("سگ در خانه است و گربه روی کتاب می‌خوابد.", Modifier.fillMaxWidth().testTag("specimen-persian"))
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.UNIT.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(gap(1))) {
                 CairnControl("Continue", onClick = {}, primary = true, modifier = Modifier.testTag("specimen-primary"))
                 CairnControl("Cancel", onClick = {}, modifier = Modifier.testTag("specimen-ordinary"))
             }

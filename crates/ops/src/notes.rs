@@ -320,8 +320,22 @@ pub fn delete_note(coll: &mut Collection, note: NoteId) -> Result<(), StoreError
 
 /// Create a deck with a name and return its id (ADR-0021 §9). Here so that both renderers reach
 /// every note-screen write through `cairn-ops` (ADR-0046 §1), not the store.
-pub fn create_deck(coll: &mut Collection, name: &str) -> Result<DeckId, StoreError> {
-    coll.create_deck(name)
+///
+/// The name is trimmed, and a blank one makes nothing and returns `None` — the rule is the
+/// operation's, so no renderer carries its own copy of it.
+pub fn create_deck(coll: &mut Collection, name: &str) -> Result<Option<DeckId>, StoreError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    coll.create_deck(name).map(Some)
+}
+
+/// The text a search field narrows by: trimmed, and `None` for a field of spaces, which narrows
+/// nothing. Both renderers build [`Filter::text`] from this.
+pub fn search_text(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
 /// Delete a deck, returning how many notes it took with it (ADR-0005 §7: every note in it derives
@@ -781,7 +795,7 @@ mod tests {
     #[test]
     fn create_deck_adds_it_and_delete_deck_returns_the_count_and_takes_its_notes() {
         let (mut coll, _d, _s) = open();
-        let deck = create_deck(&mut coll, "French").unwrap();
+        let deck = create_deck(&mut coll, "French").unwrap().unwrap();
         assert_eq!(coll.decks().unwrap(), vec![(deck, "French".to_owned())]);
         for f in ["a", "b"] {
             let n = coll
@@ -795,6 +809,24 @@ mod tests {
         assert_eq!(delete_deck(&mut coll, deck).unwrap(), 2);
         assert!(coll.decks().unwrap().is_empty());
         assert_eq!(list(&coll, &Filter::default()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_blank_deck_name_makes_no_deck_and_a_padded_one_is_stored_trimmed() {
+        let (mut coll, _d, _s) = open();
+        for blank in ["", "   ", "\t\n"] {
+            assert_eq!(create_deck(&mut coll, blank).unwrap(), None);
+        }
+        assert!(coll.decks().unwrap().is_empty());
+        let deck = create_deck(&mut coll, "  Géographie \n").unwrap().unwrap();
+        assert_eq!(coll.decks().unwrap(), vec![(deck, "Géographie".to_owned())]);
+    }
+
+    #[test]
+    fn a_search_of_spaces_narrows_nothing_and_a_padded_one_is_trimmed() {
+        assert_eq!(search_text(""), None);
+        assert_eq!(search_text(" \t "), None);
+        assert_eq!(search_text("  phare "), Some("phare".to_owned()));
     }
 
     #[test]

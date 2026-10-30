@@ -27,7 +27,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Spacing
 
 /** One word of the destinations row: its label, whether it is the page showing, and its test tag. */
 data class Destination(val label: String, val selected: Boolean, val tag: String, val onClick: () -> Unit)
@@ -39,7 +38,7 @@ data class Destination(val label: String, val selected: Boolean, val tag: String
 @Composable
 fun CairnDestinationsRow(destinations: List<Destination>, modifier: Modifier = Modifier) {
     val colors = Cairn.colors
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(Spacing.UNIT.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
         for (destination in destinations) {
             Box(
                 Modifier
@@ -48,7 +47,7 @@ fun CairnDestinationsRow(destinations: List<Destination>, modifier: Modifier = M
                     .background(if (destination.selected) colors.selection else colors.page)
                     .semantics { selected = destination.selected }
                     .clickable(onClick = destination.onClick)
-                    .padding(horizontal = (Spacing.UNIT * 2).dp)
+                    .padding(horizontal = gap(2))
                     .testTag(destination.tag),
                 contentAlignment = Alignment.Center,
             ) {
