@@ -17,8 +17,9 @@ android {
     buildFeatures { compose = true }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(property("cairn.bytecode")!!)
-        targetCompatibility = JavaVersion.toVersion(property("cairn.bytecode")!!)
+        val bytecode = JavaVersion.toVersion(property("cairn.bytecode").toString())
+        sourceCompatibility = bytecode
+        targetCompatibility = bytecode
     }
 
     testOptions { unitTests.isReturnDefaultValues = true }
