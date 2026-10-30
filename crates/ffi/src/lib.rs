@@ -1532,7 +1532,7 @@ mod tests {
     #[test]
     fn a_draft_holds_its_deck_until_the_note_is_born() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Français".into()).unwrap();
+        let deck = handle.create_deck("Français".into()).unwrap().expect("a deck");
         let editing = handle
             .clone()
             .new_draft("basic".into(), Some(deck.clone()))
@@ -1549,7 +1549,7 @@ mod tests {
     #[test]
     fn changing_deck_and_kind_on_a_stored_note_writes_at_once() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Persian".into()).unwrap();
+        let deck = handle.create_deck("Persian".into()).unwrap().expect("a deck");
         let editing = handle.clone().new_draft("basic".into(), None).unwrap();
         editing.commit_field("Front".into(), "x".into()).unwrap();
         editing.set_deck(Some(deck.clone())).unwrap();
@@ -1588,7 +1588,7 @@ mod tests {
     #[test]
     fn new_note_settles_this_one_and_opens_a_draft_with_the_same_kind_and_deck() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Français".into()).unwrap();
+        let deck = handle.create_deck("Français".into()).unwrap().expect("a deck");
         let editing = handle
             .clone()
             .new_draft("basic".into(), Some(deck.clone()))
@@ -1623,7 +1623,7 @@ mod tests {
     #[test]
     fn the_editor_lists_the_decks() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Français".into()).unwrap();
+        let deck = handle.create_deck("Français".into()).unwrap().expect("a deck");
         let editing = handle.clone().new_draft("basic".into(), None).unwrap();
         let decks = editing.decks().unwrap();
         assert_eq!(decks.len(), 1);

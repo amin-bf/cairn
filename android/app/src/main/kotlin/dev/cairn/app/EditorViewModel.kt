@@ -211,7 +211,8 @@ class EditorViewModel(
         newDeck = ""
         enqueue {
             val h = editing ?: return@enqueue
-            owner.use { h.setDeck(it.createDeck(name)) }
+            // A name the collection makes nothing of leaves the note's deck as it was.
+            owner.use { collection -> collection.createDeck(name)?.let { h.setDeck(it) } }
             show(h)
         }
     }
