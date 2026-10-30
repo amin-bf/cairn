@@ -169,7 +169,7 @@ class NoteListTest {
     fun an_empty_collection_says_what_to_do_about_it() {
         fixture("empty")
         showNotes()
-        rule.onNodeWithTag("notes-empty").assertTextEquals("Nothing here yet — create a deck, import one, or set up sync")
+        rule.onNodeWithTag("notes-empty").assertTextEquals("Nothing here yet — create a deck, or import one")
         rule.onNodeWithTag("notes-search").assertDoesNotExist()
     }
 
