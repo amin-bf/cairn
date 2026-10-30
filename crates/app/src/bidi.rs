@@ -104,8 +104,7 @@ fn fix_digits(word: &str) -> std::borrow::Cow<'_, str> {
 /// True when the text's base direction is RTL — i.e. its first strong character is Arabic-script.
 /// Use it to right-align widgets around the text, and to set `TextEdit::horizontal_align`.
 pub fn is_rtl(text: &str) -> bool {
-    let info = unicode_bidi::BidiInfo::new(text, None);
-    info.paragraphs.first().is_some_and(|p| p.level.is_rtl())
+    cairn_ops::review::is_rtl(text)
 }
 
 /// Build a `LayoutJob` whose sections are ordered by the Unicode bidirectional algorithm.

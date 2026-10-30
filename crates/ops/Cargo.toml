@@ -13,6 +13,7 @@ license.workspace = true
 cairn-core.workspace = true
 cairn-store.workspace = true
 cairn-export.workspace = true
+unicode-bidi.workspace = true
 
 [dev-dependencies]
 # The session and deck logic is tested against a real store in a temp dir (there is no fake store).

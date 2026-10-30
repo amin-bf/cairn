@@ -19,6 +19,7 @@ pub mod listing;
 pub mod markdown;
 pub mod notes;
 pub mod optimise;
+pub mod review;
 pub mod session;
 pub mod sitting;
 
