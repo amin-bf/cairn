@@ -1,28 +1,19 @@
 package dev.cairn.design
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Spacing
 import dev.cairn.design.tokens.Typography
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,7 +38,6 @@ fun CairnTextField(
 ) {
     val colors = Cairn.colors
     val faces = LocalFaces.current
-    val shape = RoundedCornerShape(Controls.WIDGET_RADIUS.dp)
     val faced = remember(faces) {
         VisualTransformation { text ->
             TransformedText(faces.resolve(text.text, Family.Proportional), OffsetMapping.Identity)
@@ -70,11 +60,8 @@ fun CairnTextField(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = Controls.HEIGHT.dp)
-                    .clip(shape)
-                    .background(colors.field)
-                    .border(BorderStroke(1.dp, colors.separator), shape)
-                    .padding(horizontal = Spacing.UNIT.dp),
+                    .controlSurface(colors.field, colors.separator)
+                    .padding(horizontal = gap(1)),
                 contentAlignment = Alignment.CenterStart,
                 // The text takes the field's width, so a right-to-left line sits at the right edge.
                 propagateMinConstraints = true,
