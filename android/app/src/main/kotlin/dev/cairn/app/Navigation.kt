@@ -12,6 +12,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.cairn.design.CairnShell
 import dev.cairn.design.Destination
+import dev.cairn.design.rememberKeyboardUp
 import kotlinx.coroutines.delay
 
 /** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
@@ -26,7 +27,7 @@ private const val NOTES = "notes"
  * Back from Notes returns to Review.
  */
 @Composable
-fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean? = null) {
+fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardUp()) {
     val nav = rememberNavController()
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
@@ -50,7 +51,7 @@ fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean? = null) {
             }
         }
     }
-    if (keyboardUp == null) CairnShell(destinations, content = shell) else CairnShell(destinations, keyboardUp = keyboardUp, content = shell)
+    CairnShell(destinations, keyboardUp = keyboardUp, content = shell)
 }
 
 /** Switch destination the way a top-level row does: one entry per place, state kept, no pile-up. */
