@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.cairn.design.CairnTheme
@@ -109,6 +110,21 @@ class NoteRowActionsTest {
         assertEquals(count("note-row"), count("row-move"))
         assertEquals(count("note-row"), count("row-delete"))
         rule.onNodeWithTag("row-delete-confirm").assertDoesNotExist()
+    }
+
+    @Test
+    fun the_actions_are_36_dp_squares_against_the_rows_right_edge() {
+        fixture("decks")
+        showNotes()
+        val row = rule.onAllNodesWithTag("note-row")[0].fetchSemanticsNode().boundsInRoot
+        val delete = rule.onAllNodesWithTag("row-delete")[0].fetchSemanticsNode().boundsInRoot
+        val move = rule.onAllNodesWithTag("row-move")[0].fetchSemanticsNode().boundsInRoot
+        val side = rule.density.run { 36.dp.toPx() }
+        assertEquals(side, delete.width, 1f)
+        assertEquals(side, delete.height, 1f)
+        assertEquals(side, move.width, 1f)
+        assertEquals(row.right, delete.right, 2f)
+        assertEquals(move.right, delete.left, 1f)
     }
 
     @Test
