@@ -182,7 +182,7 @@ pub(crate) fn review(
     {
         let s = sitting.as_mut().expect("just checked it is Some");
 
-        if s.graded >= s.chosen {
+        if s.graded() >= s.chosen() {
             // Reaching the chosen count of **gradings** ends the sitting (ADR-0011 §9, issue #94).
             end_sitting = true;
         } else if let Some((offered, rendered)) = next {
@@ -218,7 +218,7 @@ pub(crate) fn review(
 
             // Progress counts gradings against the chosen count (ADR-0011 §9), so the bar moves on
             // every grade press — a lapse re-show included — never freezing when the user struggles.
-            body(ui, &format!("{} of {}", s.graded, s.chosen));
+            body(ui, &format!("{} of {}", s.graded(), s.chosen()));
             ui.add_space(spacing::gap(2));
 
             // **One card with two faces, not two cards** (ADR-0033 §1). Reveal is tap-the-card:
@@ -238,7 +238,7 @@ pub(crate) fn review(
             // tier across the reveal (§5). `t` is 0 until the tap, so nothing of the answer is on
             // screen before it — ADR-0006 §4, pinned by test.
             let badge_text = box_badge_wording(!offered.is_new, offered.box_);
-            let t = crate::motion::reveal_progress(ui, card_changed, s.revealed);
+            let t = crate::motion::reveal_progress(ui, card_changed, s.revealed());
             if surface::card(
                 ui,
                 &rendered.prompt,
@@ -253,7 +253,7 @@ pub(crate) fn review(
                 let _ = s.reveal();
             }
 
-            if s.revealed {
+            if s.revealed() {
                 // **Edit note rides directly under the card, and the grades sit on the reach line**
                 // (ADR-0035 §1, §2). The order is still the reading order — prompt, answer, then
                 // the controls — but the *distance* is not: the page's leftover height falls
@@ -315,7 +315,7 @@ pub(crate) fn review(
         // the leeches now, minus those already crossed when it began. The `before` snapshot lived in
         // the sitting, which is in-memory, so this needs no stored dismissal or last-seen marker.
         if let Some(s) = sitting.as_ref() {
-            let crossed = session::crossed_this_session(&s.leeches_at_start, &ranked);
+            let crossed = session::crossed_this_session(s.leeches_at_start(), &ranked);
             *session_pointer = (!crossed.is_empty()).then_some(crossed.len());
         }
         *sitting = None;
@@ -1021,7 +1021,7 @@ mod tests {
             "ADR-0029 §1: no route into the editor exists before the reveal — drew: {text}"
         );
 
-        sitting.as_mut().unwrap().revealed = true;
+        sitting.as_mut().unwrap().reveal().unwrap();
         let revealed = drawn_text(&frame(&mut sitting, &mut coll));
         assert!(
             revealed.contains("the dog"),

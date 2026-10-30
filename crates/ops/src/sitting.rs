@@ -47,13 +47,14 @@ const CHECKPOINT_AFTER: Duration = Duration::from_secs(600);
 #[derive(Debug)]
 pub struct Sitting {
     /// The count the user chose — the number of **gradings** this sitting runs to.
-    pub chosen: usize,
+    chosen: usize,
     /// Gradings performed so far. This is the progress numerator, and it counts every grade press,
     /// including a lapsed card's same-session re-show (ADR-0011 §9).
-    pub graded: usize,
+    graded: usize,
     /// The card currently on screen, so a reveal survives a frame and resets when the card changes.
-    pub shown: Option<CardRef>,
-    pub revealed: bool,
+    shown: Option<CardRef>,
+    /// Private, so the reveal has one cause — [`Sitting::reveal`] (ADR-0006 §3).
+    revealed: bool,
     /// When the sitting began — the quiet 10-minute timer runs from here (issue #94).
     started: u64,
     /// When the current card came on screen, so the row can record how long the answer took
@@ -65,7 +66,7 @@ pub struct Sitting {
     /// end-of-session pointer (ADR-0010 §6). Held **in memory only**, like everything else about a
     /// sitting: the pointer covers cards that crossed *this* session, which is exactly `leeches now`
     /// minus this snapshot, and it needs no stored dismissal or last-seen state.
-    pub leeches_at_start: HashSet<CardRef>,
+    leeches_at_start: HashSet<CardRef>,
 }
 
 /// Why [`Sitting::reveal`] did nothing.
@@ -120,6 +121,31 @@ impl Sitting {
             checkpoint_dismissed: false,
             leeches_at_start,
         }
+    }
+
+    /// The count the user chose.
+    pub fn chosen(&self) -> usize {
+        self.chosen
+    }
+
+    /// Gradings performed so far.
+    pub fn graded(&self) -> usize {
+        self.graded
+    }
+
+    /// The card on screen, if any.
+    pub fn shown(&self) -> Option<CardRef> {
+        self.shown
+    }
+
+    /// Whether the answer of the card on screen has been revealed.
+    pub fn revealed(&self) -> bool {
+        self.revealed
+    }
+
+    /// The leeches that existed when the sitting began.
+    pub fn leeches_at_start(&self) -> &HashSet<CardRef> {
+        &self.leeches_at_start
     }
 
     /// Put `card` on screen at `now_mono_ms`. A card that is not the one already shown resets the
