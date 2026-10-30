@@ -55,6 +55,7 @@ fun ReviewSitting(
     onGrade: (Grade) -> Unit,
     onKeepGoing: () -> Unit,
     onFinish: () -> Unit,
+    onEditNote: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     CairnPage(modifier) {
@@ -84,6 +85,15 @@ fun ReviewSitting(
                                     rtl = card.rtl,
                                     revealed = card.revealed,
                                     onReveal = onReveal,
+                                )
+                            }
+                            // Only after the reveal (ADR-0029): there is no route into the editor before it.
+                            if (card.revealed) {
+                                Spacer(Modifier.height(gap(2)))
+                                CairnControl(
+                                    stringResource(R.string.review_edit_note),
+                                    onEditNote,
+                                    Modifier.fillMaxWidth().testTag("edit-note"),
                                 )
                             }
                         }
