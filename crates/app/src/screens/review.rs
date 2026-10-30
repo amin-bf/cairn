@@ -1,16 +1,17 @@
 //! The **Review** destination: the count picker, the running sitting, the leech screen it hangs off
 //! (ADR-0010 §6), and the wording helpers each of those needs.
 
-use std::collections::HashSet;
 use std::time::Duration;
 
 use cairn_core::content::{CardRef, NoteId};
 use cairn_core::log::DEFAULT_NEW_CARD_RATE;
-use cairn_core::replay::{Leech, Replayed, leeches, replay};
+use cairn_core::replay::{leeches, replay};
 use cairn_core::scheduling::Grade;
 use cairn_store::Collection;
 
+use cairn_ops::leeches as leech_ops;
 use cairn_ops::notes;
+use cairn_ops::review::Run;
 use cairn_ops::sitting::Sitting;
 
 use crate::session::{self, Offered, ReviewState};
@@ -53,9 +54,12 @@ pub(crate) fn review(
     let replayed = replay(&current, &refs);
     let queue = session::compose(&current, &positions, &replayed, today, rate, &suspended);
     // The leech list is a query over replayed history (ADR-0010 §1, §4), derived fresh every frame —
-    // never stored, always current, self-clearing. Suspension does not touch detection: a suspended
-    // card is still a leech if its record says so, and has its permanent home below.
+    // never stored, always current, self-clearing. `ranked` keeps suspended leeches: it only drives the
+    // end-of-session pointer and the crossing snapshot, not the screen's sections.
     let ranked = leeches(&replayed, today);
+    // The screen's two sections and the entrance's count come from one operation, so a leech that is
+    // suspended is named once, under its own section (ADR-0050 §3).
+    let leech_list = leech_ops::list(coll, now_ms).unwrap_or_default();
     let total = current.len();
 
     // The leech screen and the end-of-session pointer both hang off Review (ADR-0010 §6), and only
@@ -65,7 +69,7 @@ pub(crate) fn review(
         if *showing_leeches {
             heading(ui, "Leeches");
             ui.add_space(spacing::gap(2));
-            let edit = leech_screen(ui, coll, &ranked, &suspended, &replayed);
+            let edit = leech_screen(ui, coll, &leech_list);
             // **ADR-0035 §1's third call site** (ADR-0038 §5 made it a *page* rule). #155 moved the
             // entrance that leads *into* this screen onto the reach line and left the screen behind
             // it drawing its own last control hard under the list, with the rest of the page empty —
@@ -145,14 +149,17 @@ pub(crate) fn review(
         // with no room, so the 560×860 window and the handset reach the two arms by arithmetic.
         //
         // [ADR-0035 §1]: ../../../../docs/adr/0035-the-vertical-anchor.md
-        if !ranked.is_empty() || !suspended.is_empty() {
+        if !leech_list.active.is_empty() || !leech_list.suspended.is_empty() {
             ui.add_space(frame::slack_above(
                 frame::page_room(ui),
                 controls::HEIGHT,
                 spacing::gap(3),
             ));
-            if controls::wide_primary(ui, &leech_entry_wording(ranked.len(), suspended.len()))
-                .clicked()
+            if controls::wide_primary(
+                ui,
+                &leech_entry_wording(leech_list.active.len(), leech_list.suspended.len()),
+            )
+            .clicked()
             {
                 *showing_leeches = true;
             }
@@ -375,10 +382,10 @@ fn leech_entry_wording(leeches: usize, suspended: usize) -> String {
 ///
 /// The time is a fact rather than a verdict: §6's own example ended *"still failing"*, and a card stays
 /// on this list after its latest answer was a pass, so that clause would say something the app does
-/// not know. Rounded to the nearest minute; below half a minute it reads *under a minute*, because
-/// *0 minutes* reads as none.
-fn cost_line(failure_days: u32, reviews: u32, answer_ms: u64) -> String {
-    let time = match answer_ms.saturating_add(30_000) / 60_000 {
+/// not know. The operation rounds to the nearest minute; below half a minute it reads
+/// *under a minute*, because *0 minutes* reads as none.
+fn cost_line(failure_days: u32, reviews: u32, answer_minutes: u32) -> String {
+    let time = match answer_minutes {
         0 => "under a minute".to_owned(),
         1 => "1 minute".to_owned(),
         m => format!("{m} minutes"),
@@ -395,38 +402,27 @@ fn cost_line(failure_days: u32, reviews: u32, answer_ms: u64) -> String {
 ///
 /// A suspended card is not listed among the active leeches even when its history still qualifies — it
 /// lives in the suspended section instead, so it is named once, not twice. Actions are collected while
-/// drawing and applied after, so the immutable reads that render each card's preview do not fight the
-/// mutable writes.
+/// drawing and applied after.
 fn leech_screen(
     ui: &mut egui::Ui,
     coll: &mut Collection,
-    ranked: &[Leech],
-    suspended: &HashSet<CardRef>,
-    replayed: &Replayed,
+    list: &leech_ops::LeechList,
 ) -> Option<NoteId> {
-    // Render each card's preview text up front, while the collection is only read; the owned strings
-    // then outlive the immutable borrow so the action writes below are free to take `&mut coll`.
-    let active: Vec<(CardRef, String, String)> = ranked
+    let active: Vec<(CardRef, String, String)> = list
+        .active
         .iter()
-        .filter(|leech| !suspended.contains(&leech.card))
-        .map(|leech| {
-            let (reviews, answer_ms) = replayed
-                .cards
-                .get(&leech.card)
-                .map_or((0, 0), |state| (state.review_count, state.answer_ms));
+        .map(|row| {
             (
-                leech.card,
-                card_preview(coll, leech.card),
-                cost_line(leech.failure_days, reviews, answer_ms),
+                row.card,
+                prompt_text(row.prompt.as_deref()),
+                cost_line(row.failure_days, row.reviews, row.answer_minutes),
             )
         })
         .collect();
-    // The suspended section is ordered by card identity so two devices show it the same way.
-    let mut suspended_sorted: Vec<CardRef> = suspended.iter().copied().collect();
-    suspended_sorted.sort_by_key(|card| card.encode());
-    let suspended_rows: Vec<(CardRef, String)> = suspended_sorted
+    let suspended_rows: Vec<(CardRef, String)> = list
+        .suspended
         .iter()
-        .map(|&card| (card, card_preview(coll, card)))
+        .map(|row| (row.card, prompt_text(row.prompt.as_deref())))
         .collect();
 
     let mut edit: Option<NoteId> = None;
@@ -489,10 +485,10 @@ fn leech_screen(
     // Apply the one action taken this frame. Each is a mutable-surface write (suspend/unsuspend) or the
     // note delete (ADR-0004 §7); a failed write is dropped and the next frame re-derives, as elsewhere.
     if let Some(card) = suspend {
-        let _ = coll.suspend(card);
+        let _ = leech_ops::suspend(coll, card);
     }
     if let Some(card) = unsuspend {
-        let _ = coll.unsuspend(card);
+        let _ = leech_ops::unsuspend(coll, card);
     }
     if let Some(note) = delete {
         let _ = notes::delete_note(coll, note);
@@ -572,14 +568,11 @@ fn leech_row(
 }
 
 /// One card's prompt, for a leech row — the card the user will recognise. A dormant card (its content
-/// no longer generated, ADR-0002 §7) renders nothing, so it falls back to a plain marker rather than a
+/// no longer generated, ADR-0002 §7) has no prompt, so it falls back to a plain marker rather than a
 /// blank row: a suspended card whose note was edited away still needs a line to carry its unsuspend.
-fn card_preview(coll: &Collection, card: CardRef) -> String {
-    deck::render(coll, card)
-        .ok()
-        .flatten()
-        .map(|rendered| rendered.prompt)
-        .filter(|prompt| !prompt.trim().is_empty())
+fn prompt_text(prompt: Option<&[Run]>) -> String {
+    prompt
+        .map(|runs| runs.iter().map(|run| run.text.as_str()).collect::<String>())
         .unwrap_or_else(|| "(card no longer generated)".to_owned())
 }
 
@@ -830,6 +823,7 @@ fn new_only_wording(new: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use tempfile::TempDir;
 
     /// Every string a frame actually drew, so a control's presence can be **asserted** rather than
@@ -1249,27 +1243,59 @@ mod tests {
         assert_eq!(leech_entry_wording(2, 3), "Leeches (2) · suspended (3)");
     }
 
+    /// ADR-0050 §3: the entrance names a suspended leech once, under *suspended*, as the screen lists it.
     #[test]
-    fn the_cost_line_adds_the_answer_time_in_whole_minutes() {
-        // ADR-0043 §4: the rank key, the reviews, then ADR-0010 §6's answer time, rounded to the
-        // nearest minute. The fixture's three leeches, as the screen draws them.
-        assert_eq!(
-            cost_line(6, 12, 245_508),
-            "6 bad days · 12 reviews · 4 minutes"
+    fn the_entrance_counts_a_suspended_leech_once() {
+        const NOW: i64 = 1_760_000_000_000;
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        cairn_ops::fixtures::Fixture::Leeches
+            .install(&mut coll, NOW)
+            .unwrap();
+        let worst = leech_ops::list(&coll, NOW).unwrap().active[0].card;
+        leech_ops::suspend(&mut coll, worst).unwrap();
+
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
+        crate::typography::install(&ctx);
+        crate::spacing::install(&ctx);
+        let (mut sitting, mut showing, mut pointer) = (None, false, None);
+        let mut frame = || {
+            ctx.run_ui(Default::default(), |ui| {
+                review(
+                    ui,
+                    &mut coll,
+                    &mut sitting,
+                    &mut showing,
+                    &mut pointer,
+                    NOW,
+                    0,
+                    NOW / 86_400_000,
+                    false,
+                );
+            })
+        };
+        let _ = frame();
+        let drawn = drawn_text(&frame());
+        assert!(
+            drawn.contains("Leeches (2) · suspended (1)"),
+            "drew: {drawn}"
         );
-        assert_eq!(cost_line(4, 9, 61_000), "4 bad days · 9 reviews · 1 minute");
-        assert_eq!(
-            cost_line(4, 10, 632_440),
-            "4 bad days · 10 reviews · 11 minutes"
-        );
+    }
+
+    #[test]
+    fn the_cost_line_words_the_answer_minutes_the_operation_rounds() {
+        // ADR-0043 §4: the rank key, the reviews, then ADR-0010 §6's answer time. The rounding is
+        // `cairn_ops::leeches`' (its tests pin the half-up edges); this pins the words.
+        assert_eq!(cost_line(6, 12, 4), "6 bad days · 12 reviews · 4 minutes");
+        assert_eq!(cost_line(4, 9, 1), "4 bad days · 9 reviews · 1 minute");
+        assert_eq!(cost_line(4, 10, 11), "4 bad days · 10 reviews · 11 minutes");
         // Below half a minute there is no whole minute to state, and "0 minutes" would read as none.
         assert_eq!(
-            cost_line(4, 5, 29_999),
+            cost_line(4, 5, 0),
             "4 bad days · 5 reviews · under a minute"
         );
-        assert_eq!(cost_line(4, 5, 30_000), "4 bad days · 5 reviews · 1 minute");
-        // A foreign row can saturate the sum (`CardState::answer_ms`); the line must still draw.
-        assert!(cost_line(4, 5, u64::MAX).ends_with(" minutes"));
     }
 
     #[test]
