@@ -44,19 +44,21 @@ fun CairnWell(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
 
 /**
  * A card's [runs] as the card draws them — each glyph in the face that has it, each run in its own
- * style — at the body tier, set in the direction of the text itself. For a well, which holds a prompt.
+ * style — at the body tier, set in the direction the card's fact gives ([rtl]), not the one its first
+ * character happens to resolve to. For a well, which holds a prompt.
  */
 @Composable
-fun CairnRuns(runs: List<CardRun>, modifier: Modifier = Modifier) {
+fun CairnRuns(runs: List<CardRun>, rtl: Boolean, modifier: Modifier = Modifier) {
     val faces = LocalFaces.current
     val text = remember(runs, faces) { faces.annotate(runs) }
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart) {
         BasicText(
             text,
+            modifier,
             style = TextStyle(
                 color = Cairn.colors.body,
                 fontSize = Typography.BODY.sp,
-                textDirection = TextDirection.Content,
+                textDirection = if (rtl) TextDirection.Rtl else TextDirection.Ltr,
             ),
         )
     }

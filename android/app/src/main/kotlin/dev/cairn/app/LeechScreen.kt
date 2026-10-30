@@ -135,7 +135,7 @@ private fun LeechRow(
     Column(Modifier.fillMaxWidth().testTag("leech-row-$key")) {
         CairnWell {
             if (row.generated) {
-                CairnRuns(row.prompt.toCardRuns(), Modifier.testTag("leech-prompt-$key"))
+                CairnRuns(row.prompt.toCardRuns(), row.rtl, Modifier.testTag("leech-prompt-$key"))
             } else {
                 CairnText(stringResource(R.string.leeches_not_generated), Modifier.testTag("leech-prompt-$key"))
             }

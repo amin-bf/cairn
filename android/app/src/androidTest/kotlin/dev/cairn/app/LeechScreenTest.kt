@@ -302,6 +302,24 @@ class LeechScreenTest {
         cost = cost,
     )
 
+    @Test
+    fun a_prompt_is_set_in_the_direction_of_its_card_not_of_its_first_character() {
+        // Begins with a digit, which has no direction of its own; the card is right to left.
+        val facts = LeechListFacts(
+            active = listOf(row("a", "۱۲ معنی این واژه چیست؟", true, LeechCost(4u, 9u, 1u)), row("b", "12 what is this?", false, LeechCost(3u, 5u, 0u))),
+            suspended = emptyList(),
+        )
+        rule.setContent { CairnTheme(dark = false) { LeechList(facts, refusal = null, onEdit = {}, onSuspend = {}, onUnsuspend = {}, onBack = {}) } }
+        fun direction(key: String): androidx.compose.ui.text.style.TextDirection {
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            rule.onNodeWithTag("leech-prompt-$key", useUnmergedTree = true).fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+            return results.first().layoutInput.style.textDirection
+        }
+        assertEquals(androidx.compose.ui.text.style.TextDirection.Rtl, direction("a-0"))
+        assertEquals(androidx.compose.ui.text.style.TextDirection.Ltr, direction("b-0"))
+    }
+
     private fun capturedInBothThemes(name: String, facts: LeechListFacts) {
         val dir = context.getExternalFilesDir("leech-shots")!!
         val dark: MutableState<Boolean> = mutableStateOf(false)
