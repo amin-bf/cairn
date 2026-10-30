@@ -5,7 +5,7 @@
 # monotonic clock rather than off the log, so no pre-made collection reaches it — which is exactly
 # why the application contradicted its own accepted ADR here for ten months with nothing failing and
 # no test able to notice. `CAIRN_CHECKPOINT_SECONDS` shortens it; the *ten minutes* stay written where
-# the behaviour is, and the bench only ever subtracts (`crates/app/src/fixtures.rs`).
+# the behaviour is, and the bench only ever subtracts (`crates/ops/src/fixtures.rs`).
 #
 # The sentence the app draws is fixed copy and still reads *"10 minutes so far."* — the elapsed time
 # is not in the picture, and the arrangement is what this photographs.

@@ -148,7 +148,7 @@ the PR titles already use. Branch and PR then agree on which part of the system 
 
 ## Start with the context map
 
-**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the six crates, the
+**[`CONTEXT-MAP.md`](./CONTEXT-MAP.md) is the entry point to the codebase** — the seven crates, the
 eight contexts, and an index saying which ADR sections bind which context. `docs/adr/` is over 2,600
 lines; the index is what stops "read the ADRs" from meaning all of them.
 
@@ -157,10 +157,11 @@ Read this file first, then the context map, then the `CONTEXT.md` for the area y
 
 ## The workspace
 
-Six crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
-[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
+Seven crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
+[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md) and [ADR-0046 §2](./docs/adr/0046-the-line-between-kotlin-and-rust.md):
 `cairn-core` (the domain, pure), `cairn-store` (SQLite and the two directory lookups), `cairn-export`
 (the `.cdeck` container), `cairn-sync` (publishing to the remote; holds the network dependencies),
+`cairn-ops` (the operations both renderers call; no renderer, no binding),
 `cairn-app` (egui, lib + cdylib), `cairn-desktop` (a shim, forced by `cargo-apk`).
 
 Contexts are **modules, not crates** — with two exceptions, both for the same reason: `export` and
@@ -536,10 +537,10 @@ because they are validated findings, not because a web build ships.
     never by extending the seed.** Every capture run is a first launch — the harness wipes the whole
     data directory — so the shipping seed's six due cards were once the only collection anything was
     ever photographed against, and #134 ended up shipping three decided states whose only pictures
-    were of something that is not the application. `crates/app/src/fixtures.rs` holds pre-made
+    were of something that is not the application. `crates/ops/src/fixtures.rs` holds pre-made
     collections instead, installed from outside by `cairn-fixture` on desktop and from a temporary
     Settings block on the handset, where `getFilesDir()` is unwritable from outside and an uninstall
-    is not a first launch either (#141). **`CairnApp::open_store` stays untouched**, which is what
+    is not a first launch either (#141). **`cairn_ops::open_collection` stays untouched**, which is what
     keeps every capture taken before a fixture existed a picture of the same thing. A storyboard
     **names its own fixture** on a `fixture <name>` line, because a storyboard run without the
     collection it needs produces a full set of valid captures of the seed under the fixture's names.

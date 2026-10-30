@@ -170,7 +170,7 @@ scripts/capture-desktop.sh scripts/storyboards/caught-up.txt 1280 800
 | `decks` | four decks with notes filed in them, three notes left unfiled, and five in Persian — the note list's whole deck surface (ADR-0021 §9), and a right-to-left row |
 
 `cargo build -p cairn-desktop` builds the installer, `cairn-fixture`, alongside the app;
-`crates/app/src/fixtures.rs` defines the states and says why they are collections rather than a seed
+`crates/ops/src/fixtures.rs` defines the states and says why they are collections rather than a seed
 change or a capture mode.
 
 **`decks` is the first fixture whose state is on Notes rather than on Review, and the first whose

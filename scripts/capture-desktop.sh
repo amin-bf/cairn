@@ -87,7 +87,7 @@ mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 
 # The fixture goes in *before* the compositor starts, into the scratch profile above — so the app's
 # first launch opens a collection that is already in the wanted state and the seed never fires
-# (`crates/app/src/fixtures.rs`). `cairn-fixture` verifies what it installed and exits non-zero if it
+# (`crates/ops/src/fixtures.rs`). `cairn-fixture` verifies what it installed and exits non-zero if it
 # did not land, and the run is abandoned here rather than producing a plausible picture of the wrong
 # screen.
 if [ -n "$fixture" ]; then
