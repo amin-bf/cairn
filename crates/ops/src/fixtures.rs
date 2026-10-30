@@ -737,9 +737,10 @@ pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
     fixture.install(&mut coll, now_ms())
 }
 
-/// **Temporary** — return a device to a first launch: close `coll`, remove both databases and the
-/// writer marker, and open the collection again through [`open_collection`](crate::open_collection),
-/// so the first launch is seeded exactly as a fresh install is. Both renderers' reset is this.
+/// Return a device to a first launch: close `coll`, remove both databases and the writer marker, and
+/// open the collection again through [`open_collection`](crate::open_collection), so the first launch
+/// is seeded exactly as a fresh install is. The Android binding's reset is this; the egui build keeps
+/// its own wipe until it is replaced.
 ///
 /// **It takes the collection by value, and that is the ordering the correctness rests on**: SQLite
 /// holds the database plus its `-wal` and `-shm` siblings open, so unlinking them under a live

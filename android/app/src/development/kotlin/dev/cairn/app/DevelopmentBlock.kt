@@ -60,7 +60,7 @@ fun DevelopmentBlock(access: CollectionAccess, onRestart: () -> Unit) {
         for (fixture in model.fixtures) {
             if (asking == Asking.Install(fixture.key)) {
                 CairnConfirmRow(
-                    question = stringResource(R.string.development_install_question, fixture.key),
+                    question = stringResource(R.string.development_install_question, fixture.label),
                     confirm = stringResource(R.string.development_install_confirm),
                     keep = stringResource(R.string.development_keep),
                     onConfirm = { model.install(fixture.key, onRestart) },
@@ -71,7 +71,7 @@ fun DevelopmentBlock(access: CollectionAccess, onRestart: () -> Unit) {
                 )
             } else {
                 CairnControl(
-                    fixture.key,
+                    fixture.label,
                     onClick = { model.ask(Asking.Install(fixture.key)) },
                     modifier = Modifier.testTag("fixture-${fixture.key}"),
                 )

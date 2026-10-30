@@ -1094,7 +1094,8 @@ pub struct SittingHandle {
 /// One fixture on the development bench: the key `install_fixture` takes and what it reaches.
 ///
 /// `label` and `reaches` are the bench's own text, as in the egui build, so they cross as they are
-/// and are not a Kotlin string resource.
+/// and are not a Kotlin string resource: the bench is a development tool, not a user-facing screen,
+/// so ADR-0046 §4's words-stay-in-Kotlin rule is not applied to it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BenchFixture {
     pub key: String,

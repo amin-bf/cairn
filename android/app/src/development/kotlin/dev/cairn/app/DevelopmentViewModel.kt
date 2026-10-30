@@ -72,7 +72,8 @@ class DevelopmentViewModel(
         viewModelScope.launch {
             try {
                 val reached = owner.use { it.installFixture(key, wallClock()) }
-                DevelopmentBench.said = "$key — $reached"
+                val label = fixtures.first { it.key == key }.label
+                DevelopmentBench.said = "$label — $reached"
                 onRestart()
             } catch (e: CairnException) {
                 DevelopmentBench.said = refusal(e)

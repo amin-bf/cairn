@@ -103,11 +103,11 @@ class DevelopmentBlockTest {
     }
 
     @Test
-    fun the_bench_has_one_control_per_fixture_by_key() {
+    fun the_bench_has_one_control_per_fixture_named_by_its_label() {
         showApp()
         openSettings()
         for (fixture in fixtures()) {
-            rule.onNodeWithTag("fixture-${fixture.key}").performScrollTo().assertTextEquals(fixture.key)
+            rule.onNodeWithTag("fixture-${fixture.key}").performScrollTo().assertTextEquals(fixture.label)
         }
     }
 
@@ -157,7 +157,7 @@ class DevelopmentBlockTest {
         val before = notes()
         openSettings()
         press("fixture-backlog")
-        rule.onNodeWithTag("fixture-question").assertTextEquals("Replace the collection with backlog?")
+        rule.onNodeWithTag("fixture-question").assertTextEquals("Replace the collection with A backlog?")
         rule.onNodeWithTag("fixture-confirm").assertTextEquals("Replace")
         rule.onNodeWithTag("fixture-keep").assertTextEquals("Keep it")
         assertEquals(before, notes())
@@ -182,7 +182,7 @@ class DevelopmentBlockTest {
         waitFor("bench-result")
         val said = rule.onNodeWithTag("bench-result").performScrollTo().fetchSemanticsNode()
             .config[SemanticsProperties.Text].joinToString { it.text }
-        assertTrue(said, said.contains("cards") && said.contains("due"))
+        assertTrue(said, said.startsWith("A backlog — ") && said.contains("cards") && said.contains("due"))
         // A new press clears it.
         press("fixture-caught-up")
         assertTrue(!exists("bench-result"))
@@ -239,12 +239,16 @@ class DevelopmentBlockTest {
         for (choice in listOf(ThemeChoice.LIGHT, ThemeChoice.DARK)) {
             appearance.choice = choice
             rule.waitForIdle()
-            rule.onNodeWithTag("development-heading").performScrollTo().assertIsDisplayed()
-            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
-            FileOutputStream(File(dir, "development-${choice.name.lowercase()}.png")).use {
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            // The block is longer than a page: its head, then its last fixture, each with a capture.
+            val last = fixtures().last().key
+            for ((part, tag) in listOf("head" to "development-heading", "bench" to "fixture-$last")) {
+                rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+                val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+                FileOutputStream(File(dir, "development-${choice.name.lowercase()}-$part.png")).use {
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+                assertEquals(pageArgb(choice == ThemeChoice.DARK), bitmap.getPixel(2, bitmap.height / 2))
             }
-            assertEquals(pageArgb(choice == ThemeChoice.DARK), bitmap.getPixel(2, bitmap.height / 2))
         }
     }
 }

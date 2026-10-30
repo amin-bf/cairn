@@ -26,8 +26,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.cairn.design.CairnShell
 import dev.cairn.design.Destination
 import dev.cairn.design.rememberKeyboardUp
-import dev.cairn.ffi.CairnException
-import dev.cairn.ffi.ThemeChoice
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -65,12 +63,7 @@ fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboard
     key(generation) {
         CairnPlaces(owner, keyboardUp) {
             scope.launch {
-                // A failed read follows the platform, as the first frame's does.
-                appearance.choice = try {
-                    owner.use { it.themeChoice() }
-                } catch (_: CairnException) {
-                    ThemeChoice.SYSTEM
-                }
+                appearance.choice = owner.themeChoiceOrSystem()
                 generation++
             }
         }
