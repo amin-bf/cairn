@@ -33,7 +33,23 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.compose.ui.semantics.semantics
+import dev.cairn.design.Cairn
+import dev.cairn.design.CairnCard
 import dev.cairn.design.CairnControl
+import dev.cairn.design.CairnDestinationsRow
+import dev.cairn.design.CairnLeftRule
+import dev.cairn.design.CairnOutlineEntry
+import dev.cairn.design.CardRun
+import dev.cairn.design.Destination
+import dev.cairn.design.tokens.Surface
+import dev.cairn.ffi.CardPaneFacts
+import dev.cairn.ffi.DormantFact
+import dev.cairn.ffi.DormantName
+import dev.cairn.ffi.PaneEntry
+import dev.cairn.ffi.PaneState
+import dev.cairn.ffi.Run
+import dev.cairn.ffi.RunStyle
 import dev.cairn.design.CairnDropdown
 import dev.cairn.design.CairnFieldLabel
 import dev.cairn.design.CairnLabeledField
@@ -109,18 +125,34 @@ private fun EditorForm(
                                 tier = Tier.Heading,
                             )
                             Spacer(Modifier.height(gap(2)))
-                            CairnFieldLabel(stringResource(R.string.editor_kind))
-                            CairnDropdown(state.kind, state.kinds, onSelect = { model.chooseKind(state.kinds[it]) }, tag = "kind")
+                            // The panes always fold on a phone (ADR-0048 §7): one toggle, and a tap settles all.
+                            CairnDestinationsRow(
+                                listOf(
+                                    Destination(stringResource(R.string.editor_pane_write), !model.showingCards, "pane-write") { model.showCards(false) },
+                                    Destination(stringResource(R.string.editor_pane_cards), model.showingCards, "pane-cards") { model.showCards(true) },
+                                ),
+                            )
                             Spacer(Modifier.height(gap(2)))
-                            CairnFieldLabel(stringResource(R.string.notes_deck))
-                            CairnDropdown(deckName, deckLabels, onSelect = { model.chooseDeck(deckChoices[it]) }, tag = "deck")
-                            Spacer(Modifier.height(gap(2)))
-                            Row(horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
-                                CairnControl(stringResource(R.string.notes_new_deck), onClick = model::createDeck, modifier = Modifier.testTag("new-deck"))
-                                CairnTextField(model.newDeck, model::typeNewDeck, Modifier.weight(1f).testTag("new-deck-name"))
+                            if (model.showingCards) {
+                                CardsPane(model.pane)
+                            } else {
+                                CairnFieldLabel(stringResource(R.string.editor_kind))
+                                CairnDropdown(state.kind, state.kinds, onSelect = { model.chooseKind(state.kinds[it]) }, tag = "kind")
+                                Spacer(Modifier.height(gap(2)))
+                                CairnFieldLabel(stringResource(R.string.notes_deck))
+                                CairnDropdown(deckName, deckLabels, onSelect = { model.chooseDeck(deckChoices[it]) }, tag = "deck")
+                                Spacer(Modifier.height(gap(2)))
+                                Row(horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
+                                    CairnControl(stringResource(R.string.notes_new_deck), onClick = model::createDeck, modifier = Modifier.testTag("new-deck"))
+                                    CairnTextField(model.newDeck, model::typeNewDeck, Modifier.weight(1f).testTag("new-deck-name"))
+                                }
+                                Spacer(Modifier.height(gap(2)))
+                                model.pane?.warning?.takeIf { it.isNotEmpty() }?.let {
+                                    DormancyWarning(it)
+                                    Spacer(Modifier.height(gap(2)))
+                                }
+                                Fields(model, state)
                             }
-                            Spacer(Modifier.height(gap(2)))
-                            Fields(model, state)
                         }
                     },
                     reach = {
@@ -159,7 +191,7 @@ private fun Fields(model: EditorViewModel, state: EditorScreenState.Ready) {
         var focused by remember(field.name) { mutableStateOf(false) }
         CairnLabeledField(
             label = field.name,
-            value = model.values[field.name].orEmpty(),
+            value = model.buffer(field.name),
             onValueChange = { model.typed(field.name, it) },
             modifier = Modifier
                 .testTag("field-${field.name}")
@@ -181,6 +213,87 @@ private fun Fields(model: EditorViewModel, state: EditorScreenState.Ready) {
             ),
             singleLine = !field.multiline,
         )
+        // The multi-line field is the cloze Text, and it carries *Blank it*: enabled while text is selected.
+        if (field.multiline) {
+            Spacer(Modifier.height(gap(1)))
+            CairnControl(
+                stringResource(R.string.editor_blank_it),
+                onClick = { model.blankIt(field.name) },
+                modifier = Modifier.fillMaxWidth().testTag("blank-it"),
+                enabled = !model.buffer(field.name).selection.collapsed,
+            )
+        }
         Spacer(Modifier.height(gap(2)))
+    }
+}
+
+/** The dormant entry's one line, worded *kept* (ADR-0018 §3): its name, *dormant*, its history. */
+@Composable
+private fun dormantLine(entry: DormantFact): String {
+    val name = when (val n = entry.name) {
+        is DormantName.Roles -> stringResource(R.string.editor_dormant_roles, n.prompt.joinToString(", "), n.answer.joinToString(", "))
+        is DormantName.Blank -> stringResource(R.string.editor_dormant_blank, n.number.toInt())
+        is DormantName.Slot -> stringResource(R.string.editor_dormant_slot, n.slot.toInt())
+    }
+    return stringResource(R.string.editor_dormant_history, name, entry.reviews.toInt())
+}
+
+/**
+ * The ambient warning above the fields (ADR-0012 §5, ADR-0025 §4): the dormant names at body, the
+ * reassurance as the aside, inside a left rule. Recomputed from what the store holds, never a modal.
+ */
+@Composable
+private fun DormancyWarning(dormant: List<DormantFact>) {
+    CairnLeftRule(Modifier.testTag("dormancy-warning").semantics(mergeDescendants = true) {}) {
+        CairnText(stringResource(R.string.editor_dormant_lead))
+        Spacer(Modifier.height(gap(1)))
+        for (entry in dormant) CairnText(dormantLine(entry))
+        Spacer(Modifier.height(gap(1)))
+        CairnText(stringResource(R.string.editor_dormant_undo), tier = Tier.Small, color = Cairn.colors.weak)
+    }
+}
+
+private fun List<Run>.toCardRuns(): List<CardRun> = map {
+    CardRun(
+        it.text,
+        bold = it.style == RunStyle.BOLD || it.style == RunStyle.BOLD_ITALIC,
+        italic = it.style == RunStyle.ITALIC || it.style == RunStyle.BOLD_ITALIC,
+        code = it.style == RunStyle.CODE,
+    )
+}
+
+/**
+ * The Cards pane (ADR-0040 §3, §5; ADR-0018): a preview of what the note will ask. Entries in raw slot
+ * order, live and dormant alike. A live one is the design module's card, fully open, with its box
+ * badge; a dormant one is an outline at the card's footprint carrying its name and kept reviews.
+ */
+@Composable
+private fun CardsPane(pane: CardPaneFacts?) {
+    CairnFieldLabel(stringResource(R.string.editor_pane_cards))
+    Spacer(Modifier.height(gap(1)))
+    if (pane == null || pane.entries.isEmpty()) {
+        CairnText(stringResource(R.string.editor_cards_none), Modifier.testTag("cards-empty"))
+        return
+    }
+    for (entry in pane.entries) {
+        when (entry) {
+            is PaneEntry.Live -> {
+                val card = entry.card
+                CairnCard(
+                    prompt = card.prompt.toCardRuns(),
+                    answer = card.answer.toCardRuns(),
+                    badge = if (card.isNew) stringResource(R.string.review_badge_new) else stringResource(R.string.review_badge_box, card.boxNumber.toInt()),
+                    rtl = card.rtl,
+                    revealed = true,
+                    onReveal = {},
+                    minHeight = Surface.FIT,
+                )
+            }
+            is PaneEntry.Dormant -> CairnOutlineEntry(dormantLine(entry.entry), Modifier.testTag("dormant-entry"))
+        }
+        Spacer(Modifier.height(gap(2)))
+    }
+    if (pane.state == PaneState.NO_LIVE_CARDS) {
+        CairnText(stringResource(R.string.editor_cards_no_live), Modifier.testTag("cards-no-live"), tier = Tier.Small, color = Cairn.colors.weak)
     }
 }

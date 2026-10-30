@@ -6,9 +6,13 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.cairn.design.wrapAsBlank
 import dev.cairn.ffi.CairnException
+import dev.cairn.ffi.CardPaneFacts
 import dev.cairn.ffi.DeckFact
 import dev.cairn.ffi.EditingHandle
 import dev.cairn.ffi.FieldValue
@@ -61,8 +65,24 @@ class EditorViewModel(
     private val _state = MutableStateFlow<EditorScreenState>(EditorScreenState.Loading)
     val state: StateFlow<EditorScreenState> = _state
 
+    /** Each field's buffer by name: its text, selection and composition are Compose's own. */
+    private val buffers = mutableStateMapOf<String, TextFieldValue>()
+
     /** Each field's text by name. */
-    val values = mutableStateMapOf<String, String>()
+    val values: Map<String, String> get() = buffers.mapValues { it.value.text }
+
+    fun buffer(field: String): TextFieldValue = buffers[field] ?: TextFieldValue()
+
+    /** What the Cards pane and the warning draw: the note's cards as the store holds them. */
+    var pane by mutableStateOf<CardPaneFacts?>(null)
+        private set
+
+    /** Whether the Cards pane shows rather than the form (ADR-0048 §7). */
+    var showingCards by mutableStateOf(false)
+        private set
+
+    /** Whether a typing pause was pending at the last tick, so the tick that settles it re-reads the pane. */
+    private var settlePending = false
 
     /** The name being typed for *New deck*. */
     var newDeck by mutableStateOf("")
@@ -116,9 +136,10 @@ class EditorViewModel(
             ) to fields
         }
         if (reload) {
-            values.clear()
-            stored.forEach { values[it.name] = it.value }
+            buffers.clear()
+            stored.forEach { buffers[it.name] = TextFieldValue(it.value) }
         }
+        refreshPane(handle)
         _state.value = ready
     }
 
@@ -126,33 +147,47 @@ class EditorViewModel(
         if (note != null) saved[ARG_NOTE] = note
     }
 
-    private fun snapshot() = values.map { FieldValue(it.key, it.value) }
+    private fun snapshot() = buffers.map { FieldValue(it.key, it.value.text) }
 
-    /** A field's text changed: show it, and restart the idle window. */
-    fun typed(field: String, text: String) {
-        values[field] = text
+    /** Read the pane from the store again, after something wrote to it. */
+    private suspend fun refreshPane(handle: EditingHandle) {
+        pane = owner.use { handle.cardPane() }
+    }
+
+    /** A field changed: show it. A change of text restarts the idle window; a move of the caret does not. */
+    fun typed(field: String, value: TextFieldValue) {
+        val changed = buffers[field]?.text != value.text
+        buffers[field] = value
+        if (!changed) return
         val now = monotonicClock().toULong()
-        enqueue { editing?.let { h -> owner.use { h.touched(field, text, now) } } }
+        enqueue { editing?.let { h -> owner.use { h.touched(field, value.text, now) } } }
     }
 
     /** A field lost focus: commit it. */
     fun blur(field: String) {
-        val text = values[field] ?: return
+        val text = buffers[field]?.text ?: return
         enqueue {
             editing?.let { h ->
                 owner.use { h.commitField(field, text) }
                 persistNoteId(owner.use { h.noteId() })
+                refreshPane(h)
             }
         }
     }
 
-    /** The ticking check: settle once the typing has paused. */
+    /** The ticking check: settle once the typing has paused, then read the pane the settling changed. */
     fun tick() {
         val now = monotonicClock().toULong()
         enqueue {
             editing?.let { h ->
-                owner.use { h.settleIfIdle(now) }
+                val left = owner.use { h.settleIfIdle(now) }
                 persistNoteId(owner.use { h.noteId() })
+                if (left != null) {
+                    settlePending = true
+                } else if (settlePending) {
+                    settlePending = false
+                    refreshPane(h)
+                }
             }
         }
     }
@@ -163,6 +198,38 @@ class EditorViewModel(
         enqueue {
             editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
             then()
+        }
+    }
+
+    /** `Write | Cards`: either way it settles all, and the Cards pane then shows what the store holds (ADR-0048 §7). */
+    fun showCards(cards: Boolean) {
+        showingCards = cards
+        val snapshot = snapshot()
+        enqueue {
+            editing?.let { h ->
+                persistNoteId(owner.use { h.settleAll(snapshot) })
+                refreshPane(h)
+            }
+        }
+    }
+
+    /**
+     * *Blank it* (ADR-0012 §3): wrap the field's selection as `{{n::…}}`, [n] one above the highest ever
+     * used, which the binding answers because the text alone cannot see a dormant blank. A selection
+     * that is only a caret makes nothing.
+     */
+    fun blankIt(field: String) {
+        val before = buffers[field] ?: return
+        if (before.selection.collapsed) return
+        enqueue {
+            val h = editing ?: return@enqueue
+            val n = owner.use { h.nextBlankNumber(before.text) }
+            // Typing that arrived meanwhile wins: the selection no longer points into this text.
+            val now = buffers[field] ?: return@enqueue
+            if (now.text != before.text) return@enqueue
+            val (wrapped, caret) = wrapAsBlank(now.text, now.selection.start, now.selection.end, n.toInt())
+            buffers[field] = TextFieldValue(wrapped, TextRange(caret))
+            owner.use { h.touched(field, wrapped, monotonicClock().toULong()) }
         }
     }
 
