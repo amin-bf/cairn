@@ -38,7 +38,6 @@ import dev.cairn.design.Tier
 import dev.cairn.design.gap
 import dev.cairn.ffi.DeckSelector
 
-
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
 @Composable
 fun NotesScreen(model: NotesViewModel) {

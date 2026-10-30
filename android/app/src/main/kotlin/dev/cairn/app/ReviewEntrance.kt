@@ -26,7 +26,6 @@ import dev.cairn.design.gap
 import dev.cairn.ffi.ReviewFacts
 import dev.cairn.ffi.ReviewStateKind
 
-
 /**
  * Review's entrance (ADR-0006 §7, §8; ADR-0034 §2, §3): the heading, one worded statement of the
  * state, and — where there is work — the primary way in and the shorter sittings beside it. The
