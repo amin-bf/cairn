@@ -20,6 +20,7 @@
     <string name="review_shorter">or a shorter sitting:</string>
 
     <!-- A sitting. Also the egui build's words. -->
+    <string name="review_edit_note">Edit note</string>
     <string name="review_progress">%1$d of %2$d</string>
     <string name="review_badge_new">new</string>
     <string name="review_badge_box">box %1$d</string>

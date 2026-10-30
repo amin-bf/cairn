@@ -79,20 +79,21 @@ class ReviewViewModel(
             // One trip off the main thread: every call on the handle blocks the thread it is made on.
             val shown = owner.use {
                 val card = if (handle.ended(now)) null else handle.card(now, mono)
-                card?.let {
-                    ReviewScreenState.Sitting(
-                        chosen = handle.chosen().toInt(),
-                        graded = handle.graded().toInt(),
-                        card = it,
-                        checkpoint = handle.checkpointDue(mono),
-                    )
-                }
+                card?.let { sittingOf(handle, it, mono) }
             }
             if (shown == null) load() else _state.value = shown
         } catch (_: CairnException) {
             _state.value = ReviewScreenState.Failed
         }
     }
+
+    /** The sitting's facts around [card], read off [handle] (call inside `owner.use`). */
+    private fun sittingOf(handle: SittingHandle, card: ShownCard, mono: ULong) = ReviewScreenState.Sitting(
+        chosen = handle.chosen().toInt(),
+        graded = handle.graded().toInt(),
+        card = card,
+        checkpoint = handle.checkpointDue(mono),
+    )
 
     /** The card was tapped. The sitting has one cause for a reveal; tapping a revealed card does nothing. */
     fun reveal() {
@@ -117,6 +118,27 @@ class ReviewViewModel(
                 // Refused: nothing was recorded and nothing is counted. The card stays as it was.
             }
             show()
+        }
+    }
+
+    /**
+     * The note on screen may have been edited (the editor was popped, or the app resumed): ask the
+     * sitting to re-read the card. It is the same card edited, or the next one if the edit stopped it
+     * generating, with nothing graded or counted; both are the sitting's rule (ADR-0048 §6). Does
+     * nothing outside a sitting.
+     */
+    fun refresh() {
+        val handle = sitting ?: return
+        if (_state.value !is ReviewScreenState.Sitting) return
+        viewModelScope.launch {
+            try {
+                val now = wallClock()
+                val mono = monotonicClock().toULong()
+                val shown = owner.use { handle.refresh(now, mono)?.let { sittingOf(handle, it, mono) } }
+                if (shown == null) load() else _state.value = shown
+            } catch (_: CairnException) {
+                _state.value = ReviewScreenState.Failed
+            }
         }
     }
 

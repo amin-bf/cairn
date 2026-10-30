@@ -2,7 +2,9 @@ package dev.cairn.app
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.createSavedStateHandle
 import androidx.navigation.NavType
@@ -60,7 +62,10 @@ fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardU
                         model.tick()
                     }
                 }
-                ReviewScreen(model)
+                // Coming back from the editor (or from Notes, or the background) the shown card is
+                // re-read: the edit shows on it, or the sitting moves on (ADR-0048 §6). Asking is idle.
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
+                ReviewScreen(model, onEditNote = { nav.navigate(editorRoute(note = it)) })
             }
             composable(NOTES) {
                 NotesScreen(
