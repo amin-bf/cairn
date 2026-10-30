@@ -403,4 +403,132 @@ class LeechScreenTest {
         }
         assertNotEquals(pages[0], pages[1])
     }
+
+    // --- delete, asked in the row (ADR-0050 §2)
+
+    private fun deleteQuestion(key: String) = textOf("leech-delete-warning-$key")
+
+    @Test
+    fun delete_asks_in_the_row_naming_the_note_and_confirming_removes_the_note_and_rereads_the_list() {
+        fixture("leeches")
+        val rows = list().active
+        val row = rows[1]
+        openScreen()
+        assertEquals(listOf(true, true, true), rows.map { exists("leech-delete-${key(it)}") })
+        leaf("leech-delete-${key(row)}").assertTextEquals("Delete")
+        leaf("leech-delete-${key(row)}").assertHeightIsAtLeast(36.dp)
+        leaf("leech-delete-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-delete-warning-${key(row)}")
+        val wrapped = android.text.BidiFormatter.getInstance().unicodeWrap(row.notePreview)
+        assertEquals("Delete $wrapped? It cannot be undeleted.", deleteQuestion(key(row)))
+        leaf("leech-delete-confirm-${key(row)}").assertTextEquals("Delete")
+        leaf("leech-keep-${key(row)}").assertTextEquals("Keep it")
+        // Nothing is written until it is confirmed.
+        assertEquals(3, list().active.size)
+
+        leaf("leech-delete-confirm-${key(row)}").performScrollTo().performClick()
+        waitGone("leech-row-${key(row)}")
+        val after = list()
+        assertTrue("every card of the note is gone", (after.active + after.suspended).none { it.noteId == row.noteId })
+        assertEquals(rows.filter { it.noteId != row.noteId }.map { key(it) }, after.active.map { key(it) })
+        for (other in rows.filter { it.noteId != row.noteId }) assertTrue(exists("leech-row-${key(other)}"))
+    }
+
+    @Test
+    fun keep_it_leaves_everything_as_it_was() {
+        fixture("leeches")
+        val rows = list().active
+        val before = list()
+        openScreen()
+        leaf("leech-delete-${key(rows[0])}").performScrollTo().performClick()
+        waitFor("leech-keep-${key(rows[0])}")
+        leaf("leech-keep-${key(rows[0])}").performScrollTo().performClick()
+        waitGone("leech-delete-warning-${key(rows[0])}")
+        for (r in rows) {
+            assertTrue(exists("leech-row-${key(r)}"))
+            assertTrue(exists("leech-delete-${key(r)}"))
+        }
+        assertEquals(before, list())
+    }
+
+    @Test
+    fun a_suspended_row_offers_no_delete() {
+        fixture("leeches")
+        val row = list().active.first()
+        suspendThroughBinding(row)
+        openScreen()
+        waitFor("leech-unsuspend-${key(row)}")
+        assertFalse(exists("leech-delete-${key(row)}"))
+    }
+
+    @Test
+    fun the_question_names_the_notes_preview_not_the_cards_prompt_and_isolates_a_persian_one() {
+        val persianNote = "یادداشت من درباره‌ی واژه‌ها"
+        val facts = LeechListFacts(
+            active = listOf(
+                row("a", "the card's prompt", false, LeechCost(4u, 9u, 1u)).copy(notePreview = persianNote, notePreviewRtl = true),
+            ),
+            suspended = emptyList(),
+        )
+        rule.setContent {
+            CairnTheme(dark = false) {
+                LeechList(facts, refusal = null, confirming = LeechRowKey("a", 0u), onEdit = {}, onSuspend = {}, onUnsuspend = {}, onBack = {})
+            }
+        }
+        val wrapped = android.text.BidiFormatter.getInstance().unicodeWrap(persianNote)
+        assertNotEquals("the preview is isolated", persianNote, wrapped)
+        assertEquals("Delete $wrapped? It cannot be undeleted.", deleteQuestion("a-0"))
+        assertFalse(deleteQuestion("a-0").contains("the card's prompt"))
+    }
+
+    @Test
+    fun a_refused_delete_is_said_in_the_row_which_keeps_the_question_and_the_note() {
+        fixture("leeches")
+        val rows = list().active
+        val row = rows.first()
+        val access = Refusing(owner)
+        val model = LeechViewModel(access)
+        rule.setContent { CairnTheme(dark = false) { LeechScreen(model, onEdit = {}, onBack = {}) } }
+        waitFor("leech-row-${key(row)}")
+        leaf("leech-delete-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-delete-confirm-${key(row)}")
+        access.refuse = true
+        leaf("leech-delete-confirm-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-refused-${key(row)}")
+        leaf("leech-refused-${key(row)}").assertTextEquals("The note could not be deleted.")
+        assertTrue("the question stays", exists("leech-delete-warning-${key(row)}"))
+        assertEquals("nothing was deleted", 3, list().active.size)
+        assertFalse(exists("leech-refused-${key(rows.last())}"))
+        // The person may keep it, and the refusal goes with the question.
+        leaf("leech-keep-${key(row)}").performScrollTo().performClick()
+        waitGone("leech-refused-${key(row)}")
+    }
+
+    @Test
+    fun the_confirmation_is_captured_in_both_themes() {
+        val dir = context.getExternalFilesDir("leech-shots")!!
+        val dark = mutableStateOf(false)
+        val facts = LeechListFacts(
+            active = listOf(row("a", "néanmoins", false, LeechCost(6u, 12u, 4u)), row("b", persian, true, LeechCost(4u, 9u, 1u))),
+            suspended = emptyList(),
+        )
+        rule.setContent {
+            CairnTheme(dark = dark.value) {
+                LeechList(facts, refusal = null, confirming = LeechRowKey("b", 0u), onEdit = {}, onSuspend = {}, onUnsuspend = {}, onBack = {})
+            }
+        }
+        val pages = mutableListOf<Int>()
+        for (isDark in listOf(false, true)) {
+            dark.value = isDark
+            rule.waitForIdle()
+            leaf("leech-delete-confirm-b-0").assertIsDisplayed()
+            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+            FileOutputStream(File(dir, "confirm-${if (isDark) "dark" else "light"}.png")).use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+            assertEquals("page colour, dark=$isDark", pageArgb(isDark), bitmap.getPixel(2, bitmap.height / 2))
+            pages += bitmap.getPixel(2, 2)
+        }
+        assertNotEquals("the confirmation looks the same in both themes", pages[0], pages[1])
+    }
 }
