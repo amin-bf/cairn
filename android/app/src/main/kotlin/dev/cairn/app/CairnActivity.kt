@@ -1,5 +1,7 @@
 package dev.cairn.app
 
+import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
@@ -8,6 +10,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.lifecycleScope
 import dev.cairn.design.CairnTheme
+import dev.cairn.design.pageArgb
 import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.ThemeChoice
 import kotlinx.coroutines.launch
@@ -51,6 +54,11 @@ abstract class CairnActivity : ComponentActivity() {
             } catch (_: CairnException) {
                 ThemeChoice.SYSTEM
             }
+            // The window theme follows the platform, so a stored choice that differs from it is
+            // put behind the first frame here.
+            val systemDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
+            window.setBackgroundDrawable(ColorDrawable(pageArgb(isDark(choice, systemDark))))
             setContent {
                 CairnTheme(dark = isDark(choice, isSystemInDarkTheme())) { Screen() }
             }

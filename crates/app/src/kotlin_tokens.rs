@@ -252,6 +252,34 @@ fn both_palettes_are_mirrored_as_drawn() {
     assert_mirrors("Palette.kt", "LightPalette", &roles(&theme::cairn_light()));
 }
 
+/// The window theme cannot read Kotlin, so the page colour the window shows before the first frame
+/// is written once more in a resource per mode; it must be the page of that mode's palette.
+#[test]
+fn the_window_background_before_the_first_frame_is_the_page_of_each_palette() {
+    let page = |v: egui::Visuals| match argb(v.panel_fill) {
+        Value::Int(i) => i,
+        other => panic!("{other:?}"),
+    };
+    for (dir, expected) in [
+        ("values", page(theme::cairn_light())),
+        ("values-night", page(theme::cairn_dark())),
+    ] {
+        let path = design_root().join(format!("res/{dir}/cairn_window.xml"));
+        let xml =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let hex = xml
+            .split("name=\"cairn_page\">#")
+            .nth(1)
+            .and_then(|r| r.split('<').next())
+            .unwrap_or_else(|| panic!("{dir}: no cairn_page colour"));
+        assert_eq!(
+            i64::from_str_radix(hex, 16).unwrap(),
+            expected,
+            "{dir}/cairn_window.xml"
+        );
+    }
+}
+
 /// The names of the faces egui's own defaults add and the native client leaves to the platform's
 /// emoji fallback.
 const EMOJI: [&str; 2] = ["NotoEmoji-Regular", "emoji-icon-font"];

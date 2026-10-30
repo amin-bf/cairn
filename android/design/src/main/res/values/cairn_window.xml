@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The page colour the window shows before the first frame is drawn. Written here only because a
+     window theme cannot read Kotlin; the Rust guard holds it equal to Palette.kt's PAGE. -->
+<resources>
+    <color name="cairn_page">#FFDEE2E3</color>
+</resources>

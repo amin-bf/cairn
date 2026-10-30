@@ -88,7 +88,10 @@ internal val lightColors = CairnColors(
     error = Color(LightPalette.ERROR),
 )
 
-val LocalCairnColors = staticCompositionLocalOf { darkColors }
+/** The page colour as an ARGB int, for the window behind the first frame (a view, not a composable). */
+fun pageArgb(dark: Boolean): Int = (if (dark) DarkPalette.PAGE else LightPalette.PAGE).toInt()
+
+val LocalCairnColors =staticCompositionLocalOf { darkColors }
 internal val LocalFaces = staticCompositionLocalOf<FaceSet> { error("CairnTheme is missing") }
 
 /** The theme as the roles of the moment, read from [CairnTheme]. */
@@ -100,7 +103,7 @@ object Cairn {
 /**
  * Carries the colours and the faces. [dark] is decided by the caller from the stored choice and the
  * platform (`Light` and `Dark` are fixed, `System` follows the platform), so this never interprets
- * the stored value (ADR-0046 §3).
+ * the stored value (ADR-0046 §1, §6).
  */
 @Composable
 fun CairnTheme(dark: Boolean, content: @Composable () -> Unit) {

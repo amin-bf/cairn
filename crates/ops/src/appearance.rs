@@ -4,7 +4,7 @@
 //!
 //! It lives here, and not in the renderer, because the store keeps the stored string uninterpreted on
 //! purpose: [`ThemeChoice::parse`] is the only place that decides what it means, and a second parser
-//! in Kotlin would be a second opinion about a downgraded value (ADR-0046 §3).
+//! in Kotlin would be a second opinion about a downgraded value (ADR-0046 §1, §6).
 
 use cairn_store::Collection;
 

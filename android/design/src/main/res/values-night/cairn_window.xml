@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- See values/cairn_window.xml. -->
+<resources>
+    <color name="cairn_page">#FF1A1E21</color>
+</resources>
