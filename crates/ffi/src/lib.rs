@@ -16,6 +16,7 @@ use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::scheduling::Grade as CoreGrade;
 use cairn_ops::cards;
 use cairn_ops::editor::{self, Editing};
+use cairn_ops::leeches;
 use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::review::{self, Review};
 use cairn_ops::session::ReviewState as CoreState;
@@ -301,6 +302,61 @@ impl CollectionHandle {
     pub fn delete_note(&self, note: String) -> Result<(), CairnError> {
         let note = parse_note(&note)?;
         notes::delete_note(&mut self.collection(), note)?;
+        Ok(())
+    }
+
+    /// The leech screen's two sections against the day of `now_wall_ms` — `cairn_ops::leeches::list`.
+    pub fn leech_list(&self, now_wall_ms: i64) -> Result<LeechListFacts, CairnError> {
+        let list = leeches::list(&self.collection(), now_wall_ms)?;
+        let row = |card: CardRef,
+                   prompt: Option<Vec<review::Run>>,
+                   note_preview: String,
+                   cost: Option<LeechCost>| {
+            let generated = prompt.is_some();
+            let prompt = runs(prompt.unwrap_or_default());
+            LeechRowFact {
+                note_id: card.note.to_canonical(),
+                slot: card.ordinal,
+                rtl: review::is_rtl(&prompt.iter().map(|r| r.text.as_str()).collect::<String>()),
+                prompt,
+                generated,
+                note_preview_rtl: review::is_rtl(&note_preview),
+                note_preview,
+                cost,
+            }
+        };
+        Ok(LeechListFacts {
+            active: list
+                .active
+                .into_iter()
+                .map(|r| {
+                    let cost = LeechCost {
+                        failure_days: r.failure_days,
+                        reviews: r.reviews,
+                        answer_minutes: r.answer_minutes,
+                    };
+                    row(r.card, r.prompt, r.note_preview, Some(cost))
+                })
+                .collect(),
+            suspended: list
+                .suspended
+                .into_iter()
+                .map(|r| row(r.card, r.prompt, r.note_preview, None))
+                .collect(),
+        })
+    }
+
+    /// Suspend one card of a note (ADR-0010 §8).
+    pub fn suspend_card(&self, note: String, slot: u16) -> Result<(), CairnError> {
+        let card = CardRef::new(parse_note(&note)?, slot);
+        leeches::suspend(&mut self.collection(), card)?;
+        Ok(())
+    }
+
+    /// Unsuspend one card of a note.
+    pub fn unsuspend_card(&self, note: String, slot: u16) -> Result<(), CairnError> {
+        let card = CardRef::new(parse_note(&note)?, slot);
+        leeches::unsuspend(&mut self.collection(), card)?;
         Ok(())
     }
 
@@ -758,6 +814,40 @@ pub struct NoteListFacts {
     pub captioned: bool,
 }
 
+/// What a leech's cost line is made of; a suspended row has none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct LeechCost {
+    pub failure_days: u32,
+    pub reviews: u32,
+    /// Whole minutes of answer time, rounded half up.
+    pub answer_minutes: u32,
+}
+
+/// One card on the leech screen, as facts. An unsuspended card is one slot of one note.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LeechRowFact {
+    pub note_id: String,
+    pub slot: u16,
+    /// The prompt as Review's runs; empty when the card is no longer generated.
+    pub prompt: Vec<Run>,
+    /// Whether the prompt begins right to left.
+    pub rtl: bool,
+    /// False when the card renders nothing (ADR-0002 §7).
+    pub generated: bool,
+    /// The note's preview, whole, for the delete confirmation, and its direction.
+    pub note_preview: String,
+    pub note_preview_rtl: bool,
+    /// `Some` for an active row, `None` for a suspended one.
+    pub cost: Option<LeechCost>,
+}
+
+/// The leech screen's sections: active leeches worst first, then suspended cards by identity.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LeechListFacts {
+    pub active: Vec<LeechRowFact>,
+    pub suspended: Vec<LeechRowFact>,
+}
+
 /// Which of the five states the entrance is in, with the counts that belong to it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum ReviewStateKind {
@@ -784,7 +874,7 @@ pub struct ReviewFacts {
     pub backlog: bool,
     /// Which of 5/10/20 are strictly shorter than the queue.
     pub shorter: Vec<u32>,
-    /// Cards over the leech floor, suspended ones included.
+    /// Cards over the leech floor and not suspended: the leeches the leech screen lists.
     pub leeches: u32,
     pub suspended: u32,
 }
@@ -1218,6 +1308,66 @@ mod tests {
         );
         assert!(!again.revealed);
         assert_eq!(sitting.graded(), 1);
+    }
+
+    #[test]
+    fn the_leech_list_crosses_as_facts_and_suspending_moves_a_row() {
+        let (handle, _d, _s) = benched("leeches");
+        let list = handle.leech_list(NOW).unwrap();
+        assert_eq!(list.active.len(), 3);
+        let worst = &list.active[0];
+        assert_eq!(text(&worst.prompt), "néanmoins");
+        assert!(worst.generated && !worst.rtl);
+        assert_eq!(
+            worst.cost,
+            Some(LeechCost {
+                failure_days: 6,
+                reviews: 12,
+                answer_minutes: 4
+            })
+        );
+        assert_eq!(worst.note_preview, "néanmoins");
+
+        handle
+            .suspend_card(worst.note_id.clone(), worst.slot)
+            .unwrap();
+        let after = handle.leech_list(NOW).unwrap();
+        assert_eq!(after.active.len(), 2);
+        assert_eq!(after.suspended.len(), 1);
+        assert_eq!(after.suspended[0].cost, None);
+        assert_eq!(after.suspended[0].note_id, worst.note_id);
+        let facts = handle.review_state(NOW).unwrap();
+        assert_eq!((facts.leeches, facts.suspended), (2, 1));
+
+        handle
+            .unsuspend_card(worst.note_id.clone(), worst.slot)
+            .unwrap();
+        assert_eq!(handle.leech_list(NOW).unwrap(), list);
+    }
+
+    #[test]
+    fn a_suspended_card_that_no_longer_generates_is_flagged_and_a_bad_id_is_refused() {
+        let (handle, _d, _s) = benched("cloze");
+        let note = handle
+            .note_list(DeckSelector::All, String::new())
+            .unwrap()
+            .rows[0]
+            .note_id
+            .clone();
+        // Blank 9 does not exist on the note: the card is dormant.
+        handle.suspend_card(note, 0x8000 | 9).unwrap();
+        let list = handle.leech_list(NOW).unwrap();
+        assert_eq!(list.suspended.len(), 1);
+        assert!(!list.suspended[0].generated);
+        assert!(list.suspended[0].prompt.is_empty());
+        assert!(matches!(
+            handle.suspend_card("nope".to_owned(), 0),
+            Err(CairnError::Failed { .. })
+        ));
+        assert!(matches!(
+            handle.unsuspend_card("nope".to_owned(), 0),
+            Err(CairnError::Failed { .. })
+        ));
     }
 
     #[test]
