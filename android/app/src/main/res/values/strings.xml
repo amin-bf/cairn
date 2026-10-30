@@ -71,6 +71,22 @@
     <string name="settings_rate_label">New cards a day</string>
     <string name="settings_rate_consequence">The only limit in the app. Set it to zero to clear a backlog, then turn it back on.</string>
     <string name="settings_rate_refused">The new-card rate could not be saved.</string>
+    <!-- Optimise and the nudge under it (ADR-0014). The egui build's words, word for word; counts arrive grouped. -->
+    <string name="settings_scheduler_label">Scheduler</string>
+    <string name="settings_optimise">Optimise</string>
+    <string name="settings_optimise_preparing">Preparing…</string>
+    <string name="settings_optimise_cancel">Cancel</string>
+    <string name="settings_optimise_done">Parameters updated. Due dates have been recalculated.</string>
+    <string name="nudge_standard">Using the standard parameters. You\'ve reviewed %1$s.</string>
+    <string name="nudge_fitted">Fitted over %1$s. You\'ve reviewed %2$s since.</string>
+    <plurals name="nudge_reviews">
+        <item quantity="one">%1$s review</item>
+        <item quantity="other">%1$s reviews</item>
+    </plurals>
+    <plurals name="nudge_times">
+        <item quantity="one">%1$s time</item>
+        <item quantity="other">%1$s times</item>
+    </plurals>
     <string name="settings_device">This device</string>
     <string name="settings_device_caption">Stays on this machine.</string>
     <string name="settings_appearance_label">Appearance</string>
