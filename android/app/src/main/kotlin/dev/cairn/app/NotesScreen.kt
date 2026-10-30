@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,12 +19,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.cairn.design.Cairn
+import dev.cairn.design.CairnConfirmRow
 import dev.cairn.design.CairnControl
+import dev.cairn.design.CairnInertRow
+import dev.cairn.design.CairnQuietTarget
+import dev.cairn.design.RowAction
+import dev.cairn.design.RowIcon
+import dev.cairn.ffi.NoteRowFact
 import dev.cairn.design.CairnFieldLabel
 import dev.cairn.design.CairnDropdown
 import dev.cairn.design.CairnListRow
@@ -32,12 +39,10 @@ import dev.cairn.design.CairnRule
 import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Tier
+import dev.cairn.design.gap
 import dev.cairn.design.rememberKeyboardUp
 import dev.cairn.design.tokens.Frame
-import dev.cairn.design.tokens.Spacing
 import dev.cairn.ffi.DeckSelector
-
-private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
 @Composable
@@ -56,6 +61,14 @@ fun NotesScreen(model: NotesViewModel, onOpen: (String) -> Unit = {}, onCreate: 
             onAskDelete = model::askDeleteDeck,
             onKeep = model::keepDeck,
             onDelete = model::deleteDeck,
+            rows = RowCallbacks(
+                onAskDelete = model::askDeleteNote,
+                onKeep = model::keepNote,
+                onDelete = model::deleteNote,
+                onMove = model::startMove,
+                onCancelMove = model::cancelMove,
+                onPlace = model::placeAt,
+            ),
             onOpen = onOpen,
             onCreate = onCreate,
         )
@@ -63,6 +76,16 @@ fun NotesScreen(model: NotesViewModel, onOpen: (String) -> Unit = {}, onCreate: 
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("notes-failed")) }
     }
 }
+
+/** What a row's actions and the placement state do: each takes the note (or gap) it was pressed on. */
+class RowCallbacks(
+    val onAskDelete: (String) -> Unit,
+    val onKeep: () -> Unit,
+    val onDelete: () -> Unit,
+    val onMove: (String) -> Unit,
+    val onCancelMove: () -> Unit,
+    val onPlace: (Int) -> Unit,
+)
 
 @Composable
 fun NoteList(
@@ -74,6 +97,7 @@ fun NoteList(
     onAskDelete: () -> Unit,
     onKeep: () -> Unit,
     onDelete: () -> Unit,
+    rows: RowCallbacks,
     modifier: Modifier = Modifier,
     onOpen: (String) -> Unit = {},
     onCreate: (deck: String?) -> Unit = {},
@@ -88,7 +112,18 @@ fun NoteList(
                 }
                 // The empty state is the empty *collection*, not a filter that matched nothing.
                 if (!facts.hasNotes) {
-                    item { CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty")) }
+                    item {
+                        CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty"))
+                        Spacer(Modifier.height(gap(2)))
+                        // The sentence's first verb is *create a deck*, so the control for it is here too
+                        // (ADR-0021 §2 puts a surface behind each of the three). Once a deck exists the
+                        // whole deck surface returns with it, so the new deck can be seen and deleted.
+                        if (facts.decks.isEmpty()) {
+                            NewDeck(state, onNewDeck, onCreateDeck)
+                        } else {
+                            DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
+                        }
+                    }
                     return@LazyColumn
                 }
                 item {
@@ -104,14 +139,29 @@ fun NoteList(
                     item { CairnText(stringResource(R.string.notes_no_match), Modifier.testTag("notes-no-match")) }
                     return@LazyColumn
                 }
+                val held = facts.rows.firstOrNull { it.noteId == state.moving }
+                if (held != null) {
+                    placement(facts.rows, held, rows)
+                    return@LazyColumn
+                }
                 items(facts.rows, key = { it.noteId }) { row ->
                     Spacer(Modifier.height(gap(1)))
-                    CairnListRow(
-                        title = row.preview,
-                        caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
-                        modifier = Modifier.testTag("note-row"),
-                        onClick = { onOpen(row.noteId) },
-                    )
+                    if (row.noteId == state.confirmingNote) {
+                        DeleteQuestion(row.preview, rows)
+                    } else {
+                        val move = stringResource(R.string.notes_move)
+                        val delete = stringResource(R.string.notes_delete)
+                        CairnListRow(
+                            title = row.preview,
+                            caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
+                            modifier = Modifier.testTag("note-row"),
+                            actions = listOf(
+                                RowAction(RowIcon.Move, move, "row-move") { rows.onMove(row.noteId) },
+                                RowAction(RowIcon.Delete, delete, "row-delete") { rows.onAskDelete(row.noteId) },
+                            ),
+                            onClick = { onOpen(row.noteId) },
+                        )
+                    }
                 }
             }
             // Pinned outside the scroll on the reach line (ADR-0039 §8) while the keyboard is down, so
@@ -125,6 +175,49 @@ fun NoteList(
                     primary = true,
                 )
                 Spacer(Modifier.height(Frame.REACH_LINE.dp))
+            }
+        }
+    }
+}
+
+/** *Delete ⟨preview⟩? It cannot be undeleted.* in the note's own row, the preview bidi-isolated (ADR-0048 §4). */
+@Composable
+private fun DeleteQuestion(preview: String, rows: RowCallbacks) {
+    CairnConfirmRow(
+        question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(preview)),
+        confirm = stringResource(R.string.notes_delete),
+        keep = stringResource(R.string.notes_keep_it),
+        onConfirm = rows.onDelete,
+        onKeep = rows.onKeep,
+        questionModifier = Modifier.testTag("row-delete-warning"),
+        confirmModifier = Modifier.testTag("row-delete-confirm"),
+        keepModifier = Modifier.testTag("row-keep"),
+    )
+}
+
+/**
+ * The placement state (ADR-0039 §7): *Cancel move*, *Placing* over the held note, then a quiet
+ * *Place here* in every gap between the other visible notes, which are real rows that offer nothing.
+ */
+private fun LazyListScope.placement(all: List<NoteRowFact>, held: NoteRowFact, rows: RowCallbacks) {
+    val others = all.filter { it.noteId != held.noteId }
+    item {
+        CairnControl(stringResource(R.string.notes_cancel_move), onClick = rows.onCancelMove, modifier = Modifier.fillMaxWidth().testTag("cancel-move"))
+        Spacer(Modifier.height(gap(2)))
+        CairnFieldLabel(stringResource(R.string.notes_placing))
+        Spacer(Modifier.height(gap(1)))
+        CairnInertRow(held.preview, Modifier.testTag("held-row"), held = true)
+        Spacer(Modifier.height(gap(2)))
+    }
+    for (at in 0..others.size) {
+        item(key = "gap-$at") {
+            CairnQuietTarget(stringResource(R.string.notes_place_here), onClick = { rows.onPlace(at) }, modifier = Modifier.testTag("place-here"))
+        }
+        others.getOrNull(at)?.let { row ->
+            item(key = row.noteId) {
+                Spacer(Modifier.height(gap(1)))
+                CairnInertRow(row.preview, Modifier.testTag("inert-row"))
+                Spacer(Modifier.height(gap(1)))
             }
         }
     }
@@ -156,14 +249,15 @@ private fun DeckControls(
     CairnFieldLabel(stringResource(R.string.notes_deck))
     CairnDropdown(selectedName, labels, onSelect = { onSelect(choices[it]) }, tag = "deck-filter")
     Spacer(Modifier.height(gap(1)))
-    Row(horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
-        CairnControl(stringResource(R.string.notes_new_deck), onClick = onCreateDeck, modifier = Modifier.testTag("new-deck"))
-        CairnTextField(state.newDeck, onNewDeck, Modifier.weight(1f).testTag("new-deck-name"))
-    }
+    NewDeck(state, onNewDeck, onCreateDeck)
 
     // Delete exists only for the deck the filter names, and asks first, with the count.
     if (state.selector !is DeckSelector.Deck) return
     Spacer(Modifier.height(gap(1)))
+    if (state.refusal == NotesScreenState.Refusal.DeleteDeck) {
+        CairnText(stringResource(R.string.notes_delete_deck_refused), Modifier.testTag("delete-deck-refused"), color = Cairn.colors.error)
+        Spacer(Modifier.height(gap(1)))
+    }
     val count = state.confirmingCount
     if (count == null) {
         CairnControl(stringResource(R.string.notes_delete_deck), onClick = onAskDelete, modifier = Modifier.testTag("delete-deck"))
@@ -180,5 +274,18 @@ private fun DeckControls(
             CairnControl(stringResource(R.string.notes_delete_deck_confirm), onClick = onDelete, modifier = Modifier.testTag("delete-deck-confirm"))
             CairnControl(stringResource(R.string.notes_keep_it), onClick = onKeep, modifier = Modifier.testTag("keep-deck"))
         }
+    }
+}
+
+/** *New deck* beside the name being typed, and — when the collection refused it — the refusal under them. */
+@Composable
+private fun NewDeck(state: NotesScreenState.Ready, onNewDeck: (String) -> Unit, onCreateDeck: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(gap(1)), verticalAlignment = Alignment.CenterVertically) {
+        CairnControl(stringResource(R.string.notes_new_deck), onClick = onCreateDeck, modifier = Modifier.testTag("new-deck"))
+        CairnTextField(state.newDeck, onNewDeck, Modifier.weight(1f).testTag("new-deck-name"))
+    }
+    if (state.refusal == NotesScreenState.Refusal.CreateDeck) {
+        Spacer(Modifier.height(gap(1)))
+        CairnText(stringResource(R.string.notes_new_deck_refused), Modifier.testTag("new-deck-refused"), color = Cairn.colors.error)
     }
 }

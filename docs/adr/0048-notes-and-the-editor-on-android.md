@@ -80,6 +80,12 @@ All on Android only; the desktop reads each as written.
   a visible action rather than an accelerator (§2).
 - **[ADR-0021 §2](0021-note-ordering-saving-and-the-note-list.md)** — a note's delete is confirmed in
   its row (§4).
+- **[ADR-0021 §2](0021-note-ordering-saving-and-the-note-list.md)** and **[ADR-0015 §7](0015-the-sync-experience.md)**
+  — the empty collection's sentence (*create a deck, import one, or set up sync*) leaves open whether
+  its first verb has a control beside it. On Android it does: *New deck*, the same control the deck
+  surface has, so a person with nothing can make the first deck from that screen. Once a deck exists
+  the whole deck surface shows under the sentence. A refused create or delete is said where the person
+  acted, and the screen stays.
 - **[ADR-0040 §1](0040-the-note-editor.md)** — confirmed rather than amended: a phone has a soft
   keyboard, so the panes fold (§7).
 

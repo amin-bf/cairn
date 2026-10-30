@@ -156,7 +156,7 @@ fn note_list(
     text_field(ui, search);
     let filter = Filter {
         deck: deck.filter.clone(),
-        text: (!search.trim().is_empty()).then(|| search.trim().to_owned()),
+        text: notes::search_text(search),
         ..Filter::default()
     };
 
@@ -373,9 +373,7 @@ fn deck_controls(ui: &mut egui::Ui, coll: &mut Collection, deck: &mut notes::Dec
         let created = controls::snug(ui, "New deck").clicked();
         text_field(ui, &mut deck.new_name);
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
-        if created
-            && !deck.new_name.trim().is_empty()
-            && let Ok(id) = notes::create_deck(coll, deck.new_name.trim())
+        if created && let Ok(Some(id)) = notes::create_deck(coll, &deck.new_name)
         {
             deck.filter = DeckFilter::Deck(id);
             deck.new_name.clear();
@@ -467,9 +465,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
     spacing::row(ui, 1, |ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
         text_field(ui, &mut ed.new_deck);
-        if created
-            && !ed.new_deck.trim().is_empty()
-            && let Ok(id) = notes::create_deck(coll, ed.new_deck.trim())
+        if created && let Ok(Some(id)) = notes::create_deck(coll, &ed.new_deck)
         {
             ed.deck = Some(id);
             ed.new_deck.clear();

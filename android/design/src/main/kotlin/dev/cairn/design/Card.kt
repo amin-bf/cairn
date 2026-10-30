@@ -45,12 +45,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cairn.design.tokens.Motion
-import dev.cairn.design.tokens.Spacing
 import dev.cairn.design.tokens.Surface
 import dev.cairn.design.tokens.Typography
 
@@ -63,8 +61,6 @@ private val CardTiers = floatArrayOf(Typography.DISPLAY, Typography.HEADING, Typ
 /** The type size the card chose, in sp, for a test to read; nothing in the app reads it. */
 val CardTierKey = SemanticsPropertyKey<Float>("CairnCardTier")
 private var SemanticsPropertyReceiver.cardTier by CardTierKey
-
-private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 private val RevealEasing = Easing { Motion.easing(it) }
 

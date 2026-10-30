@@ -15,8 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import dev.cairn.design.Cairn
 import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnPage
@@ -24,11 +22,9 @@ import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextAction
 import dev.cairn.design.Mark
 import dev.cairn.design.Tier
-import dev.cairn.design.tokens.Spacing
+import dev.cairn.design.gap
 import dev.cairn.ffi.ReviewFacts
 import dev.cairn.ffi.ReviewStateKind
-
-private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 /**
  * Review's entrance (ADR-0006 §7, §8; ADR-0034 §2, §3): the heading, one worded statement of the

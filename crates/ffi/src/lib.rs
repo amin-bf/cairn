@@ -231,15 +231,14 @@ impl CollectionHandle {
     }
 
     /// The note list under a deck selector and a search text (ADR-0021 §2): every row in list order,
-    /// the decks the collection holds, and the two facts the screen's states turn on. The search is
-    /// trimmed here, so a field of spaces narrows nothing, as on the desktop.
+    /// the decks the collection holds, and the two facts the screen's states turn on. The search
+    /// text is `cairn_ops::notes::search_text`'s.
     pub fn note_list(&self, deck: DeckSelector, text: String) -> Result<NoteListFacts, CairnError> {
         let coll = self.collection();
         let held = coll.decks()?;
-        let trimmed = text.trim();
         let filter = Filter {
             deck: deck.into_filter()?,
-            text: (!trimmed.is_empty()).then(|| trimmed.to_owned()),
+            text: notes::search_text(&text),
             ..Filter::default()
         };
         let rows = notes::list(&coll, &filter)?
@@ -304,9 +303,9 @@ impl CollectionHandle {
         Ok(())
     }
 
-    /// Create a deck and return its id.
-    pub fn create_deck(&self, name: String) -> Result<String, CairnError> {
-        Ok(notes::create_deck(&mut self.collection(), &name)?.to_canonical())
+    /// Create a deck and return its id; a blank name makes nothing and returns `None`.
+    pub fn create_deck(&self, name: String) -> Result<Option<String>, CairnError> {
+        Ok(notes::create_deck(&mut self.collection(), &name)?.map(|id| id.to_canonical()))
     }
 
     /// Delete a deck, returning how many notes went with it.
@@ -1331,7 +1330,10 @@ mod tests {
     #[test]
     fn creating_a_deck_returns_its_id_and_lists_it() {
         let (handle, _d, _s) = benched("decks");
-        let id = handle.create_deck("Géographie".to_owned()).unwrap();
+        let id = handle
+            .create_deck("  Géographie ".to_owned())
+            .unwrap()
+            .unwrap();
         let facts = all(&handle, "");
         assert!(
             facts
@@ -1340,6 +1342,15 @@ mod tests {
                 .any(|d| d.id == id && d.name == "Géographie")
         );
         assert_eq!(handle.notes_in_deck(id).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_blank_deck_name_and_a_search_of_spaces_are_the_operations_rules() {
+        let (handle, _d, _s) = benched("decks");
+        let before = all(&handle, "").decks.len();
+        assert_eq!(handle.create_deck("   ".to_owned()).unwrap(), None);
+        assert_eq!(all(&handle, "").decks.len(), before);
+        assert_eq!(all(&handle, "   ").rows, all(&handle, "").rows);
     }
 
     #[test]

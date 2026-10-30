@@ -9,6 +9,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** What a screen's model needs of the collection: a way to run a block on it, off the main thread. */
+interface CollectionAccess {
+    suspend fun <T> use(block: (CollectionHandle) -> T): T
+}
+
 /**
  * The one collection of the process (ADR-0046 §7): opened once, held for the process's life, and
  * reached only from a coroutine on [Dispatchers.IO] — a synchronous call into the binding blocks the
@@ -24,12 +29,12 @@ class CollectionOwner(
     // resolved when the collection is first opened, because asking the platform for one is disk work.
     private val dataDir: File? = null,
     private val stateDir: File? = null,
-) {
+) : CollectionAccess {
     private val lock = Mutex()
     private var handle: CollectionHandle? = null
 
     /** Run [block] on the collection, off the main thread. The first call opens it (and seeds a first launch). */
-    suspend fun <T> use(block: (CollectionHandle) -> T): T = withContext(Dispatchers.IO) {
+    override suspend fun <T> use(block: (CollectionHandle) -> T): T = withContext(Dispatchers.IO) {
         block(opened())
     }
 

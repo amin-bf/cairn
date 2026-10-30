@@ -28,8 +28,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,12 +43,10 @@ import dev.cairn.design.CairnTextAction
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.ReachColumn
 import dev.cairn.design.Tier
-import dev.cairn.design.tokens.Spacing
+import dev.cairn.design.gap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-
-private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 /** How often the idle check asks, so a pause of two seconds settles within a fraction of one more. */
 private const val IDLE_CHECK_MS = 500L
