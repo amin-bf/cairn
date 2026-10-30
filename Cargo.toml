@@ -6,6 +6,7 @@ members = [
   "crates/export",
   "crates/sync",
   "crates/ops",
+  "crates/ffi",
   "crates/app",
   "crates/desktop",
 ]
@@ -81,6 +82,12 @@ unicode-bidi = "0.3.18"
 # compile. Only `cairn-export` builds the container, so only it depends on this; declared here so
 # the version cannot drift.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+# ADR-0046 §2: only `cairn-ffi` depends on this. Pinned exactly — the Kotlin runtime the generator
+# emits is matched to the Rust scaffolding by version, and the spike measured 0.32.2
+# (docs/research/kotlin-binding/README.md). Declared without `cli`: the generator is host-only and
+# `cairn-ffi` turns it on behind a feature the Android build leaves off.
+uniffi = "=0.32.2"
 
 android-activity = "0.6"
 jni = "0.21"

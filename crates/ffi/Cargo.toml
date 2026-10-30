@@ -1,0 +1,36 @@
+[package]
+name = "cairn-ffi"
+version.workspace = true
+edition.workspace = true
+publish = false
+license.workspace = true
+
+# ADR-0046 §2: the only crate that depends on uniffi, and thin — an exported handle over `cairn-ops`,
+# the records and enums uniffi can carry, and one error type. The library is `cairn_ffi`; the Kotlin
+# it generates lives in the package `dev.cairn.ffi` (`uniffi.toml`).
+[lib]
+name = "cairn_ffi"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+cairn-ops.workspace = true
+cairn-store.workspace = true
+uniffi.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[features]
+# The generator needs uniffi's `cli` feature, which pulls `uniffi_bindgen` into whatever carries it
+# (research §6: 24 KB of `.so` on arm64). It is host-only: the Gradle build turns it on to run the
+# `uniffi-bindgen` binary on the host and leaves it off for every Android build.
+cli = ["uniffi/cli"]
+
+# A deliberately panicking export, so a test can prove a Rust panic reaches Kotlin as an exception
+# (ADR-0046 §7). Only the debug variant's build turns it on; a release build never carries it.
+panic-probe = []
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
