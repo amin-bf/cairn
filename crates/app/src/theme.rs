@@ -393,51 +393,15 @@ fn popup_shadow(alpha: u8) -> egui::epaint::Shadow {
     }
 }
 
-/// **Which theme the user asked for** (ADR-0036 §3). The decision, as distinct from
-/// `egui::ThemePreference`, which is one renderer's way of carrying it — a native client honours
-/// the same three options against its own platform setting.
-///
-/// Stored device-local and never synced (`Collection::theme_preference`), because a desktop under a
-/// lamp and a handset in bed want opposite answers. [`ThemeChoice::System`] is the default and the
-/// fallback for anything unrecognised, which is what an older build's value looks like after a
-/// downgrade.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ThemeChoice {
-    /// Follow the platform's own light/dark setting. The default.
-    #[default]
-    System,
-    Light,
-    Dark,
-}
+pub use cairn_ops::appearance::ThemeChoice;
 
-impl ThemeChoice {
-    /// The stored form. Lower-case and stable — it is written to a database.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::System => "system",
-            Self::Light => "light",
-            Self::Dark => "dark",
-        }
-    }
-
-    /// Read a stored value. **Anything unrecognised — including `None` — is [`Self::System`]**,
-    /// never an error: the store keeps this string uninterpreted on purpose, so this is the only
-    /// place that decides what it means, and a value from a build that knew more themes than this
-    /// one must degrade to following the platform rather than refusing to start.
-    pub fn parse(stored: Option<&str>) -> Self {
-        match stored {
-            Some("light") => Self::Light,
-            Some("dark") => Self::Dark,
-            _ => Self::System,
-        }
-    }
-
-    fn preference(self) -> ThemePreference {
-        match self {
-            Self::System => ThemePreference::System,
-            Self::Light => ThemePreference::Light,
-            Self::Dark => ThemePreference::Dark,
-        }
+/// How egui carries a [`ThemeChoice`]. The decision itself lives in `cairn-ops`, shared with the
+/// native client; this is the one renderer-specific half.
+fn preference(choice: ThemeChoice) -> ThemePreference {
+    match choice {
+        ThemeChoice::System => ThemePreference::System,
+        ThemeChoice::Light => ThemePreference::Light,
+        ThemeChoice::Dark => ThemePreference::Dark,
     }
 }
 
@@ -451,7 +415,7 @@ impl ThemeChoice {
 pub fn install(ctx: &egui::Context, choice: ThemeChoice) {
     ctx.set_visuals_of(Theme::Dark, cairn_dark());
     ctx.set_visuals_of(Theme::Light, cairn_light());
-    ctx.set_theme(choice.preference());
+    ctx.set_theme(preference(choice));
 }
 
 /// The palette itself, built from egui's dark theme so every field this does not name keeps its
@@ -793,7 +757,7 @@ mod tests {
             );
             let ctx = egui::Context::default();
             install(&ctx, choice);
-            assert_eq!(ctx.options(|o| o.theme_preference), choice.preference());
+            assert_eq!(ctx.options(|o| o.theme_preference), preference(choice));
         }
 
         assert_eq!(ThemeChoice::parse(None), ThemeChoice::System, "unset");

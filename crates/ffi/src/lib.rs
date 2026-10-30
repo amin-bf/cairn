@@ -48,6 +48,26 @@ impl From<String> for CairnError {
     }
 }
 
+/// Which theme the user asked for (ADR-0036 §3): the mirror of `cairn_ops::appearance::ThemeChoice`,
+/// so Kotlin never parses the stored string itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ThemeChoice {
+    System,
+    Light,
+    Dark,
+}
+
+impl From<cairn_ops::appearance::ThemeChoice> for ThemeChoice {
+    fn from(choice: cairn_ops::appearance::ThemeChoice) -> Self {
+        use cairn_ops::appearance::ThemeChoice as Stored;
+        match choice {
+            Stored::System => Self::System,
+            Stored::Light => Self::Light,
+            Stored::Dark => Self::Dark,
+        }
+    }
+}
+
 /// The opened collection. Kotlin holds exactly one per process (ADR-0046 §7). Objects are shared
 /// through `Arc` so every method takes `&self`, and `Collection` is `Send` but not `Sync`, hence the
 /// `Mutex`: calls run one at a time.
@@ -83,6 +103,12 @@ impl CollectionHandle {
         let rows =
             cairn_ops::notes::list(&self.collection(), &cairn_ops::notes::Filter::default())?;
         Ok(rows.len() as u64)
+    }
+
+    /// The stored appearance choice, read before the first frame (ADR-0036 §3, ADR-0046 §6).
+    /// Reading only: changing it is the Settings slice's. Unset or unrecognised is `System`.
+    pub fn theme_choice(&self) -> Result<ThemeChoice, CairnError> {
+        Ok(cairn_ops::appearance::theme_choice(&self.collection())?.into())
     }
 }
 
@@ -126,6 +152,22 @@ mod tests {
         assert!(handle.note_count().unwrap() > 0, "a first launch seeds");
         // The seed is all new cards, none yet due.
         assert_eq!(handle.due_count(1_700_000_000_000).unwrap(), 0);
+    }
+
+    #[test]
+    fn the_stored_appearance_choice_is_read_and_unrecognised_follows_the_platform() {
+        let (data, state) = dirs();
+        let handle = open(&data, &state);
+        assert_eq!(handle.theme_choice().unwrap(), ThemeChoice::System, "unset");
+        for (stored, expected) in [
+            ("light", ThemeChoice::Light),
+            ("dark", ThemeChoice::Dark),
+            ("system", ThemeChoice::System),
+            ("sepia", ThemeChoice::System),
+        ] {
+            handle.collection().set_theme_preference(stored).unwrap();
+            assert_eq!(handle.theme_choice().unwrap(), expected, "stored {stored:?}");
+        }
     }
 
     #[test]

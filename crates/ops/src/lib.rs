@@ -9,6 +9,7 @@
 //! **Time is a value** (ADR-0046 §3). Where an operation needs *now*, the caller passes it; nothing in
 //! this crate's sitting or editor reads a clock.
 
+pub mod appearance;
 pub mod cards;
 pub mod deck;
 pub mod editor;
