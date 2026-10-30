@@ -332,6 +332,13 @@ mod tests {
     use crate::fixtures::Fixture;
     use tempfile::TempDir;
 
+    #[test]
+    fn a_leading_marker_does_not_change_the_direction() {
+        assert!(is_rtl("**سلام** دنیا"));
+        assert!(is_rtl("`سلام`"));
+        assert!(!is_rtl("**Bonjour** le monde"));
+    }
+
     /// A moment well after the fixtures' own clock origin; the fixtures take `now` as a value.
     const NOW: i64 = 1_760_000_000_000;
 
