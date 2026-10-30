@@ -12,10 +12,14 @@
 use std::collections::{HashMap, HashSet};
 
 use cairn_core::content::{CardRef, NoteId};
+use cairn_core::log::{DEFAULT_NEW_CARD_RATE, DayScale, day_number};
 use cairn_core::replay::{
-    Leech, NewCard, Replayed, introduction_candidates, notes_introduced_today,
+    Leech, NewCard, Replayed, introduction_candidates, notes_introduced_today, replay,
 };
 use cairn_core::scheduling::{Grade, MemoryState, Scheduler, SchedulerParameters, day_gap};
+use cairn_store::Collection;
+
+use crate::deck;
 
 /// More cards due than a sitting will clear: past this, the count picker **frames** the backlog
 /// rather than reporting a bare number (ADR-0001 §3 forbids a due-count presented as a queue; the
@@ -146,6 +150,26 @@ pub fn compose(
         due: due.into_iter().map(|(_, o)| o).collect(),
         new,
     }
+}
+
+/// How many cards are due at `now_ms` — the same derivation Review makes: the current cards against
+/// the replayed log, composed under the stored new-card rate and the suspension flags, measured
+/// against the device-local day of `now_ms` (the caller hands the instant over; nothing here reads a
+/// clock). Suspended cards and not-yet-introduced ones are not counted.
+pub fn due_count(coll: &Collection, now_ms: i64) -> Result<usize, String> {
+    let today = day_number(now_ms, DayScale::default());
+    let current = deck::current_cards(coll).map_err(|e| e.to_string())?;
+    let positions = deck::note_positions(coll).map_err(|e| e.to_string())?;
+    let rate = coll.new_card_rate().unwrap_or(DEFAULT_NEW_CARD_RATE) as usize;
+    let suspended = coll.suspended().map_err(|e| e.to_string())?;
+    let lines = coll.log_lines().map_err(|e| e.to_string())?;
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let replayed = replay(&current, &refs);
+    Ok(
+        compose(&current, &positions, &replayed, today, rate, &suspended)
+            .due
+            .len(),
+    )
 }
 
 /// The illustrative next interval, in days, if `offered` were graded `grade` today — the figure the
@@ -501,6 +525,37 @@ mod tests {
         assert_eq!(queue.due.len(), 1);
         assert!(!queue.due[0].is_new);
         assert!(queue.due[0].box_ >= 1);
+    }
+
+    #[test]
+    fn the_due_count_reads_the_collection_as_review_does() {
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        let note_id = coll
+            .create_note("basic", &[("Front", "chien"), ("Back", "dog")])
+            .unwrap();
+        let card = CardRef::new(note_id, 0);
+        const TODAY: i64 = 20_514;
+        let day0_ms = TODAY * 86_400_000 + 4 * 3_600_000;
+
+        assert_eq!(
+            due_count(&coll, day0_ms).unwrap(),
+            0,
+            "a new card is not due"
+        );
+        coll.append_review(card, Grade::Good, day0_ms, DayScale::default(), 1000)
+            .unwrap();
+        assert_eq!(
+            due_count(&coll, day0_ms).unwrap(),
+            0,
+            "graded today, scheduled ahead"
+        );
+        assert_eq!(
+            due_count(&coll, day0_ms + 3650 * 86_400_000).unwrap(),
+            1,
+            "far enough on, the scheduled day has arrived"
+        );
     }
 
     #[test]
