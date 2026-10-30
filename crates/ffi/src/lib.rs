@@ -439,7 +439,7 @@ impl EditingHandle {
             .fields
             .iter()
             .map(|(name, value)| FieldFact {
-                multiline: editing.kind == "cloze" && name == "Text",
+                multiline: editor::field_is_multiline(&editing.kind, name),
                 name: name.clone(),
                 value: value.clone(),
             })

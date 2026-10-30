@@ -76,6 +76,12 @@ pub fn field_names(kind: &str) -> Vec<&'static str> {
     shipped(kind).map_or_else(Vec::new, |def| def.fields.iter().map(|f| f.name).collect())
 }
 
+/// Whether `name` of a `kind` note is a multiline field: `cloze`'s Text is the one, Enter inserts a
+/// newline there (and it carries *Blank it*). Every renderer asks here rather than repeating it.
+pub fn field_is_multiline(kind: &str, name: &str) -> bool {
+    kind == "cloze" && name == "Text"
+}
+
 /// Commit one field edit under autosave (ADR-0021 §7). Returns the note id the edit landed on,
 /// **creating the note on its first non-empty field**:
 ///
@@ -342,6 +348,16 @@ impl Editing {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    /// Only `cloze`'s Text field is multiline: Enter types a new line there and everywhere else it
+    /// is the key's ordinary job — a fact both renderers read from here.
+    #[test]
+    fn only_the_cloze_text_field_is_multiline() {
+        assert!(field_is_multiline("cloze", "Text"));
+        assert!(!field_is_multiline("cloze", "Extra"));
+        assert!(!field_is_multiline("basic", "Text"));
+        assert!(!field_is_multiline("basic", "Front"));
+    }
 
     /// **The idle half of ADR-0021 §7** (#179): a field settles after a pause with no blur and no
     /// exit, so the note is in the store while the caret is still in the field. Deferred from #82 for
