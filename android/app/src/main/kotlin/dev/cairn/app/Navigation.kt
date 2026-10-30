@@ -11,6 +11,11 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -21,7 +26,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.cairn.design.CairnShell
 import dev.cairn.design.Destination
 import dev.cairn.design.rememberKeyboardUp
+import dev.cairn.ffi.CairnException
+import dev.cairn.ffi.ThemeChoice
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
 private const val TICK_MS = 15_000L
@@ -48,6 +56,29 @@ internal fun editorRoute(note: String? = null, kind: String? = null, deck: Strin
  */
 @Composable
 fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboardUp()) {
+    // After a reset or a fixture install the app starts afresh (#237): the whole graph is composed again
+    // under a new key, so the back stack is Review and no place keeps a ViewModel of the replaced
+    // collection, and the appearance is read again from the new one.
+    var generation by remember { mutableIntStateOf(0) }
+    val appearance = LocalAppearance.current
+    val scope = rememberCoroutineScope()
+    key(generation) {
+        CairnPlaces(owner, keyboardUp) {
+            scope.launch {
+                // A failed read follows the platform, as the first frame's does.
+                appearance.choice = try {
+                    owner.use { it.themeChoice() }
+                } catch (_: CairnException) {
+                    ThemeChoice.SYSTEM
+                }
+                generation++
+            }
+        }
+    }
+}
+
+@Composable
+private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, onRestart: () -> Unit) {
     val nav = rememberNavController()
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
@@ -96,7 +127,7 @@ fun CairnNavHost(owner: CollectionAccess, keyboardUp: Boolean = rememberKeyboard
                 val model = viewModel { SettingsViewModel(owner, appearance) }
                 // Coming back to the page it is read again; a field mid-edit keeps what was typed.
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
-                SettingsScreen(model)
+                SettingsScreen(model, development = { DevelopmentBlock(owner, onRestart) })
             }
             composable(
                 EDITOR,
