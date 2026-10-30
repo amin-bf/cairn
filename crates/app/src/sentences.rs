@@ -4,9 +4,8 @@
 //! it. Kotlin says them from its string resources; the ADRs that fix a sentence are the specification
 //! of it for both.
 
-use cairn_core::content::{CLOZE_SLOT_BIT, SHIPPED_KINDS, cloze_blank};
 use cairn_core::replay::OptimisationNudge;
-use cairn_ops::cards::DormantEntry;
+use cairn_ops::cards::{self, DormantEntry, DormantName};
 
 /// The nudge sentence for the settings screen (ADR-0014 §2), from the fact `replay` derived. Carries
 /// only the counts — no threshold, no badge, no verb — so the user infers "that sounds like a lot"
@@ -69,29 +68,13 @@ fn grouped(n: u64) -> String {
 ///    unnameable dormant card is still history attached to this note, and omitting it is the
 ///    header-counter failure taken to its limit.
 pub fn dormant_name(slot: u16) -> String {
-    if slot & CLOZE_SLOT_BIT != 0 {
-        return format!("blank {}", cloze_blank(slot));
-    }
-    if let Some(roles) = slot_roles(slot) {
-        return roles;
-    }
-    format!("card {slot}")
-}
-
-/// The field-role name of a fixed-arity slot — *"prompt → answer"* — looked up across every held kind
-/// definition, or `None` when no definition declares it (ADR-0018 §3 case 3). A slot means one
-/// question collection-wide (ADR-0017 §1), so the first match is canonical.
-fn slot_roles(slot: u16) -> Option<String> {
-    for kind in SHIPPED_KINDS {
-        if let Some(card) = kind.cards.iter().find(|c| c.slot == slot) {
-            return Some(format!(
-                "{} → {}",
-                card.prompt.join(", "),
-                card.answer.join(", ")
-            ));
+    match cards::dormant_name(slot) {
+        DormantName::Blank(n) => format!("blank {n}"),
+        DormantName::Roles { prompt, answer } => {
+            format!("{} → {}", prompt.join(", "), answer.join(", "))
         }
+        DormantName::Slot(slot) => format!("card {slot}"),
     }
-    None
 }
 
 /// The one-line history of a dormant entry, worded *kept* (ADR-0018 §3, ADR-0012 §5): the reviews

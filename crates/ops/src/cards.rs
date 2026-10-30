@@ -81,6 +81,39 @@ impl Entry {
     }
 }
 
+/// What a dormant entry is named by (ADR-0018 §3), as facts: the words around them are the
+/// renderer's (ADR-0046 §4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DormantName {
+    /// A slot a held kind definition declares: the field roles of its question, never its content.
+    Roles {
+        prompt: Vec<String>,
+        answer: Vec<String>,
+    },
+    /// A cloze blank (the high bit set), by its masked number.
+    Blank(u16),
+    /// Neither: the bare slot, shown and never hidden.
+    Slot(u16),
+}
+
+/// Name a dormant slot in ADR-0018 §3's order of precedence. The lookup spans every shipped kind, which
+/// is well-formed only because a slot means one question collection-wide (ADR-0017 §1).
+pub fn dormant_name(slot: u16) -> DormantName {
+    if slot & CLOZE_SLOT_BIT != 0 {
+        return DormantName::Blank(cloze_blank(slot));
+    }
+    for kind in SHIPPED_KINDS {
+        if let Some(card) = kind.cards.iter().find(|c| c.slot == slot) {
+            let own = |names: &[&str]| names.iter().map(|n| (*n).to_owned()).collect();
+            return DormantName::Roles {
+                prompt: own(card.prompt),
+                answer: own(card.answer),
+            };
+        }
+    }
+    DormantName::Slot(slot)
+}
+
 /// The ambient destructive-edit warning (ADR-0012 §5, ADR-0018 §4, ADR-0025 §4). Recomputed every
 /// call from current content — never a modal at save — it is the **form pane's** speaker, sitting
 /// above the fields, and names the dormant cards and their kept history. `Some` exactly when the note
@@ -305,6 +338,20 @@ mod tests {
             coll.append_review(card, Grade::Good, day_ms, DayScale::default(), 1000)
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn a_dormant_entry_is_named_by_roles_then_blank_then_bare_slot() {
+        // ADR-0018 §3, in its order of precedence; the words around these facts are the renderer's.
+        assert_eq!(
+            dormant_name(2),
+            DormantName::Roles {
+                prompt: vec!["Term".to_owned()],
+                answer: vec!["Meaning".to_owned()],
+            }
+        );
+        assert_eq!(dormant_name(CLOZE_SLOT_BIT | 3), DormantName::Blank(3));
+        assert_eq!(dormant_name(7), DormantName::Slot(7));
     }
 
     #[test]
