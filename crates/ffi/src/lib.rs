@@ -34,6 +34,14 @@ impl std::fmt::Display for CairnError {
 
 impl std::error::Error for CairnError {}
 
+impl From<cairn_store::StoreError> for CairnError {
+    fn from(e: cairn_store::StoreError) -> Self {
+        CairnError::Failed {
+            reason: e.to_string(),
+        }
+    }
+}
+
 impl From<String> for CairnError {
     fn from(reason: String) -> Self {
         CairnError::Failed { reason }
@@ -70,9 +78,21 @@ impl CollectionHandle {
         Ok(cairn_ops::session::due_count(&self.collection(), now_ms)? as u64)
     }
 
+    /// How many notes the collection holds — what a first launch's seed shows up as.
+    pub fn note_count(&self) -> Result<u64, CairnError> {
+        let rows =
+            cairn_ops::notes::list(&self.collection(), &cairn_ops::notes::Filter::default())?;
+        Ok(rows.len() as u64)
+    }
+}
+
+/// Its own block, because the export macro expands every method it sees whatever `cfg` the method
+/// carries — the cfg has to sit on the whole block.
+#[cfg(feature = "panic-probe")]
+#[uniffi::export]
+impl CollectionHandle {
     /// Panic on purpose, holding the lock, so a test can see the panic arrive as an exception and the
     /// handle survive it.
-    #[cfg(feature = "panic-probe")]
     pub fn panic_probe(&self) {
         let _held = self.collection();
         panic!("panic probe");
@@ -103,6 +123,7 @@ mod tests {
         assert!(data.path().join("collection.db").exists());
         assert!(state.path().join("derived.db").exists());
         assert!(state.path().join("writer.id").exists(), "the writer marker");
+        assert!(handle.note_count().unwrap() > 0, "a first launch seeds");
         // The seed is all new cards, none yet due.
         assert_eq!(handle.due_count(1_700_000_000_000).unwrap(), 0);
     }
@@ -120,6 +141,19 @@ mod tests {
         .expect("opening under a file must fail");
         let CairnError::Failed { reason } = err;
         assert!(!reason.is_empty());
+    }
+
+    /// ADR-0046 §7: a panic reaches Kotlin as an exception only while the profile unwinds.
+    #[test]
+    fn the_release_profile_never_aborts_on_panic() {
+        let manifest = include_str!("../../../Cargo.toml");
+        assert!(
+            !manifest.lines().any(|l| {
+                let l = l.split('#').next().unwrap_or("").replace(' ', "");
+                l.starts_with("panic=")
+            }),
+            "`panic = \"abort\"` in any profile turns a Rust panic into a process abort"
+        );
     }
 
     #[cfg(feature = "panic-probe")]
