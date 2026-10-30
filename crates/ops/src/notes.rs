@@ -154,6 +154,24 @@ pub fn count_in_deck(coll: &Collection, deck: DeckId) -> Result<usize, StoreErro
     .len())
 }
 
+/// The text match's folding (ADR-0049): case, Arabic `ي`/`ى` to `ی`, `ك` to `ک`, Persian and
+/// Arabic-Indic digits to Latin, and the marks that carry no letter dropped (ZWNJ U+200C, tatweel
+/// U+0640, U+064B–U+065F, U+0670). Applied to the query and to each field value alike; it builds a
+/// new string for the comparison and never touches the stored one.
+fn fold(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .filter_map(|c| match c {
+            '\u{200C}' | '\u{0640}' | '\u{064B}'..='\u{065F}' | '\u{0670}' => None,
+            '\u{064A}' | '\u{0649}' => Some('\u{06CC}'),
+            '\u{0643}' => Some('\u{06A9}'),
+            '\u{06F0}'..='\u{06F9}' => char::from_digit(u32::from(c) - 0x06F0, 10),
+            '\u{0660}'..='\u{0669}' => char::from_digit(u32::from(c) - 0x0660, 10),
+            c => Some(c),
+        })
+        .collect()
+}
+
 impl Filter {
     fn matches(&self, row: &NoteRow, held: &[DeckId]) -> bool {
         match &self.deck {
@@ -184,11 +202,8 @@ impl Filter {
         if let Some(text) = &self.text
             && !text.is_empty()
         {
-            let needle = text.to_lowercase();
-            let hit = row
-                .fields
-                .iter()
-                .any(|(_, v)| v.to_lowercase().contains(&needle));
+            let needle = fold(text);
+            let hit = row.fields.iter().any(|(_, v)| fold(v).contains(&needle));
             if !hit {
                 return false;
             }
@@ -295,6 +310,32 @@ pub fn place_between(
     let low = gap.checked_sub(1).and_then(|i| visible.get(i)).copied();
     let high = visible.get(gap).copied();
     coll.move_note_between(moving, low, high)
+}
+
+/// Delete a note: ADR-0004 §7's marker on the mutable surface, which discards the content. There is
+/// no undelete — recovery is ADR-0016's restore (ADR-0021 §2).
+pub fn delete_note(coll: &mut Collection, note: NoteId) -> Result<(), StoreError> {
+    coll.mutable_set("note", &note.0, "deleted", Some("true"))
+}
+
+/// Create a deck with a name and return its id (ADR-0021 §9).
+pub fn create_deck(coll: &mut Collection, name: &str) -> Result<DeckId, StoreError> {
+    coll.create_deck(name)
+}
+
+/// Delete a deck, returning how many notes it took with it (ADR-0005 §7: every note in it derives
+/// deleted). The count is the one the warning names, taken through [`count_in_deck`] before the
+/// flag is written.
+pub fn delete_deck(coll: &mut Collection, deck: DeckId) -> Result<usize, StoreError> {
+    let count = count_in_deck(coll, deck)?;
+    coll.mutable_set("deck", &deck.0, "deleted", Some("true"))?;
+    Ok(count)
+}
+
+/// Change a stored note's kind — an ordinary edit (ADR-0017 §5). Which kinds are offered is
+/// [`crate::editor::kind_options`]'s rule, not checked here.
+pub fn set_kind(coll: &mut Collection, note: NoteId, kind: &str) -> Result<(), StoreError> {
+    coll.mutable_set("note", &note.0, "kind", Some(kind))
 }
 
 /// Whether the collection has any note at all — the test the browse screen uses to choose between its
@@ -671,5 +712,100 @@ mod tests {
             .unwrap();
 
         assert_eq!(count_in_deck(&coll, deck).unwrap(), 3);
+    }
+
+    #[test]
+    fn search_folds_persian_letter_variants_both_ways_and_never_touches_stored_text() {
+        // ADR-0049: a query typed with one variant finds a note stored with the other.
+        let (mut coll, _d, _s) = open();
+        // Stored with Arabic yeh/kaf; ZWNJ, tatweel, a vowel mark and Persian digits inside.
+        coll.create_note("basic", &[("Front", "كتاب\u{200C}ي"), ("Back", "x")])
+            .unwrap();
+        coll.create_note("basic", &[("Front", "کتـاب"), ("Back", "ص۱۲")])
+            .unwrap();
+        coll.create_note("basic", &[("Front", "عَلَى"), ("Back", "y")])
+            .unwrap();
+        let stored = |coll: &Collection| -> Vec<Vec<(String, String)>> {
+            list(coll, &Filter::default())
+                .unwrap()
+                .into_iter()
+                .map(|r| r.fields)
+                .collect()
+        };
+        let before = stored(&coll);
+        let found = |t: &str| -> usize {
+            list(
+                &coll,
+                &Filter {
+                    text: Some(t.to_owned()),
+                    ..Filter::default()
+                },
+            )
+            .unwrap()
+            .len()
+        };
+        assert_eq!(
+            found("کتابی"),
+            1,
+            "Persian query finds the Arabic-stored note (ZWNJ dropped)"
+        );
+        assert_eq!(found("كتابي"), 1, "Arabic query finds the same note");
+        assert_eq!(found("کتاب"), 2, "tatweel in the stored value is dropped");
+        assert_eq!(found("علی"), 1, "yeh/alef maksura and vowel marks fold");
+        assert_eq!(found("علي"), 1);
+        assert_eq!(found("ص12"), 1, "Latin digits find Persian digits");
+        assert_eq!(found("ص١٢"), 1, "Arabic-Indic digits find Persian digits");
+        assert_eq!(found("کتاب ی"), 0, "a space is not folded away");
+        assert_eq!(
+            stored(&coll),
+            before,
+            "stored values are byte-identical after a search"
+        );
+    }
+
+    #[test]
+    fn delete_note_hides_it_from_the_list() {
+        let (mut coll, _d, _s) = open();
+        let gone = coll
+            .create_note("basic", &[("Front", "a"), ("Back", "b")])
+            .unwrap();
+        coll.create_note("basic", &[("Front", "c"), ("Back", "d")])
+            .unwrap();
+        delete_note(&mut coll, gone).unwrap();
+        let rows = list(&coll, &Filter::default()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_ne!(rows[0].id, gone);
+    }
+
+    #[test]
+    fn create_deck_adds_it_and_delete_deck_returns_the_count_and_takes_its_notes() {
+        let (mut coll, _d, _s) = open();
+        let deck = create_deck(&mut coll, "French").unwrap();
+        assert_eq!(coll.decks().unwrap(), vec![(deck, "French".to_owned())]);
+        for f in ["a", "b"] {
+            let n = coll
+                .create_note("basic", &[("Front", f), ("Back", "z")])
+                .unwrap();
+            coll.mutable_set("note", &n.0, "deck", Some(&deck.to_canonical()))
+                .unwrap();
+        }
+        coll.create_note("basic", &[("Front", "loose"), ("Back", "z")])
+            .unwrap();
+        assert_eq!(delete_deck(&mut coll, deck).unwrap(), 2);
+        assert!(coll.decks().unwrap().is_empty());
+        assert_eq!(list(&coll, &Filter::default()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn set_kind_changes_a_stored_notes_kind() {
+        let (mut coll, _d, _s) = open();
+        let n = coll
+            .create_note("basic", &[("Front", "a"), ("Back", "b")])
+            .unwrap();
+        set_kind(&mut coll, n, "basic-reverse").unwrap();
+        assert_eq!(
+            coll.mutable_get("note", &n.0, "kind").unwrap().as_deref(),
+            Some("basic-reverse")
+        );
     }
 }
