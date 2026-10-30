@@ -38,6 +38,9 @@ judged under a pointer.
    every field, then open a fresh draft carrying the kind and the deck — which the desktop reaches by
    a modifier chord and a phone could not reach at all. It is a quiet text action, so *Done* stays the
    closing control on the reach line (ADR-0042 §1); exactly where it sits is judged in the hand.
+   *Judged in the hand, 30.10.2026 ([#220](https://github.com/amin-bf/cairn/issues/220)):* it stays a
+   quiet text action at the start edge, directly above the full-width *Done*. Both are in one thumb's
+   reach, and neither is taken for the other.
 3. **The soft keyboard's action key is *Next* in a single-line field, and closes the keyboard on the
    last one.** Neither commits, saves or creates anything, so ADR-0021 §8's hazard — a key whose
    meaning a kind definition changes — does not arise: the last field closes the keyboard whatever
@@ -53,7 +56,9 @@ judged under a pointer.
    delete.
 5. ***Blank it* stays a button under the cloze field**, enabled while text is selected, and is not
    added to the system's selection menu. Revisited only if the handset judgement finds the button out
-   of reach.
+   of reach. *Judged in the hand, 30.10.2026 ([#220](https://github.com/amin-bf/cairn/issues/220)):*
+   with the keyboard up, the full-width button sits mid-screen under the field, clear of the selection
+   handles, and is within reach, so it stays a button.
 6. **The editor sits on the back stack, and leaving it settles every field.** *Done* and the system
    Back are the same exit (ADR-0040's *every exit settles*). **Opened from Review, the editor returns to
    the sitting**, on the card it was opened from, re-read so the edit shows; where the edit leaves that
