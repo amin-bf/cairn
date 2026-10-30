@@ -23,6 +23,12 @@
     <string name="leeches_entrance_leeches">Leeches (%1$d)</string>
     <string name="leeches_entrance_suspended">Suspended (%1$d)</string>
     <string name="leeches_entrance_both">Leeches (%1$d) · suspended (%2$d)</string>
+    <plurals name="leeches_pointer">
+        <item quantity="one">%d card is costing you a lot. Take a look?</item>
+        <item quantity="other">%d cards are costing you a lot. Take a look?</item>
+    </plurals>
+    <string name="leeches_pointer_show">Show me</string>
+    <string name="leeches_pointer_dismiss">Not now</string>
     <string name="leeches_statement">These keep catching you out — worst first.</string>
     <string name="leeches_suspended_statement">Suspended — not shown in review.</string>
     <string name="leeches_empty">Nothing is costing you a lot right now.</string>

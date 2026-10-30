@@ -18,13 +18,24 @@ class MainActivity : CairnActivity() {
     }
 }
 
-/** Review: the entrance until a sitting is begun, then the sitting until it ends. */
+/**
+ * Review: the entrance until a sitting is begun, then the sitting until it ends — and, when cards crossed
+ * the leech floor in it, the pointer in the entrance's place until it is answered.
+ */
 @Composable
 fun ReviewScreen(model: ReviewViewModel, onEditNote: (noteId: String) -> Unit = {}, onLeeches: () -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
         is ReviewScreenState.Loading -> CairnPage {}
         is ReviewScreenState.Entrance -> ReviewEntrance(s.facts, onStart = model::start, onLeeches = onLeeches)
+        is ReviewScreenState.Pointer -> LeechPointer(
+            s.crossed,
+            onShow = {
+                model.answerPointer()
+                onLeeches()
+            },
+            onDismiss = model::answerPointer,
+        )
         is ReviewScreenState.Sitting -> ReviewSitting(
             chosen = s.chosen,
             graded = s.graded,
