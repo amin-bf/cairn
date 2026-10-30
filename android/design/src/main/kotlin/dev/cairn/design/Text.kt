@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import dev.cairn.design.tokens.Faces
 import dev.cairn.design.tokens.Typography
@@ -30,12 +31,15 @@ fun CairnText(
     tier: Tier = Tier.Body,
     family: Family = Family.Proportional,
     color: Color = Cairn.colors.body,
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     val faces = LocalFaces.current
     val resolved = remember(text, family, faces) { faces.resolve(text, family) }
     BasicText(
         resolved,
         modifier,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
         style = TextStyle(
             color = color,
             fontSize = tier.size.sp,

@@ -82,6 +82,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation("androidx.navigation:navigation-compose:2.9.7")
 
     // What the uniffi-generated Kotlin needs (research §1): JNA as an aar, which carries
     // libjnidispatch.so per ABI, coroutines, and androidx.annotation for `android = true`.

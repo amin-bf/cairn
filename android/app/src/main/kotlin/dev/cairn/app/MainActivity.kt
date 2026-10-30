@@ -1,33 +1,20 @@
 package dev.cairn.app
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.cairn.design.CairnPage
 import dev.cairn.design.CairnText
-import kotlinx.coroutines.delay
-
-/** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
-private const val TICK_MS = 15_000L
 
 class MainActivity : CairnActivity() {
     @Composable
     override fun Screen() {
         val owner = (LocalContext.current.applicationContext as CairnApplication).collection
-        val model = viewModel { ReviewViewModel(owner) }
-        LaunchedEffect(model) {
-            while (true) {
-                delay(TICK_MS)
-                model.tick()
-            }
-        }
-        ReviewScreen(model)
+        CairnNavHost(owner)
     }
 }
 

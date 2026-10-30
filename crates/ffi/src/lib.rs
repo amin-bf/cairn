@@ -12,8 +12,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use cairn_core::content::CardRef;
+use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::scheduling::Grade as CoreGrade;
+use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::review::{self, Review};
 use cairn_ops::session::ReviewState as CoreState;
 use cairn_ops::sitting::{GradeRefused, RevealRefused};
@@ -227,6 +228,155 @@ impl CollectionHandle {
     pub fn theme_choice(&self) -> Result<ThemeChoice, CairnError> {
         Ok(cairn_ops::appearance::theme_choice(&self.collection())?.into())
     }
+
+    /// The note list under a deck selector and a search text (ADR-0021 §2): every row in list order,
+    /// the decks the collection holds, and the two facts the screen's states turn on. The search is
+    /// trimmed here, so a field of spaces narrows nothing, as on the desktop.
+    pub fn note_list(&self, deck: DeckSelector, text: String) -> Result<NoteListFacts, CairnError> {
+        let coll = self.collection();
+        let held = coll.decks()?;
+        let trimmed = text.trim();
+        let filter = Filter {
+            deck: deck.into_filter()?,
+            text: (!trimmed.is_empty()).then(|| trimmed.to_owned()),
+            ..Filter::default()
+        };
+        let rows = notes::list(&coll, &filter)?
+            .into_iter()
+            .map(|row| {
+                let preview = row.preview().to_owned();
+                // A reference naming no held deck is unfiled (ADR-0005 §8).
+                let deck = row.deck.as_deref().and_then(|id| {
+                    held.iter()
+                        .find(|(held_id, _)| held_id.to_canonical() == id)
+                });
+                NoteRowFact {
+                    note_id: row.id.to_canonical(),
+                    rtl: review::is_rtl(&preview),
+                    preview,
+                    deck_id: deck.map(|(id, _)| id.to_canonical()),
+                    deck_name: deck.map(|(_, name)| name.clone()),
+                }
+            })
+            .collect();
+        Ok(NoteListFacts {
+            rows,
+            captioned: matches!(filter.deck, DeckFilter::All) && !held.is_empty(),
+            has_notes: notes::any_notes(&coll)?,
+            decks: held
+                .into_iter()
+                .map(|(id, name)| DeckFact {
+                    id: id.to_canonical(),
+                    name,
+                })
+                .collect(),
+        })
+    }
+
+    /// How many notes the deck holds — what the delete warning names (ADR-0021 §9).
+    pub fn notes_in_deck(&self, deck: String) -> Result<u64, CairnError> {
+        let deck = parse_deck(&deck)?;
+        Ok(notes::count_in_deck(&self.collection(), deck)? as u64)
+    }
+
+    /// Write one position value placing `moving` at `gap` among the `visible` notes (the list as
+    /// drawn, without the moving note) — `cairn_ops::notes::place_between`.
+    pub fn place_note(
+        &self,
+        moving: String,
+        visible: Vec<String>,
+        gap: u32,
+    ) -> Result<(), CairnError> {
+        let moving = parse_note(&moving)?;
+        let visible = visible
+            .iter()
+            .map(|id| parse_note(id))
+            .collect::<Result<Vec<_>, _>>()?;
+        notes::place_between(&mut self.collection(), moving, &visible, gap as usize)?;
+        Ok(())
+    }
+
+    /// Delete a note; there is no undelete (ADR-0021 §2).
+    pub fn delete_note(&self, note: String) -> Result<(), CairnError> {
+        let note = parse_note(&note)?;
+        notes::delete_note(&mut self.collection(), note)?;
+        Ok(())
+    }
+
+    /// Create a deck and return its id.
+    pub fn create_deck(&self, name: String) -> Result<String, CairnError> {
+        Ok(notes::create_deck(&mut self.collection(), &name)?.to_canonical())
+    }
+
+    /// Delete a deck, returning how many notes went with it.
+    pub fn delete_deck(&self, deck: String) -> Result<u64, CairnError> {
+        let deck = parse_deck(&deck)?;
+        Ok(notes::delete_deck(&mut self.collection(), deck)? as u64)
+    }
+}
+
+fn parse_note(id: &str) -> Result<NoteId, CairnError> {
+    NoteId::parse_canonical(id).ok_or_else(|| CairnError::Failed {
+        reason: format!("{id:?} is not a note id"),
+    })
+}
+
+fn parse_deck(id: &str) -> Result<DeckId, CairnError> {
+    DeckId::parse_canonical(id).ok_or_else(|| CairnError::Failed {
+        reason: format!("{id:?} is not a deck id"),
+    })
+}
+
+/// Which decks the note list admits: the mirror of `cairn_ops::notes::DeckFilter`, the deck by its
+/// canonical id text.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum DeckSelector {
+    All,
+    Deck { id: String },
+    Unfiled,
+}
+
+impl DeckSelector {
+    fn into_filter(self) -> Result<DeckFilter, CairnError> {
+        Ok(match self {
+            DeckSelector::All => DeckFilter::All,
+            DeckSelector::Deck { id } => DeckFilter::Deck(parse_deck(&id)?),
+            DeckSelector::Unfiled => DeckFilter::Unfiled,
+        })
+    }
+}
+
+/// A deck the collection holds.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DeckFact {
+    pub id: String,
+    pub name: String,
+}
+
+/// One note's row as facts. No schedule information, by construction (ADR-0001 §3).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NoteRowFact {
+    pub note_id: String,
+    /// The note's first field value, whole: truncating it is the row's drawing.
+    pub preview: String,
+    /// Whether the preview's first strong character runs right to left.
+    pub rtl: bool,
+    /// The deck the note is filed under; both `None` when it is unfiled.
+    pub deck_id: Option<String>,
+    pub deck_name: Option<String>,
+}
+
+/// The note list and what the screen's states turn on.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NoteListFacts {
+    pub rows: Vec<NoteRowFact>,
+    pub decks: Vec<DeckFact>,
+    /// Whether the collection holds any note at all: false is the empty state, true with no rows is
+    /// "no match".
+    pub has_notes: bool,
+    /// Whether rows carry their deck as a caption (ADR-0039 §3): under *All decks*, in a collection
+    /// that holds a deck.
+    pub captioned: bool,
 }
 
 /// Which of the five states the entrance is in, with the counts that belong to it.
@@ -845,6 +995,184 @@ mod tests {
             panic!("a store fault is a logged reason, not a refusal: {err:?}");
         };
         assert!(!reason.is_empty());
+    }
+
+    fn previews(facts: &NoteListFacts) -> Vec<String> {
+        facts.rows.iter().map(|r| r.preview.clone()).collect()
+    }
+
+    fn all(handle: &CollectionHandle, search: &str) -> NoteListFacts {
+        handle
+            .note_list(DeckSelector::All, search.to_owned())
+            .unwrap()
+    }
+
+    #[test]
+    fn the_note_list_is_every_note_in_list_order_with_the_decks_beside_it() {
+        let (handle, _d, _s) = benched("decks");
+        let facts = all(&handle, "");
+        assert_eq!(facts.rows.len(), 25);
+        assert_eq!(facts.rows[0].preview, "le carrefour");
+        assert_eq!(facts.rows[0].deck_name.as_deref(), Some("Français"));
+        assert!(!facts.rows[0].rtl);
+        // The fourth note is unfiled: a row with no deck.
+        assert_eq!(facts.rows[3].preview, "le colporteur");
+        assert_eq!(facts.rows[3].deck_name, None);
+        assert_eq!(facts.rows[3].deck_id, None);
+        assert!(facts.rows[6].rtl);
+        assert_eq!(facts.decks.len(), 4);
+        assert!(facts.decks.iter().any(|d| d.name == "فارسی"));
+        assert!(facts.has_notes);
+        assert!(facts.captioned, "a collection with decks captions its rows");
+    }
+
+    #[test]
+    fn the_caption_is_only_for_all_decks_in_a_collection_that_holds_a_deck() {
+        let (handle, _d, _s) = benched("decks");
+        let french = handle
+            .note_list(DeckSelector::All, String::new())
+            .unwrap()
+            .decks
+            .iter()
+            .find(|d| d.name == "Français")
+            .unwrap()
+            .id
+            .clone();
+        let narrowed = handle
+            .note_list(DeckSelector::Deck { id: french }, String::new())
+            .unwrap();
+        assert!(!narrowed.captioned);
+        assert_eq!(narrowed.rows.len(), 10);
+
+        let (handle, _d, _s) = benched("caught-up");
+        let facts = all(&handle, "");
+        assert!(facts.decks.is_empty());
+        assert!(!facts.captioned, "no decks: every row would say Unfiled");
+    }
+
+    #[test]
+    fn unfiled_narrows_to_the_notes_with_no_deck() {
+        let (handle, _d, _s) = benched("decks");
+        let facts = handle
+            .note_list(DeckSelector::Unfiled, String::new())
+            .unwrap();
+        assert_eq!(
+            previews(&facts),
+            vec!["le colporteur", "la girouette", "l'arrière-boutique"]
+        );
+    }
+
+    #[test]
+    fn search_finds_persian_through_its_letter_variants() {
+        let (handle, _d, _s) = benched("decks");
+        // Arabic kaf and yeh, typed on an Arabic keyboard, find the Persian kaf and yeh (ADR-0049).
+        let facts = all(&handle, "\u{0643}\u{062A}\u{0627}\u{0628}");
+        assert_eq!(previews(&facts), vec!["کتاب", "کتابخانه"]);
+        let none = all(&handle, "zzzz");
+        assert!(none.rows.is_empty());
+        assert!(none.has_notes, "no match is not an empty collection");
+    }
+
+    #[test]
+    fn an_empty_collection_has_no_notes() {
+        let (handle, _d, _s) = benched("empty");
+        assert!(!all(&handle, "").has_notes);
+    }
+
+    #[test]
+    fn deleting_a_note_removes_it_from_the_list() {
+        let (handle, _d, _s) = benched("decks");
+        let first = all(&handle, "").rows[0].note_id.clone();
+        handle.delete_note(first).unwrap();
+        let facts = all(&handle, "");
+        assert_eq!(facts.rows.len(), 24);
+        assert_eq!(facts.rows[0].preview, "la serrure");
+    }
+
+    #[test]
+    fn creating_a_deck_returns_its_id_and_lists_it() {
+        let (handle, _d, _s) = benched("decks");
+        let id = handle.create_deck("Géographie".to_owned()).unwrap();
+        let facts = all(&handle, "");
+        assert!(
+            facts
+                .decks
+                .iter()
+                .any(|d| d.id == id && d.name == "Géographie")
+        );
+        assert_eq!(handle.notes_in_deck(id).unwrap(), 0);
+    }
+
+    #[test]
+    fn deleting_a_deck_takes_its_notes_and_says_how_many() {
+        let (handle, _d, _s) = benched("decks");
+        let facts = all(&handle, "");
+        let french = facts
+            .decks
+            .iter()
+            .find(|d| d.name == "Français")
+            .unwrap()
+            .id
+            .clone();
+        assert_eq!(handle.notes_in_deck(french.clone()).unwrap(), 10);
+        assert_eq!(handle.delete_deck(french).unwrap(), 10);
+        let after = all(&handle, "");
+        assert_eq!(after.rows.len(), 15);
+        assert_eq!(after.decks.len(), 3);
+    }
+
+    #[test]
+    fn a_malformed_id_is_a_refusal_not_a_panic() {
+        let (handle, _d, _s) = benched("decks");
+        assert!(matches!(
+            handle.delete_note("not-an-id".to_owned()),
+            Err(CairnError::Failed { .. })
+        ));
+        assert!(handle.delete_deck("nope".to_owned()).is_err());
+        assert!(
+            handle
+                .note_list(DeckSelector::Deck { id: "nope".into() }, String::new())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn placing_a_note_writes_one_value_and_a_hidden_note_keeps_its_place() {
+        let (handle, _d, _s) = benched("decks");
+        let french = all(&handle, "")
+            .decks
+            .iter()
+            .find(|d| d.name == "Français")
+            .unwrap()
+            .id
+            .clone();
+        let sel = DeckSelector::Deck { id: french };
+        let rows = handle.note_list(sel.clone(), String::new()).unwrap().rows;
+        let order: Vec<String> = rows.iter().map(|r| r.note_id.clone()).collect();
+        // Move the first French note to the end of the filtered list.
+        let moving = order[0].clone();
+        let others: Vec<String> = order[1..].to_vec();
+        handle
+            .place_note(moving, others.clone(), others.len() as u32)
+            .unwrap();
+        let after = handle.note_list(sel, String::new()).unwrap();
+        assert_eq!(after.rows.last().unwrap().preview, "le carrefour");
+        assert_eq!(after.rows[0].preview, "la serrure");
+        // The unfiled note that sat among them did not move.
+        let whole = all(&handle, "");
+        let colporteur = whole
+            .rows
+            .iter()
+            .position(|r| r.preview == "le colporteur")
+            .unwrap();
+        assert!(
+            colporteur
+                < whole
+                    .rows
+                    .iter()
+                    .position(|r| r.preview == "le carrefour")
+                    .unwrap()
+        );
     }
 
     /// ADR-0046 §7: a panic reaches Kotlin as an exception only while the profile unwinds.
