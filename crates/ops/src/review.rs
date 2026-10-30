@@ -41,7 +41,8 @@ pub fn is_rtl(text: &str) -> bool {
 }
 
 /// How a run of text is drawn. [`markdown::Style`] is three independent flags; the card draws code
-/// in the monospace face whatever else covers it, and otherwise bold and italic compose.
+/// in the monospace face whatever else covers it (bold included — there is no bold monospace), keeps
+/// the slant of an italic that wraps it, and otherwise bold and italic compose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunStyle {
     Plain,
@@ -49,12 +50,14 @@ pub enum RunStyle {
     Italic,
     BoldItalic,
     Code,
+    CodeItalic,
 }
 
 impl From<markdown::Style> for RunStyle {
     fn from(style: markdown::Style) -> Self {
         match (style.code, style.bold, style.italic) {
-            (true, _, _) => RunStyle::Code,
+            (true, _, true) => RunStyle::CodeItalic,
+            (true, _, false) => RunStyle::Code,
             (false, true, true) => RunStyle::BoldItalic,
             (false, true, false) => RunStyle::Bold,
             (false, false, true) => RunStyle::Italic,
