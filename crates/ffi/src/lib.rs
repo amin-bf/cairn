@@ -262,6 +262,8 @@ pub enum RunStyle {
     Italic,
     BoldItalic,
     Code,
+    /// Monospace and slanted: an italic that wraps a code span, drawn so by the egui card too.
+    CodeItalic,
 }
 
 impl From<review::RunStyle> for RunStyle {
@@ -272,6 +274,7 @@ impl From<review::RunStyle> for RunStyle {
             review::RunStyle::Italic => RunStyle::Italic,
             review::RunStyle::BoldItalic => RunStyle::BoldItalic,
             review::RunStyle::Code => RunStyle::Code,
+            review::RunStyle::CodeItalic => RunStyle::CodeItalic,
         }
     }
 }
@@ -685,6 +688,22 @@ mod tests {
         let shown = sitting.card(NOW, 10).unwrap().unwrap();
         assert!(shown.is_new);
         assert_ne!(text(&shown.prompt), text(&shown.answer));
+
+        // Every cloze card the fixture offers: the blank is masked as "[…]" on the prompt, and the
+        // answer shows the word the fixture's own text hides, with no mask left.
+        let blanks = ["mange", "1889", "Bonjour", "Alliés"];
+        for _ in 0..4 {
+            let shown = sitting.card(NOW, 10).unwrap().unwrap();
+            let (prompt, answer) = (text(&shown.prompt), text(&shown.answer));
+            assert_eq!(prompt.matches("[…]").count(), 1, "{prompt:?}");
+            assert!(!answer.contains("[…]"), "{answer:?}");
+            assert!(
+                blanks.iter().any(|word| answer.contains(word)),
+                "{answer:?} shows none of the hidden words"
+            );
+            sitting.reveal().unwrap();
+            sitting.grade(Grade::Good, 20, NOW).unwrap();
+        }
     }
 
     #[test]
@@ -716,12 +735,16 @@ mod tests {
         let (handle, _d, _s) = benched("caught-up");
         handle
             .collection()
-            .create_note("basic", &[("Front", "a **b** *c* `d`"), ("Back", "plain")])
+            .create_note(
+                "basic",
+                &[("Front", "a **b** *c* `d` *`e`*"), ("Back", "plain")],
+            )
             .unwrap();
         let sitting = handle.start_sitting(1, 0, NOW).unwrap();
         let shown = sitting.card(NOW, 10).unwrap().unwrap();
-        assert_eq!(text(&shown.prompt), "a b c d");
+        assert_eq!(text(&shown.prompt), "a b c d e");
         let styles: Vec<RunStyle> = shown.prompt.iter().map(|r| r.style).collect();
+        // An italic around a code span stays slanted, as the egui card draws it.
         assert_eq!(
             styles,
             [
@@ -730,7 +753,9 @@ mod tests {
                 RunStyle::Plain,
                 RunStyle::Italic,
                 RunStyle::Plain,
-                RunStyle::Code
+                RunStyle::Code,
+                RunStyle::Plain,
+                RunStyle::CodeItalic
             ]
         );
     }
