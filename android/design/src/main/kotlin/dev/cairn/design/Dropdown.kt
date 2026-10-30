@@ -28,7 +28,6 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.window.PopupProperties
 import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Spacing
 import dev.cairn.design.tokens.Surface
 
 /**
@@ -46,17 +45,13 @@ fun CairnDropdown(
 ) {
     val colors = Cairn.colors
     var open by rememberSaveable { mutableStateOf(false) }
-    val shape = RoundedCornerShape(Controls.WIDGET_RADIUS.dp)
     Box(modifier.fillMaxWidth()) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = Controls.HEIGHT.dp)
-                .clip(shape)
-                .background(colors.control)
-                .border(BorderStroke(1.dp, colors.separator), shape)
+                .controlSurface(colors.control, colors.separator)
                 .clickable { open = true }
-                .padding(horizontal = (Spacing.UNIT * 2).dp)
+                .padding(horizontal = gap(2))
                 .testTag(tag),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -85,7 +80,7 @@ fun CairnDropdown(
                                     open = false
                                     onSelect(place)
                                 }
-                                .padding(horizontal = (Spacing.UNIT * 2).dp)
+                                .padding(horizontal = gap(2))
                                 .testTag("$tag-option-$place"),
                             contentAlignment = Alignment.CenterStart,
                         ) { CairnText(label) }

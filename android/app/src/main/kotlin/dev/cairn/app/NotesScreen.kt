@@ -17,8 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cairn.design.CairnControl
 import dev.cairn.design.CairnFieldLabel
@@ -29,10 +27,9 @@ import dev.cairn.design.CairnRule
 import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Tier
-import dev.cairn.design.tokens.Spacing
+import dev.cairn.design.gap
 import dev.cairn.ffi.DeckSelector
 
-private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
 @Composable

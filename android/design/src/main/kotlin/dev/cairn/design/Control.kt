@@ -1,8 +1,5 @@
 package dev.cairn.design
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -10,14 +7,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Spacing
 
 /**
  * A text action: a label with no surface, in the link colour at the small tier (ADR-0034 §2). The one
@@ -30,7 +24,7 @@ fun CairnTextAction(label: String, onClick: () -> Unit, modifier: Modifier = Mod
         modifier
             .defaultMinSize(minWidth = Controls.HEIGHT.dp, minHeight = Controls.HEIGHT.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.UNIT.dp),
+            .padding(horizontal = gap(1)),
         contentAlignment = Alignment.Center,
     ) {
         CairnText(label, tier = Tier.Small, color = Cairn.colors.link)
@@ -50,22 +44,21 @@ fun CairnControl(
     aside: String? = null,
 ) {
     val colors = Cairn.colors
-    val shape = RoundedCornerShape(Controls.WIDGET_RADIUS.dp)
     Box(
         modifier
-            .defaultMinSize(minHeight = Controls.HEIGHT.dp)
-            .clip(shape)
-            .background(if (primary) colors.primary else colors.control)
-            .border(BorderStroke(1.dp, if (primary) colors.primaryStroke else colors.separator), shape)
+            .controlSurface(
+                if (primary) colors.primary else colors.control,
+                if (primary) colors.primaryStroke else colors.separator,
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = (Spacing.UNIT * 2).dp),
+            .padding(horizontal = gap(2)),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CairnText(label, color = colors.onControl)
             // An aside is a second, quieter fact about the same choice: small and dimmed (ADR-0034 §1).
             if (aside != null) {
-                Spacer(Modifier.width(Spacing.UNIT.dp))
+                Spacer(Modifier.width(gap(1)))
                 CairnText(aside, tier = Tier.Small, color = colors.weak)
             }
         }

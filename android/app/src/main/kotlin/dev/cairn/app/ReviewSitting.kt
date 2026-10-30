@@ -16,8 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import dev.cairn.design.Cairn
 import dev.cairn.design.CairnCard
 import dev.cairn.design.CairnControl
@@ -26,13 +24,12 @@ import dev.cairn.design.CairnText
 import dev.cairn.design.CardRun
 import dev.cairn.design.ReachColumn
 import dev.cairn.design.Tier
-import dev.cairn.design.tokens.Spacing
+import dev.cairn.design.gap
 import dev.cairn.ffi.Grade
 import dev.cairn.ffi.Run
 import dev.cairn.ffi.RunStyle
 import dev.cairn.ffi.ShownCard
 
-private fun gap(units: Int): Dp = (Spacing.UNIT * units).dp
 
 private fun List<Run>.toCardRuns(): List<CardRun> = map {
     CardRun(
