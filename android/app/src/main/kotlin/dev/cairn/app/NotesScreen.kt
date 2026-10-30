@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cairn.design.Cairn
 import dev.cairn.design.CairnConfirmRow
@@ -36,12 +46,18 @@ import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Tier
 import dev.cairn.design.gap
+import dev.cairn.design.rememberKeyboardUp
+import dev.cairn.design.tokens.Controls
+import dev.cairn.design.tokens.Frame
+import dev.cairn.design.tokens.Spacing
 import dev.cairn.ffi.DeckSelector
 
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
 @Composable
-fun NotesScreen(model: NotesViewModel) {
+fun NotesScreen(model: NotesViewModel, onOpen: (String) -> Unit = {}, onCreate: (deck: String?) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
+    // Coming back from the editor, the list is read again: a note was born, changed or filed.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
     when (val s = state) {
         is NotesScreenState.Loading -> CairnPage {}
         is NotesScreenState.Ready -> NoteList(
@@ -61,6 +77,8 @@ fun NotesScreen(model: NotesViewModel) {
                 onCancelMove = model::cancelMove,
                 onPlace = model::placeAt,
             ),
+            onOpen = onOpen,
+            onCreate = onCreate,
         )
         is NotesScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("notes-failed")) }
@@ -89,65 +107,87 @@ fun NoteList(
     onDelete: () -> Unit,
     rows: RowCallbacks,
     modifier: Modifier = Modifier,
+    onOpen: (String) -> Unit = {},
+    onCreate: (deck: String?) -> Unit = {},
 ) {
     val facts = state.facts
     CairnPage(modifier) {
-        LazyColumn(Modifier.fillMaxWidth().padding(top = gap(2))) {
-            item {
-                CairnText(stringResource(R.string.notes_heading), tier = Tier.Heading)
-                Spacer(Modifier.height(gap(2)))
-            }
-            // The empty state is the empty *collection*, not a filter that matched nothing.
-            if (!facts.hasNotes) {
+        val density = LocalDensity.current
+        var page by remember { mutableStateOf(Dp.Unspecified) }
+        Column(Modifier.fillMaxSize().onSizeChanged { page = with(density) { it.height.toDp() } }) {
+            LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(top = gap(2))) {
                 item {
-                    CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty"))
+                    CairnText(stringResource(R.string.notes_heading), tier = Tier.Heading)
                     Spacer(Modifier.height(gap(2)))
-                    // The sentence's first verb is *create a deck*, so the control for it is here too
-                    // (ADR-0021 §2 puts a surface behind each of the three). Once a deck exists the
-                    // whole deck surface returns with it, so the new deck can be seen and deleted.
-                    if (facts.decks.isEmpty()) {
-                        NewDeck(state, onNewDeck, onCreateDeck)
+                }
+                // The empty state is the empty *collection*, not a filter that matched nothing.
+                if (!facts.hasNotes) {
+                    item {
+                        CairnText(stringResource(R.string.notes_empty), Modifier.testTag("notes-empty"))
+                        Spacer(Modifier.height(gap(2)))
+                        // The sentence's first verb is *create a deck*, so the control for it is here too
+                        // (ADR-0021 §2 puts a surface behind each of the three). Once a deck exists the
+                        // whole deck surface returns with it, so the new deck can be seen and deleted.
+                        if (facts.decks.isEmpty()) {
+                            NewDeck(state, onNewDeck, onCreateDeck)
+                        } else {
+                            DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
+                        }
+                    }
+                    return@LazyColumn
+                }
+                item {
+                    DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
+                    Spacer(Modifier.height(gap(2)))
+                    CairnFieldLabel(stringResource(R.string.notes_search))
+                    CairnTextField(state.search, onSearch, Modifier.testTag("notes-search"))
+                    Spacer(Modifier.height(gap(2)))
+                    CairnRule()
+                    Spacer(Modifier.height(gap(2)))
+                }
+                if (facts.rows.isEmpty()) {
+                    item { CairnText(stringResource(R.string.notes_no_match), Modifier.testTag("notes-no-match")) }
+                    return@LazyColumn
+                }
+                val held = facts.rows.firstOrNull { it.noteId == state.moving }
+                if (held != null) {
+                    placement(facts.rows, held, rows)
+                    return@LazyColumn
+                }
+                items(facts.rows, key = { it.noteId }) { row ->
+                    Spacer(Modifier.height(gap(1)))
+                    if (row.noteId == state.confirmingNote) {
+                        DeleteQuestion(row.preview, state.refusal == NotesScreenState.Refusal.DeleteNote, rows)
                     } else {
-                        DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
+                        val move = stringResource(R.string.notes_move)
+                        val delete = stringResource(R.string.notes_delete)
+                        CairnListRow(
+                            title = row.preview,
+                            caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
+                            modifier = Modifier.testTag("note-row"),
+                            actions = listOf(
+                                RowAction(RowIcon.Move, move, "row-move") { rows.onMove(row.noteId) },
+                                RowAction(RowIcon.Delete, delete, "row-delete") { rows.onAskDelete(row.noteId) },
+                            ),
+                            onClick = { onOpen(row.noteId) },
+                        )
                     }
                 }
-                return@LazyColumn
             }
-            item {
-                DeckControls(state, onSelect, onNewDeck, onCreateDeck, onAskDelete, onKeep, onDelete)
-                Spacer(Modifier.height(gap(2)))
-                CairnFieldLabel(stringResource(R.string.notes_search))
-                CairnTextField(state.search, onSearch, Modifier.testTag("notes-search"))
-                Spacer(Modifier.height(gap(2)))
-                CairnRule()
-                Spacer(Modifier.height(gap(2)))
-            }
-            if (facts.rows.isEmpty()) {
-                item { CairnText(stringResource(R.string.notes_no_match), Modifier.testTag("notes-no-match")) }
-                return@LazyColumn
-            }
-            val held = facts.rows.firstOrNull { it.noteId == state.moving }
-            if (held != null) {
-                placement(facts.rows, held, rows)
-                return@LazyColumn
-            }
-            items(facts.rows, key = { it.noteId }) { row ->
-                Spacer(Modifier.height(gap(1)))
-                if (row.noteId == state.confirmingNote) {
-                    DeleteQuestion(row.preview, state.refusal == NotesScreenState.Refusal.DeleteNote, rows)
-                } else {
-                    val move = stringResource(R.string.notes_move)
-                    val delete = stringResource(R.string.notes_delete)
-                    CairnListRow(
-                        title = row.preview,
-                        caption = if (facts.captioned) row.deckName ?: stringResource(R.string.notes_unfiled) else null,
-                        modifier = Modifier.testTag("note-row"),
-                        actions = listOf(
-                            RowAction(RowIcon.Move, move, "row-move") { rows.onMove(row.noteId) },
-                            RowAction(RowIcon.Delete, delete, "row-delete") { rows.onAskDelete(row.noteId) },
-                        ),
-                    )
-                }
+            // Pinned outside the scroll on the reach line (ADR-0039 §8): a new note is a `basic` draft
+            // filed to the deck the list is filtered to. Not drawn during a move, nor while the keyboard
+            // is up (the list keeps the room while one types). On a page too short to spend the reach
+            // line on nothing — a third of the page is where it turns over — the band collapses to the
+            // control and a gap.
+            if (state.moving == null && !rememberKeyboardUp()) {
+                CairnControl(
+                    stringResource(R.string.notes_create),
+                    onClick = { onCreate((state.selector as? DeckSelector.Deck)?.id) },
+                    modifier = Modifier.fillMaxWidth().testTag("create-note"),
+                    primary = true,
+                )
+                val full = (Frame.REACH_LINE + Controls.HEIGHT + Spacing.UNIT).dp
+                Spacer(Modifier.height(if (page != Dp.Unspecified && full <= page / 3) Frame.REACH_LINE.dp else gap(2)))
             }
         }
     }

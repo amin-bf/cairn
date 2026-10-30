@@ -647,7 +647,7 @@ fn editor_form_body(
         let name = ed.fields[idx].0.clone();
         // `cloze`'s Text field is the one multiline field — Enter inserts a newline there, and it
         // carries the *Blank it* action.
-        let cloze_text = kind == "cloze" && name == "Text";
+        let cloze_text = cairn_ops::editor::field_is_multiline(&kind, &name);
         // **The gap the rest of the form has** (ADR-0040 §6). Every other pair in this column is one
         // `gap(2)` apart, and a field's label sat directly on the field above it — the same missing
         // stated gap `a075e920` found under the deck dropdown, one loop further down.

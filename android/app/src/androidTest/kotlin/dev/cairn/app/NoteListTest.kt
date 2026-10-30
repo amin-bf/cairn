@@ -64,9 +64,13 @@ class NoteListTest {
     private fun facts(selector: DeckSelector = DeckSelector.All, search: String = "") =
         runBlocking { owner.use { it.noteList(selector, search) } }
 
-    private fun showNotes(dark: MutableState<Boolean> = mutableStateOf(false)) {
+    private fun showNotes(
+        dark: MutableState<Boolean> = mutableStateOf(false),
+        onOpen: (String) -> Unit = {},
+        onCreate: (String?) -> Unit = {},
+    ) {
         val model = NotesViewModel(owner)
-        rule.setContent { CairnTheme(dark = dark.value) { NotesScreen(model) } }
+        rule.setContent { CairnTheme(dark = dark.value) { NotesScreen(model, onOpen, onCreate) } }
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("note-row") or hasTestTag("notes-empty")).fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -123,6 +127,32 @@ class NoteListTest {
         waitForText("کتابخانه")
         rule.onNodeWithText("کتاب").assertIsDisplayed()
         assertEquals(2, rule.onAllNodesWithTag("note-row").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun tapping_a_row_opens_that_note_and_create_note_carries_the_filtered_deck() {
+        fixture("decks")
+        var opened: String? = null
+        val created = mutableListOf<String?>()
+        showNotes(onOpen = { opened = it }, onCreate = { created += it })
+        rule.onAllNodesWithTag("note-row")[0].performClick()
+        assertEquals(facts().rows[0].noteId, opened)
+        rule.onNodeWithTag("create-note").performClick()
+        chooseDeck(francais)
+        rule.onNodeWithTag("deck-filter").assertTextEquals("Français")
+        rule.onNodeWithTag("create-note").performClick()
+        val deck = facts().decks.first { it.name == "Français" }.id
+        assertEquals(listOf(null, deck), created)
+    }
+
+    @Test
+    fun create_note_is_not_drawn_while_a_note_is_being_moved() {
+        fixture("decks")
+        showNotes()
+        rule.onNodeWithTag("create-note").assertExists()
+        rule.onAllNodesWithTag("row-move")[0].performClick()
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("cancel-move")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("create-note").assertDoesNotExist()
     }
 
     @Test
@@ -310,8 +340,10 @@ class NoteListTest {
         assertTrue("$at shows rows only for the facts' rows", rows.size <= facts.rows.size)
         assertEquals("$at row count", facts.rows.isEmpty(), rows.isEmpty())
         rows.zipWithNext().forEach { (a, b) -> assertTrue("$at rows run down the page in order", a.bottom <= b.top) }
-        // The window's bottom inset cuts the last row short, so it is judged only by what the rows above say.
-        val seen = rows.filter { it.bottom < bitmap.height * 0.9 }
+        // The window's bottom inset cuts the last row short, and so does the opaque band the pinned
+        // *Create note* sits in (ADR-0039 §8): a row is judged only if it is whole above both.
+        val clip = minOf(bitmap.height * 0.9, boundsOf("create-note").firstOrNull()?.top?.toDouble() ?: Double.MAX_VALUE)
+        val seen = rows.filter { it.bottom < clip }
         assertTrue("$at at least one whole row", seen.isNotEmpty() || rows.isEmpty())
         seen.forEachIndexed { i, r ->
             val (_, share, _) = inkIn(bitmap, r, ink.control)

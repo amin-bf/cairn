@@ -2,6 +2,7 @@ package dev.cairn.design
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -16,6 +17,11 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.sp
 import dev.cairn.design.tokens.Typography
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.layout.fillMaxWidth
 
 /** A field's label: small and quiet, set over the field it names. */
@@ -35,6 +41,8 @@ fun CairnTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    singleLine: Boolean = true,
 ) {
     val colors = Cairn.colors
     val faces = LocalFaces.current
@@ -47,8 +55,9 @@ fun CairnTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
-        singleLine = true,
+        singleLine = singleLine,
         keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         textStyle = TextStyle(
             color = colors.body,
             fontSize = Typography.BODY.sp,
@@ -68,4 +77,45 @@ fun CairnTextField(
             ) { inner() }
         },
     )
+}
+
+/**
+ * Whether [text] sets right to left: its first strong character decides, as the platform's own
+ * content-direction rule does. Empty text, or text with no strong character, is left to right.
+ */
+fun isRightToLeft(text: String): Boolean {
+    var at = 0
+    while (at < text.length) {
+        val point = text.codePointAt(at)
+        when (Character.getDirectionality(point)) {
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT, Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC -> return true
+            Character.DIRECTIONALITY_LEFT_TO_RIGHT -> return false
+        }
+        at += Character.charCount(point)
+    }
+    return false
+}
+
+/**
+ * A field with its [label] over it (ADR-0040 §6). The pair is laid out by the first strong character
+ * of what the field holds, so a Persian field's label sits over the edge its text starts at — the
+ * right — and a French one's over the left.
+ */
+@Composable
+fun CairnLabeledField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    singleLine: Boolean = true,
+) {
+    val direction = if (isRightToLeft(value)) LayoutDirection.Rtl else LayoutDirection.Ltr
+    CompositionLocalProvider(LocalLayoutDirection provides direction) {
+        Column(Modifier.fillMaxWidth()) {
+            CairnFieldLabel(label, Modifier.testTag("label-$label"))
+            CairnTextField(value, onValueChange, modifier, keyboardOptions, keyboardActions, singleLine)
+        }
+    }
 }
