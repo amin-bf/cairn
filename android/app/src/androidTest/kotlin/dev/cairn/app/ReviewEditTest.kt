@@ -97,9 +97,7 @@ class ReviewEditTest {
         waitFor("editor-heading")
         // Both faces are fields of the note: marking each means the prompt changes whichever face it is.
         for (field in listOf("Front", "Back")) {
-            if (rule.onAllNodes(hasTestTag("field-$field")).fetchSemanticsNodes().isNotEmpty()) {
-                rule.onNodeWithTag("field-$field").performTextReplacement("EDITED")
-            }
+            rule.onNodeWithTag("field-$field").performTextReplacement("EDITED")
         }
         rule.waitForIdle()
         rule.onNodeWithTag("done").performScrollTo().performClick()
@@ -120,9 +118,15 @@ class ReviewEditTest {
         reveal()
         rule.onNodeWithTag("edit-note").performScrollTo().performClick()
         waitFor("editor-heading")
+        // Typing settles on its own; the system Back pops without Done and the edit still shows.
+        for (field in listOf("Front", "Back")) {
+            rule.onNodeWithTag("field-$field").performTextReplacement("EDITED")
+        }
+        rule.waitForIdle()
         rule.runOnUiThread { dispatcher!!.onBackPressed() }
         waitFor("grades")
         assertEquals(progress, textOf("progress"))
+        assertTrue(textOf("prompt"), textOf("prompt").contains("EDITED"))
     }
 
     @Test
@@ -139,11 +143,10 @@ class ReviewEditTest {
         rule.onNodeWithTag("field-Text").performTextReplacement("no blank any more")
         rule.waitForIdle()
         rule.onNodeWithTag("done").performScrollTo().performClick()
-        // Either the next card is on screen, unrevealed and at the same count, or nothing is left.
-        rule.waitUntil(10_000) { exists("start-all") || exists("state-caught-up") || (exists("card") && textOf("prompt") != prompt) }
-        if (exists("progress")) {
-            assertEquals("no grading counted", progress, textOf("progress"))
-            assertFalse("the next card starts unrevealed", exists("grades"))
-        }
+        // The fixture holds several cloze notes: the next one is on screen, unrevealed, nothing counted.
+        rule.waitUntil(10_000) { exists("card") && !exists("editor-heading") && textOf("prompt") != prompt }
+        assertEquals("no grading counted", progress, textOf("progress"))
+        assertFalse("the next card starts unrevealed", exists("grades"))
+        assertFalse(textOf("prompt"), textOf("prompt").contains("no blank any more"))
     }
 }

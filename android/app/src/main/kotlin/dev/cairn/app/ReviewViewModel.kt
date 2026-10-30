@@ -79,20 +79,21 @@ class ReviewViewModel(
             // One trip off the main thread: every call on the handle blocks the thread it is made on.
             val shown = owner.use {
                 val card = if (handle.ended(now)) null else handle.card(now, mono)
-                card?.let {
-                    ReviewScreenState.Sitting(
-                        chosen = handle.chosen().toInt(),
-                        graded = handle.graded().toInt(),
-                        card = it,
-                        checkpoint = handle.checkpointDue(mono),
-                    )
-                }
+                card?.let { sittingOf(handle, it, mono) }
             }
             if (shown == null) load() else _state.value = shown
         } catch (_: CairnException) {
             _state.value = ReviewScreenState.Failed
         }
     }
+
+    /** The sitting's facts around [card], read off [handle] (call inside `owner.use`). */
+    private fun sittingOf(handle: SittingHandle, card: ShownCard, mono: ULong) = ReviewScreenState.Sitting(
+        chosen = handle.chosen().toInt(),
+        graded = handle.graded().toInt(),
+        card = card,
+        checkpoint = handle.checkpointDue(mono),
+    )
 
     /** The card was tapped. The sitting has one cause for a reveal; tapping a revealed card does nothing. */
     fun reveal() {
@@ -133,16 +134,7 @@ class ReviewViewModel(
             try {
                 val now = wallClock()
                 val mono = monotonicClock().toULong()
-                val shown = owner.use {
-                    handle.refresh(now, mono)?.let { card ->
-                        ReviewScreenState.Sitting(
-                            chosen = handle.chosen().toInt(),
-                            graded = handle.graded().toInt(),
-                            card = card,
-                            checkpoint = handle.checkpointDue(mono),
-                        )
-                    }
-                }
+                val shown = owner.use { handle.refresh(now, mono)?.let { sittingOf(handle, it, mono) } }
                 if (shown == null) load() else _state.value = shown
             } catch (_: CairnException) {
                 _state.value = ReviewScreenState.Failed
