@@ -16,6 +16,7 @@ pub mod editor;
 pub mod file_bench;
 pub mod fixtures;
 pub mod inbound;
+pub mod leeches;
 pub mod listing;
 pub mod markdown;
 pub mod notes;

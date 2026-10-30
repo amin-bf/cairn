@@ -105,8 +105,8 @@ pub struct Facts {
     /// Which of 5/10/20 are strictly shorter than the queue — an option equal to it is the primary
     /// said twice.
     pub shorter: Vec<usize>,
-    /// Cards over the leech floor, suspended ones included (ADR-0010 §6) — carried for the leech
-    /// slice.
+    /// Cards over the leech floor and not suspended — the leeches the leech screen lists, each
+    /// counted once (ADR-0050 §3).
     pub leeches: usize,
     /// Suspended cards (ADR-0010 §8).
     pub suspended: usize,
@@ -117,6 +117,8 @@ pub struct Facts {
 struct Derived {
     queue: Queue,
     ranked: Vec<Leech>,
+    /// The ranked leeches that are not suspended.
+    active_leeches: usize,
     suspended: usize,
     total: usize,
     reviewed_ever: bool,
@@ -133,8 +135,13 @@ fn derive(coll: &Collection, now_wall_ms: i64) -> Result<Derived, String> {
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let replayed = replay(&current, &refs);
     let queue = session::compose(&current, &positions, &replayed, today, rate, &suspended);
+    let ranked = leeches(&replayed, today);
     Ok(Derived {
-        ranked: leeches(&replayed, today),
+        active_leeches: ranked
+            .iter()
+            .filter(|l| !suspended.contains(&l.card))
+            .count(),
+        ranked,
         suspended: suspended.len(),
         total: current.len(),
         reviewed_ever: !replayed.cards.is_empty(),
@@ -159,7 +166,7 @@ pub fn facts(coll: &Collection, now_wall_ms: i64) -> Result<Facts, String> {
             .into_iter()
             .filter(|option| *option < available)
             .collect(),
-        leeches: d.ranked.len(),
+        leeches: d.active_leeches,
         suspended: d.suspended,
     })
 }
@@ -472,6 +479,27 @@ mod tests {
         let facts = facts(&coll, NOW).unwrap();
         assert_eq!(facts.state, ReviewState::CaughtUp);
         assert_eq!(facts.leeches, 3);
+    }
+
+    #[test]
+    fn a_suspended_leech_is_not_counted_among_the_leeches_but_among_the_suspended() {
+        let (mut coll, _d, _s) = installed(Fixture::Leeches);
+        let worst = crate::leeches::list(&coll, NOW).unwrap().active[0].card;
+        coll.suspend(worst).unwrap();
+        let facts = facts(&coll, NOW).unwrap();
+        assert_eq!((facts.leeches, facts.suspended), (2, 1));
+    }
+
+    #[test]
+    fn a_leech_that_is_suspended_after_crossing_still_counts_as_crossed() {
+        let (mut coll, _d, _s) = installed(Fixture::Crossing);
+        let mut review = Review::start(&coll, 1, 0, NOW).unwrap();
+        review.card(&coll, NOW, 10).unwrap().unwrap();
+        review.reveal().unwrap();
+        let card = review.card(&coll, NOW, 11).unwrap().unwrap().card;
+        review.grade(&mut coll, Grade::Forgot, 20, NOW).unwrap();
+        coll.suspend(card).unwrap();
+        assert_eq!(review.leeches_crossed(&coll, NOW).unwrap(), 1);
     }
 
     #[test]
