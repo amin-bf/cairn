@@ -494,7 +494,7 @@ fn leech_screen(
         let _ = coll.unsuspend(card);
     }
     if let Some(note) = delete {
-        let _ = coll.mutable_set("note", &note.0, "deleted", Some("true"));
+        let _ = cairn_ops::notes::delete_note(coll, note);
     }
     edit
 }
