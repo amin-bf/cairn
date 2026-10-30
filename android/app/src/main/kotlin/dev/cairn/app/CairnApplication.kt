@@ -27,7 +27,8 @@ class CairnApplication : Application() {
 
     // Any call into the binding that runs on the main thread is a bug: it blocks the thread it is made
     // on (ADR-0046 §7). The listener needs API 28; below it the log line is all StrictMode gives, and
-    // CollectionOwner refuses a main-thread call outright.
+    // CollectionOwner hops to Dispatchers.IO itself (a test pins that), so a violation here is new code
+    // that bypassed it. StrictMode sees Java-level I/O only, not native SQLite.
     private fun enableStrictMode() {
         val thread = StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog()
         val vm = StrictMode.VmPolicy.Builder().detectAll().penaltyLog()

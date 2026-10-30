@@ -18,4 +18,5 @@ export ANDROID_NDK_HOME="$NDK_HOME"
 export ANDROID_NDK_ROOT="$NDK_HOME"
 
 # No Gradle on PATH: the native client builds through its own wrapper (`android/gradlew`, 9.7.1).
-export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+# The Gradle build runs `cargo` and `cargo ndk` from its PATH, so rustup's bin directory must be on it.
+export PATH="$HOME/.cargo/bin:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"

@@ -28,7 +28,7 @@ class CollectionOwner(private val context: Context) {
 
     private suspend fun opened(): CollectionHandle = lock.withLock {
         check(Looper.myLooper() != Looper.getMainLooper()) { "the collection was reached on the main thread" }
-        handle ?:CollectionHandle.open(
+        handle ?: CollectionHandle.open(
             context.filesDir.absolutePath,
             context.noBackupFilesDir.absolutePath,
         ).also { handle = it }
