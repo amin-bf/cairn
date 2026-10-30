@@ -63,6 +63,9 @@ class NoteListRefusalTest {
     private fun waitFor(tag: String) =
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
 
+    private fun waitGone(tag: String) =
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isEmpty() }
+
     private fun show(access: CollectionAccess) {
         rule.setContent { CairnTheme(dark = false) { NotesScreen(NotesViewModel(access)) } }
         waitFor("note-row")
@@ -128,6 +131,12 @@ class NoteListRefusalTest {
         rule.onNodeWithTag("row-keep").performClick()
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("row-delete-refused")).fetchSemanticsNodes().isEmpty() }
         rule.onAllNodesWithTag("note-row")[0].assertIsDisplayed()
+        // Another row's question does not inherit it.
+        rule.onAllNodesWithTag("row-delete")[1].performClick()
+        waitFor("row-delete-confirm")
+        rule.onNodeWithTag("row-delete-refused").assertDoesNotExist()
+        rule.onNodeWithTag("row-keep").performClick()
+        waitGone("row-delete-confirm")
         // Asking again and confirming goes through.
         rule.onAllNodesWithTag("row-delete")[0].performClick()
         waitFor("row-delete-confirm")

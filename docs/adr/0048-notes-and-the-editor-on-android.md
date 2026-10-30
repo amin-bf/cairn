@@ -84,8 +84,8 @@ All on Android only; the desktop reads each as written.
   — the empty collection's sentence (*create a deck, import one, or set up sync*) leaves open whether
   its first verb has a control beside it. On Android it does: *New deck*, the same control the deck
   surface has, so a person with nothing can make the first deck from that screen. Once a deck exists
-  the whole deck surface shows under the sentence. A refused create or delete (a deck's, or a note's) is said where the person
-  acted, and the screen stays.
+  the whole deck surface shows under the sentence. A refused create or delete (a deck's, or a note's)
+  is said where the person acted, and the screen stays.
 - **[ADR-0040 §1](0040-the-note-editor.md)** — confirmed rather than amended: a phone has a soft
   keyboard, so the panes fold (§7).
 
