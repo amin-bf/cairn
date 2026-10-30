@@ -16,23 +16,56 @@ use cairn_core::content::CardRef;
 use cairn_core::scheduling::Grade as CoreGrade;
 use cairn_ops::review::{self, Review};
 use cairn_ops::session::ReviewState as CoreState;
+use cairn_ops::sitting::{GradeRefused, RevealRefused};
 use cairn_store::Collection;
 
 uniffi::setup_scaffolding!();
 
-/// The one error that crosses, as Kotlin's `CairnException`. The field is `reason` and never
-/// `message`: a field called `message` generates Kotlin that clashes with `Throwable.message`.
+/// The one error that crosses, as Kotlin's `CairnException`. A field is never called `message`: it
+/// generates Kotlin that clashes with `Throwable.message`.
+///
+/// **A refusal is a fact, not a sentence** (ADR-0046 §4): each way an operation says no has its own
+/// variant, so Kotlin catches `CairnException.NotRevealed` and says what it needs to in its own words.
+/// `Failed` is what is left — a store or I/O fault nobody can act on by name.
 #[derive(Debug, uniffi::Error)]
 pub enum CairnError {
     /// An operation failed; `reason` is the operation's own account of why, for a log, not for the
-    /// screen (facts cross, words do not — ADR-0046 §4).
+    /// screen.
     Failed { reason: String },
+    /// A reveal or a grade was asked of a sitting with no card on screen.
+    NoCardShown,
+    /// A grade was asked of a card whose answer has not been revealed (ADR-0006 §4).
+    NotRevealed,
+    /// `install_fixture` was given a name no fixture has; nothing was touched.
+    UnknownFixture { name: String },
 }
 
 impl std::fmt::Display for CairnError {
+    /// For a log; nothing here is shown to a person.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let CairnError::Failed { reason } = self;
-        write!(f, "{reason}")
+        match self {
+            CairnError::Failed { reason } => write!(f, "{reason}"),
+            CairnError::NoCardShown => f.write_str("no card is on screen"),
+            CairnError::NotRevealed => f.write_str("the answer has not been revealed"),
+            CairnError::UnknownFixture { name } => write!(f, "no fixture is named {name:?}"),
+        }
+    }
+}
+
+impl From<GradeRefused> for CairnError {
+    fn from(refused: GradeRefused) -> Self {
+        match refused {
+            GradeRefused::NoCardShown => CairnError::NoCardShown,
+            GradeRefused::NotRevealed => CairnError::NotRevealed,
+        }
+    }
+}
+
+impl From<RevealRefused> for CairnError {
+    fn from(refused: RevealRefused) -> Self {
+        match refused {
+            RevealRefused::NoCardShown => CairnError::NoCardShown,
+        }
     }
 }
 
@@ -141,7 +174,7 @@ impl CollectionHandle {
     /// only a debug or test build may call it, never a path a user reaches.
     pub fn install_fixture(&self, name: String, now_ms: i64) -> Result<(), CairnError> {
         let fixture = cairn_ops::fixtures::Fixture::parse(&name)
-            .ok_or_else(|| CairnError::from(format!("no fixture is named {name:?}")))?;
+            .ok_or(CairnError::UnknownFixture { name })?;
         let mut slot = self
             .collection
             .lock()
@@ -411,27 +444,22 @@ impl SittingHandle {
 
     /// Show the answer of the card on screen.
     pub fn reveal(&self) -> Result<(), CairnError> {
-        self.review()
-            .reveal()
-            .map_err(|e| CairnError::from(format!("{e:?}")))
+        Ok(self.review().reveal()?)
     }
 
-    /// Grade the card on screen; refused (as `CairnException`) before the reveal.
+    /// Grade the card on screen; refused as `NotRevealed` before the reveal, `NoCardShown` with none.
     pub fn grade(
         &self,
         grade: Grade,
         now_mono_ms: u64,
         now_wall_ms: i64,
     ) -> Result<GradeOutcome, CairnError> {
-        let outcome = self
-            .review()
-            .grade(
-                &mut self.owner.collection(),
-                grade.into(),
-                now_mono_ms,
-                now_wall_ms,
-            )
-            .map_err(|e| CairnError::from(e.to_string()))?;
+        let outcome = self.review().grade(
+            &mut self.owner.collection(),
+            grade.into(),
+            now_mono_ms,
+            now_wall_ms,
+        )?;
         Ok(GradeOutcome {
             recorded: outcome.recorded,
         })
@@ -579,10 +607,13 @@ mod tests {
         let (data, state) = dirs();
         let handle = open(&data, &state);
         let before = handle.note_count().unwrap();
-        let CairnError::Failed { reason } = handle
+        let refused = handle
             .install_fixture("no-such-fixture".to_owned(), NOW)
             .unwrap_err();
-        assert!(reason.contains("no-such-fixture"));
+        assert!(
+            matches!(&refused, CairnError::UnknownFixture { name } if name == "no-such-fixture"),
+            "{refused:?}"
+        );
         assert_eq!(handle.note_count().unwrap(), before);
     }
 
@@ -612,14 +643,21 @@ mod tests {
     }
 
     #[test]
-    fn a_grade_before_the_reveal_crosses_as_the_one_error_and_counts_nothing() {
+    fn a_refused_grade_or_reveal_crosses_as_a_typed_reason_and_counts_nothing() {
         let (handle, _d, _s) = benched("backlog");
         let sitting = handle.start_sitting(3, 0, NOW).unwrap();
-        // Nothing on screen yet, and then a card that is not revealed: both refused.
-        assert!(sitting.grade(Grade::Good, 5, NOW).is_err());
+        // Nothing on screen yet: neither a reveal nor a grade has a card to act on.
+        assert!(matches!(sitting.reveal(), Err(CairnError::NoCardShown)));
+        assert!(matches!(
+            sitting.grade(Grade::Good, 5, NOW),
+            Err(CairnError::NoCardShown)
+        ));
+        // A card that is not revealed: the grade is refused for that reason.
         sitting.card(NOW, 10).unwrap().unwrap();
-        let CairnError::Failed { reason } = sitting.grade(Grade::Good, 20, NOW).unwrap_err();
-        assert!(!reason.is_empty());
+        assert!(matches!(
+            sitting.grade(Grade::Good, 20, NOW),
+            Err(CairnError::NotRevealed)
+        ));
         assert_eq!(sitting.graded(), 0);
     }
 
@@ -803,7 +841,9 @@ mod tests {
         )
         .err()
         .expect("opening under a file must fail");
-        let CairnError::Failed { reason } = err;
+        let CairnError::Failed { reason } = err else {
+            panic!("a store fault is a logged reason, not a refusal: {err:?}");
+        };
         assert!(!reason.is_empty());
     }
 
