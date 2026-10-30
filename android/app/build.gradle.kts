@@ -31,6 +31,30 @@ android {
 
     buildFeatures { compose = true }
 
+    buildTypes {
+        release {
+            // R8 shrinks and renames; app/proguard-rules.pro keeps what native code binds by name.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signing a real release key is not part of this build. The release is signed with the
+            // debug key so it can be installed and run; a shipping key replaces this.
+            signingConfig = signingConfigs.getByName("debug")
+            testProguardFiles("proguard-test-rules.pro")
+        }
+    }
+
+    // The release build exactly, plus the keeps the test runner needs in the app's own dex (it shares
+    // the process, and R8 would otherwise strip what only the runner calls). `-Pcairn.testMinified`
+    // runs the instrumented tests against it, which is how the keep rules are proven
+    // (docs/environment/android-toolchain.md); the shipped `release` carries none of the test keeps.
+    buildTypes.create("minified") {
+        initWith(buildTypes.getByName("release"))
+        matchingFallbacks += "release"
+        proguardFiles("proguard-minified-rules.pro")
+    }
+    if (providers.gradleProperty("cairn.testMinified").isPresent) testBuildType = "minified"
+
     // The launcher mark is the egui build's, shared rather than copied, so the upgrade keeps its icon.
     sourceSets["main"].res.directories.add("../../crates/app/res")
 
