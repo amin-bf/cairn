@@ -28,9 +28,6 @@ private const val REVIEW = "review"
 private const val NOTES = "notes"
 private const val EDITOR = "editor?$ARG_NOTE={$ARG_NOTE}&$ARG_KIND={$ARG_KIND}&$ARG_DECK={$ARG_DECK}"
 
-/** The kind of a draft made from the note list. */
-private const val NEW_KIND = "basic"
-
 /** The editor's route: a stored [note], or a draft of [kind] to be filed to [deck]. */
 internal fun editorRoute(note: String? = null, kind: String? = null, deck: String? = null): String =
     buildString {

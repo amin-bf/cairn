@@ -67,7 +67,7 @@ fun EditorScreen(
     onNewNote: (kind: String, deck: String?) -> Unit,
 ) {
     val state by model.state.collectAsStateWithLifecycle()
-    BackHandler { model.done(onDone) }
+    BackHandler { model.settleAll(onDone) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.settleAll() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(model, lifecycle) {
@@ -137,7 +137,7 @@ private fun EditorForm(
                             Spacer(Modifier.height(gap(1)))
                             CairnControl(
                                 stringResource(R.string.editor_done),
-                                onClick = { model.done(onDone) },
+                                onClick = { model.settleAll(onDone) },
                                 modifier = Modifier.fillMaxWidth().testTag("done"),
                                 primary = true,
                             )

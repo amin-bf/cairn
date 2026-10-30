@@ -36,9 +36,12 @@ sealed interface EditorScreenState {
 }
 
 /** The route's arguments: a stored note, or the draft's kind and deck. */
-const val ARG_NOTE = "note"
-const val ARG_KIND = "kind"
-const val ARG_DECK = "deck"
+internal const val ARG_NOTE = "note"
+internal const val ARG_KIND = "kind"
+internal const val ARG_DECK = "deck"
+
+/** The kind a new note starts as. */
+internal const val NEW_KIND = "basic"
 
 /**
  * The editor's state (ADR-0048, ADR-0021 §7). The text being typed is Compose's own: [values] holds
@@ -84,7 +87,7 @@ class EditorViewModel(
                 if (note != null) {
                     collection.editNote(note)
                 } else {
-                    collection.newDraft(saved.get<String>(ARG_KIND) ?: "basic", saved.get<String>(ARG_DECK))
+                    collection.newDraft(saved.get<String>(ARG_KIND) ?: NEW_KIND, saved.get<String>(ARG_DECK))
                 }
             }
             editing = handle
@@ -119,11 +122,11 @@ class EditorViewModel(
         _state.value = ready
     }
 
-    private fun remember(note: String?) {
+    private fun persistNoteId(note: String?) {
         if (note != null) saved[ARG_NOTE] = note
     }
 
-    private fun typed() = values.map { FieldValue(it.key, it.value) }
+    private fun snapshot() = values.map { FieldValue(it.key, it.value) }
 
     /** A field's text changed: show it, and restart the idle window. */
     fun typed(field: String, text: String) {
@@ -138,7 +141,7 @@ class EditorViewModel(
         enqueue {
             editing?.let { h ->
                 owner.use { h.commitField(field, text) }
-                remember(owner.use { h.noteId() })
+                persistNoteId(owner.use { h.noteId() })
             }
         }
     }
@@ -149,26 +152,23 @@ class EditorViewModel(
         enqueue {
             editing?.let { h ->
                 owner.use { h.settleIfIdle(now) }
-                remember(owner.use { h.noteId() })
+                persistNoteId(owner.use { h.noteId() })
             }
         }
     }
 
     /** Settle every field, then [then]. Used on stopping, and by every way out. */
     fun settleAll(then: () -> Unit = {}) {
-        val snapshot = typed()
+        val snapshot = snapshot()
         enqueue {
-            editing?.let { h -> remember(owner.use { h.settleAll(snapshot) }) }
+            editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
             then()
         }
     }
 
-    /** *Done*, and the system Back: settle all, then leave. */
-    fun done(leave: () -> Unit) = settleAll(leave)
-
     /** *New note*: settle this one, then hand the kind and deck forward to a fresh draft. */
     fun newNote(open: (kind: String, deck: String?) -> Unit) {
-        val snapshot = typed()
+        val snapshot = snapshot()
         enqueue {
             val h = editing ?: return@enqueue
             owner.use { h.settleAll(snapshot) }
@@ -179,14 +179,14 @@ class EditorViewModel(
 
     /** A kind was chosen. A stored note is written; the fields rebuild, carrying the shared names. */
     fun chooseKind(kind: String) {
-        val snapshot = typed()
+        val snapshot = snapshot()
         enqueue {
             val h = editing ?: return@enqueue
             owner.use {
                 h.settleAll(snapshot)
                 h.switchKind(kind)
             }
-            remember(owner.use { h.noteId() })
+            persistNoteId(owner.use { h.noteId() })
             show(h, reload = true)
         }
     }
