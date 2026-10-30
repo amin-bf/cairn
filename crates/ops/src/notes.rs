@@ -318,14 +318,15 @@ pub fn delete_note(coll: &mut Collection, note: NoteId) -> Result<(), StoreError
     coll.mutable_set("note", &note.0, "deleted", Some("true"))
 }
 
-/// Create a deck with a name and return its id (ADR-0021 §9).
+/// Create a deck with a name and return its id (ADR-0021 §9). Here so that both renderers reach
+/// every note-screen write through `cairn-ops` (ADR-0046 §1), not the store.
 pub fn create_deck(coll: &mut Collection, name: &str) -> Result<DeckId, StoreError> {
     coll.create_deck(name)
 }
 
 /// Delete a deck, returning how many notes it took with it (ADR-0005 §7: every note in it derives
-/// deleted). The count is the one the warning names, taken through [`count_in_deck`] before the
-/// flag is written.
+/// deleted). The count is [`count_in_deck`]'s, read just before the flag is written, so a caller
+/// that never asked for the warning (the Kotlin binding) still learns what was taken.
 pub fn delete_deck(coll: &mut Collection, deck: DeckId) -> Result<usize, StoreError> {
     let count = count_in_deck(coll, deck)?;
     coll.mutable_set("deck", &deck.0, "deleted", Some("true"))?;

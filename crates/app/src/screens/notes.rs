@@ -261,8 +261,7 @@ fn note_list(
         *moving = Some(id);
     }
     if let Some(id) = delete {
-        // ADR-0004 §7's delete: a marker on the mutable surface that discards the content. There is no
-        // undelete here — recovery is ADR-0016's restore (ADR-0021 §2).
+        // No undelete here (ADR-0021 §2).
         let _ = notes::delete_note(coll, id);
     }
     if let Some(id) = open {
