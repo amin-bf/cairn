@@ -109,6 +109,33 @@ class NoteListRefusalTest {
     }
 
     @Test
+    fun a_refused_note_delete_is_said_in_the_row_and_the_question_and_list_stay() {
+        fixture("decks")
+        val access = Refusing(owner)
+        show(access)
+        val before = facts().rows.size
+        rule.onAllNodesWithTag("row-delete")[0].performClick()
+        waitFor("row-delete-confirm")
+        rule.waitForIdle()
+        access.failAt = access.calls.get() + 1
+        rule.onNodeWithTag("row-delete-confirm").performClick()
+        waitFor("row-delete-refused")
+        rule.onNodeWithTag("row-delete-refused").assertTextEquals("The note could not be deleted.")
+        rule.onNodeWithTag("row-delete-warning").assertIsDisplayed()
+        rule.onNodeWithTag("notes-search").assertIsDisplayed()
+        assertEquals(before, facts().rows.size)
+        // Keeping the note clears the refusal along with the question.
+        rule.onNodeWithTag("row-keep").performClick()
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("row-delete-refused")).fetchSemanticsNodes().isEmpty() }
+        rule.onAllNodesWithTag("note-row")[0].assertIsDisplayed()
+        // Asking again and confirming goes through.
+        rule.onAllNodesWithTag("row-delete")[0].performClick()
+        waitFor("row-delete-confirm")
+        rule.onNodeWithTag("row-delete-confirm").performClick()
+        rule.waitUntil(10_000) { facts().rows.size == before - 1 }
+    }
+
+    @Test
     fun the_empty_collection_offers_new_deck_and_a_made_deck_shows_the_deck_controls() {
         fixture("empty")
         rule.setContent { CairnTheme(dark = false) { NotesScreen(NotesViewModel(owner)) } }

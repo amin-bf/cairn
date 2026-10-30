@@ -15,7 +15,7 @@ sealed interface NotesScreenState {
     data object Loading : NotesScreenState
 
     /** Which write the collection refused, shown where the person did it. */
-    enum class Refusal { CreateDeck, DeleteDeck }
+    enum class Refusal { CreateDeck, DeleteDeck, DeleteNote }
 
     /**
      * The list under [selector] and [search], the [newDeck] name being typed, and — when a deck's
@@ -157,12 +157,14 @@ class NotesViewModel(private val owner: CollectionAccess) : ViewModel() {
     fun askDeleteNote(id: String) {
         confirmingNote = id
         moving = null
+        refusal = null
         refresh()
     }
 
     /** *Keep it* on a note's question. */
     fun keepNote() {
         confirmingNote = null
+        refusal = null
         refresh()
     }
 
@@ -173,10 +175,12 @@ class NotesViewModel(private val owner: CollectionAccess) : ViewModel() {
             try {
                 owner.use { it.deleteNote(note) }
                 confirmingNote = null
-                refresh()
+                refusal = null
             } catch (_: CairnException) {
-                _state.value = NotesScreenState.Failed
+                // The question stays in the row, so the person can try again or keep the note.
+                refusal = NotesScreenState.Refusal.DeleteNote
             }
+            refresh()
         }
     }
 

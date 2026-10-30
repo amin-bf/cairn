@@ -52,6 +52,7 @@
     <string name="notes_delete_deck_empty">Delete %1$s? It has no notes in it.</string>
     <string name="notes_move">Move</string>
     <string name="notes_delete">Delete</string>
+    <string name="notes_delete_note_refused">The note could not be deleted.</string>
     <string name="notes_delete_note_question">Delete %1$s? It cannot be undeleted.</string>
     <string name="notes_cancel_move">Cancel move</string>
     <string name="notes_placing">Placing</string>
