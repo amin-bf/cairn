@@ -2,13 +2,18 @@ package dev.cairn.app
 
 import android.content.Context
 import android.view.KeyEvent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -19,6 +24,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.cairn.design.CairnTheme
 import dev.cairn.design.pageArgb
 import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.CollectionHandle
@@ -42,7 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @RunWith(AndroidJUnit4::class)
 class SettingsTest {
     @get:Rule
-    val rule = createComposeRule()
+    val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val root = File(context.cacheDir, "settings-${System.nanoTime()}")
@@ -80,13 +86,19 @@ class SettingsTest {
     private fun selected(tag: String): Boolean =
         rule.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.Selected]
 
-    private fun showApp(access: CollectionAccess = owner, initial: ThemeChoice = ThemeChoice.LIGHT): AppearanceState {
+    private fun showApp(
+        access: CollectionAccess = owner,
+        initial: ThemeChoice = ThemeChoice.LIGHT,
+        settingsTickMs: Long = SETTINGS_TICK_MS,
+        // Review shows its start button only when something is due; the history fixture's cards are not.
+        ready: String = "start-all",
+    ): AppearanceState {
         runBlocking { owner.use { it.setThemeChoice(initial) } }
         val appearance = AppearanceState(initial)
         rule.setContent {
-            CairnAppearance(appearance) { CairnNavHost(access, keyboardUp = false) }
+            CairnAppearance(appearance) { CairnNavHost(access, keyboardUp = false, settingsTickMs = settingsTickMs) }
         }
-        waitFor("start-all")
+        waitFor(ready)
         return appearance
     }
 
@@ -134,7 +146,7 @@ class SettingsTest {
             .assertTextEquals("The only limit in the app. Set it to zero to clear a backlog, then turn it back on.")
         rule.onNodeWithTag("appearance-note")
             .assertTextEquals("This machine only — your appearance does not follow the collection to another device.")
-        for (absent in listOf("Files", "Open a file", "sync", "Sync", "Development", "Optimise")) {
+        for (absent in listOf("Files", "Open a file", "sync", "Sync", "Development")) {
             assertEquals("nothing on the page says '$absent'", 0, rule.onAllNodesWithText(absent, substring = true).fetchSemanticsNodes().size)
         }
     }
@@ -288,5 +300,122 @@ class SettingsTest {
             pages += bitmap.getPixel(2, 2)
         }
         assertNotEquals(pages[0], pages[1])
+    }
+
+    // --- Optimise (#236, ADR-0014): over the fixture with plenty of history, so a run fits a new vector.
+
+    private val nudgeAtRest = "Using the standard parameters. You've reviewed 225 times."
+    private val nudgeAfterRun = "Fitted over 225 reviews. You've reviewed 0 times since."
+    private val updated = "Parameters updated. Due dates have been recalculated."
+
+    private fun withHistory() {
+        runBlocking { owner.use { it.installFixture("history", System.currentTimeMillis()) } }
+    }
+
+    private fun text(tag: String): String =
+        rule.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text }
+
+    @Test
+    fun optimise_sits_under_the_scheduler_label_with_the_nudge_beneath() {
+        withHistory()
+        showApp(ready = "destination-settings")
+        openSettings()
+        waitFor("nudge-text")
+        rule.onNodeWithTag("label-Scheduler").assertTextEquals("Scheduler")
+        rule.onNodeWithTag("optimise-button").assertTextEquals("Optimise")
+        assertEquals(nudgeAtRest, text("nudge-text"))
+        assertTrue(!exists("optimise-done") && !exists("optimise-cancel"))
+    }
+
+    @Test
+    fun the_nudge_of_a_collection_with_one_review_is_singular_and_a_big_one_is_grouped() {
+        // 225 is the history fixture; the singular and the grouping are the egui words' own cases.
+        val single = SettingsScreenState.Ready("5", ThemeChoice.LIGHT, nudge = Nudge.Standard(1))
+        val fitted = SettingsScreenState.Ready("5", ThemeChoice.LIGHT, nudge = Nudge.Fitted(1, 1))
+        val big = SettingsScreenState.Ready("5", ThemeChoice.LIGHT, nudge = Nudge.Fitted(3120, 1234567))
+        val said = mutableListOf<String>()
+        var shown by mutableStateOf(single)
+        rule.setContent { CairnTheme(dark = false) { SettingsPage(shown, {}, {}, {}, {}, {}) } }
+        for (state in listOf(single, fitted, big)) {
+            shown = state
+            rule.waitForIdle()
+            said += text("nudge-text")
+        }
+        assertEquals(
+            listOf(
+                "Using the standard parameters. You've reviewed 1 time.",
+                "Fitted over 1 review. You've reviewed 1 time since.",
+                "Fitted over 3,120 reviews. You've reviewed 1,234,567 times since.",
+            ),
+            said,
+        )
+    }
+
+    @Test
+    fun optimise_then_cancel_returns_to_rest_and_writes_nothing() {
+        withHistory()
+        // No tick lands before Cancel is pressed, so the run is in flight when it is.
+        showApp(settingsTickMs = 60_000, ready = "destination-settings")
+        openSettings()
+        waitFor("optimise-button")
+        rule.onNodeWithTag("optimise-button").performClick()
+        waitFor("optimise-cancel")
+        rule.onNodeWithTag("optimise-cancel").assertTextEquals("Cancel")
+        assertTrue("the button is replaced while the run is in flight", !exists("optimise-button"))
+        assertTrue(exists("optimise-preparing") || exists("optimise-progress"))
+        rule.onNodeWithTag("optimise-cancel").performClick()
+        waitFor("optimise-button")
+        assertEquals(nudgeAtRest, text("nudge-text"))
+        assertTrue(!exists("optimise-done"))
+    }
+
+    @Test
+    fun optimise_runs_to_the_completion_sentence_and_the_nudge_reads_fitted() {
+        withHistory()
+        showApp(ready = "destination-settings")
+        openSettings()
+        waitFor("optimise-button")
+        rule.onNodeWithTag("optimise-button").performClick()
+        waitFor("optimise-cancel")
+        waitFor("optimise-done")
+        rule.onNodeWithTag("optimise-done").assertTextEquals(updated)
+        waitFor("optimise-button")
+        rule.waitUntil(10_000) { text("nudge-text") == nudgeAfterRun }
+        // The sentence stays until the next run starts.
+        rule.onNodeWithTag("optimise-button").performClick()
+        rule.waitUntil(10_000) { !exists("optimise-done") }
+    }
+
+    @Test
+    fun settings_mid_run_and_after_a_run_are_captured_in_both_themes() {
+        val dir = context.getExternalFilesDir("settings-shots")!!
+        val states = mapOf(
+            "mid-run" to SettingsScreenState.Ready("5", ThemeChoice.LIGHT, nudge = Nudge.Standard(225), run = OptimiseRun.Training(40, 100)),
+            "preparing" to SettingsScreenState.Ready("5", ThemeChoice.LIGHT, nudge = Nudge.Standard(225), run = OptimiseRun.Preparing),
+            "after-run" to SettingsScreenState.Ready("5", ThemeChoice.LIGHT, nudge = Nudge.Fitted(225, 0), updated = true),
+        )
+        var dark by mutableStateOf(false)
+        var shown by mutableStateOf(states.getValue("mid-run"))
+        rule.setContent { CairnTheme(dark) { SettingsPage(shown, {}, {}, {}, {}, {}) } }
+        for ((name, state) in states) {
+            for (isDark in listOf(false, true)) {
+                dark = isDark
+                shown = state
+                rule.waitForIdle()
+                rule.onNodeWithTag("settings-screen").assertIsDisplayed()
+                val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+                FileOutputStream(File(dir, "optimise-$name-${if (isDark) "dark" else "light"}.png")).use {
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+                assertEquals(pageArgb(isDark), bitmap.getPixel(2, bitmap.height / 2))
+            }
+        }
+        // What each state shows: the bar and Cancel mid-run; the sentence under the nudge after.
+        shown = states.getValue("mid-run")
+        rule.waitForIdle()
+        assertTrue(exists("optimise-progress") && exists("optimise-cancel") && !exists("optimise-button"))
+        shown = states.getValue("after-run")
+        rule.waitForIdle()
+        assertEquals(updated, text("optimise-done"))
     }
 }
