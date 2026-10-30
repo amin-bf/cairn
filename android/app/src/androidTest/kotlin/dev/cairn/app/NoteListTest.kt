@@ -306,6 +306,7 @@ class NoteListTest {
         val ink = Ink(isDark)
         val at = "$name dark=$isDark"
         val rows = boundsOf("note-row")
+        val actions = boundsOf("row-move") + boundsOf("row-delete")
         assertTrue("$at shows rows only for the facts' rows", rows.size <= facts.rows.size)
         assertEquals("$at row count", facts.rows.isEmpty(), rows.isEmpty())
         rows.zipWithNext().forEach { (a, b) -> assertTrue("$at rows run down the page in order", a.bottom <= b.top) }
@@ -315,9 +316,12 @@ class NoteListTest {
         seen.forEachIndexed { i, r ->
             val (_, share, _) = inkIn(bitmap, r, ink.control)
             assertTrue("$at row $i is a control surface ($share)", share > 0.4)
-            val (title, _, meanX) = inkIn(bitmap, r, ink.onControl)
+            // The title reads inside the band the action column leaves it, so the column's glyphs are not its ink.
+            val actionsLeft = actions.filter { it.top >= r.top && it.bottom <= r.bottom }.minOfOrNull { it.left } ?: r.right
+            val text = Rect(r.left, r.top, actionsLeft, r.bottom)
+            val (title, _, meanX) = inkIn(bitmap, text, ink.onControl)
             assertTrue("$at row $i has title ink", title > 20)
-            val centre = (r.left + r.right) / 2.0
+            val centre = (text.left + text.right) / 2.0
             if (facts.rows[i].rtl) assertTrue("$at row $i reads from the right", meanX > centre)
             else assertTrue("$at row $i reads from the left", meanX < centre)
             // The caption is the row's second line: look for its ink in the row's last quarter, below
