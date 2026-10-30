@@ -453,9 +453,27 @@ impl EditingHandle {
         editing.touched(now_mono_ms);
     }
 
-    /// A field lost focus: commit its value. A draft is born here if the value is not empty.
+    /// The decks the collection holds, for the deck dropdown.
+    pub fn decks(&self) -> Result<Vec<DeckFact>, CairnError> {
+        Ok(self
+            .owner
+            .collection()
+            .decks()?
+            .into_iter()
+            .map(|(id, name)| DeckFact {
+                id: id.to_canonical(),
+                name,
+            })
+            .collect())
+    }
+
+    /// A field lost focus: commit its value. A draft is born here if the value is not empty. A field
+    /// the store already holds as typed is left alone — no row, no stamp.
     pub fn commit_field(&self, field: String, value: String) -> Result<(), CairnError> {
         let mut editing = self.editing();
+        if !editor::is_unsettled(&self.owner.collection(), editing.note, &field, &value) {
+            return Ok(());
+        }
         Self::take_values(
             &mut editing,
             &[FieldValue {
@@ -1572,6 +1590,36 @@ mod tests {
         assert_eq!(fresh.kind(), "basic");
         assert_eq!(fresh.deck(), Some(deck));
         assert!(fresh.fields().iter().all(|f| f.value.is_empty()));
+    }
+
+    #[test]
+    fn leaving_a_field_that_holds_what_is_stored_writes_nothing() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        editing.commit_field("Front".into(), "a".into()).unwrap();
+        let id = editing.note_id().unwrap();
+        // Moved away by hand in the store; a blur over the same text must not write it back.
+        let rival = handle.clone().edit_note(id).unwrap();
+        rival.commit_field("Front".into(), "b".into()).unwrap();
+        editing.commit_field("Front".into(), "b".into()).unwrap();
+        assert_eq!(stored(&handle, "Front"), "b");
+        // A blank draft field leaves the draft unborn.
+        let blank = handle.clone().new_draft("basic".into(), None).unwrap();
+        blank.commit_field("Front".into(), String::new()).unwrap();
+        assert_eq!(blank.note_id(), None);
+    }
+
+    #[test]
+    fn the_editor_lists_the_decks() {
+        let (handle, _d, _s) = blank_bench();
+        let deck = handle.create_deck("Français".into()).unwrap();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        let decks = editing.decks().unwrap();
+        assert_eq!(decks.len(), 1);
+        assert_eq!(
+            (decks[0].id.as_str(), decks[0].name.as_str()),
+            (deck.as_str(), "Français")
+        );
     }
 
     #[test]
