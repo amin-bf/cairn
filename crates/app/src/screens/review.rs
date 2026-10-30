@@ -11,6 +11,7 @@ use cairn_store::Collection;
 
 use cairn_ops::leeches as leech_ops;
 use cairn_ops::notes;
+use cairn_ops::review::Run;
 use cairn_ops::sitting::Sitting;
 
 use crate::session::{self, Offered, ReviewState};
@@ -53,8 +54,8 @@ pub(crate) fn review(
     let replayed = replay(&current, &refs);
     let queue = session::compose(&current, &positions, &replayed, today, rate, &suspended);
     // The leech list is a query over replayed history (ADR-0010 §1, §4), derived fresh every frame —
-    // never stored, always current, self-clearing. Suspension does not touch detection: a suspended
-    // card is still a leech if its record says so, and has its permanent home below.
+    // never stored, always current, self-clearing. `ranked` keeps suspended leeches: it only drives the
+    // end-of-session pointer and the crossing snapshot, not the screen's sections.
     let ranked = leeches(&replayed, today);
     // The screen's two sections and the entrance's count come from one operation, so a leech that is
     // suspended is named once, under its own section (ADR-0050 §3).
@@ -381,8 +382,8 @@ fn leech_entry_wording(leeches: usize, suspended: usize) -> String {
 ///
 /// The time is a fact rather than a verdict: §6's own example ended *"still failing"*, and a card stays
 /// on this list after its latest answer was a pass, so that clause would say something the app does
-/// not know. Rounded to the nearest minute by `cairn_ops::leeches`; below half a minute it reads *under a minute*, because
-/// *0 minutes* reads as none.
+/// not know. The operation rounds to the nearest minute; below half a minute it reads
+/// *under a minute*, because *0 minutes* reads as none.
 fn cost_line(failure_days: u32, reviews: u32, answer_minutes: u32) -> String {
     let time = match answer_minutes {
         0 => "under a minute".to_owned(),
@@ -401,8 +402,7 @@ fn cost_line(failure_days: u32, reviews: u32, answer_minutes: u32) -> String {
 ///
 /// A suspended card is not listed among the active leeches even when its history still qualifies — it
 /// lives in the suspended section instead, so it is named once, not twice. Actions are collected while
-/// drawing and applied after, so the immutable reads that render each card's preview do not fight the
-/// mutable writes.
+/// drawing and applied after.
 fn leech_screen(
     ui: &mut egui::Ui,
     coll: &mut Collection,
@@ -570,7 +570,7 @@ fn leech_row(
 /// One card's prompt, for a leech row — the card the user will recognise. A dormant card (its content
 /// no longer generated, ADR-0002 §7) has no prompt, so it falls back to a plain marker rather than a
 /// blank row: a suspended card whose note was edited away still needs a line to carry its unsuspend.
-fn prompt_text(prompt: Option<&[cairn_ops::review::Run]>) -> String {
+fn prompt_text(prompt: Option<&[Run]>) -> String {
     prompt
         .map(|runs| runs.iter().map(|run| run.text.as_str()).collect::<String>())
         .unwrap_or_else(|| "(card no longer generated)".to_owned())
