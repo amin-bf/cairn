@@ -32,4 +32,24 @@
     <string name="review_grade_easy">Easy</string>
     <string name="review_interval_days">%1$dd</string>
     <string name="review_unavailable">The collection could not be opened</string>
+
+    <!-- The destinations row and the note list. The sentences are the egui build's, word for word. -->
+    <string name="destination_review">Review</string>
+    <string name="destination_notes">Notes</string>
+    <string name="notes_heading">Notes</string>
+    <string name="notes_empty">Nothing here yet — create a deck, import one, or set up sync</string>
+    <string name="notes_no_match">No notes match.</string>
+    <string name="notes_search">Search</string>
+    <string name="notes_deck">Deck</string>
+    <string name="notes_all_decks">All decks</string>
+    <string name="notes_unfiled">Unfiled</string>
+    <string name="notes_new_deck">New deck</string>
+    <string name="notes_delete_deck">Delete deck</string>
+    <string name="notes_delete_deck_confirm">Delete the deck and its notes</string>
+    <string name="notes_keep_it">Keep it</string>
+    <string name="notes_delete_deck_empty">Delete %1$s? It has no notes in it.</string>
+    <plurals name="notes_delete_deck_warning">
+        <item quantity="one">Delete %1$s? Its %2$d note is deleted with it, and cannot be undeleted.</item>
+        <item quantity="other">Delete %1$s? Its %2$d notes are deleted with it, and cannot be undeleted.</item>
+    </plurals>
 </resources>
