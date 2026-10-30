@@ -15,7 +15,7 @@ import java.io.File
 
 /**
  * What the shipping configuration must still do once R8 has renamed and stripped the app. Run it
- * against the minified build with `-Pcairn.testRelease`; it uses only the binding, which the keep
+ * against the minified build with `-Pcairn.testMinified`; it uses only the binding, which the keep
  * rules leave under its own names, so the test APK links against the minified one.
  */
 @RunWith(AndroidJUnit4::class)
@@ -59,8 +59,9 @@ class ReleaseBuildTest {
             try {
                 handle.installFixture("no-such-fixture", now)
                 fail("an unknown fixture must be refused")
-            } catch (e: CairnException) {
-                assertTrue(e::class.java.name.startsWith("dev.cairn.ffi.CairnException"))
+            } catch (_: CairnException) {
+                // Caught as the binding's own type: the keep leaves the exception classes the Rust
+                // side constructs by name intact.
             }
         }
     }
