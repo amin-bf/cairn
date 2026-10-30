@@ -634,6 +634,7 @@ dependencies = [
 name = "cairn-ffi"
 version = "0.1.0"
 dependencies = [
+ "cairn-core",
  "cairn-ops",
  "cairn-store",
  "tempfile",
