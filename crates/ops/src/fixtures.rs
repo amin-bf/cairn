@@ -65,6 +65,7 @@
 //! override is present.
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -734,6 +735,28 @@ pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
     cairn_store::remove_files(&data, &state);
     let mut coll = Collection::open(&data, &state).map_err(|e| e.to_string())?;
     fixture.install(&mut coll, now_ms())
+}
+
+/// **Temporary** — return a device to a first launch: close `coll`, remove both databases and the
+/// writer marker, and open the collection again through [`open_collection`](crate::open_collection),
+/// so the first launch is seeded exactly as a fresh install is. Both renderers' reset is this.
+///
+/// **It takes the collection by value, and that is the ordering the correctness rests on**: SQLite
+/// holds the database plus its `-wal` and `-shm` siblings open, so unlinking them under a live
+/// connection leaves a checkpoint writing into inodes nothing can reach. Dropping the collection
+/// here closes it first.
+///
+/// The fitted scheduler parameters and the new-card rate go with the log they live in, and the
+/// device mints a fresh writer id: a reset device is a new writer, not a returning one.
+pub fn reset(coll: Collection, data: &Path, state: &Path) -> Result<Collection, String> {
+    drop(coll);
+    reset_files(data, state)
+}
+
+/// [`reset`] for a caller with no open collection to close — one whose last reopen failed.
+pub fn reset_files(data: &Path, state: &Path) -> Result<Collection, String> {
+    cairn_store::remove_files(data, state);
+    crate::open_collection(data, state)
 }
 
 /// Wall-clock milliseconds for the installer's stamp — an edge value read once per install, never
@@ -1524,6 +1547,24 @@ mod tests {
                 fixture.key()
             );
         }
+    }
+
+    /// **Reset leaves a freshly seeded collection**, whatever the bench had put there. It goes
+    /// through `open_collection`, so a first launch is seeded exactly as a fresh install is.
+    #[test]
+    fn reset_leaves_a_freshly_seeded_collection() {
+        let (data, state, mut coll) = empty();
+        Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
+        let before = crate::notes::list(&coll, &crate::notes::Filter::default())
+            .unwrap()
+            .len();
+        assert_ne!(before, DEFAULT_NEW_CARD_RATE as usize + 1);
+
+        let fresh = reset(coll, data.path(), state.path()).unwrap();
+
+        let rows = crate::notes::list(&fresh, &crate::notes::Filter::default()).unwrap();
+        assert_eq!(rows.len(), DEFAULT_NEW_CARD_RATE as usize + 1);
+        assert_eq!(read(&fresh, NOW_MS).unwrap().notes, rows.len());
     }
 
     /// **No fixture writes a constant answer time.** One did, everywhere, until
