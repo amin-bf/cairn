@@ -42,6 +42,7 @@ fun CairnControl(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     aside: String? = null,
+    enabled: Boolean = true,
 ) {
     val colors = Cairn.colors
     Box(
@@ -50,12 +51,13 @@ fun CairnControl(
                 if (primary) colors.primary else colors.control,
                 if (primary) colors.primaryStroke else colors.separator,
             )
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = gap(2)),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CairnText(label, color = colors.onControl)
+            // A control that cannot be pressed speaks in the weak ink, as a hint rather than a command.
+            CairnText(label, color = if (enabled) colors.onControl else colors.weak)
             // An aside is a second, quieter fact about the same choice: small and dimmed (ADR-0034 §1).
             if (aside != null) {
                 Spacer(Modifier.width(gap(1)))
