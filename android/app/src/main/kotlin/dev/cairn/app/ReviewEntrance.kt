@@ -1,6 +1,7 @@
 package dev.cairn.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import dev.cairn.design.CairnPage
 import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextAction
 import dev.cairn.design.Mark
+import dev.cairn.design.ReachColumn
 import dev.cairn.design.Tier
 import dev.cairn.design.gap
 import dev.cairn.ffi.ReviewFacts
@@ -33,37 +35,80 @@ import dev.cairn.ffi.ReviewStateKind
  * alone (ADR-0046 §1, §4). [onStart] is told how many gradings the person chose.
  */
 @Composable
-fun ReviewEntrance(facts: ReviewFacts, onStart: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun ReviewEntrance(
+    facts: ReviewFacts,
+    onStart: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    onLeeches: () -> Unit = {},
+) {
     CairnPage(modifier) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = gap(2))) {
-            CairnText(stringResource(R.string.review_heading), tier = Tier.Heading)
-            Spacer(Modifier.height(gap(2)))
-            when (val state = facts.state) {
-                is ReviewStateKind.Empty -> Statement(stringResource(R.string.review_empty), "state-empty")
-                is ReviewStateKind.CaughtUp -> CaughtUp()
-                is ReviewStateKind.NewDeck -> {
-                    Statement(stringResource(R.string.review_new_deck), "state-new-deck")
-                    Ways(facts, onStart)
-                }
-                is ReviewStateKind.NewOnly -> {
-                    Statement(
-                        pluralStringResource(R.plurals.review_new_only, state.new.toInt(), state.new.toInt()),
-                        "state-new-only",
-                    )
-                    Ways(facts, onStart)
-                }
-                is ReviewStateKind.Due -> {
-                    val words = when {
-                        state.backlog -> stringResource(R.string.review_due_backlog)
-                        state.new > 0u -> stringResource(R.string.review_due_plus_new, state.due.toInt(), state.new.toInt())
-                        else -> stringResource(R.string.review_due, state.due.toInt())
-                    }
-                    Statement(words, "state-due")
-                    Ways(facts, onStart)
-                }
+        BoxWithConstraints {
+            val room = maxHeight
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                ReachColumn(
+                    room = room,
+                    floor = gap(3),
+                    top = {
+                        Column(Modifier.padding(top = gap(2))) {
+                            CairnText(stringResource(R.string.review_heading), tier = Tier.Heading)
+                            Spacer(Modifier.height(gap(2)))
+                            State(facts, onStart)
+                        }
+                    },
+                    reach = { Leeches(facts, onLeeches) },
+                )
             }
         }
     }
+}
+
+@Composable
+private fun State(facts: ReviewFacts, onStart: (Int) -> Unit) {
+    when (val state = facts.state) {
+        is ReviewStateKind.Empty -> Statement(stringResource(R.string.review_empty), "state-empty")
+        is ReviewStateKind.CaughtUp -> CaughtUp()
+        is ReviewStateKind.NewDeck -> {
+            Statement(stringResource(R.string.review_new_deck), "state-new-deck")
+            Ways(facts, onStart)
+        }
+        is ReviewStateKind.NewOnly -> {
+            Statement(
+                pluralStringResource(R.plurals.review_new_only, state.new.toInt(), state.new.toInt()),
+                "state-new-only",
+            )
+            Ways(facts, onStart)
+        }
+        is ReviewStateKind.Due -> {
+            val words = when {
+                state.backlog -> stringResource(R.string.review_due_backlog)
+                state.new > 0u -> stringResource(R.string.review_due_plus_new, state.due.toInt(), state.new.toInt())
+                else -> stringResource(R.string.review_due, state.due.toInt())
+            }
+            Statement(words, "state-due")
+            Ways(facts, onStart)
+        }
+    }
+}
+
+/**
+ * The way to the leech screen (ADR-0050): a full-width primary on the reach line, drawn only where there
+ * is a leech or a suspended card, and naming what is there. Suspended cards are not counted as leeches.
+ */
+@Composable
+private fun Leeches(facts: ReviewFacts, onLeeches: () -> Unit) {
+    val leeches = facts.leeches.toInt()
+    val suspended = facts.suspended.toInt()
+    if (leeches == 0 && suspended == 0) return
+    CairnControl(
+        when {
+            suspended == 0 -> stringResource(R.string.leeches_entrance_leeches, leeches)
+            leeches == 0 -> stringResource(R.string.leeches_entrance_suspended, suspended)
+            else -> stringResource(R.string.leeches_entrance_both, leeches, suspended)
+        },
+        onClick = onLeeches,
+        primary = true,
+        modifier = Modifier.fillMaxWidth().testTag("leech-entrance"),
+    )
 }
 
 @Composable

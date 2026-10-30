@@ -30,7 +30,7 @@ import dev.cairn.ffi.Run
 import dev.cairn.ffi.RunStyle
 import dev.cairn.ffi.ShownCard
 
-private fun List<Run>.toCardRuns(): List<CardRun> = map {
+internal fun List<Run>.toCardRuns(): List<CardRun> = map {
     CardRun(
         it.text,
         bold = it.style == RunStyle.BOLD || it.style == RunStyle.BOLD_ITALIC,

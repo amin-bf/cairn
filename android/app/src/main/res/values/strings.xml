@@ -19,6 +19,25 @@
     <string name="review_start_one">Start — the one card</string>
     <string name="review_shorter">or a shorter sitting:</string>
 
+    <!-- The leech screen and its durable entrance (ADR-0010 §4 §6 §7 §8, ADR-0043). The egui build's words. -->
+    <string name="leeches_entrance_leeches">Leeches (%1$d)</string>
+    <string name="leeches_entrance_suspended">Suspended (%1$d)</string>
+    <string name="leeches_entrance_both">Leeches (%1$d) · suspended (%2$d)</string>
+    <string name="leeches_statement">These keep catching you out — worst first.</string>
+    <string name="leeches_suspended_statement">Suspended — not shown in review.</string>
+    <string name="leeches_empty">Nothing is costing you a lot right now.</string>
+    <string name="leeches_not_generated">(card no longer generated)</string>
+    <string name="leeches_cost">%1$d bad days · %2$d reviews · %3$s</string>
+    <string name="leeches_time_under_a_minute">under a minute</string>
+    <string name="leeches_time_one_minute">1 minute</string>
+    <string name="leeches_time_minutes">%1$d minutes</string>
+    <string name="leeches_edit">Edit</string>
+    <string name="leeches_suspend">Suspend</string>
+    <string name="leeches_unsuspend">Unsuspend</string>
+    <string name="leeches_back">Back to review</string>
+    <string name="leeches_suspend_refused">The card could not be suspended.</string>
+    <string name="leeches_unsuspend_refused">The card could not be unsuspended.</string>
+
     <!-- A sitting. Also the egui build's words. -->
     <string name="review_edit_note">Edit note</string>
     <string name="review_progress">%1$d of %2$d</string>

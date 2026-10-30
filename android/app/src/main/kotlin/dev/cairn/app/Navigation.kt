@@ -28,6 +28,7 @@ private const val TICK_MS = 15_000L
 
 private const val REVIEW = "review"
 private const val NOTES = "notes"
+private const val LEECHES = "leeches"
 private const val EDITOR = "editor?$ARG_NOTE={$ARG_NOTE}&$ARG_KIND={$ARG_KIND}&$ARG_DECK={$ARG_DECK}"
 
 /** The editor's route: a stored [note], or a draft of [kind] to be filed to [deck]. */
@@ -49,7 +50,7 @@ fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardU
     val nav = rememberNavController()
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
-        Destination(stringResource(R.string.destination_review), route == REVIEW, "destination-review") { nav.goTo(REVIEW) },
+        Destination(stringResource(R.string.destination_review), route == REVIEW || route == LEECHES, "destination-review") { nav.goTo(REVIEW) },
         Destination(stringResource(R.string.destination_notes), route == NOTES, "destination-notes") { nav.goTo(NOTES) },
     )
     val shell: @Composable () -> Unit = {
@@ -65,7 +66,21 @@ fun CairnNavHost(owner: CollectionOwner, keyboardUp: Boolean = rememberKeyboardU
                 // Coming back from the editor (or from Notes, or the background) the shown card is
                 // re-read: the edit shows on it, or the sitting moves on (ADR-0048 §6). Asking is idle.
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
-                ReviewScreen(model, onEditNote = { nav.navigate(editorRoute(note = it)) })
+                ReviewScreen(
+                    model,
+                    onEditNote = { nav.navigate(editorRoute(note = it)) },
+                    onLeeches = { nav.navigate(LEECHES) },
+                )
+            }
+            composable(LEECHES) {
+                val model = viewModel { LeechViewModel(owner) }
+                // Coming back from the editor the list is read again: the edit may have changed what is a leech.
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
+                LeechScreen(
+                    model,
+                    onEdit = { nav.navigate(editorRoute(note = it)) },
+                    onBack = { nav.popBackStack() },
+                )
             }
             composable(NOTES) {
                 NotesScreen(
