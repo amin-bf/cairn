@@ -19,7 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,7 +47,9 @@ import dev.cairn.design.CairnTextField
 import dev.cairn.design.Tier
 import dev.cairn.design.gap
 import dev.cairn.design.rememberKeyboardUp
+import dev.cairn.design.tokens.Controls
 import dev.cairn.design.tokens.Frame
+import dev.cairn.design.tokens.Spacing
 import dev.cairn.ffi.DeckSelector
 
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
@@ -104,7 +112,9 @@ fun NoteList(
 ) {
     val facts = state.facts
     CairnPage(modifier) {
-        Column(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        var page by remember { mutableStateOf(Dp.Unspecified) }
+        Column(Modifier.fillMaxSize().onSizeChanged { page = with(density) { it.height.toDp() } }) {
             LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(top = gap(2))) {
                 item {
                     CairnText(stringResource(R.string.notes_heading), tier = Tier.Heading)
@@ -164,17 +174,20 @@ fun NoteList(
                     }
                 }
             }
-            // Pinned outside the scroll on the reach line (ADR-0039 §8) while the keyboard is down, so
-            // the list keeps the room while one types: a new note is a `basic` draft filed to the deck
-            // the list is filtered to.
-            if (!rememberKeyboardUp()) {
+            // Pinned outside the scroll on the reach line (ADR-0039 §8): a new note is a `basic` draft
+            // filed to the deck the list is filtered to. Not drawn during a move, nor while the keyboard
+            // is up (the list keeps the room while one types). On a page too short to spend the reach
+            // line on nothing — a third of the page is where it turns over — the band collapses to the
+            // control and a gap.
+            if (state.moving == null && !rememberKeyboardUp()) {
                 CairnControl(
                     stringResource(R.string.notes_create),
                     onClick = { onCreate((state.selector as? DeckSelector.Deck)?.id) },
                     modifier = Modifier.fillMaxWidth().testTag("create-note"),
                     primary = true,
                 )
-                Spacer(Modifier.height(Frame.REACH_LINE.dp))
+                val full = (Frame.REACH_LINE + Controls.HEIGHT + Spacing.UNIT).dp
+                Spacer(Modifier.height(if (page != Dp.Unspecified && full <= page / 3) Frame.REACH_LINE.dp else gap(2)))
             }
         }
     }
