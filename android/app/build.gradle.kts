@@ -59,8 +59,9 @@ android {
     sourceSets["main"].res.directories.add("../../crates/app/res")
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        val bytecode = JavaVersion.toVersion(property("cairn.bytecode").toString())
+        sourceCompatibility = bytecode
+        targetCompatibility = bytecode
     }
 
     packaging {
@@ -69,7 +70,8 @@ android {
     }
 }
 
-kotlin { jvmToolchain(17) }
+// The JDK and bytecode target are `cairn.jdk` and `cairn.bytecode` in gradle.properties.
+kotlin { jvmToolchain(property("cairn.jdk").toString().toInt()) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.04.01")

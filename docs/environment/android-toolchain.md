@@ -29,7 +29,7 @@ agent must export them itself).
 
 | Component | Version | Location |
 | --- | --- | --- |
-| JDK (Eclipse Temurin) | **17.0.20+8** | `~/.local/share/jdk-17.0.20+8`, symlinked as `~/.local/share/jdk17` |
+| JDK (system OpenJDK, the newest installed) | **27.0.1** | `/usr/lib/jvm/java-27-openjdk` (the `jdk-openjdk` package, not user-installed) |
 | Android SDK cmdline-tools | **15859902** | `~/Android/Sdk/cmdline-tools/latest` |
 | Android SDK Platform | **android-34**, **android-36**, **android-37.0** | `~/Android/Sdk/platforms` |
 | Android build-tools | **34.0.0**, **35.0.0**, **36.1.0**, **37.0.0** | `~/Android/Sdk/build-tools` |
@@ -56,9 +56,9 @@ API 37 is installed because **the physical test device runs it** (see below). AG
 accepts `compileSdk = 37` / `targetSdk = 37` without complaint despite the
 `android-37.0` directory name.
 
-The symlink `~/.local/share/jdk17` exists so `JAVA_HOME` contains no `+` character —
-some build tooling mishandles it in paths — and so a future JDK bump is a symlink
-swap rather than an edit to every consumer.
+`JAVA_HOME` is the system JDK's directory, set in `scripts/android-env.sh`. The JDK version and the
+bytecode target are `cairn.jdk` and `cairn.bytecode` in `android/gradle.properties`, which both
+modules read; a JDK bump is those properties plus that one line.
 
 ### Rust targets
 
@@ -74,36 +74,33 @@ wasm32-unknown-unknown
 x86_64-unknown-linux-gnu
 ```
 
-Note the client-stacks research: **Dioxus silently dropped 32-bit Android in 0.7.4**
-(#5637) while its docs still tell you to add `armv7-linux-androideabi`. The 32-bit
-targets are installed anyway — they cost nothing and Tauri may still want them.
+The 32-bit targets are installed although the native client packages only `arm64-v8a` and
+`x86_64`: they cost nothing, and the earlier client-stack candidates (since dropped,
+[ADR-0045](../adr/0045-the-native-android-client.md)) were measured with them.
 
 ## Why these versions
 
-The two candidate stacks in
-[#8 "Prototype: pick the client stack"](https://github.com/amin-bf/cairn/issues/8)
-have different requirements, and this toolchain must satisfy **both**, since #8 has to
-build each one on the same machine.
-
-- **JDK 17.** Dioxus's generated Gradle module sets `jvmTarget = "17"`, so 17 is a hard
-  floor; and Tauri **breaks cryptically on JDK 25/26**. 17 is the version both accept.
-  (`dx` autodetects JDK 11 on Linux and would fail — hence setting `JAVA_HOME`
-  explicitly is mandatory, not optional.)
-- **SDK 34 and 36.** Dioxus generates `compileSdk`/`targetSdk` 34; the Tauri CLI uses
-  SDK 36. Both platforms are installed so neither stack triggers a download mid-build.
+- **JDK 27, the newest installed** (it was 17 while the client-stack candidates were being compared).
+  Gradle 9.7.1 runs on it and the build compiles with it as the `jvmToolchain`. **The bytecode
+  target is 24, not 27:** the Kotlin Gradle plugin AGP 9.4.1 brings (2.2.10) knows JVM targets only up
+  to 24 and fails configuration on `jvmTarget` 27 ("Unknown Kotlin JVM target: 27"), and Java's
+  `sourceCompatibility` must equal it. So `cairn.bytecode` is 24. Raising it needs a
+  Kotlin that knows a later target, which comes with a newer AGP.
+- **SDK 34 and 36.** The build uses `compileSdk` 36; platform 34 stays installed from the
+  earlier toolchain work, so nothing triggers a download mid-build.
 - **NDK 29.0.14206865 (r29 stable), pinned as `ndkVersion`.** It replaced the
   `29.0.13846066` **beta** (`r29-beta3`) this document first recorded: that beta was kept only
-  because the Tauri CLI pinned it and selected the lexicographically highest installed NDK, and
-  Tauri is no longer a candidate ([ADR-0045](../adr/0045-the-native-android-client.md)). r29 stable
+  because a client-stack candidate's CLI pinned it and selected the lexicographically highest
+  installed NDK, and that candidate is gone ([ADR-0045](../adr/0045-the-native-android-client.md)). r29 stable
   is the release line the Kotlin binding was measured on
   ([research](../research/kotlin-binding/README.md)); AGP 9.4's own default (r28.2) is not taken
   because nothing was measured on it. The Gradle build builds with the directory AGP resolves from
   `ndkVersion`, so Gradle and cargo cannot disagree. The beta may stay installed — nothing selects
   it any more — and can be removed with `sdkmanager --uninstall "ndk;29.0.13846066"`.
-- **Gradle 9.7.1 and AGP 9.4.1.** AGP 9.4 needs Gradle 9.6 or later, JDK 17 and Build Tools 36,
+- **Gradle 9.7.1 and AGP 9.4.1.** AGP 9.4 needs Gradle 9.6 or later, JDK 17 or later and Build Tools 36,
   and has Kotlin built in. The wrapper in `android/` carries the Gradle version, so no Gradle is
-  installed system-wide (the 8.14.3 install was the Tauri CLI's, and Gradle 8 cannot load an AGP 9
-  project at all).
+  installed system-wide (an earlier 8.14.3 install existed for a client-stack candidate's CLI, and
+  Gradle 8 cannot load an AGP 9 project at all).
 - **`compileSdk` 36, and androidx versions that fit it.** The newest Compose, lifecycle and activity
   releases require `compileSdk` 37; the spec pins 36 (as the egui build declares), so the project
   pins the Compose BOM `2026.04.01`, lifecycle `2.10.0` and activity-compose `1.12.4`, the last
@@ -136,7 +133,7 @@ The debug variant also builds the `panic-probe` cargo feature (an export that pa
 for the test that a Rust panic arrives as an exception); a release build never carries it. The
 release profile has no `panic = "abort"`, and a Rust test fails if one is added.
 
-**Pins:** uniffi `=0.32.2` and JNA 5.19.1 (`@aar`), AGP 9.4.1, Gradle 9.7.1, JDK 17, Compose
+**Pins:** uniffi `=0.32.2` and JNA 5.19.1 (`@aar`), AGP 9.4.1, Gradle 9.7.1, JDK 27 (toolchain; bytecode target 24), Compose
 through its BOM, NDK `29.0.14206865`, cargo-ndk 4.1.2, `compileSdk` and `targetSdk` 36, `minSdk`
 24, ABIs `arm64-v8a` and `x86_64`.
 
@@ -252,7 +249,7 @@ Installed and launched on the emulator, `System.loadLibrary("andsmoke")` succeed
 I APKSMOKE: APKSMOKE_OK loaded libandsmoke.so (bundled SQLite) into app process
 ```
 
-This exercises the *other* half of the toolchain — JDK 17 driving Gradle and AGP, aapt2,
+This exercises the *other* half of the toolchain — a JDK driving Gradle and AGP (17 at the time), aapt2,
 d8, signing, packaging, install — which the native binary test alone does not touch.
 
 ### Two research claims settled
@@ -295,14 +292,14 @@ The whole suite was re-run on the human's handset and **passed identically**:
 **Three consequences worth carrying into #8:**
 
 1. **This device is `arm64-v8a` only.** `armv7-linux-androideabi` and
-   `i686-linux-android` binaries cannot run on it at all, so Dioxus having dropped
-   32-bit Android is a non-issue for our test hardware.
+   `i686-linux-android` binaries cannot run on it at all, so the 32-bit targets are
+   not exercised on our test hardware.
 2. **The device runs 4 KB pages**, so it does *not* exercise the 16 KB page-size path at
    runtime. 16 KB alignment is still mandatory for Play uploads — it is satisfied at
    link time (see above) — but do not treat "works on this Pixel" as evidence about
    16 KB-page devices.
-3. **The device API (37) is ahead of the stacks' defaults** (Dioxus generates 34, Tauri
-   36). That is fine — an APK targeting 36 installs and runs on 37 — but it means the
+3. **The device API (37) is ahead of the build's `compileSdk` (36).** That is fine — an APK
+   targeting 36 installs and runs on 37 — but it means the
    handset cannot, by itself, catch anything that only breaks on older Android.
 
 ### Getting the device connected
@@ -368,19 +365,15 @@ defaults), so it is a poor witness for a **UI layout** judgement. Now that the P
 Pro is known-working, prefer the handset for anything about how the app *looks or feels*
 and keep the emulator for build/CI checks and the `x86_64` triple.
 
-Also: the research found Dioxus 0.7.x **crashes below API 30** (`tao` calls the
-API-30-only `getCurrentWindowMetrics`). Both the emulator (API 36) and the handset
-(API 37) are **above** that floor, so **neither can reproduce that bug**. Testing the
-declared `minSdk` 24 needs an API 24–29 system image installed separately.
+Also: both the emulator (API 36) and the handset (API 37) are far above the declared `minSdk`
+24, so neither can reproduce anything that breaks only on older Android (the earlier
+client-stack research found one candidate crashing below API 30 for exactly that reason).
+Testing `minSdk` 24 needs an API 24–29 system image installed separately.
 
 ## Reproducing this setup elsewhere
 
 ```sh
-# JDK 17 (Temurin), no root
-curl -L -o jdk17.tar.gz \
-  "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20%2B8/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20_8.tar.gz"
-tar -xzf jdk17.tar.gz -C ~/.local/share/
-ln -sfn ~/.local/share/jdk-17.0.20+8 ~/.local/share/jdk17
+# JDK 27: the system's OpenJDK (Arch package `jdk-openjdk`), at /usr/lib/jvm/java-27-openjdk
 
 # Android SDK cmdline-tools -> must land at $ANDROID_HOME/cmdline-tools/latest
 curl -L -o cmdline-tools.zip \
@@ -388,7 +381,7 @@ curl -L -o cmdline-tools.zip \
 mkdir -p ~/Android/Sdk/cmdline-tools && unzip -q cmdline-tools.zip -d /tmp/ct
 mv /tmp/ct/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
 
-export JAVA_HOME=~/.local/share/jdk17 ANDROID_HOME=~/Android/Sdk
+export JAVA_HOME=/usr/lib/jvm/java-27-openjdk ANDROID_HOME=~/Android/Sdk
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 yes | sdkmanager --licenses
 sdkmanager "platform-tools" "platforms;android-34" "platforms;android-36" \

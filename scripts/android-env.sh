@@ -6,7 +6,8 @@
 # See docs/environment/android-toolchain.md for what was installed and why
 # these exact versions.
 
-export JAVA_HOME="$HOME/.local/share/jdk17"
+# The same JDK as `cairn.jdk` in android/gradle.properties; a bump changes both.
+export JAVA_HOME="/usr/lib/jvm/java-27-openjdk"
 export ANDROID_HOME="$HOME/Android/Sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 
