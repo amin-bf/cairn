@@ -451,7 +451,8 @@ development control to the Kotlin app.** The *Development* block holds reset and
 only, and is compiled in only when the build is made with a build-time environment variable. A
 session that installs such a build on the handset ends by upgrading it to one made without the
 variable, never by uninstalling. No sync block is drawn until sync is built, and the empty note list
-drops *"or set up sync"*.
+drops *"or set up sync"*. Until the file-surface slice, *This device* holds Appearance alone, and
+reset and a fixture's install ask first in the row.
 
 **If you write a new ADR, add it to this table.** An ADR that is not in this index is invisible to
 the agent it was written for.
