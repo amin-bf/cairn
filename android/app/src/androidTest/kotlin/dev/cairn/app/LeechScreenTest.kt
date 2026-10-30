@@ -531,4 +531,35 @@ class LeechScreenTest {
         }
         assertNotEquals("the confirmation looks the same in both themes", pages[0], pages[1])
     }
+
+    @Test
+    fun suspending_a_row_with_its_question_open_does_not_carry_the_question_to_the_suspended_row() {
+        fixture("leeches")
+        val row = list().active.first()
+        openScreen()
+        leaf("leech-delete-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-delete-warning-${key(row)}")
+        leaf("leech-suspend-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-unsuspend-${key(row)}")
+        assertFalse(exists("leech-delete-confirm-${key(row)}"))
+        // Unsuspended again, the row does not come back asking.
+        leaf("leech-unsuspend-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-suspend-${key(row)}")
+        assertFalse(exists("leech-delete-warning-${key(row)}"))
+    }
+
+    @Test
+    fun a_question_left_open_is_not_armed_again_after_an_edit() {
+        fixture("leeches")
+        val row = list().active.first()
+        openScreen()
+        leaf("leech-delete-${key(row)}").performScrollTo().performClick()
+        waitFor("leech-delete-warning-${key(row)}")
+        leaf("leech-edit-${key(row)}").performScrollTo().performClick()
+        waitFor("editor-heading")
+        rule.runOnUiThread { dispatcher!!.onBackPressed() }
+        waitFor("leech-screen")
+        waitFor("leech-row-${key(row)}")
+        assertFalse(exists("leech-delete-warning-${key(row)}"))
+    }
 }

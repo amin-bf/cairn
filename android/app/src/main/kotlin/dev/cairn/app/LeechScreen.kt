@@ -11,7 +11,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -48,7 +52,10 @@ fun LeechScreen(model: LeechViewModel, onEdit: (noteId: String) -> Unit, onBack:
             s.facts,
             s.refusal,
             s.confirming,
-            onEdit = { onEdit(it.noteId) },
+            onEdit = {
+                model.keep()
+                onEdit(it.noteId)
+            },
             onSuspend = model::suspend,
             onUnsuspend = model::unsuspend,
             onBack = onBack,
@@ -132,14 +139,13 @@ private class RowActions(
 private fun Rows(rows: List<LeechRowFact>, refusal: LeechRefusal?, confirming: LeechRowKey?, actions: RowActions) {
     for ((i, row) in rows.withIndex()) {
         if (i > 0) Spacer(Modifier.height(BetweenRows))
-        val here = LeechRowKey(row.noteId, row.slot)
-        LeechRow(row, refusal?.takeIf { LeechRowKey(it.noteId, it.slot) == here }, confirming == here, actions)
+        LeechRow(row, refusal?.takeIf { it.row == row.key }, asking = confirming == row.key, actions)
     }
 }
 
 /** One card: its prompt (and cost) in a well, and what may be done to it underneath, in words. */
 @Composable
-private fun LeechRow(row: LeechRowFact, refusal: LeechRefusal?, confirming: Boolean, actions: RowActions) {
+private fun LeechRow(row: LeechRowFact, refusal: LeechRefusal?, asking: Boolean, actions: RowActions) {
     val key = "${row.noteId}-${row.slot}"
     Column(Modifier.fillMaxWidth().testTag("leech-row-$key")) {
         CairnWell {
@@ -175,12 +181,17 @@ private fun LeechRow(row: LeechRowFact, refusal: LeechRefusal?, confirming: Bool
                 ),
                 Modifier.testTag("leech-refused-$key"),
                 tier = Tier.Small,
+                color = if (refusal.write == LeechWrite.Delete) Cairn.colors.error else Cairn.colors.body,
             )
         }
-        if (confirming) {
+        if (asking && row.cost != null) {
             Spacer(Modifier.height(gap(1)))
+            // The question grows the row downwards; ask the list to show all of it, *Keep it* included (as the note list does).
+            val inView = remember { BringIntoViewRequester() }
+            LaunchedEffect(Unit) { inView.bringIntoView() }
             // The note's preview, whole: the note is what goes, every card of it (ADR-0050 §2).
             CairnConfirmRow(
+                modifier = Modifier.bringIntoViewRequester(inView),
                 question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(row.notePreview)),
                 confirm = stringResource(R.string.notes_delete),
                 keep = stringResource(R.string.notes_keep_it),

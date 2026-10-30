@@ -16,7 +16,10 @@ data class LeechRowKey(val noteId: String, val slot: UShort)
 enum class LeechWrite { Suspend, Unsuspend, Delete }
 
 /** The row a refused write came from, and which write it was: the refusal is said in that row. */
-data class LeechRefusal(val noteId: String, val slot: UShort, val write: LeechWrite)
+data class LeechRefusal(val row: LeechRowKey, val write: LeechWrite)
+
+/** The row a fact belongs to. */
+val LeechRowFact.key: LeechRowKey get() = LeechRowKey(noteId, slot)
 
 /** What the leech screen shows: the two sections as facts, and the write the store last refused. */
 sealed interface LeechScreenState {
@@ -44,6 +47,10 @@ class LeechViewModel(
     private val _state = MutableStateFlow<LeechScreenState>(LeechScreenState.Loading)
     val state: StateFlow<LeechScreenState> = _state
 
+    /** The row whose *Delete* is asking; kept here so a rotation keeps the question (ADR-0050 §2). */
+    private var confirming: LeechRowKey? = null
+    private var deleting = false
+
     init {
         refresh()
     }
@@ -53,11 +60,12 @@ class LeechViewModel(
         viewModelScope.launch { read(null) }
     }
 
-    private var confirming: LeechRowKey? = null
-
     private suspend fun read(refusal: LeechRefusal?) {
         _state.value = try {
-            LeechScreenState.Ready(owner.use { it.leechList(wallClock()) }, refusal, confirming)
+            val facts = owner.use { it.leechList(wallClock()) }
+            // A question belongs to an active row; once the row is gone or suspended it is not asked again.
+            if (facts.active.none { it.key == confirming }) confirming = null
+            LeechScreenState.Ready(facts, refusal, confirming)
         } catch (_: CairnException) {
             LeechScreenState.Failed
         }
@@ -71,11 +79,11 @@ class LeechViewModel(
 
     /** *Delete* on a row: ask first, in that row, and write nothing (ADR-0050 §2). */
     fun askDelete(row: LeechRowFact) {
-        confirming = LeechRowKey(row.noteId, row.slot)
+        confirming = row.key
         refresh()
     }
 
-    /** *Keep it*: the question and any refusal go, and the note stays. */
+    /** *Keep it*, or leaving the row for the editor: the question and any refusal go, and the note stays. */
     fun keep() {
         confirming = null
         refresh()
@@ -86,6 +94,13 @@ class LeechViewModel(
 
     private fun write(row: LeechRowFact, write: LeechWrite) {
         viewModelScope.launch {
+            // A second tap on *Delete* while the first is in flight would delete a note that is already gone.
+            if (write == LeechWrite.Delete) {
+                if (deleting || confirming != row.key) return@launch
+                deleting = true
+            } else {
+                confirming = null
+            }
             val refusal = try {
                 owner.use {
                     when (write) {
@@ -98,7 +113,9 @@ class LeechViewModel(
                 null
             } catch (_: CairnException) {
                 // A refused delete keeps its question in the row, so the person can try again or keep the note.
-                LeechRefusal(row.noteId, row.slot, write)
+                LeechRefusal(row.key, write)
+            } finally {
+                deleting = false
             }
             read(refusal)
         }
