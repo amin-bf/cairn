@@ -120,6 +120,36 @@ class ReviewViewModel(
         }
     }
 
+    /**
+     * The note on screen may have been edited (the editor was popped, or the app resumed): ask the
+     * sitting to re-read the card. It is the same card edited, or the next one if the edit stopped it
+     * generating, with nothing graded or counted; both are the sitting's rule (ADR-0048 §6). Does
+     * nothing outside a sitting.
+     */
+    fun refresh() {
+        val handle = sitting ?: return
+        if (_state.value !is ReviewScreenState.Sitting) return
+        viewModelScope.launch {
+            try {
+                val now = wallClock()
+                val mono = monotonicClock().toULong()
+                val shown = owner.use {
+                    handle.refresh(now, mono)?.let { card ->
+                        ReviewScreenState.Sitting(
+                            chosen = handle.chosen().toInt(),
+                            graded = handle.graded().toInt(),
+                            card = card,
+                            checkpoint = handle.checkpointDue(mono),
+                        )
+                    }
+                }
+                if (shown == null) load() else _state.value = shown
+            } catch (_: CairnException) {
+                _state.value = ReviewScreenState.Failed
+            }
+        }
+    }
+
     /** *Keep going*: the check-in does not come back this sitting. */
     fun keepGoing() {
         viewModelScope.launch {

@@ -20,7 +20,7 @@ class MainActivity : CairnActivity() {
 
 /** Review: the entrance until a sitting is begun, then the sitting until it ends. */
 @Composable
-fun ReviewScreen(model: ReviewViewModel) {
+fun ReviewScreen(model: ReviewViewModel, onEditNote: (noteId: String) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
         is ReviewScreenState.Loading -> CairnPage {}
@@ -34,6 +34,7 @@ fun ReviewScreen(model: ReviewViewModel) {
             onGrade = model::grade,
             onKeepGoing = model::keepGoing,
             onFinish = model::finishHere,
+            onEditNote = { onEditNote(s.card.noteId) },
         )
         is ReviewScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("review-failed")) }
