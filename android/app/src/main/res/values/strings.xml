@@ -50,6 +50,12 @@
     <string name="notes_new_deck_refused">The deck could not be created.</string>
     <string name="notes_delete_deck_refused">The deck could not be deleted.</string>
     <string name="notes_delete_deck_empty">Delete %1$s? It has no notes in it.</string>
+    <string name="notes_move">Move</string>
+    <string name="notes_delete">Delete</string>
+    <string name="notes_delete_note_question">Delete %1$s? It cannot be undeleted.</string>
+    <string name="notes_cancel_move">Cancel move</string>
+    <string name="notes_placing">Placing</string>
+    <string name="notes_place_here">Place here</string>
     <plurals name="notes_delete_deck_warning">
         <item quantity="one">Delete %1$s? Its %2$d note is deleted with it, and cannot be undeleted.</item>
         <item quantity="other">Delete %1$s? Its %2$d notes are deleted with it, and cannot be undeleted.</item>
