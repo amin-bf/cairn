@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * The one collection of the process (ADR-0046 §7): opened once, held for the process's life, and
@@ -17,7 +18,13 @@ import kotlinx.coroutines.withContext
  * never asks the platform for them. Everything Cairn persists goes through the store (§6), so this
  * owner keeps no file of its own.
  */
-class CollectionOwner(private val context: Context) {
+class CollectionOwner(
+    private val context: Context,
+    // Where the collection lives: the app's two directories unless a test gives its own. They are
+    // resolved when the collection is first opened, because asking the platform for one is disk work.
+    private val dataDir: File? = null,
+    private val stateDir: File? = null,
+) {
     private val lock = Mutex()
     private var handle: CollectionHandle? = null
 
@@ -29,8 +36,8 @@ class CollectionOwner(private val context: Context) {
     private suspend fun opened(): CollectionHandle = lock.withLock {
         check(Looper.myLooper() != Looper.getMainLooper()) { "the collection was reached on the main thread" }
         handle ?: CollectionHandle.open(
-            context.filesDir.absolutePath,
-            context.noBackupFilesDir.absolutePath,
+            (dataDir ?: context.filesDir).absolutePath,
+            (stateDir ?: context.noBackupFilesDir).absolutePath,
         ).also { handle = it }
     }
 }

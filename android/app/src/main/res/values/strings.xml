@@ -1,10 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Cairn</string>
-    <!-- The placeholder screen of the walking skeleton: one fact read through the binding. -->
-    <plurals name="due_count">
-        <item quantity="one">%d card due</item>
-        <item quantity="other">%d cards due</item>
+
+    <!-- Review's entrance. The sentences are the egui build's, word for word. -->
+    <string name="review_heading">Review</string>
+    <string name="review_empty">No cards yet. Add a note to start reviewing.</string>
+    <string name="review_caught_up">All caught up.</string>
+    <string name="review_caught_up_note">Nothing is due right now.</string>
+    <string name="review_new_deck">A fresh deck. These cards are new — start whenever you like.</string>
+    <plurals name="review_new_only">
+        <item quantity="one">Nothing due right now. One new card, whenever you like.</item>
+        <item quantity="other">Nothing due right now. %d new cards, whenever you like.</item>
     </plurals>
-    <string name="due_unavailable">The collection could not be opened</string>
+    <string name="review_due_backlog">Plenty due — pick a comfortable size, the rest will keep.</string>
+    <string name="review_due_plus_new">%1$d due, plus %2$d new. Pick a size.</string>
+    <string name="review_due">%1$d due. Pick a size.</string>
+    <string name="review_start_all">Start — all %1$d</string>
+    <string name="review_start_one">Start — the one card</string>
+    <string name="review_shorter">or a shorter sitting:</string>
+
+    <!-- Until the sitting is drawn: what beginning one shows. -->
+    <string name="review_sitting_stub">A sitting of %1$d</string>
+    <string name="review_unavailable">The collection could not be opened</string>
 </resources>
