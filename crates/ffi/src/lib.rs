@@ -535,6 +535,18 @@ mod tests {
         let facts = handle.review_state(NOW).unwrap();
         assert_eq!(facts.state, ReviewStateKind::NewDeck { new: 5 });
         assert!(facts.shorter.is_empty());
+
+        // `open` seeds a first-launch deck, so the empty collection is only reached by name.
+        let (handle, _d, _s) = benched("empty");
+        let facts = handle.review_state(NOW).unwrap();
+        assert_eq!(facts.state, ReviewStateKind::Empty);
+        assert_eq!((facts.due, facts.new, facts.available), (0, 0, 0));
+        assert_eq!(handle.note_count().unwrap(), 0);
+
+        let (handle, _d, _s) = benched("new-only");
+        let facts = handle.review_state(NOW).unwrap();
+        assert_eq!(facts.state, ReviewStateKind::NewOnly { new: 2 });
+        assert_eq!((facts.due, facts.new, facts.available), (0, 2, 2));
     }
 
     #[test]
