@@ -1,11 +1,11 @@
 package dev.cairn.app
 
-import android.app.Activity
 import android.content.res.Configuration
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
@@ -80,11 +80,10 @@ abstract class CairnActivity : ComponentActivity() {
  * [dark], so a switch of the phone's theme while the app is open changes them too.
  */
 @Composable
-fun SystemBarIcons(dark: Boolean) {
+internal fun SystemBarIcons(dark: Boolean) {
     val view = LocalView.current
-    if (view.isInEditMode) return
+    val window = LocalActivity.current?.window ?: return
     SideEffect {
-        val window = (view.context as Activity).window
         val bars = WindowCompat.getInsetsController(window, view)
         bars.isAppearanceLightStatusBars = !dark
         bars.isAppearanceLightNavigationBars = !dark

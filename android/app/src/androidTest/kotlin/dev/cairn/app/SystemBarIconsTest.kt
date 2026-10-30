@@ -1,6 +1,8 @@
 package dev.cairn.app
 
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
+import androidx.test.core.app.ActivityScenario
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.core.view.WindowCompat
@@ -23,6 +25,28 @@ class SystemBarIconsTest {
         val window = rule.activity.window
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         return controller.isAppearanceLightStatusBars && controller.isAppearanceLightNavigationBars
+    }
+
+    /** The real activity wires it: with no stored choice it follows the platform's theme. */
+    @Test
+    fun the_app_activity_applies_the_icons_for_the_platform_theme() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var systemDark = false
+            var lightIcons = false
+            // The content is composed only once the stored choice is read, so poll from here.
+            val deadline = System.currentTimeMillis() + 30_000
+            do {
+                scenario.onActivity { activity ->
+                    systemDark = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                        Configuration.UI_MODE_NIGHT_YES
+                    lightIcons = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                        .isAppearanceLightStatusBars
+                }
+                if (lightIcons == !systemDark) break
+                Thread.sleep(100)
+            } while (System.currentTimeMillis() < deadline)
+            assertEquals(!systemDark, lightIcons)
+        }
     }
 
     @Test
