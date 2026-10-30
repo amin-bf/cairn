@@ -158,6 +158,17 @@ class LeechPointerTest {
     }
 
     @Test
+    fun not_now_reads_the_entrances_counts_afresh() {
+        fixture("crossing")
+        showReview()
+        forgetTheCrossingCard()
+        waitFor("pointer-dismiss")
+        rule.onNodeWithTag("pointer-dismiss").performClick()
+        waitFor("leech-entrance")
+        rule.onNodeWithTag("leech-entrance").assertTextEquals("Leeches (1)")
+    }
+
+    @Test
     fun many_cards_are_counted_in_the_plural() {
         showPointer(3)
         assertEquals("3 cards are costing you a lot. Take a look?", textOf("leech-pointer"))

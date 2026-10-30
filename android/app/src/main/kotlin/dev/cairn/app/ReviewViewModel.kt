@@ -27,9 +27,9 @@ sealed interface ReviewScreenState {
     /**
      * A sitting ended with [crossed] cards over the leech floor: shown in the entrance's place until it is
      * answered. Held here only, never in saved state, so a rotation keeps it and a process death drops it
-     * (ADR-0050 §4). [facts] are the entrance's, shown once it is answered.
+     * (ADR-0050 §4). The entrance's facts are read when it is answered, so they are never stale.
      */
-    data class Pointer(val facts: ReviewFacts, val crossed: Int) : ReviewScreenState
+    data class Pointer(val crossed: Int) : ReviewScreenState
 
     data object Failed : ReviewScreenState
 }
@@ -56,10 +56,12 @@ class ReviewViewModel(
         viewModelScope.launch { load() }
     }
 
-    private suspend fun load() {
+    /** Show the entrance, or — when a sitting just ended with [crossed] cards over the floor — the pointer in its place. */
+    private suspend fun load(crossed: Int = 0) {
         sitting = null
         _state.value = try {
-            ReviewScreenState.Entrance(owner.use { it.reviewState(wallClock()) })
+            val facts = owner.use { it.reviewState(wallClock()) }
+            if (crossed > 0) ReviewScreenState.Pointer(crossed) else ReviewScreenState.Entrance(facts)
         } catch (_: CairnException) {
             ReviewScreenState.Failed
         }
@@ -90,16 +92,7 @@ class ReviewViewModel(
                 if (card == null) crossed = handle.leechesCrossed(now).toInt()
                 card?.let { sittingOf(handle, it, mono) }
             }
-            if (shown != null) {
-                _state.value = shown
-                return
-            }
-            load()
-            // The sitting ended with cards over the leech floor: the pointer takes the entrance's place.
-            val entrance = _state.value
-            if (crossed > 0 && entrance is ReviewScreenState.Entrance) {
-                _state.value = ReviewScreenState.Pointer(entrance.facts, crossed)
-            }
+            if (shown == null) load(crossed) else _state.value = shown
         } catch (_: CairnException) {
             _state.value = ReviewScreenState.Failed
         }
@@ -167,8 +160,10 @@ class ReviewViewModel(
 
     /** *Show me* or *Not now*: either answer clears the pointer for good and the entrance takes its place. */
     fun answerPointer() {
-        val pointer = _state.value as? ReviewScreenState.Pointer ?: return
-        _state.value = ReviewScreenState.Entrance(pointer.facts)
+        if (_state.value !is ReviewScreenState.Pointer) return
+        // Loading at once, so a second tap finds nothing to press; the facts are read afresh.
+        _state.value = ReviewScreenState.Loading
+        viewModelScope.launch { load() }
     }
 
     /** *Keep going*: the check-in does not come back this sitting. */
