@@ -197,6 +197,12 @@ pub(crate) const SPECIMENS: [(&str, &str); 9] = [
 /// Install the shipped faces into `ctx`. Call **once, on the first frame** — see the module header
 /// and [`crate::CairnApp`].
 pub fn install(ctx: &egui::Context) {
+    ctx.set_fonts(definitions());
+}
+
+/// The faces and the order each family reaches them. Its own function so the native client's token
+/// guard (`kotlin_tokens`) reads the very list the desktop installs.
+pub(crate) fn definitions() -> FontDefinitions {
     let mut fonts = FontDefinitions::default();
 
     // Regular faces, appended to the existing families so egui's own faces still win where they
@@ -263,7 +269,7 @@ pub fn install(ctx: &egui::Context) {
         list.extend(icons.iter().map(|&(name, _)| name.into()));
     }
 
-    ctx.set_fonts(fonts);
+    fonts
 }
 
 #[cfg(test)]

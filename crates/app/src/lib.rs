@@ -19,6 +19,8 @@ pub mod controls;
 pub mod fonts;
 pub mod frame;
 pub mod keyboard;
+#[cfg(test)]
+mod kotlin_tokens;
 pub mod motion;
 pub mod platform;
 mod screens;
