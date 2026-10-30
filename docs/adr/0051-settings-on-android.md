@@ -81,6 +81,27 @@ to name it, and nothing is published from Android before then.
 The sentence offers what the screen can reach. *Import one* stays because the file-surface slice
 brings import.
 
+### 5. Until the file-surface slice, *This device* holds Appearance alone
+
+> *Decided at the spec round, 30.10.2026 ([#232](https://github.com/amin-bf/cairn/issues/232)),
+> the owner accepting the recommendation.* The *Files* block is not drawn, not even as an empty
+> heading, until the file-surface slice brings *Open a file…* (ADR-0047 §1). *This device* keeps its
+> heading and caption over Appearance alone.
+
+A heading with nothing under it is a control that leads nowhere in all but name (§3's rule). The
+group stays named because what it says is true of Appearance, and the *Files* block joins it later.
+
+### 6. Reset and a fixture's install ask first, in the row
+
+> *Decided at the spec round, 30.10.2026 ([#232](https://github.com/amin-bf/cairn/issues/232)),
+> the owner accepting the recommendation.* Pressing reset, or a fixture on the bench, turns that row
+> into a question, *Reset the collection to a first launch?* or *Replace the collection with
+> ⟨fixture⟩?*, with the action and *Keep it*. Nothing is replaced until the action is pressed.
+
+Either one replaces the whole collection, and on the handset both sit in a scrolling page under a
+thumb, which is ADR-0048 §4's reason for confirming a note's delete in its row. The desktop keeps its
+one-tap controls.
+
 ## Amendments to accepted ADRs
 
 All on Android only; the desktop reads each as written.
