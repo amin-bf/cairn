@@ -17,15 +17,15 @@ android {
     buildFeatures { compose = true }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_24
-        targetCompatibility = JavaVersion.VERSION_24
+        sourceCompatibility = JavaVersion.toVersion(property("cairn.bytecode")!!)
+        targetCompatibility = JavaVersion.toVersion(property("cairn.bytecode")!!)
     }
 
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 
-// Compiles on JDK 27; the bytecode target stops at 24, the newest JVM target Kotlin 2.2.10 knows.
-kotlin { jvmToolchain(27) }
+// The JDK and bytecode target are `cairn.jdk` and `cairn.bytecode` in gradle.properties.
+kotlin { jvmToolchain(property("cairn.jdk").toString().toInt()) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.04.01")
