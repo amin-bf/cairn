@@ -59,9 +59,9 @@ class ReleaseBuildTest {
             try {
                 handle.installFixture("no-such-fixture", now)
                 fail("an unknown fixture must be refused")
-            } catch (_: CairnException) {
-                // Caught as the binding's own type: the keep leaves the exception classes the Rust
-                // side constructs by name intact.
+            } catch (_: CairnException.UnknownFixture) {
+                // Caught as the binding's own variant: the keep leaves the exception classes the Rust
+                // side constructs by name intact, nested ones included.
             }
         }
     }

@@ -42,6 +42,9 @@ class ReviewTest {
     fun the_review_state_arrives_as_facts() {
         withFixture("caught-up") { assertEquals(ReviewStateKind.CaughtUp, it.reviewState(now).state) }
         withFixture("leeches") { assertEquals(3u, it.reviewState(now).leeches) }
+        // `open` seeds a first-launch deck, so these two are only reached by name.
+        withFixture("empty") { assertEquals(ReviewStateKind.Empty, it.reviewState(now).state) }
+        withFixture("new-only") { assertEquals(ReviewStateKind.NewOnly(2u), it.reviewState(now).state) }
         withFixture("backlog") {
             val facts = it.reviewState(now)
             assertTrue(facts.backlog)
@@ -67,11 +70,11 @@ class ReviewTest {
                 assertFalse(shown.isNew)
                 assertTrue(shown.previews.good >= 1u)
 
-                // Graded before the reveal: refused, crossing as CairnException.
+                // Graded before the reveal: refused, crossing as the typed reason and no sentence.
                 try {
                     sitting.grade(Grade.GOOD, 2_500uL, now)
                     fail("a grade before the reveal is refused")
-                } catch (_: CairnException) {
+                } catch (_: CairnException.NotRevealed) {
                 }
 
                 sitting.reveal()
@@ -151,14 +154,33 @@ class ReviewTest {
     }
 
     @Test
-    fun an_unknown_fixture_crosses_as_cairn_exception() {
+    fun a_reveal_or_grade_with_no_card_on_screen_is_refused_as_no_card_shown() {
+        withFixture("backlog") { handle ->
+            handle.startSitting(5u, 0uL, now).use { sitting ->
+                try {
+                    sitting.reveal()
+                    fail("a reveal with no card shown is refused")
+                } catch (_: CairnException.NoCardShown) {
+                }
+                try {
+                    sitting.grade(Grade.GOOD, 1uL, now)
+                    fail("a grade with no card shown is refused")
+                } catch (_: CairnException.NoCardShown) {
+                }
+            }
+        }
+    }
+
+    @Test
+    fun an_unknown_fixture_crosses_as_unknown_fixture_naming_it() {
         val root = File(context.cacheDir, "review-unknown-${System.nanoTime()}")
         try {
             CollectionHandle.open(File(root, "files").absolutePath, File(root, "no_backup").absolutePath).use {
                 try {
                     it.installFixture("no-such-fixture", now)
                     fail("an unknown fixture is refused")
-                } catch (_: CairnException) {
+                } catch (e: CairnException.UnknownFixture) {
+                    assertEquals("no-such-fixture", e.name)
                 }
             }
         } finally {

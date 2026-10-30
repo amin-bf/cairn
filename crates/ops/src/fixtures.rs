@@ -274,11 +274,19 @@ pub enum Fixture {
     /// *"card 7"* — the unnameable one the ADR says is **shown, never hidden**, which is what a note
     /// switched back out of an acquired kind leaves behind (ADR-0017 §6).
     Dormant,
+    /// **No cards at all** — Review's `Empty` state. The shipping `open` seeds a first-launch deck, so
+    /// nothing a person does reaches it by chance; the binding's tests and a capture reach it here.
+    /// It writes nothing, which is the whole fixture: the install wipes the collection first.
+    Empty,
+    /// **Nothing due, something reviewed, and new cards still on offer** — Review's `NewOnly` state,
+    /// the ordinary shape of an afternoon once the day's repeats are done (ADR-0011 §2). Three
+    /// words passed and scheduled ahead (history, so it is not `NewDeck`), two never seen.
+    NewOnly,
 }
 
 impl Fixture {
     /// Every fixture, in the order the Settings block draws them.
-    pub const ALL: [Fixture; 9] = [
+    pub const ALL: [Fixture; 11] = [
         Fixture::CaughtUp,
         Fixture::Leeches,
         Fixture::Crossing,
@@ -288,6 +296,8 @@ impl Fixture {
         Fixture::Decks,
         Fixture::Persian,
         Fixture::Dormant,
+        Fixture::Empty,
+        Fixture::NewOnly,
     ];
 
     /// The name the harness and the storyboard use. Stable — a storyboard names its fixture, so
@@ -303,6 +313,8 @@ impl Fixture {
             Fixture::Decks => "decks",
             Fixture::Persian => "persian",
             Fixture::Dormant => "dormant",
+            Fixture::Empty => "empty",
+            Fixture::NewOnly => "new-only",
         }
     }
 
@@ -318,6 +330,8 @@ impl Fixture {
             Fixture::Decks => "Decks, and Persian",
             Fixture::Persian => "Persian cards",
             Fixture::Dormant => "Dormant cards",
+            Fixture::Empty => "No cards",
+            Fixture::NewOnly => "New cards only",
         }
     }
 
@@ -333,6 +347,8 @@ impl Fixture {
             Fixture::Decks => "the deck filter with decks in it, and a right-to-left row",
             Fixture::Persian => "a right-to-left prompt on the Review card, and its badge side",
             Fixture::Dormant => "a dormant line, a pane with nothing live, and the edit warning",
+            Fixture::Empty => "Review's empty state, which a first-launch seed never reaches",
+            Fixture::NewOnly => "Review with nothing due and only never-seen cards left",
         }
     }
 
@@ -485,6 +501,16 @@ impl Fixture {
                 let returned = note(coll, "le hêtre", "the beech")?;
                 history.passes(returned, &SCHEDULED_AHEAD);
                 history.passes(CardRef::new(returned.note, STRANGER_SLOT), &SCHEDULED_AHEAD);
+            }
+            // Nothing to write: the collection is empty already.
+            Fixture::Empty => {}
+            // **History on three, none on two.** `caught_up` passes the first three words ahead; the
+            // next two are plain new notes, which the rate introduces.
+            Fixture::NewOnly => {
+                caught_up(coll, &mut history, 3)?;
+                for (front, back) in CAUGHT_UP_WORDS.iter().skip(3).take(2) {
+                    note(coll, front, back)?;
+                }
             }
         }
         history.write(coll, now_ms)?;
@@ -649,6 +675,23 @@ impl Fixture {
                 _ => Some(
                     "five new cards, three of them Persian, on a deck nothing has been reviewed on",
                 ),
+            },
+            Fixture::Empty => match reached {
+                Reached {
+                    cards: 0,
+                    state: ReviewState::Empty,
+                    ..
+                } => None,
+                _ => Some("no cards at all"),
+            },
+            Fixture::NewOnly => match reached {
+                Reached {
+                    due: 0,
+                    leeches: 0,
+                    state: ReviewState::NewOnly { new: 2 },
+                    ..
+                } => None,
+                _ => Some("nothing due, two never-seen cards left, and history behind them"),
             },
             Fixture::Dormant => match reached {
                 Reached {
@@ -1476,7 +1519,7 @@ mod tests {
                 .install(&mut coll, NOW_MS)
                 .unwrap_or_else(|e| panic!("{}: {e}", fixture.key()));
             assert!(
-                reached.cards > 0,
+                reached.cards > 0 || fixture == Fixture::Empty,
                 "{}: a fixture with no cards is not a fixture",
                 fixture.key()
             );

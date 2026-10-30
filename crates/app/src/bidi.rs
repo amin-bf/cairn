@@ -688,6 +688,80 @@ mod tests {
         assert_eq!(ls.format.font_id.family, egui::FontFamily::Monospace);
     }
 
+    /// **The binding's card runs are what the egui card draws.** `review::runs` is what crosses to
+    /// Kotlin; `markdown_job` is what the desktop draws. They are two readings of one parse, so this
+    /// holds them to each other character by character — the face (body, bold or monospace) and the
+    /// slant — rather than to `markdown::parse`, which both start from. Spaces are skipped: `job`
+    /// draws a gap in the style of the word after it, which is invisible, and the runs keep it with
+    /// the word before.
+    ///
+    /// **The one deliberate difference is granularity.** `job` styles a word by its first byte (see
+    /// `markdown`'s note), so a word that mixes styles — `un**bold**`, or literal stars left standing
+    /// at a word's edge — takes the leading one on the desktop, while the runs carry each character's
+    /// own. The corpus below is therefore word-aligned; the runs are the more exact of the two.
+    #[test]
+    fn the_runs_that_cross_the_binding_are_what_the_egui_card_draws() {
+        use cairn_ops::review::{RunStyle, runs};
+
+        let base = FontId::new(20.0, egui::FontFamily::Proportional);
+        let drawn = |text: &str| -> Vec<(char, egui::FontFamily, bool)> {
+            let job = markdown_job(text, base.clone(), Color32::WHITE);
+            job.sections
+                .iter()
+                .flat_map(|s| {
+                    let (a, b): (usize, usize) =
+                        (s.byte_range.start.into(), s.byte_range.end.into());
+                    let (family, italics) = (s.format.font_id.family.clone(), s.format.italics);
+                    job.text[a..b]
+                        .chars()
+                        .filter(|c| !c.is_whitespace())
+                        .map(move |c| (c, family.clone(), italics))
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
+        let crossed = |text: &str| -> Vec<(char, egui::FontFamily, bool)> {
+            runs(text)
+                .into_iter()
+                .flat_map(|run| {
+                    let (family, italics) = match run.style {
+                        RunStyle::Plain => (egui::FontFamily::Proportional, false),
+                        RunStyle::Bold => (crate::fonts::bold_family(), false),
+                        RunStyle::Italic => (egui::FontFamily::Proportional, true),
+                        RunStyle::BoldItalic => (crate::fonts::bold_family(), true),
+                        RunStyle::Code => (egui::FontFamily::Monospace, false),
+                        RunStyle::CodeItalic => (egui::FontFamily::Monospace, true),
+                    };
+                    run.text
+                        .chars()
+                        .filter(|c| !c.is_whitespace())
+                        .map(move |c| (c, family.clone(), italics))
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
+
+        for text in [
+            "plain words",
+            "a **b** *c* `d` e",
+            "**a *b* c**",
+            "*`slanted code`*",
+            "**`bold code`**",
+            "`**literal**`",
+            "2 * 3 and a ** b",
+            "un-closed *marker",
+        ] {
+            assert_eq!(crossed(text), drawn(text), "{text:?}");
+        }
+        // The two readings agree on the cases that matter, not merely with each other: an
+        // italic-wrapped code span is monospace *and* slanted, as on the desktop.
+        assert_eq!(
+            runs("*`x`*")[0].style,
+            RunStyle::CodeItalic,
+            "monospace and slanted"
+        );
+    }
+
     #[test]
     fn every_section_indexes_real_text() {
         // Guards the invariant epaint relies on: each section's byte range must land on a character
