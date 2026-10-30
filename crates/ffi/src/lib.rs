@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::scheduling::Grade as CoreGrade;
+use cairn_ops::editor::{self, Editing};
 use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::review::{self, Review};
 use cairn_ops::session::ReviewState as CoreState;
@@ -313,12 +314,232 @@ impl CollectionHandle {
         let deck = parse_deck(&deck)?;
         Ok(notes::delete_deck(&mut self.collection(), deck)? as u64)
     }
+
+    /// Open the editor on a stored note. Refused for an id that names no note.
+    pub fn edit_note(self: Arc<Self>, note: String) -> Result<Arc<EditingHandle>, CairnError> {
+        let id = parse_note(&note)?;
+        let editing = Editing::for_note(&self.collection(), id);
+        if editing.kind.is_empty() {
+            return Err(CairnError::Failed {
+                reason: format!("{note:?} is not a stored note"),
+            });
+        }
+        Ok(EditingHandle::wrap(self, editing, false))
+    }
+
+    /// Open the editor on a new draft of `kind`, filed to `deck` when it is born. Nothing is stored
+    /// until a field has text (ADR-0021 §7).
+    pub fn new_draft(
+        self: Arc<Self>,
+        kind: String,
+        deck: Option<String>,
+    ) -> Result<Arc<EditingHandle>, CairnError> {
+        Ok(EditingHandle::draft(
+            self,
+            &kind,
+            parse_optional_deck(deck)?,
+        ))
+    }
+}
+
+/// One field of the editor: its name, what the store holds, and whether Enter types a new line in it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FieldFact {
+    pub name: String,
+    pub value: String,
+    pub multiline: bool,
+}
+
+/// A field's text as Kotlin holds it, handed over to settle.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FieldValue {
+    pub name: String,
+    pub value: String,
+}
+
+/// The editor on one note, as the sitting is a handle (ADR-0046 §7). The text being typed is Kotlin's;
+/// this holds the rules around it: when a note is born, what settles, when the idle window falls due.
+#[derive(uniffi::Object)]
+pub struct EditingHandle {
+    owner: Arc<CollectionHandle>,
+    editing: Mutex<Editing>,
+    /// Opened as a draft: the heading's fact, fixed for the screen's life.
+    new: bool,
+}
+
+impl EditingHandle {
+    fn wrap(owner: Arc<CollectionHandle>, editing: Editing, new: bool) -> Arc<Self> {
+        Arc::new(Self {
+            owner,
+            editing: Mutex::new(editing),
+            new,
+        })
+    }
+
+    fn draft(owner: Arc<CollectionHandle>, kind: &str, deck: Option<DeckId>) -> Arc<Self> {
+        let mut editing = Editing::new_draft(kind);
+        editing.deck = deck;
+        Self::wrap(owner, editing, true)
+    }
+
+    fn editing(&self) -> MutexGuard<'_, Editing> {
+        self.editing.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Put Kotlin's buffers into the editor's, for the names the kind has.
+    fn take_values(editing: &mut Editing, values: &[FieldValue]) {
+        for (name, buffer) in &mut editing.fields {
+            if let Some(v) = values.iter().find(|v| &v.name == name) {
+                buffer.clone_from(&v.value);
+            }
+        }
+    }
+
+    fn settle(&self, editing: &mut Editing) {
+        editing.note = editor::settle_all(
+            &mut self.owner.collection(),
+            editing.note,
+            &editing.kind,
+            &editing.fields,
+            editing.deck,
+        );
+    }
+}
+
+#[uniffi::export]
+impl EditingHandle {
+    /// Whether this editor was opened as a draft — the heading reads *New note* or *Edit note*.
+    pub fn is_new(&self) -> bool {
+        self.new
+    }
+
+    /// The note's id once it exists: always for a stored note, after its first field for a draft.
+    pub fn note_id(&self) -> Option<String> {
+        self.editing().note.map(|n| n.to_canonical())
+    }
+
+    pub fn kind(&self) -> String {
+        self.editing().kind.clone()
+    }
+
+    /// The kinds the dropdown offers (ADR-0012 §2).
+    pub fn kind_options(&self) -> Vec<String> {
+        editor::kind_options(&self.editing().kind)
+    }
+
+    /// The deck the note is filed under, by id.
+    pub fn deck(&self) -> Option<String> {
+        self.editing().deck.map(|d| d.to_canonical())
+    }
+
+    /// The fields in kind order, each with the value the editor holds.
+    pub fn fields(&self) -> Vec<FieldFact> {
+        let editing = self.editing();
+        editing
+            .fields
+            .iter()
+            .map(|(name, value)| FieldFact {
+                multiline: editing.kind == "cloze" && name == "Text",
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect()
+    }
+
+    /// A field changed to `value` at `now_mono_ms`: restarts the idle window (ADR-0021 §7).
+    pub fn touched(&self, field: String, value: String, now_mono_ms: u64) {
+        let mut editing = self.editing();
+        Self::take_values(&mut editing, &[FieldValue { name: field, value }]);
+        editing.touched(now_mono_ms);
+    }
+
+    /// A field lost focus: commit its value. A draft is born here if the value is not empty.
+    pub fn commit_field(&self, field: String, value: String) -> Result<(), CairnError> {
+        let mut editing = self.editing();
+        Self::take_values(
+            &mut editing,
+            &[FieldValue {
+                name: field.clone(),
+                value: value.clone(),
+            }],
+        );
+        let born_before = editing.note.is_some();
+        let note = editor::commit_field(
+            &mut self.owner.collection(),
+            editing.note,
+            &editing.kind,
+            &field,
+            &value,
+        )?;
+        editing.note = note;
+        if !born_before && let Some(id) = note {
+            editor::set_note_deck(&mut self.owner.collection(), id, editing.deck)?;
+        }
+        Ok(())
+    }
+
+    /// Settle every field, writing only where the value differs from the store. Returns the note id.
+    pub fn settle_all(&self, values: Vec<FieldValue>) -> Result<Option<String>, CairnError> {
+        let mut editing = self.editing();
+        Self::take_values(&mut editing, &values);
+        self.settle(&mut editing);
+        Ok(editing.note.map(|n| n.to_canonical()))
+    }
+
+    /// The ticking check: settle once the buffers have sat still for the idle window. Returns the
+    /// milliseconds until it falls due, or `None` when nothing is pending.
+    pub fn settle_if_idle(&self, now_mono_ms: u64) -> Result<Option<u64>, CairnError> {
+        let left = self.editing().settle_if_idle(
+            &mut self.owner.collection(),
+            now_mono_ms,
+            editor::SETTLE_AFTER_IDLE,
+        );
+        Ok(left.map(|d| d.as_millis() as u64))
+    }
+
+    /// Choose another kind. A stored note is written at once; the fields rebuild, carrying the values
+    /// whose names the new kind shares.
+    pub fn switch_kind(&self, kind: String) -> Result<(), CairnError> {
+        let mut editing = self.editing();
+        if editing.kind == kind {
+            return Ok(());
+        }
+        self.settle(&mut editing);
+        if let Some(id) = editing.note {
+            notes::set_kind(&mut self.owner.collection(), id, &kind)?;
+        }
+        editing.switch_kind(&kind);
+        Ok(())
+    }
+
+    /// Choose a deck (or none). A stored note is written at once; a draft holds it until it is born.
+    pub fn set_deck(&self, deck: Option<String>) -> Result<(), CairnError> {
+        let deck = parse_optional_deck(deck)?;
+        let mut editing = self.editing();
+        if let Some(id) = editing.note {
+            editor::set_note_deck(&mut self.owner.collection(), id, deck)?;
+        }
+        editing.deck = deck;
+        Ok(())
+    }
+
+    /// *New note*: settle this one, then open a fresh draft carrying its kind and deck.
+    pub fn new_note(&self, values: Vec<FieldValue>) -> Result<Arc<EditingHandle>, CairnError> {
+        let mut editing = self.editing();
+        Self::take_values(&mut editing, &values);
+        self.settle(&mut editing);
+        Ok(Self::draft(self.owner.clone(), &editing.kind, editing.deck))
+    }
 }
 
 fn parse_note(id: &str) -> Result<NoteId, CairnError> {
     NoteId::parse_canonical(id).ok_or_else(|| CairnError::Failed {
         reason: format!("{id:?} is not a note id"),
     })
+}
+
+fn parse_optional_deck(id: Option<String>) -> Result<Option<DeckId>, CairnError> {
+    id.as_deref().map(parse_deck).transpose()
 }
 
 fn parse_deck(id: &str) -> Result<DeckId, CairnError> {
@@ -1186,6 +1407,177 @@ mod tests {
             }),
             "`panic = \"abort\"` in any profile turns a Rust panic into a process abort"
         );
+    }
+
+    fn blank_bench() -> (Arc<CollectionHandle>, TempDir, TempDir) {
+        benched("empty")
+    }
+
+    fn value(name: &str, text: &str) -> FieldValue {
+        FieldValue {
+            name: name.to_owned(),
+            value: text.to_owned(),
+        }
+    }
+
+    fn stored(handle: &Arc<CollectionHandle>, name: &str) -> String {
+        let note = handle
+            .note_list(DeckSelector::All, String::new())
+            .unwrap()
+            .rows[0]
+            .note_id
+            .clone();
+        let editing = handle.clone().edit_note(note).unwrap();
+        editing
+            .fields()
+            .into_iter()
+            .find(|f| f.name == name)
+            .unwrap()
+            .value
+    }
+
+    #[test]
+    fn an_untouched_draft_leaves_nothing_behind() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        assert!(editing.is_new());
+        assert_eq!(editing.note_id(), None);
+        let born = editing
+            .settle_all(vec![value("Front", ""), value("Back", "")])
+            .unwrap();
+        assert_eq!(born, None);
+        assert_eq!(handle.note_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_draft_is_born_on_its_first_field_and_reopening_shows_the_text() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        editing
+            .commit_field("Front".into(), "le chat".into())
+            .unwrap();
+        assert_eq!(handle.note_count().unwrap(), 1);
+        let id = editing.note_id().expect("born");
+        editing
+            .commit_field("Back".into(), "the cat".into())
+            .unwrap();
+        let again = handle.clone().edit_note(id).unwrap();
+        assert!(!again.is_new());
+        let fields = again.fields();
+        assert_eq!(
+            fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
+            ["Front", "Back"]
+        );
+        assert_eq!(fields[0].value, "le chat");
+        assert_eq!(fields[1].value, "the cat");
+    }
+
+    #[test]
+    fn persian_text_is_stored_byte_for_byte() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        let persian = "سلام \u{200c}دنیا";
+        editing
+            .commit_field("Front".into(), persian.into())
+            .unwrap();
+        assert_eq!(stored(&handle, "Front").as_bytes(), persian.as_bytes());
+    }
+
+    #[test]
+    fn the_idle_settle_falls_due_two_seconds_after_the_last_edit() {
+        let (handle, _d, _s) = blank_bench();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        editing.touched("Front".into(), "mot".into(), 10_000);
+        assert_eq!(editing.settle_if_idle(11_000).unwrap(), Some(1_000));
+        assert_eq!(handle.note_count().unwrap(), 0);
+        // Another edit restarts the window.
+        editing.touched("Front".into(), "mots".into(), 11_500);
+        assert_eq!(editing.settle_if_idle(13_000).unwrap(), Some(500));
+        assert_eq!(editing.settle_if_idle(13_500).unwrap(), None);
+        assert_eq!(handle.note_count().unwrap(), 1);
+        assert_eq!(stored(&handle, "Front"), "mots");
+        // It fires once per pause.
+        assert_eq!(editing.settle_if_idle(20_000).unwrap(), None);
+    }
+
+    #[test]
+    fn a_draft_holds_its_deck_until_the_note_is_born() {
+        let (handle, _d, _s) = blank_bench();
+        let deck = handle.create_deck("Français".into()).unwrap();
+        let editing = handle
+            .clone()
+            .new_draft("basic".into(), Some(deck.clone()))
+            .unwrap();
+        assert_eq!(editing.deck(), Some(deck.clone()));
+        editing.commit_field("Front".into(), "x".into()).unwrap();
+        let rows = handle
+            .note_list(DeckSelector::Deck { id: deck }, String::new())
+            .unwrap()
+            .rows;
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn changing_deck_and_kind_on_a_stored_note_writes_at_once() {
+        let (handle, _d, _s) = blank_bench();
+        let deck = handle.create_deck("Persian".into()).unwrap();
+        let editing = handle.clone().new_draft("basic".into(), None).unwrap();
+        editing.commit_field("Front".into(), "x".into()).unwrap();
+        editing.set_deck(Some(deck.clone())).unwrap();
+        assert_eq!(
+            handle
+                .note_list(DeckSelector::Deck { id: deck }, String::new())
+                .unwrap()
+                .rows
+                .len(),
+            1
+        );
+        assert!(editing.kind_options().contains(&"cloze".to_owned()));
+        editing.switch_kind("cloze".into()).unwrap();
+        assert_eq!(editing.kind(), "cloze");
+        let fields = editing.fields();
+        assert_eq!(fields.len(), 1);
+        assert!(fields[0].multiline);
+        let again = handle
+            .clone()
+            .edit_note(editing.note_id().unwrap())
+            .unwrap();
+        assert_eq!(again.kind(), "cloze");
+        assert!(!editing_fields_multiline(&handle, "basic"));
+    }
+
+    fn editing_fields_multiline(handle: &Arc<CollectionHandle>, kind: &str) -> bool {
+        handle
+            .clone()
+            .new_draft(kind.into(), None)
+            .unwrap()
+            .fields()
+            .iter()
+            .any(|f| f.multiline)
+    }
+
+    #[test]
+    fn new_note_settles_this_one_and_opens_a_draft_with_the_same_kind_and_deck() {
+        let (handle, _d, _s) = blank_bench();
+        let deck = handle.create_deck("Français".into()).unwrap();
+        let editing = handle
+            .clone()
+            .new_draft("basic".into(), Some(deck.clone()))
+            .unwrap();
+        editing.touched("Front".into(), "un".into(), 1);
+        let fresh = editing.new_note(vec![value("Front", "un")]).unwrap();
+        assert_eq!(handle.note_count().unwrap(), 1);
+        assert!(fresh.is_new());
+        assert_eq!(fresh.note_id(), None);
+        assert_eq!(fresh.kind(), "basic");
+        assert_eq!(fresh.deck(), Some(deck));
+        assert!(fresh.fields().iter().all(|f| f.value.is_empty()));
+    }
+
+    #[test]
+    fn a_missing_note_is_refused() {
+        let (handle, _d, _s) = blank_bench();
+        assert!(handle.clone().edit_note("nonsense".into()).is_err());
     }
 
     #[cfg(feature = "panic-probe")]
