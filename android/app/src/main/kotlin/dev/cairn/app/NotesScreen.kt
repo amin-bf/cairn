@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
@@ -196,20 +200,33 @@ fun NoteList(
 /** *Delete ⟨preview⟩? It cannot be undeleted.* in the note's own row, the preview bidi-isolated (ADR-0048 §4). */
 @Composable
 private fun DeleteQuestion(preview: String, refused: Boolean, rows: RowCallbacks) {
-    if (refused) {
-        CairnText(stringResource(R.string.notes_delete_note_refused), Modifier.testTag("row-delete-refused"), color = Cairn.colors.error)
-        Spacer(Modifier.height(gap(1)))
+    // The question grows the row downwards, so on a row near the list's end *Keep it* opens cut off by
+    // the list's edge — Delete in view and the safe answer hidden. Ask the list to show the whole thing,
+    // once when it opens and again if the refusal grows it; scrolling the row away and back is not asking.
+    val inView = remember { BringIntoViewRequester() }
+    var shown by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(refused) {
+        if (shown != refused) {
+            shown = refused
+            inView.bringIntoView()
+        }
     }
-    CairnConfirmRow(
-        question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(preview)),
-        confirm = stringResource(R.string.notes_delete),
-        keep = stringResource(R.string.notes_keep_it),
-        onConfirm = rows.onDelete,
-        onKeep = rows.onKeep,
-        questionModifier = Modifier.testTag("row-delete-warning"),
-        confirmModifier = Modifier.testTag("row-delete-confirm"),
-        keepModifier = Modifier.testTag("row-keep"),
-    )
+    Column(Modifier.bringIntoViewRequester(inView)) {
+        if (refused) {
+            CairnText(stringResource(R.string.notes_delete_note_refused), Modifier.testTag("row-delete-refused"), color = Cairn.colors.error)
+            Spacer(Modifier.height(gap(1)))
+        }
+        CairnConfirmRow(
+            question = stringResource(R.string.notes_delete_note_question, BidiFormatter.getInstance().unicodeWrap(preview)),
+            confirm = stringResource(R.string.notes_delete),
+            keep = stringResource(R.string.notes_keep_it),
+            onConfirm = rows.onDelete,
+            onKeep = rows.onKeep,
+            questionModifier = Modifier.testTag("row-delete-warning"),
+            confirmModifier = Modifier.testTag("row-delete-confirm"),
+            keepModifier = Modifier.testTag("row-keep"),
+        )
+    }
 }
 
 /**
