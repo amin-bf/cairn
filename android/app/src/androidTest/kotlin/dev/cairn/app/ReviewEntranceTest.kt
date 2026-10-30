@@ -168,11 +168,16 @@ class ReviewEntranceTest {
      * for looking at (never committed), and checked for what the theme decides: the page colour fills
      * the frame, and the two themes differ.
      */
-    private fun capturedInBothThemes(name: String) {
+    private fun capturedInBothThemes(name: String, facts: ReviewFacts? = null) {
         val dir = context.getExternalFilesDir("entrance-shots")!!
-        fixture(name)
         val dark = mutableStateOf(false)
-        show(dark)
+        if (facts == null) {
+            fixture(name)
+            show(dark)
+        } else {
+            // A state no fixture reaches (#205's open box) is drawn from facts built here.
+            rule.setContent { CairnTheme(dark = dark.value) { ReviewEntrance(facts, onStart = {}) } }
+        }
         val pages = mutableListOf<Int>()
         for (isDark in listOf(false, true)) {
             dark.value = isDark
@@ -201,4 +206,16 @@ class ReviewEntranceTest {
 
     @Test
     fun a_fresh_deck_is_captured_in_both_themes() = capturedInBothThemes("persian")
+
+    @Test
+    fun the_empty_state_is_captured_in_both_themes() =
+        capturedInBothThemes("empty", facts(ReviewStateKind.Empty, 0u, 0u))
+
+    @Test
+    fun nothing_due_with_new_cards_is_captured_in_both_themes() =
+        capturedInBothThemes("new-only", facts(ReviewStateKind.NewOnly(4u), 0u, 4u))
+
+    @Test
+    fun a_plain_due_state_is_captured_in_both_themes() =
+        capturedInBothThemes("due", facts(ReviewStateKind.Due(3u, 2u, false), 3u, 2u))
 }
