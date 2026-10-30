@@ -6,6 +6,7 @@ node_modules/
 /android/.kotlin/
 /android/build/
 /android/app/build/
+/android/design/build/
 /android/buildSrc/build/
 /android/buildSrc/.gradle/
 /android/local.properties

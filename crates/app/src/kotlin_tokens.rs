@@ -64,7 +64,11 @@ fn tokens(source: &str) -> BTreeMap<String, Value> {
     while let Some(line) = lines.next() {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("object ") {
-            object = rest.split(|c: char| !c.is_alphanumeric()).next().unwrap_or("").to_owned();
+            object = rest
+                .split(|c: char| !c.is_alphanumeric())
+                .next()
+                .unwrap_or("")
+                .to_owned();
         } else if let Some(rest) = line.strip_prefix("const val ") {
             let (name, tail) = rest.split_once('=').unwrap_or_else(|| {
                 // A declaration wrapped onto the next line: `const val NAME =\n    "..."`.
@@ -100,7 +104,10 @@ fn mismatches(source: &str, object: &str, expected: &[(&str, Value)]) -> Vec<Str
     }
     let prefix = format!("{object}.");
     for key in kotlin.keys().filter(|k| k.starts_with(&prefix)) {
-        if !expected.iter().any(|(name, _)| format!("{prefix}{name}") == *key) {
+        if !expected
+            .iter()
+            .any(|(name, _)| format!("{prefix}{name}") == *key)
+        {
             problems.push(format!("{key}: in Kotlin, with no counterpart in Rust"));
         }
     }
@@ -289,7 +296,10 @@ fn the_faces_are_bundled_as_they_ship_in_the_order_each_family_reaches_them() {
             rust.len()
         );
         for (place, (a, b)) in rust.iter().zip(&got).enumerate() {
-            assert!(a == b, "{name}: the face at place {place} is a different file");
+            assert!(
+                a == b,
+                "{name}: the face at place {place} is a different file"
+            );
         }
         assert!(
             got.last() == Some(&defs.font_data["icons"].font.to_vec()),
@@ -320,7 +330,10 @@ fn every_bundled_face_has_its_licence_and_nothing_unused_ships() {
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(used, shipped, "the files under assets/fonts are exactly the faces Faces.kt lists");
+    assert_eq!(
+        used, shipped,
+        "the files under assets/fonts are exactly the faces Faces.kt lists"
+    );
 
     // One licence per foundry; the file name says whose it is.
     for licence in [
@@ -331,7 +344,8 @@ fn every_bundled_face_has_its_licence_and_nothing_unused_ships() {
         "CairnIcons.txt",
     ] {
         let path = root.join("licenses").join(licence);
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert!(!text.trim().is_empty(), "{licence} is empty");
     }
 }
@@ -345,5 +359,12 @@ fn a_difference_a_missing_token_and_an_extra_token_each_fail_the_guard() {
     assert!(problems.iter().any(|p| p.contains("UNIT: Kotlin has")));
     assert!(problems.iter().any(|p| p.contains("GONE: missing")));
     assert!(problems.iter().any(|p| p.contains("EXTRA: in Kotlin")));
-    assert!(mismatches("object Spacing {\n const val UNIT = 8f\n}", "Spacing", &[("UNIT", f(8.0))]).is_empty());
+    assert!(
+        mismatches(
+            "object Spacing {\n const val UNIT = 8f\n}",
+            "Spacing",
+            &[("UNIT", f(8.0))]
+        )
+        .is_empty()
+    );
 }

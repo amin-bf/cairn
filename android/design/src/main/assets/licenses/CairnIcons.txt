@@ -1,0 +1,4 @@
+Cairn Icons
+
+The application's own drawing (the mark and the row icons), licensed with the application under the
+MIT licence declared in the workspace Cargo.toml.

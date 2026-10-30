@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 rootProject.name = "cairn-android"
 
 include(":app")
+include(":design")
