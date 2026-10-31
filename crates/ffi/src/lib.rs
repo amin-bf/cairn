@@ -299,6 +299,36 @@ impl CollectionHandle {
         Ok(optimise::nudge(&self.collection())?.into())
     }
 
+    /// The collection as an archive made at `created_ms`, with the name the save dialog suggests,
+    /// dated in local time `offset_minutes` east of UTC (ADR-0053 §4). Records nothing: Kotlin calls
+    /// [`record_backup`](Self::record_backup) once the provider took the bytes.
+    pub fn backup(&self, created_ms: i64, offset_minutes: i32) -> Result<BackupFacts, CairnError> {
+        let built = cairn_ops::backup::build(&self.collection(), created_ms, offset_minutes)?;
+        Ok(BackupFacts {
+            bytes: built.bytes,
+            name: built.name,
+            notes: built.notes,
+            reviews: built.reviews,
+        })
+    }
+
+    /// Note that the archive made at `created_ms` was written. Device-local; nothing settles.
+    pub fn record_backup(&self, created_ms: i64) -> Result<(), CairnError> {
+        cairn_ops::backup::record(&mut self.collection(), created_ms)?;
+        Ok(())
+    }
+
+    /// The facts the backup nudge states (ADR-0016 §6). Kotlin words it; no sentence crosses.
+    pub fn backup_nudge(&self) -> Result<BackupNudge, CairnError> {
+        let nudge = cairn_ops::backup::nudge(&self.collection())?;
+        Ok(BackupNudge {
+            last_backup_ms: nudge.last_backup_ms,
+            reviews_since: nudge.reviews_since,
+            reviews: nudge.reviews,
+            notes: nudge.notes,
+        })
+    }
+
     /// Snapshot the log and start an optimise run on a Rust thread (ADR-0014 §3). The handle outlives
     /// the call: Kotlin polls it, and nothing is written until its `finish` finds the run over.
     pub fn start_optimise(self: Arc<Self>) -> Result<Arc<OptimiseHandle>, CairnError> {
@@ -1099,6 +1129,34 @@ pub struct GradeOutcome {
     /// Whether the review row was appended. A failed append still counts the grading and moves the
     /// card off the screen (`Graded::NotRecorded`).
     pub recorded: bool,
+}
+
+/// A built backup, not yet written: the archive's bytes, the suggested name and the counts the
+/// report states (ADR-0053 §4).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BackupFacts {
+    pub bytes: Vec<u8>,
+    pub name: String,
+    pub notes: u64,
+    pub reviews: u64,
+}
+
+/// What the backup nudge states (ADR-0016 §6): the mirror of `cairn_ops::backup::Nudge`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct BackupNudge {
+    /// The last backup's creation instant in epoch milliseconds, or none before the first.
+    pub last_backup_ms: Option<i64>,
+    /// Reviews after the last backup; every review when there is none.
+    pub reviews_since: u64,
+    pub reviews: u64,
+    pub notes: u64,
+}
+
+/// The name a backup made at `created_ms` suggests, `offset_minutes` east of UTC — what the save
+/// dialog opens with, known before the archive is built (ADR-0053 §4).
+#[uniffi::export]
+pub fn backup_filename(created_ms: i64, offset_minutes: i32) -> String {
+    cairn_ops::backup::filename(created_ms, offset_minutes)
 }
 
 /// What the optimise nudge states (ADR-0014 §2): the mirror of `cairn_ops::optimise::OptimisationNudge`.
@@ -2975,6 +3033,44 @@ mod tests {
             handle.note_list(DeckSelector::All, String::new()).unwrap(),
             before
         );
+    }
+
+    #[test]
+    fn a_backup_is_built_named_and_counted_and_only_recording_moves_the_nudge() {
+        let (handle, _d, _s) = benched("history");
+        let notes = handle.note_count().unwrap();
+        let before = handle.backup_nudge().unwrap();
+        assert_eq!(before.last_backup_ms, None);
+        assert!(before.reviews > 0);
+        assert_eq!(before.reviews_since, before.reviews);
+        assert_eq!(before.notes, notes);
+
+        // 2025-10-09T08:53:20Z: an hour east of UTC, the same day.
+        let backup = handle.backup(NOW, 60).unwrap();
+        assert_eq!(backup.name, "Cairn backup 2025-10-09.ccoll");
+        assert_eq!(backup.name, backup_filename(NOW, 60));
+        assert_eq!((backup.notes, backup.reviews), (notes, before.reviews));
+        // Building wrote nothing down.
+        assert_eq!(handle.backup_nudge().unwrap(), before);
+
+        // The bytes are an archive the binding itself recognises when the file is opened again.
+        let opened =
+            handle
+                .clone()
+                .open_file(FileArrival::Opened, Some(backup.name), backup.bytes, true);
+        assert!(matches!(
+            opened.preview().unwrap(),
+            FilePreview::Refused {
+                refusal: FileRefusal::CollectionArchive,
+                ..
+            }
+        ));
+
+        handle.record_backup(NOW).unwrap();
+        let after = handle.backup_nudge().unwrap();
+        assert_eq!(after.last_backup_ms, Some(NOW));
+        assert_eq!(after.reviews_since, 0);
+        assert_eq!((after.reviews, after.notes), (before.reviews, before.notes));
     }
 
     #[test]
