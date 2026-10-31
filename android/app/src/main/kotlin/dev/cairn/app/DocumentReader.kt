@@ -1,6 +1,8 @@
 package dev.cairn.app
 
+import android.app.ActivityManager
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import kotlinx.coroutines.CancellationException
@@ -8,11 +10,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
+/** The read ceiling's floor: 32 MiB (#241), what every phone reads whatever its heap. */
+const val READ_CEILING_FLOOR_BYTES = 32 * 1024 * 1024
+
 /**
- * How much of a document is read: 32 MiB (#241, *yours to overturn*). It bounds memory against a file
- * the person didn't mean to pick; past it the head is handed over and marked incomplete.
+ * How much of a document is read on a phone whose `ActivityManager.memoryClass` is [memoryClassMb]: a
+ * quarter of it, never below [READ_CEILING_FLOOR_BYTES] (spec #248, *yours to overturn*). It bounds
+ * memory against a file the person didn't mean to pick, while a collection archive — which grows with
+ * every review — still opens; past it the head is handed over and marked incomplete.
  */
-const val READ_CEILING_BYTES = 32 * 1024 * 1024
+fun readCeiling(memoryClassMb: Int): Int = maxOf(READ_CEILING_FLOOR_BYTES, memoryClassMb / 4 * 1024 * 1024)
+
+/** The read ceiling on this phone. */
+fun readCeiling(context: Context): Int =
+    readCeiling((context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryClass)
 
 /**
  * A document read once. [complete] is false when the read stopped at the ceiling or failed; the bytes
@@ -25,24 +36,27 @@ class DocumentRead(val name: String?, val bytes: ByteArray, val complete: Boolea
  * `OpenableColumns.DISPLAY_NAME`, none when the provider gives none, and its bytes up to [ceiling].
  * No permission is asked for and no grant is kept — the picker's grant is used here and nowhere else.
  * A read the provider fails is an empty incomplete one, which the preview states as unreadable.
+ *
+ * The buffer is sized from `OpenableColumns.SIZE` when the provider states one, so a large archive is
+ * neither grown by doubling nor copied once read; the size is a hint, and the stream decides.
  */
-suspend fun readDocument(resolver: ContentResolver, uri: Uri, ceiling: Int = READ_CEILING_BYTES): DocumentRead =
+suspend fun readDocument(resolver: ContentResolver, uri: Uri, ceiling: Int): DocumentRead =
     withContext(Dispatchers.IO) {
-        val name = displayName(resolver, uri)
+        val (name, size) = described(resolver, uri)
         try {
             val input = resolver.openInputStream(uri) ?: return@withContext DocumentRead(name, ByteArray(0), false)
             input.use {
-                val out = ByteArrayOutputStream()
+                val out = Held(size?.coerceIn(0L, ceiling.toLong())?.toInt() ?: 64 * 1024)
                 val buffer = ByteArray(64 * 1024)
                 var left = ceiling
                 while (left > 0) {
                     val n = it.read(buffer, 0, minOf(buffer.size, left))
-                    if (n < 0) return@withContext DocumentRead(name, out.toByteArray(), true)
+                    if (n < 0) return@withContext DocumentRead(name, out.bytes(), true)
                     out.write(buffer, 0, n)
                     left -= n
                 }
                 // The ceiling is reached: the read is whole only if nothing follows it.
-                DocumentRead(name, out.toByteArray(), complete = it.read() < 0)
+                DocumentRead(name, out.bytes(), complete = it.read() < 0)
             }
         } catch (e: CancellationException) {
             throw e
@@ -51,13 +65,23 @@ suspend fun readDocument(resolver: ContentResolver, uri: Uri, ceiling: Int = REA
         }
     }
 
+/** A buffer that hands over its own array when it is exactly full, rather than a copy of it. */
+private class Held(initial: Int) : ByteArrayOutputStream(initial) {
+    fun bytes(): ByteArray = if (count == buf.size) buf else toByteArray()
+}
+
 /** The provider's `OpenableColumns.DISPLAY_NAME` for [uri], or none when it gives none. */
-internal fun displayName(resolver: ContentResolver, uri: Uri): String? =
+internal fun displayName(resolver: ContentResolver, uri: Uri): String? = described(resolver, uri).first
+
+/** The provider's display name and `OpenableColumns.SIZE` for [uri], each none when it gives none. */
+private fun described(resolver: ContentResolver, uri: Uri): Pair<String?, Long?> =
     try {
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-        }
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null to null
+            val name = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { cursor.getString(it) }
+            val size = cursor.getColumnIndex(OpenableColumns.SIZE).takeIf { it >= 0 && !cursor.isNull(it) }?.let { cursor.getLong(it) }
+            name to size
+        } ?: (null to null)
     } catch (_: Exception) {
-        null
+        null to null
     }

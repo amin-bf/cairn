@@ -42,7 +42,6 @@ class ReviewTest {
     fun the_review_state_arrives_as_facts() {
         withFixture("caught-up") { assertEquals(ReviewStateKind.CaughtUp, it.reviewState(now).state) }
         withFixture("leeches") { assertEquals(3u, it.reviewState(now).leeches) }
-        // `open` seeds a first-launch deck, so these two are only reached by name.
         withFixture("empty") { assertEquals(ReviewStateKind.Empty, it.reviewState(now).state) }
         withFixture("new-only") { assertEquals(ReviewStateKind.NewOnly(2u), it.reviewState(now).state) }
         withFixture("backlog") {

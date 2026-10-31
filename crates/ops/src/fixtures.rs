@@ -779,9 +779,9 @@ pub fn install_into_platform_dirs(fixture: Fixture) -> Result<Reached, String> {
 }
 
 /// Return a device to a first launch: close `coll`, remove both databases and the writer marker, and
-/// open the collection again through [`open_collection`](crate::open_collection), so the first launch
-/// is seeded exactly as a fresh install is. The Android binding's reset is this; the egui build keeps
-/// its own wipe until it is replaced.
+/// open the collection again through [`open_unseeded`](crate::open_unseeded), so it is empty exactly
+/// as a fresh Android install is. The Android binding's reset is this; the egui build keeps its own
+/// wipe until it is replaced.
 ///
 /// **It takes the collection by value, and that is the ordering the correctness rests on**: SQLite
 /// holds the database plus its `-wal` and `-shm` siblings open, so unlinking them under a live
@@ -798,7 +798,7 @@ pub fn reset(coll: Collection, data: &Path, state: &Path) -> Result<Collection, 
 /// [`reset`] for a caller with no open collection to close — one whose last reopen failed.
 pub fn reset_files(data: &Path, state: &Path) -> Result<Collection, String> {
     cairn_store::remove_files(data, state);
-    crate::open_collection(data, state)
+    crate::open_unseeded(data, state)
 }
 
 /// Wall-clock milliseconds for the installer's stamp — an edge value read once per install, never
@@ -1591,22 +1591,18 @@ mod tests {
         }
     }
 
-    /// **Reset leaves a freshly seeded collection**, whatever the bench had put there. It goes
-    /// through `open_collection`, so a first launch is seeded exactly as a fresh install is.
+    /// **Reset leaves an empty collection**, whatever the bench had put there: a first launch on
+    /// Android seeds nothing, so a reset device can take a restore.
     #[test]
-    fn reset_leaves_a_freshly_seeded_collection() {
+    fn reset_leaves_an_empty_collection() {
         let (data, state, mut coll) = empty();
         Fixture::Backlog.install(&mut coll, NOW_MS).unwrap();
-        let before = crate::notes::list(&coll, &crate::notes::Filter::default())
-            .unwrap()
-            .len();
-        assert_ne!(before, DEFAULT_NEW_CARD_RATE as usize + 1);
+        assert!(!coll.is_empty().unwrap());
 
         let fresh = reset(coll, data.path(), state.path()).unwrap();
 
-        let rows = crate::notes::list(&fresh, &crate::notes::Filter::default()).unwrap();
-        assert_eq!(rows.len(), DEFAULT_NEW_CARD_RATE as usize + 1);
-        assert_eq!(read(&fresh, NOW_MS).unwrap().notes, rows.len());
+        assert!(fresh.is_empty().unwrap());
+        assert_eq!(read(&fresh, NOW_MS).unwrap().notes, 0);
     }
 
     /// **No fixture writes a constant answer time.** One did, everywhere, until

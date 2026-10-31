@@ -42,9 +42,10 @@ class FileIntentTest {
     private val app = context as CairnApplication
 
     // The bench's files in the order the set builds them.
-    private val bench = benchFiles()
+    private val bench = benchFiles(context.cacheDir.path)
     private val update = bench[0]
     private val several = bench[1]
+    private val archive = bench[2]
 
     @Before
     fun serve() {
@@ -204,6 +205,29 @@ class FileIntentTest {
             waitFor("import-screen")
             waitFor("import-deck-0")
             assertEquals(update.name, text("import-heading"))
+        }
+    }
+
+    /** The app's collection holding nothing, so the bench archive is one this device may restore. */
+    private fun emptied() = runBlocking { app.collection.use { it.installFixture("empty", System.currentTimeMillis()) } }
+
+    @Test
+    fun an_archive_opened_with_the_app_reaches_the_restore_preview() {
+        emptied()
+        ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(archive.name))).use {
+            waitFor("restore-summary")
+            assertEquals(archive.name, text("import-heading"))
+            assertTrue(exists("gate-restore") && exists("gate-cancel"))
+        }
+    }
+
+    @Test
+    fun an_archive_shared_to_the_app_reaches_the_restore_preview() {
+        emptied()
+        ActivityScenario.launch<MainActivity>(sendStream(BenchProvider.uri(archive.name))).use {
+            waitFor("restore-summary")
+            assertEquals(archive.name, text("import-heading"))
+            assertTrue(exists("gate-restore") && exists("gate-cancel"))
         }
     }
 

@@ -51,7 +51,7 @@ class ImportRotationTest {
 
     @Test
     fun the_preview_survives_a_rotation_and_a_second_one_goes_back_to_settings() {
-        val update = benchFiles()[0]
+        val update = benchFiles(context.cacheDir.path)[0]
         BenchProvider.files[update.name] = update.bytes
         runBlocking { owner.use { it.installFixture("decks", System.currentTimeMillis()) } }
         RotatingActivity.access = owner

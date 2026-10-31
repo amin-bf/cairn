@@ -41,15 +41,15 @@ class CollectionTest {
     }
 
     @Test
-    fun a_first_launch_seeds_and_a_second_open_does_not_seed_again() {
+    fun a_first_launch_holds_nothing_so_an_archive_can_restore_into_it() {
         val root = File(context.cacheDir, "first-launch-${System.nanoTime()}")
         val data = File(root, "files").absolutePath
         val state = File(root, "no_backup").absolutePath
         try {
-            val seeded = CollectionHandle.open(data, state).use { it.noteCount() }
-            assertTrue("a first launch seeds the starter notes", seeded > 0u)
+            val first = CollectionHandle.open(data, state).use { it.noteCount() }
+            assertEquals("a first launch seeds no starter notes", 0uL, first)
             val again = CollectionHandle.open(data, state).use { it.noteCount() }
-            assertEquals(seeded, again)
+            assertEquals(first, again)
         } finally {
             root.deleteRecursively()
         }

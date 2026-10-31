@@ -36,7 +36,7 @@ import dev.cairn.ffi.CairnException
 import dev.cairn.ffi.CollectionHandle
 import dev.cairn.ffi.FileArrival
 import dev.cairn.ffi.FilePreview
-import dev.cairn.ffi.FileRefusal
+import dev.cairn.ffi.ImportGate
 import dev.cairn.ffi.ThemeChoice
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -326,12 +326,31 @@ class BackupTest {
         val created = isoMillis(manifest.getString("created"))
         assertTrue("$created in [$before, $after]", created in before..after)
         val preview = runBlocking { owner.use { it.openFile(FileArrival.OPENED, "Bench backup (2).ccoll", bytes, true).preview() } }
-        assertEquals(FileRefusal.CollectionArchive, (preview as FilePreview.Refused).refusal)
+        // Opened again over the collection it came from, it is a restore this device may perform (#252).
+        val restore = (preview as FilePreview.Restore).restore
+        assertEquals(Triple(25uL, 225uL, ImportGate.DECIDE), Triple(restore.notes, restore.reviews, restore.gate))
+        assertEquals(created, restore.createdMs)
 
         // Recorded only now, at that instant, and the nudge moves to today.
         assertEquals(created, lastBackup())
         rule.waitUntil(10_000) { text("backup-nudge") == "Last backup ${today()}. 0 reviews since." }
         assertTrue(BenchProvider.deleted.isEmpty())
+    }
+
+    @Test
+    fun the_archive_a_backup_wrote_opens_as_a_restore_of_this_collection() {
+        showApp()
+        openSettings()
+        backUpTo(BenchProvider.uri("Bench backup.ccoll"))
+        waitFor("backup-report")
+        rule.waitUntil(10_000) { BenchProvider.files.containsKey("Bench backup.ccoll") }
+        // *Open a file…* through the same stubbed dialog, which answers the picker with the document just written.
+        rule.onNodeWithTag("open-file").performScrollTo().performClick()
+        waitFor("import-screen")
+        assertEquals("Bench backup.ccoll", text("import-heading"))
+        val day = SimpleDateFormat("d MMMM yyyy", Locale.ENGLISH).format(Date())
+        assertEquals("Collection archive, $day. 25 notes, 225 reviews.", text("restore-summary"))
+        assertTrue(exists("gate-restore") && exists("gate-cancel"))
     }
 
     @Test

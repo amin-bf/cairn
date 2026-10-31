@@ -64,11 +64,11 @@ class DevelopmentBlockTest {
     private fun selected(tag: String): Boolean =
         rule.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.Selected]
 
-    private fun showApp(initial: ThemeChoice = ThemeChoice.LIGHT): AppearanceState {
+    private fun showApp(initial: ThemeChoice = ThemeChoice.LIGHT, ready: String = "state-empty"): AppearanceState {
         runBlocking { owner.use { it.setThemeChoice(initial) } }
         val appearance = AppearanceState(initial)
         rule.setContent { CairnAppearance(appearance) { CairnNavHost(owner, keyboardUp = false) } }
-        waitFor("start-all")
+        waitFor(ready)
         return appearance
     }
 
@@ -87,11 +87,11 @@ class DevelopmentBlockTest {
         openSettings()
         rule.onNodeWithTag("development-heading").performScrollTo().assertTextEquals("Development")
         rule.onNodeWithTag("reset-sentence").performScrollTo().assertTextEquals(
-            "Development control — returns this device to a first launch, seed and all.",
+            "Development control — returns this device to a first launch, with nothing in it.",
         )
         rule.onNodeWithTag("reset-control").performScrollTo().assertTextEquals("Reset the collection")
         rule.onNodeWithTag("bench-sentence").performScrollTo().assertTextEquals(
-            "Development control — replaces the collection with a pre-made one, to reach a screen the shipping seed cannot.",
+            "Development control — replaces the collection with a pre-made one, to reach a screen a first launch cannot.",
         )
         // The block follows the page's last group, so nothing of it is above Appearance.
         val appearance = rule.onNodeWithTag("appearance-note").fetchSemanticsNode().boundsInRoot
@@ -131,21 +131,18 @@ class DevelopmentBlockTest {
 
     @Test
     fun a_confirmed_reset_leaves_a_first_launch_and_the_app_starts_afresh_on_review() {
-        showApp()
-        // A sitting is under way, and the collection is not the seed.
+        // A sitting is under way, over a collection that holds notes.
+        runBlocking { owner.use { it.installFixture("backlog", System.currentTimeMillis()) } }
+        showApp(ready = "start-all")
         rule.onNodeWithTag("start-all").performClick()
         waitFor("progress")
-        runBlocking { owner.use { it.installFixture("backlog", System.currentTimeMillis()) } }
-        val seeded = runBlocking {
-            val handle = CollectionHandle.open(File(root, "seed/files").absolutePath, File(root, "seed/no_backup").absolutePath)
-            handle.use { it.noteCount() }
-        }
-        assertTrue(notes() != seeded)
+        assertTrue(notes() > 0u)
         openSettings()
         press("reset-control")
         press("reset-confirm")
-        waitFor("start-all")
-        assertEquals(seeded, notes())
+        // A first launch holds nothing: Android seeds no starter notes, so a restore can land.
+        waitFor("state-empty")
+        assertEquals(0uL, notes())
         assertTrue("no sitting of the old collection survives", !exists("progress"))
         assertTrue("the back stack is Review", selected("destination-review"))
         assertTrue(!exists("settings-screen"))
@@ -194,7 +191,7 @@ class DevelopmentBlockTest {
         openSettings()
         press("reset-control")
         press("reset-confirm")
-        waitFor("start-all")
+        waitFor("state-empty")
         rule.waitUntil(10_000) { appearance.choice == ThemeChoice.SYSTEM }
         rule.waitForIdle()
         // The system's own setting decides what the emulator shows, so only the choice is asserted.
@@ -214,7 +211,7 @@ class DevelopmentBlockTest {
         }
         runBlocking { owner.use { it.setThemeChoice(ThemeChoice.LIGHT) } }
         rule.setContent { CairnAppearance(AppearanceState(ThemeChoice.LIGHT)) { CairnNavHost(refusing, keyboardUp = false) } }
-        waitFor("start-all")
+        waitFor("state-empty")
         openSettings()
         rule.waitForIdle()
         val before = notes()

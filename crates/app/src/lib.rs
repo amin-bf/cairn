@@ -237,8 +237,8 @@ impl CairnApp {
     }
 
     /// Open the collection under the platform's two directories (ADR-0007 §6) and, on a first launch,
-    /// seed it — through [`cairn_ops::open_collection`], the one operation the Kotlin app calls too
-    /// with `filesDir` and `noBackupFilesDir` (ADR-0046 §5), so both renderers seed alike.
+    /// seed it — through [`cairn_ops::open_collection`]. The Kotlin app opens through
+    /// [`cairn_ops::open_unseeded`] instead and seeds nothing (ADR-0053 §5).
     fn open_store() -> Result<Collection, String> {
         let data = cairn_store::platform::data_dir().map_err(|e| e.to_string())?;
         let state = cairn_store::platform::state_dir().map_err(|e| e.to_string())?;
