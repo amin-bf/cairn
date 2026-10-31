@@ -44,11 +44,12 @@ sealed interface NotesScreenState {
  * for the list under them. Which rows match, whether a caption applies and whether the collection is
  * empty are the binding's facts (ADR-0046 §1).
  */
-class NotesViewModel(private val owner: CollectionAccess) : ViewModel() {
+class NotesViewModel(private val owner: CollectionAccess, deck: String? = null) : ViewModel() {
     private val _state = MutableStateFlow<NotesScreenState>(NotesScreenState.Loading)
     val state: StateFlow<NotesScreenState> = _state
 
-    private var selector: DeckSelector = DeckSelector.All
+    // An import lands here filtered to the deck it wrote, or unfiltered for several (ADR-0041 §3).
+    private var selector: DeckSelector = deck?.let { DeckSelector.Deck(it) } ?: DeckSelector.All
     private var search = ""
     private var newDeck = ""
     private var confirming: String? = null

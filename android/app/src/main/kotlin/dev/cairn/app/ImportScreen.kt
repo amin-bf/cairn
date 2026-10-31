@@ -44,12 +44,14 @@ import dev.cairn.ffi.ImportPlanFacts
 
 /** The import screen over its model: the preview, or the failure page when the file cannot be read. */
 @Composable
-fun ImportScreen(model: ImportViewModel, onLeave: () -> Unit, onImport: () -> Unit = {}) {
+fun ImportScreen(model: ImportViewModel, onLeave: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
-        // Nothing is held: the caller has already left, or is about to (a killed process is not restored).
-        is ImportScreenState.Empty -> CairnPage {}
-        is ImportScreenState.Preview -> ImportPage(s.name, s.preview, onImport = onImport, onLeave = onLeave)
+        // Nothing is held, or the file was written: the caller has already left, or is about to (a
+        // killed process is not restored, and a landing goes on to the note list).
+        is ImportScreenState.Empty, is ImportScreenState.Landed -> CairnPage {}
+        is ImportScreenState.Preview ->
+            ImportPage(s.name, s.preview, onImport = model::import, onLeave = onLeave, writing = s.writing, failure = s.failure)
         is ImportScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("import-failed")) }
     }
@@ -59,10 +61,18 @@ fun ImportScreen(model: ImportViewModel, onLeave: () -> Unit, onImport: () -> Un
  * The import preview (ADR-0022 §3, ADR-0041 §1-§3): the file's name as it arrived, its own claims in
  * weak text above a hairline, each deck in its own direction with its effects under it, and the line
  * that is always there. A refusal is its sentence alone. The gate is pinned on the reach line outside
- * the scroll, and the page above it opens at its top.
+ * the scroll, and the page above it opens at its top. While the plan is [writing] the gate cannot be
+ * pressed; a write the store refused is said as [failure] just above the gate, where the press was.
  */
 @Composable
-fun ImportPage(name: String?, preview: FilePreview, onImport: () -> Unit, onLeave: () -> Unit) {
+fun ImportPage(
+    name: String?,
+    preview: FilePreview,
+    onImport: () -> Unit,
+    onLeave: () -> Unit,
+    writing: Boolean = false,
+    failure: String? = null,
+) {
     CairnPage(Modifier.testTag("import-screen")) {
         BoxWithConstraints {
             val page: Dp = maxHeight
@@ -82,8 +92,12 @@ fun ImportPage(name: String?, preview: FilePreview, onImport: () -> Unit, onLeav
                     }
                     Spacer(Modifier.height(gap(2)))
                 }
+                if (failure != null) {
+                    Spacer(Modifier.height(gap(1)))
+                    Sentence(stringResource(R.string.import_write_failed, failure), "import-failure")
+                }
                 Spacer(Modifier.height(gap(2)))
-                Gate(preview.gate(), onImport, onLeave)
+                Gate(preview.gate(), onImport, onLeave, enabled = !writing)
                 Spacer(Modifier.height(reachLineBelow(page)))
             }
         }
@@ -97,19 +111,25 @@ private fun FilePreview.gate(): ImportGate = when (this) {
 
 /** *Import* as the primary with *Cancel* beside it as a text action, or a lone *Close* (ADR-0041 §3). */
 @Composable
-private fun Gate(gate: ImportGate, onImport: () -> Unit, onLeave: () -> Unit) {
+private fun Gate(gate: ImportGate, onImport: () -> Unit, onLeave: () -> Unit, enabled: Boolean) {
     when (gate) {
-        ImportGate.DISMISS ->
-            CairnControl(stringResource(R.string.import_close), onLeave, Modifier.fillMaxWidth().testTag("gate-close"), primary = true)
+        ImportGate.DISMISS -> CairnControl(
+            stringResource(R.string.import_close),
+            onLeave,
+            Modifier.fillMaxWidth().testTag("gate-close"),
+            primary = true,
+            enabled = enabled,
+        )
         ImportGate.DECIDE -> Row(verticalAlignment = Alignment.CenterVertically) {
             CairnControl(
                 stringResource(R.string.import_import),
                 onImport,
                 Modifier.weight(1f).testTag("gate-import"),
                 primary = true,
+                enabled = enabled,
             )
             Spacer(Modifier.width(gap(1)))
-            CairnTextAction(stringResource(R.string.import_cancel), onLeave, Modifier.testTag("gate-cancel"))
+            CairnTextAction(stringResource(R.string.import_cancel), onLeave, Modifier.testTag("gate-cancel"), enabled = enabled)
         }
     }
 }
