@@ -89,9 +89,9 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 ROOT = Path(__file__).resolve().parent.parent
 DRAWABLE = ROOT / "crates/app/res/drawable/ic_launcher_monochrome.xml"
-# **Not under `res/`.** `res/` is the directory `cargo-apk` hands to aapt, and aapt refuses any
-# subdirectory that is not an Android resource type — `icons/` there stopped every APK from packaging,
-# with nothing on the desktop failing (#166).
+# **Not under `res/`.** `res/` is the directory the Kotlin app's Gradle build hands to aapt, and aapt
+# refuses any subdirectory that is not an Android resource type — `icons/` there stopped every APK
+# from packaging, with nothing on the desktop failing (#166).
 ICONS = ROOT / "crates/app/icons"
 FACE = ROOT / "crates/app/assets/CairnIcons-Regular.ttf"
 

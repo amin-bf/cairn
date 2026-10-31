@@ -2,9 +2,9 @@
 //! share, and nothing that draws.
 //!
 //! This crate depends on `cairn-core`, `cairn-store` and `cairn-export`, and on **no renderer**
-//! (`egui`, `eframe`, `winit`, `android-activity`) and no binding. That is the point of it being a
-//! crate: the compiler states what this code cannot reach. The egui app calls it, and so will the
-//! Kotlin binding, so the desktop and Android run one implementation of every operation.
+//! (`egui`, `eframe`, `winit`) and no binding. That is the point of it being a crate: the compiler
+//! states what this code cannot reach. The egui app calls it, and so does the Kotlin binding, so the
+//! desktop and Android run one implementation of every operation.
 //!
 //! **Time is a value** (ADR-0046 §3). Where an operation needs *now*, the caller passes it; nothing in
 //! this crate's sitting or editor reads a clock.

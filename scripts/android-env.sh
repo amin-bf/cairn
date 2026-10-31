@@ -13,7 +13,7 @@ export ANDROID_SDK_ROOT="$ANDROID_HOME"
 
 # NDK r29 stable, the release line the binding was measured on. The Gradle project pins the same
 # version as `ndkVersion` and builds with the directory AGP resolves from it; these variables serve
-# the egui build (`cargo apk`) and a bare `cargo ndk`.
+# a bare `cargo ndk`.
 export NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 export ANDROID_NDK_HOME="$NDK_HOME"
 export ANDROID_NDK_ROOT="$NDK_HOME"

@@ -10,28 +10,6 @@ members = [
   "crates/app",
   "crates/desktop",
 ]
-# The vendored adapter is third-party source we carry, not a crate of ours (ADR-0026 §3). It is
-# reached only through `[patch.crates-io]` below, so it is never built as a member and never
-# inherits `[workspace.package]`.
-exclude = ["vendor/egui-winit"]
-
-# ADR-0026 §3: `egui-winit` is carried as a **verbatim copy of the published 0.35.0**, with one
-# block — the per-tap IME-composition interrupt — behind `#[cfg(not(target_os = "android"))]`. On
-# Android that block dismisses and reopens the soft keyboard on every tap into a text field, for a
-# composition that platform can never produce, and the inset collapse it causes throws away the
-# scroll position ADR-0025 §1 exists to make meaningful. There is no fix above the dependency: the
-# interrupt flag is private, its setter public and its clearer not, and nothing hooks the platform
-# output before this crate reads it.
-#
-# A *fork* was rejected rather than merely not chosen: the crate as published depends on `egui` from
-# the registry, but inside its own repository on a workspace path — so a fork pulls a second copy of
-# `egui` into the graph beside the one `eframe` and our crates use, whose types would not unify.
-#
-# **Bumping this is not just a version change.** See `vendor/PATCH.md` and
-# `scripts/verify-vendor.sh`: recursive diff against a pristine copy, then the block-shape check —
-# and if a release restructures the block, re-judge rather than re-apply.
-[patch.crates-io]
-egui-winit = { path = "vendor/egui-winit" }
 
 [workspace.package]
 version = "0.1.0"
@@ -39,8 +17,7 @@ edition = "2024"
 publish = false
 license = "MIT"
 
-# Dependency versions live here so the five crates cannot drift apart. The Android set is pinned to
-# the versions proven on the handset in #7 and #8 — see docs/environment/android-toolchain.md.
+# Dependency versions live here so the crates cannot drift apart.
 [workspace.dependencies]
 cairn-core = { path = "crates/core" }
 cairn-store = { path = "crates/store" }
@@ -54,10 +31,8 @@ cairn-app = { path = "crates/app" }
 # so the crates cannot drift apart — even though only `cairn-core` depends on it.
 fsrs = "=6.6.1"
 
-# Pinned exactly, adapter and toolkit together (ADR-0026 §3, on ADR-0001 §2's precedent). The
-# vendored `egui-winit` above is one published version with one block guarded, and it declares an
-# ordinary `egui = 0.35.0` dependency — so a floating requirement here could resolve the family onto
-# a release the vendored copy was never diffed against, silently.
+# Pinned exactly, with `eframe` in `crates/app` (ADR-0026 §3, on ADR-0001 §2's precedent): the egui
+# family moves together, and the desktop is judged against one version of it.
 egui = "=0.35.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
 getrandom = "0.3"
@@ -70,10 +45,8 @@ tempfile = "3"
 # compiles C, so an Android build needs the NDK's clang exported (`scripts/android-env.sh`).
 zstd = "0.13"
 
-# `eframe` is deliberately absent. Its two arms disagree on `default-features` (ADR-0003 §5), and a
-# workspace entry cannot be overridden that way — so both arms are declared literally in
-# `crates/app`, side by side in one file where they cannot drift apart. `crates/desktop` gets it by
-# re-export rather than by dependency, which is what keeps that crate a shim.
+# `eframe` is declared in `crates/app` alone, its one user; `crates/desktop` gets it by re-export
+# rather than by dependency, which is what keeps that crate a shim.
 unicode-bidi = "0.3.18"
 
 # ADR-0008 §2 fixes the deck container as a zip archive, and the feature flags there are the working
@@ -88,11 +61,6 @@ zip = { version = "8.6", default-features = false, features = ["deflate-flate2-z
 # (docs/research/kotlin-binding/README.md). Declared without `cli`: the generator is host-only and
 # `cairn-ffi` turns it on behind a feature the Android build leaves off.
 uniffi = "=0.32.2"
-
-android-activity = "0.6"
-jni = "0.21"
-ndk-context = "0.1"
-winit = "0.30"
 
 [profile.release]
 opt-level = "z"
