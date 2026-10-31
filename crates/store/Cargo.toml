@@ -21,9 +21,3 @@ getrandom.workspace = true
 # database in a temp directory, because the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and
 # `INSERT OR IGNORE`.
 tempfile.workspace = true
-
-# ADR-0003 §5 / ADR-0007 §6: Android's data directory is reachable only through hand-written JNI.
-# These two crates exist solely for `platform/android.rs` and must not be used anywhere else.
-[target.'cfg(target_os = "android")'.dependencies]
-jni.workspace = true
-ndk-context.workspace = true

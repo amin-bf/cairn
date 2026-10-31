@@ -39,9 +39,11 @@ Agent instructions live in [`AGENTS.md`](./AGENTS.md). The codebase entry point 
 
 ## Layout
 
-A six-crate workspace, laid out in
+An eight-crate workspace, laid out in
 [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.md) and extended by
-[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md):
+[ADR-0013 §11](./docs/adr/0013-the-sync-transport.md) and
+[ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md). The Android app is native Kotlin,
+in [`android/`](./android), over `cairn-ffi`:
 
 | Crate | What it is |
 |---|---|
@@ -49,31 +51,28 @@ A six-crate workspace, laid out in
 | `cairn-store` | SQLite persistence and the two directory lookups (its platform seam is two functions wide). |
 | `cairn-export` | The `.cdeck` deck-file container and import policy. Holds the zip dependency. |
 | `cairn-sync` | Publishing the log to the remote and reading it back. Holds the network dependencies. |
-| `cairn-app` | The egui application. `lib` + `cdylib`; the Android entry point and the window's inset seam live here. |
-| `cairn-desktop` | A twenty-line shim, forced by `cargo-apk`. Keep it empty. |
+| `cairn-ops` | The application's operations, which both renderers call. No renderer, no binding. |
+| `cairn-ffi` | The Kotlin binding: the one crate that depends on uniffi. |
+| `cairn-app` | The egui application, desktop only since the egui Android build retired ([ADR-0045 §8](./docs/adr/0045-the-native-android-client.md)). |
+| `cairn-desktop` | The desktop binaries, `cairn` and `cairn-fixture`: shims over `cairn-app`. Keep them empty. |
 
 ## Stack
 
-**egui / eframe** — one binary per platform, no webview, no IPC. Chosen in
+**egui / eframe on the desktop** — no webview, no IPC. Chosen in
 [ADR-0003](./docs/adr/0003-client-stack.md) after building the same slice four ways and measuring
-them on real hardware.
+them on real hardware. **Kotlin and Jetpack Compose on Android**, over the same Rust through a
+uniffi binding ([ADR-0045](./docs/adr/0045-the-native-android-client.md)); the egui build that ran
+there first is retired (§8).
 
 The web target was ruled out of scope in [ADR-0007 §1](./docs/adr/0007-the-local-store.md): for an
 app whose only copy of the data is local, the browser is the one platform where "local" is not
 reliably durable.
 
-**One crate of that stack is not taken as published.** `vendor/egui-winit` is a verbatim copy of
-`egui-winit` 0.35.0 with one block guarded off Android, wired in by `[patch.crates-io]`: as shipped,
-every tap into a text field there dismisses and reopens the soft keyboard, for a composition that
-platform cannot produce. So **a version bump of the stack is no longer only a version change** — see
-[`vendor/PATCH.md`](./vendor/PATCH.md) and `scripts/verify-vendor.sh`
-([ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)).
-
 ## Prerequisites
 
 ```sh
 rustup target add aarch64-linux-android
-cargo install cargo-apk --locked  # Android packaging
+cargo install cargo-ndk --locked  # the Gradle build compiles cairn-ffi for the handset with it
 ```
 
 **Linux desktop** needs no webkit — egui renders to a canvas, so a working GPU/OpenGL stack is all
@@ -95,14 +94,10 @@ Skipping it produces `Failed to get android tools`, which does not say what is m
 cargo run -p cairn-desktop          # desktop
 cargo test --workspace                # everything verifiable without hardware
 cargo test -p cairn-core            # the domain alone: no database, no window, no handset
-scripts/verify-vendor.sh              # the vendored adapter: verbatim plus exactly one change
 
 source scripts/android-env.sh
-cd crates/app && cargo apk build      # APK: a manifest, one .so and res/ (the icon), no classes.dex
+cd android && ./gradlew assembleDebug  # the Kotlin app's APK, with cairn-ffi's .so built in
 ```
-
-`cargo apk build --release` compiles but stops at signing — no release keystore is configured, since
-the only one available is a local developer debug key and deployment is out of scope.
 
 Under Wayland, winit ignores `GDK_BACKEND`. For an X11 window (e.g. to drive it with `xdotool`):
 
@@ -115,20 +110,20 @@ arm64-v8a only.
 
 ## Where data lives
 
-Resolved by `cairn_store::platform`, which is two functions wide and stays that way.
+On the desktop, resolved by `cairn_store::platform`, which is two functions wide and stays that way.
+On Android the Kotlin app passes its own directories in
+([ADR-0046 §5](./docs/adr/0046-the-line-between-kotlin-and-rust.md)), and the seam's Android arm
+only refuses.
 
-**The platform surface is per crate, not per workspace** ([ADR-0016 §5](./docs/adr/0016-backup-and-restore.md)).
-There are three modules under the same three-arm `#[cfg]` discipline, each answering a question its own
-crate owns: `cairn_store::platform` the two directories below, `cairn_export::platform` the
-user-visible files, and `cairn_app::platform` the window's insets — an inset being a fact about the
-window the UI draws into, which the store has no business answering
-([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)). A **fourth function
-appearing in any one of them** is the erosion signal, not a fourth module.
+**The platform surface is per crate, not per workspace**
+([ADR-0016 §5](./docs/adr/0016-backup-and-restore.md)): `cairn_store::platform` answers the two directories below and `cairn_export::platform` the
+user-visible files, each under the same three-arm `#[cfg]` discipline. A **fourth function
+appearing in either** is the erosion signal, not a third module.
 
 | Target | Collection (`collection.db`, `derived.db`) | Writer marker |
 |---|---|---|
 | Desktop | `$XDG_DATA_HOME/cairn/` | `$XDG_STATE_HOME/cairn/` |
-| Android | `getFilesDir()`, via JNI | `getNoBackupFilesDir()`, via JNI |
+| Android | `getFilesDir()`, passed in by the Kotlin app | `getNoBackupFilesDir()`, passed in by the Kotlin app |
 
 The two are separate on purpose. Android's Auto Backup is on by default and restores the data
 directory onto a replacement phone — including the writer identity, which would make two devices the

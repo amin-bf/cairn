@@ -21,14 +21,15 @@
 //! pin them, and not as an invitation to arithmetic at a call site.
 //!
 //! **There is no third number, and #163 is why.** The editor carried a `TWO_COLUMN_MIN_WIDTH` from
-//! #131 — the width at which it stopped folding its two panes into a toggle — and the toggle exists
+//! #131 — the width at which it stopped folding its two panes into a toggle — and the toggle existed
 //! because a soft keyboard eats *height*, so the test named one axis and decided about the other.
 //! Judged on a live window dragged down by hand, two columns stayed readable at **118px per pane**,
 //! which is a third of the narrowest case anyone had argued for: narrowness is a gradient here and a
-//! gradient has no threshold in it. So the width was deleted rather than moved, and the arrangement
-//! asks [`editor_is_side_by_side`] instead. The app now has **no width-driven arrangement change
-//! anywhere** — the frame is one arrangement at every width (#131), Review refused a second
-//! breakpoint (#124), and this was the last one standing.
+//! gradient has no threshold in it. So the width was deleted rather than moved. The app has **no
+//! width-driven arrangement change anywhere** — the frame is one arrangement at every width (#131),
+//! Review refused a second breakpoint (#124), and the editor's was the last one standing. Since the
+//! egui Android build retired (ADR-0045 §8) this client runs only where there is no soft keyboard,
+//! so the editor is always two columns.
 
 use eframe::egui::{self, Align, Layout, vec2};
 
@@ -60,7 +61,7 @@ pub fn column<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
 }
 
 /// The same frame, at a caller-chosen cap. **One caller only** — the editor, which earns a wider
-/// frame by putting two real columns in it (see [`editor_is_side_by_side`]). A second caller reaching
+/// frame by putting two real columns in it (see [`TWO_COLUMN_MEASURE`]). A second caller reaching
 /// for this is the frame eroding into a per-screen preference, which is exactly what #131 refused.
 pub fn wide_column<R>(ui: &mut egui::Ui, cap: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     frame_of_width(ui, cap, add)
@@ -165,9 +166,6 @@ pub fn pinned_band(viewport_height: f32) -> f32 {
 /// what the widgets already drawn have claimed, never what the screen has left. The clip rect is the
 /// viewport, and the viewport is what a thumb can reach. This was found by a prototype rendering
 /// pixel-identically to the thing it was varying, with nothing failing.
-///
-/// The viewport already excludes the gesture bar: the inset band is a panel reserved *before* the
-/// scroll area (`crate::keyboard`, ADR-0025 §1), so this measures usable page and not glass.
 pub fn page_room(ui: &egui::Ui) -> f32 {
     (ui.clip_rect().bottom() - ui.cursor().top()).max(0.0)
 }
@@ -187,42 +185,6 @@ pub fn slack_above(room: f32, block: f32, floor: f32) -> f32 {
     (room - block - REACH_LINE).max(floor)
 }
 
-/// Whether the note editor draws its two panes **side by side** — true wherever there is no soft
-/// keyboard to eat the height, false wherever there is one.
-///
-/// **This replaced a width threshold, and #163 deleted the width rather than moving it.** The editor
-/// carried `TWO_COLUMN_MIN_WIDTH = 900` from #131, and the case against it was never that 900 was the
-/// wrong number: the test named a *width* and decided about *vertical* room. The `Write | Cards`
-/// toggle exists because a soft keyboard takes 39% of a handset display
-/// ([ADR-0025](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md) §4), and at 880
-/// on a desktop there is no keyboard and 450px of height going spare — and it fired anyway.
-///
-/// **The width half was tested and there is nothing there.** ADR-0025 §5 had already written
-/// *"the failure is vertical, and no width rule addresses it"*, and #131 left standing the worry that
-/// two narrow columns might simply be unreadable, which would have given the threshold a reason it
-/// did not state. #163 put that in front of a person on a live window dragged down by hand: at
-/// **118px per pane** — a third of the narrowest case anyone had argued about — the card face wraps
-/// to four lines and stays perfectly readable, nothing clips and nothing overflows. Narrowness
-/// produces a *gradient*, not a failure, and a gradient has no threshold in it.
-///
-/// So there is no width at which the arrangement should change, and the app now has **no
-/// width-driven arrangement change anywhere**: #124 refused a second breakpoint on Review, #131 made
-/// the frame one arrangement at every width, and this was the last one standing — the one #122
-/// recorded as *"the only arrangement change in the app"*.
-///
-/// **Read off `SoftKeyboard::exists`, which is this client's way of asking *is this operated by a
-/// thumb***. [ADR-0035 §3](../../../docs/adr/0035-the-vertical-anchor.md) already reads it for the
-/// same kind of question, and its reasoning carries: a platform that raises a keyboard on screen is a
-/// platform with no pointer. It is a proxy rather than a truth, exact for the two targets that exist,
-/// and stated as *touch* so the native clients coming later inherit the rule without inheriting
-/// egui's way of noticing it. Not a compile-time capability constant, deliberately — the one that
-/// exists (ADR-0015 §9) exists to make a limitation visible and never to vary behaviour.
-///
-/// It answers for the **platform**, not for the window, which is why nothing here takes a width.
-pub fn editor_is_side_by_side() -> bool {
-    !crate::platform::insets().keyboard.exists()
-}
-
 /// The widest the editor's two-column frame is drawn. Two columns of a full [`MEASURE`] each would
 /// want 1308px including the gutter, which does not fit the 1280 the design pass judges at — so the
 /// pair is capped where it stops gaining and each pane simply takes half.
@@ -233,8 +195,8 @@ pub const TWO_COLUMN_MEASURE: f32 = 1120.0;
 /// and window.
 pub const PANE_GUTTER: f32 = PAGE_MARGIN;
 
-/// The cap the current screen is drawn at — [`MEASURE`] everywhere, except the editor wherever it is
-/// drawing two columns.
+/// The cap the current screen is drawn at — [`MEASURE`] everywhere, except the editor, which draws
+/// two columns.
 ///
 /// **Read by the nav row and by the screen itself, so the two cannot disagree.** The reason the
 /// chosen frame beat the others was that the nav pill and the content share one left edge; a nav
@@ -242,16 +204,16 @@ pub const PANE_GUTTER: f32 = PAGE_MARGIN;
 /// frames were rejected for, and it would arrive here silently the moment one caller hard-coded
 /// `MEASURE` while the other asked a question.
 ///
-/// The row therefore *does* shift when a note is opened on a pointer platform. That is a deliberate
-/// trade and the smaller of two: the alternative — pinning the nav to one column while the editor
-/// uses another — buys stillness by breaking the alignment on the screen where the eye has two
-/// columns to line up against rather than one.
+/// The row therefore *does* shift when a note is opened. That is a deliberate trade and the smaller
+/// of two: the alternative — pinning the nav to one column while the editor uses another — buys
+/// stillness by breaking the alignment on the screen where the eye has two columns to line up
+/// against rather than one.
 ///
 /// **It takes no width any more** (#163). It used to, and the window it was handed was the one thing
 /// that made this and the screen able to disagree: two call sites, each measuring the window for
-/// itself. Now both ask [`editor_is_side_by_side`], which measures nothing.
+/// itself. Now it measures nothing.
 pub fn cap_for(editor_open: bool) -> f32 {
-    if editor_open && editor_is_side_by_side() {
+    if editor_open {
         TWO_COLUMN_MEASURE
     } else {
         MEASURE
@@ -313,28 +275,16 @@ mod tests {
         assert_eq!(slack_above(184.0 + REACH_LINE + FLOOR, 184.0, FLOOR), FLOOR);
     }
 
-    /// **The arrangement asks the platform and never the window** — the one thing left to pin once
-    /// the threshold is gone, and the trap it replaces.
+    /// **The arrangement never asks the window** — the one thing left to pin once the threshold is
+    /// gone, and the trap it replaces.
     ///
     /// #131's trap was that the editor's side-by-side test could be evaluated against a *column*
-    /// rather than the window and pass or fail accidentally, with nothing erroring; the test that
-    /// used to sit here pinned `MEASURE` a safe distance below the threshold so the two could not be
-    /// mistaken for each other. #163 removed the trap by removing the width: there is no expression
-    /// left that could be handed the wrong one.
-    ///
-    /// What can still go wrong is subtler and this is what catches it — a later ticket reaching for
-    /// `viewport_rect().width()` again, to add a floor, a tablet case or a landscape rule. Both
-    /// answers here are about the *platform*, so on a desktop they hold at every window size, and a
-    /// width creeping back in is what makes one of them move.
+    /// rather than the window and pass or fail accidentally, with nothing erroring. #163 removed the
+    /// trap by removing the width: there is no expression left that could be handed the wrong one,
+    /// and `cap_for` taking no width is what keeps it so. This pins the two caps the editor flag
+    /// chooses between.
     #[test]
     fn the_arrangement_does_not_depend_on_how_wide_the_window_is() {
-        // The desktop has no soft keyboard (`platform::desktop`), so the editor is side by side —
-        // and stays so at every width, because no width is consulted. 118px per pane was judged by
-        // hand and kept; the narrowest arm here is far below anything a window reaches.
-        assert!(
-            editor_is_side_by_side(),
-            "a platform with no soft keyboard draws two columns"
-        );
         assert_eq!(
             cap_for(true),
             TWO_COLUMN_MEASURE,

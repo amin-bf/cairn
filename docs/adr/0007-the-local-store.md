@@ -265,6 +265,11 @@ the "my edit keeps silently losing with no explanation" failure §7 rejected wal
 Android exposes no data directory to this stack, so the ~29 lines of `ndk_context` + `jni` calling
 `getFilesDir().getAbsolutePath()` carry forward as validated code, per ADR-0003 §5.
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026):** the JNI went with the
+> egui Android build. The Kotlin app passes `getFilesDir()` and `getNoBackupFilesDir()` in
+> ([ADR-0046 §5](0046-the-line-between-kotlin-and-rust.md)), and the store's Android arm refuses. The
+> locations, and everything below about Auto Backup, are unchanged.
+
 What survives on Android: an **app update**, yes; an **uninstall**, no; a user "clear data", no.
 
 **And then there is backup, which silently manufactures ADR-0004 §2's duplicate-writer failure.**

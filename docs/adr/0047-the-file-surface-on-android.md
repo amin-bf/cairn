@@ -141,6 +141,9 @@ retires (ADR-0045 §5).
 > cross both ways, and the seam's Android arms stay, uncalled by the Kotlin app, until the egui
 > build retires.
 
+> **Note (31.10.2026):** the egui build is retired
+> ([ADR-0045 §8](0045-the-native-android-client.md)). The seam's Android arms now refuse.
+
 > **Note (31.10.2026):** [ADR-0052](0052-the-file-surface-on-android-is-import-only.md) takes deck
 > export off the map: no renderer has an export screen, and parity does not need one. In this map,
 > §3 and §4 serve the collection archive, which the backup slice builds. A deck file uses them when
@@ -170,7 +173,7 @@ All on Android only; the desktop reads each as written.
   *Open with* sheet — the gap ADR-0024 §3 recorded as unfixable.
 - The `MediaStore` facts in `AGENTS.md` (deck-export rules 11–15) and backup rule 5 describe the egui
   build; they are re-worded when it retires (the map's fog, *Retiring the egui Android build*), not
-  here.
+  here. *Done with [ADR-0045 §8](0045-the-native-android-client.md), 31.10.2026.*
 - **Open, for the build**: how the device's providers treat a typed extension and a colliding name
   under `ACTION_CREATE_DOCUMENT`; and whether a shared document URI from a cloud provider reaches
   the receiving application as reliably as a `MediaStore` URI did (ADR-0023's recipient read).

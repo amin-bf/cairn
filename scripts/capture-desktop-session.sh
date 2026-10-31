@@ -87,13 +87,9 @@ echo "session: page frame — margin $margin, measure $measure, column left edge
 # correct at exactly one window and silently wrong at every other, which is the property the tokens
 # exist to remove — so #163 spends the token rather than the caveat.
 #
-# **The cap is unconditional, because #163 deleted the width that used to gate it.** The editor's
-# arrangement is now a question about the platform's input rather than about the window
-# (`frame::editor_is_side_by_side`), and this harness only ever photographs the **desktop**, which
-# has no soft keyboard — so the editor is side by side at every width the harness is given and takes
-# the wide cap at every one of them. A handset capture is not this script's, and if it ever is, this
-# is the line that has to learn the difference rather than a width comparison that would look
-# plausible and be wrong on both platforms at once.
+# **The cap is unconditional, because #163 deleted the width that used to gate it.** The egui app
+# runs only on the desktop since its Android build retired (ADR-0045 §8), so the editor is side by
+# side at every width the harness is given and takes the wide cap at every one of them.
 two_column_measure=${CAIRN_TWO_COLUMN_MEASURE:-1120}
 editor_cap=$two_column_measure
 editor_inner=$(( ${CAIRN_WIDTH:-1280} - margin * 2 ))

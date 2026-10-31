@@ -211,12 +211,10 @@ fn sync_block(ui: &mut egui::Ui, setting_up: &mut bool) {
 /// **Temporary, and not a specified feature.** The fixture bench: the collection states the shipping
 /// seed never produces, one tap each (`fixtures`).
 ///
-/// **This is the handset half of a bench whose other half is a binary.** The desktop harness installs
-/// a fixture from *outside*, into the scratch data directory it already owns; Android has no such
-/// route, because `data_dir` is `getFilesDir()` and nothing outside the app may write it — and #141
-/// found that even an uninstall does not clear it, because ADR-0007 §6 deliberately puts it in the
-/// Auto Backup set. A thumb tapping a button is the only way in, which is why this block exists
-/// rather than a flag.
+/// **This is the in-app half of a bench whose other half is a binary.** The desktop harness installs
+/// a fixture from *outside*, into the scratch data directory it already owns. This block was built
+/// for the egui Android build, where nothing outside the app may write `getFilesDir()`; that build is
+/// retired (ADR-0045 §8), and the block stays because the checkpoint below has no outside route.
 ///
 /// The **checkpoint** is the one control here that installs no rows. ADR-0006 §1's ten-minute
 /// check-in hangs off a sitting's monotonic clock rather than off the log, so no pre-made collection
@@ -225,9 +223,7 @@ fn sync_block(ui: &mut egui::Ui, setting_up: &mut bool) {
 ///
 /// The **file sets** sit under the fixtures, and they are the one control here that acts on the spot:
 /// a set only *adds* files through the user-files seam and reads the collection to check its plans,
-/// so it closes no connection and needs nothing from the caller. On a handset this row is the only
-/// way a file set lands at all — `MediaStore` is writable by the application and by nothing outside
-/// it (`file_bench`).
+/// so it closes no connection and needs nothing from the caller (`file_bench`).
 ///
 /// Returns what the person asked for; the caller acts once the collection borrow has ended.
 fn fixture_bench(
@@ -457,11 +453,12 @@ fn calendar_date(iso: &str) -> String {
 /// exist for, drawn in every family they are registered into, so issue #97's criteria can be read off
 /// one screen by someone who reads the script.
 ///
-/// **It is here because the handset cannot be asked any other way.** Client-stack rule 8 makes Android
-/// text input ASCII-only — there is no IME path, so a Persian sentence can never be *typed* on the
-/// device — and a screenshot compared against a reference image only tells a non-reader that something
-/// shaped like Persian appeared. So the strings ship in the binary, each above what it must read, and
-/// the judgement handed over is the one only a reader can make.
+/// **It was built because the egui Android build could not be asked any other way**: that build's
+/// text input was ASCII-only, so a Persian sentence could never be *typed* on the device, and a
+/// screenshot compared against a reference image only tells a non-reader that something shaped like
+/// Persian appeared. So the strings ship in the binary, each above what it must read, and the
+/// judgement handed over is the one only a reader can make. That build is retired (ADR-0045 §8); the
+/// specimen stays because the desktop draws through the same faces.
 ///
 /// **Three families, drawn one under the other on purpose.** A face is resolved per family and per
 /// character, so the same string can be right in `Proportional` and wrong in `Monospace` or in

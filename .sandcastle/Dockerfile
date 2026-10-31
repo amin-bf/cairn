@@ -63,18 +63,18 @@ ENV PATH="/home/agent/.cargo/bin:/home/agent/.local/bin:$PATH"
 
 # --- Android cross-compilation: compile and link, never package ---
 #
-# Without this the sandbox cannot so much as *compile* the
-# `#[cfg(target_os = "android")]` arms, so any issue can break the Android build
-# and nothing notices until someone builds by hand. With it,
-# `cargo build --target aarch64-linux-android` works.
+# Without this the sandbox cannot so much as *compile* `cairn-ffi` and the
+# `#[cfg(target_os = "android")]` arms for the Kotlin app's `.so`, so any issue
+# can break the Android build and nothing notices until someone builds by hand.
+# With it, `cargo build --target aarch64-linux-android -p cairn-ffi` works.
 #
 # rustup's target alone is not enough, and this is the part that surprises:
 # `cargo check` runs build scripts, and rusqlite's `bundled` feature compiles
 # SQLite's C with `cc`, so a cross C toolchain is needed even to type-check.
 #
-# Deliberately omitted: the JDK, the SDK platforms and Gradle. `cargo apk build`
-# therefore does NOT run here, and packaging regressions — the emitted manifest,
-# the intent filters — stay a human check on the handset. Adding them would
+# Deliberately omitted: the JDK, the SDK platforms and Gradle. The Kotlin app's
+# Gradle build therefore does NOT run here, and packaging regressions — the
+# manifest, the intent filters — stay a human check on the handset. Adding them would
 # roughly double the image for a check that still could not answer the questions
 # a device answers.
 #

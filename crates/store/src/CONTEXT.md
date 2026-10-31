@@ -180,7 +180,11 @@ disown every earlier `reviewed` row.
 
 `platform/` is this crate's whole platform surface, and it is two functions wide: `data_dir()` and
 `state_dir()`. Three `#[cfg]` arms, the third a `compile_error!` so an unrecognised target fails the
-build rather than silently taking the desktop path.
+build rather than silently taking the desktop path. The Android arm refuses both: its JNI lookups
+went with the egui Android build ([ADR-0045 §8](../../../docs/adr/0045-the-native-android-client.md)),
+and the Kotlin app passes `filesDir` and `noBackupFilesDir` in itself (ADR-0046), which keeps
+ADR-0007 §6's split — the collection in the backup set, the writer marker outside it — that caller's
+to keep.
 
 **A third function appearing here means the seam is eroding.** Everything else in this crate is
 portable — `rusqlite` with `bundled` compiles unchanged for desktop and Android, proven on the
@@ -191,9 +195,8 @@ recorded a contradiction — ADR-0009's handoff sends every platform capability 
 above forbids a third arriving — and [ADR-0016 §5](../../../docs/adr/0016-backup-and-restore.md)
 resolved it: a crate that must touch the platform for an unrelated reason gets **its own** `platform`
 module under the same three-arm discipline. `cairn-export` has one (put/get/list/hand_off for
-user-visible files), and `cairn-app` has the third — one function returning the window's insets,
-since an inset is a fact about the window the UI draws into and routing it here would make this crate
-answer a question about layout ([ADR-0025 §2](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)).
-**This module still stays at two functions**, and that limit is now load-bearing rather than merely
-tidy — it is the reason the erosion signal still means anything. The signal is a **fourth function
+user-visible files); `cairn-app` had a third — the window's insets
+([ADR-0025 §2](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)) — which went
+with the egui Android build. **This module still stays at two functions**, and that limit is now
+load-bearing rather than merely tidy — it is the reason the erosion signal still means anything. The signal is a **fourth function
 here**, never a fourth module elsewhere.

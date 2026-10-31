@@ -220,8 +220,9 @@ pub struct Collection {
 
 impl Collection {
     /// Open (or first-time create) the collection under a data directory and a state directory. The
-    /// caller supplies both — on desktop they are the two XDG lookups, on Android the two JNI ones
-    /// ([`crate::platform`]); the store never reaches for a directory itself.
+    /// caller supplies both — on desktop they are the two XDG lookups ([`crate::platform`]), on
+    /// Android the two directories the Kotlin app passes in (ADR-0046 §5); the store never reaches
+    /// for a directory itself.
     ///
     /// This resolves identity as a side effect, which is the one moment ADR-0007 §6 permits minting:
     /// a fresh install mints a writer and a collection id; a collection whose writer marker is

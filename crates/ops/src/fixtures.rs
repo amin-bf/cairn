@@ -40,10 +40,11 @@
 //!
 //! 1. **From outside** — the `cairn-fixture` binary, run by `capture-desktop.sh` against the scratch
 //!    profile before the app launches. Desktop only, and sufficient there.
-//! 2. **From inside** — the temporary block on Settings. This is not a convenience: Android's
-//!    `data_dir` is `getFilesDir()`, which is not writable from outside the app, and #141 found that
-//!    an uninstall is not a first launch there either, because ADR-0007 §6 deliberately puts it in
-//!    the Auto Backup set. A thumb tapping a button is the only route in on a handset.
+//! 2. **From inside** — the temporary block on Settings, and the Kotlin app's through the binding.
+//!    This is not a convenience: Android's `getFilesDir()` is not writable from outside the app, and
+//!    #141 found that an uninstall is not a first launch there either, because ADR-0007 §6
+//!    deliberately puts it in the Auto Backup set. A thumb tapping a button is the only route in on a
+//!    handset.
 //!
 //! # A fixture verifies itself
 //!
@@ -762,11 +763,9 @@ impl Fixture {
 /// Wipe whatever is in the platform's two directories (ADR-0007 §6) and install `fixture` there —
 /// the **outside** way in, and the whole of what the `cairn-fixture` binary does.
 ///
-/// This lives here rather than in `cairn-desktop` because that crate is a shim with no logic
-/// (ADR-0003 §5): anything written there is never compiled by the Android build and never exercised
-/// on the handset, which is the same class of defect as a runtime platform check. It is not
-/// desktop-only by construction — it is simply useless on Android, where nothing outside the app can
-/// write `getFilesDir()` and the Settings block is the route instead.
+/// This lives here rather than in `cairn-desktop` because that crate is a shim with no logic, where
+/// no test reaches. It is useless on Android, where nothing outside the app can write
+/// `getFilesDir()` and the platform directories are the app's to pass in (ADR-0046).
 ///
 /// **The application must not be running.** SQLite's `-wal` and `-shm` siblings are unlinked here,
 /// and a live connection would be left checkpointing into inodes nothing can reach. The capture

@@ -27,7 +27,7 @@ use crate::{bidi, controls, fonts, frame, spacing, theme, typography};
 /// reveal" is retired with the pre-reveal control that needed it, so ADR-0006 §4's guarantee holds by
 /// there being no route rather than by a side-effect.
 // Each screen threads its own `&mut` slice of `CairnApp` state plus the frame's facts — `now_ms`,
-// `today`, and now whether a thumb is driving (ADR-0035 §3). Grouping them behind a struct would
+// `mono_ms` and `today`. Grouping them behind a struct would
 // relocate the same fields, not reduce them; the same trade `settings_screen` makes.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn review(
@@ -39,7 +39,6 @@ pub(crate) fn review(
     now_ms: i64,
     mono_ms: u64,
     today: i64,
-    touch: bool,
 ) -> Option<NoteId> {
     // Everything on screen is derived from the log this frame — there is no cached session state to
     // fall out of step with it. The new-card rate and the notes' authored positions ride the mutable
@@ -298,10 +297,10 @@ pub(crate) fn review(
 
                 ui.add_space(frame::slack_above(
                     frame::page_room(ui),
-                    grade_cluster_height(touch),
+                    grade_cluster_height(),
                     spacing::gap(3),
                 ));
-                let pressed = grade_buttons(ui, &offered, today, touch);
+                let pressed = grade_buttons(ui, &offered, today);
 
                 if let Some(grade) = pressed {
                     // The grade buttons are drawn only inside the `revealed` branch, so the sitting
@@ -694,7 +693,7 @@ fn start_wording(available: usize) -> String {
 /// label with its interval still fits inside 118. So a later change to
 /// [ADR-0001](../../../../docs/adr/0001-scheduling-algorithm-and-grade-scale.md)'s scale does not
 /// have to reopen this arrangement.
-fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64, touch: bool) -> Option<Grade> {
+fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64) -> Option<Grade> {
     let label = |ui: &egui::Ui, grade: Grade, name: &str| {
         let days = session::interval_preview(offered, grade, today);
         controls::grade_label(ui, name, &format!("{days}d"))
@@ -711,29 +710,9 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64, touch: bool) 
         (Grade::Easy, "Easy"),
     ];
 
-    // **Under a thumb the passes stack; under a pointer they stay a row** (ADR-0035 §3). A thumb
-    // travels up and down freely and sideways badly, so the two ends of a segmented row flip
-    // between comfortable and a stretch depending on which hand holds the phone — which is not a
-    // sizing problem and cannot be fixed by a bigger target. A pointer has no such axis and crosses
-    // 208px for nothing, so it keeps the row ADR-0034 §1 chose.
+    // A pointer crosses 208px for nothing, so the passes keep the row ADR-0034 §1 chose. The thumb's
+    // stack ADR-0035 §3 added went with the egui Android build (ADR-0045 §8).
     //
-    // *Forgot* is held apart either way, which is the half of §1 that survives: **three** units
-    // here, because in a stack the gap carries the whole distinction on its own rather than sharing
-    // it with a change of shape.
-    if touch {
-        ui.add_space(spacing::gap(3));
-        for (i, (grade, name)) in PASSES.iter().enumerate() {
-            if i > 0 {
-                ui.add_space(spacing::gap(1));
-            }
-            let job = label(ui, *grade, name);
-            if controls::control_job(ui, job, ui.available_width()).clicked() {
-                pressed = Some(*grade);
-            }
-        }
-        return pressed;
-    }
-
     // Two units hold the passes apart from *Forgot*. Three was the old stacked break and it is more
     // than a row needs: the row is already a different shape, so the gap only has to separate, not
     // to carry the whole distinction on its own.
@@ -754,14 +733,9 @@ fn grade_buttons(ui: &mut egui::Ui, offered: &Offered, today: i64, touch: bool) 
 /// Computed rather than measured: the cluster is a fixed composition of controls at a fixed height
 /// with stated gaps, so its height is arithmetic. A prototype that varied the composition had to
 /// remember last frame's measurement and carry a frame of lag; one composition needs neither.
-fn grade_cluster_height(touch: bool) -> f32 {
-    if touch {
-        // Forgot, the break, then three passes a unit apart.
-        controls::HEIGHT * 4.0 + spacing::gap(3) + spacing::gap(1) * 2.0
-    } else {
-        // Forgot, the break, then the segmented row.
-        controls::HEIGHT * 2.0 + spacing::gap(2)
-    }
+fn grade_cluster_height() -> f32 {
+    // Forgot, the break, then the segmented row.
+    controls::HEIGHT * 2.0 + spacing::gap(2)
 }
 
 /// The caught-up floor: **the mark, then the statement**, centred and given the screen
@@ -996,7 +970,6 @@ mod tests {
                     now_ms,
                     0,
                     TODAY,
-                    false,
                 );
             })
         };
@@ -1076,7 +1049,6 @@ mod tests {
                     now_ms,
                     LATER_MS,
                     TODAY,
-                    false,
                 );
             })
         };
@@ -1127,19 +1099,15 @@ mod tests {
         assert_eq!(start_wording(1), "Start — the one card");
     }
 
-    /// **ADR-0035 §3, and the only thing that keeps the two axes apart.** Under a thumb every grade
-    /// is a full-width control; under a pointer the three passes share one row.
+    /// **ADR-0034 §1: *Forgot* spans the column and the three passes share one row.**
     ///
-    /// Asserted on the **widths actually drawn**, not on the branch taken, because the defect this
-    /// guards against is a control that renders perfectly at the wrong width. Deleting the `touch`
-    /// argument and always drawing the row compiles, passes every other test, and silently returns
-    /// the handset to a grade row whose two ends flip between comfortable and a stretch depending on
-    /// which hand is holding the phone — the finding #141 was opened for.
+    /// Asserted on the **widths actually drawn**, not on the code path, because the defect this
+    /// guards against is a control that renders perfectly at the wrong width.
     #[test]
-    fn the_grades_stack_under_a_thumb_and_stay_a_row_under_a_pointer() {
-        const WIDTH: f32 = 392.0; // the handset's column: 448dp less two 28dp margins.
+    fn forgot_spans_the_column_and_the_passes_share_a_row() {
+        const WIDTH: f32 = 392.0;
 
-        fn control_widths(width: f32, touch: bool) -> Vec<f32> {
+        fn control_widths(width: f32) -> Vec<f32> {
             let ctx = egui::Context::default();
             crate::theme::install(&ctx, crate::theme::ThemeChoice::Dark);
             crate::typography::install(&ctx);
@@ -1157,7 +1125,7 @@ mod tests {
             };
             let out = ctx.run_ui(Default::default(), |ui| {
                 ui.set_width(width);
-                grade_buttons(ui, &offered, 0, touch);
+                grade_buttons(ui, &offered, 0);
             });
 
             fn walk(shape: &egui::Shape, fill: egui::Color32, into: &mut Vec<f32>) {
@@ -1178,26 +1146,15 @@ mod tests {
             widths
         }
 
-        let stacked = control_widths(WIDTH, true);
-        assert_eq!(
-            stacked.len(),
-            4,
-            "a thumb gets four separate controls — drew {stacked:?}"
-        );
-        assert!(
-            stacked.iter().all(|w| *w == WIDTH.round()),
-            "every stacked grade takes the whole column — drew {stacked:?}"
-        );
-
-        let row = control_widths(WIDTH, false);
+        let row = control_widths(WIDTH);
         assert_eq!(
             row.len(),
             4,
-            "a pointer still gets four controls, three of them sharing a row — drew {row:?}"
+            "four controls, three of them sharing a row — drew {row:?}"
         );
         assert!(
             row.iter().filter(|w| **w == WIDTH.round()).count() == 1,
-            "only *Forgot* spans the column under a pointer — drew {row:?}"
+            "only *Forgot* spans the column — drew {row:?}"
         );
         assert!(
             row.iter().filter(|w| **w < WIDTH.round() / 2.0).count() == 3,
@@ -1211,14 +1168,8 @@ mod tests {
     /// kind that stays plausible while being wrong by one gap.
     #[test]
     fn the_cluster_height_matches_what_the_cluster_draws() {
-        let stacked = controls::HEIGHT * 4.0 + spacing::gap(3) + spacing::gap(1) * 2.0;
         let row = controls::HEIGHT * 2.0 + spacing::gap(2);
-        assert_eq!(grade_cluster_height(true), stacked);
-        assert_eq!(grade_cluster_height(false), row);
-        assert!(
-            grade_cluster_height(true) > grade_cluster_height(false),
-            "the stack is the taller of the two, which is what the slack has to absorb"
-        );
+        assert_eq!(grade_cluster_height(), row);
     }
 
     #[test]
@@ -1272,7 +1223,6 @@ mod tests {
                     NOW,
                     0,
                     NOW / 86_400_000,
-                    false,
                 );
             })
         };
