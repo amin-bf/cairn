@@ -1,10 +1,22 @@
 package dev.cairn.design
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.cairn.design.tokens.DarkPalette
@@ -97,6 +109,34 @@ class DesignTest {
         assertEquals(Color(LightPalette.PAGE), light.page)
         assertEquals(Color(LightPalette.BODY), light.body)
         assertTrue(!light.dark)
+    }
+
+    /** The colour a text node is laid out in, read from its own layout. */
+    private fun inkOf(tag: String): Color {
+        val layouts = mutableListOf<TextLayoutResult>()
+        rule.onNode(hasTestTag(tag), useUnmergedTree = true).onChildren().onFirst()
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().layoutInput.style.color
+    }
+
+    @Test
+    fun a_disabled_text_action_cannot_be_pressed_and_speaks_in_the_weak_ink() {
+        var colors: CairnColors? = null
+        var presses = 0
+        rule.setContent {
+            CairnTheme(false) {
+                Probe { colors = it }
+                Column {
+                    CairnTextAction("Cancel", { presses++ }, Modifier.testTag("on"))
+                    CairnTextAction("Cancel", { presses++ }, Modifier.testTag("off"), enabled = false)
+                }
+            }
+        }
+        rule.onNodeWithTag("on").assertIsEnabled()
+        rule.onNodeWithTag("off").assertIsNotEnabled().performClick()
+        assertEquals(0, presses)
+        assertEquals(colors!!.link, inkOf("on"))
+        assertEquals(colors!!.weak, inkOf("off"))
     }
 
     private fun specimenShowsEverything(dark: Boolean) {

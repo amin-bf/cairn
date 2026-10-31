@@ -46,7 +46,9 @@ private const val TICK_MS = 15_000L
 const val SETTINGS_TICK_MS = 250L
 
 private const val REVIEW = "review"
-private const val NOTES = "notes"
+private const val ARG_FILTER = "filter"
+private const val NOTES_PLACE = "notes"
+private const val NOTES = "$NOTES_PLACE?$ARG_FILTER={$ARG_FILTER}"
 private const val SETTINGS = "settings"
 private const val LEECHES = "leeches"
 private const val IMPORT = "import"
@@ -60,6 +62,10 @@ internal fun editorRoute(note: String? = null, kind: String? = null, deck: Strin
             .filter { it.second != null }
             .joinTo(this, "&") { "${it.first}=${Uri.encode(it.second)}" }
     }
+
+/** The note list's route: unfiltered, or opened on [deck] the way an import lands (ADR-0041 §3). */
+private fun notesRoute(deck: String? = null): String = 
+    if (deck == null) NOTES_PLACE else "$NOTES_PLACE?$ARG_FILTER=${Uri.encode(deck)}"
 
 /**
  * The app's places on the Navigation back stack (ADR-0048 §1, §6): Review, where it starts, Notes and
@@ -97,7 +103,7 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
         Destination(stringResource(R.string.destination_review), route == REVIEW || route == LEECHES, "destination-review") { nav.goTo(REVIEW) },
-        Destination(stringResource(R.string.destination_notes), route == NOTES, "destination-notes") { nav.goTo(NOTES) },
+        Destination(stringResource(R.string.destination_notes), route == NOTES, "destination-notes") { nav.goTo(notesRoute()) },
         Destination(stringResource(R.string.destination_settings), route == SETTINGS, "destination-settings") { nav.goTo(SETTINGS) },
     )
     val shell: @Composable () -> Unit = {
@@ -129,9 +135,19 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                     onBack = { nav.popBackStack() },
                 )
             }
-            composable(NOTES) {
+            composable(
+                NOTES,
+                arguments = listOf(
+                    navArgument(ARG_FILTER) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
+                val filter = entry.arguments?.getString(ARG_FILTER)
                 NotesScreen(
-                    viewModel { NotesViewModel(owner) },
+                    viewModel { NotesViewModel(owner, filter) },
                     onOpen = { nav.navigate(editorRoute(note = it)) },
                     onCreate = { deck -> nav.navigate(editorRoute(kind = NEW_KIND, deck = deck)) },
                 )
@@ -178,19 +194,32 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                     nav.popBackStack()
                     Unit
                 }
-                BackHandler(onBack = leave)
+                // Back is the gate's, so while the write is in flight it does nothing, as the gate does.
+                // It stays handled then: a handler let go would leave Back to the NavHost's own pop.
+                BackHandler {
+                    if (!importModel.writing) leave()
+                }
                 // The plan is derived on every read, so it is read again on return (ADR-0022 §5).
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { importModel.refresh() }
                 // After a killed process the route comes back with no file: the preview is not
                 // restored, and the app opens on Review (#241). Leaving clears the model too, but
                 // has already popped the route by then.
                 val held by importModel.state.collectAsStateWithLifecycle()
-                if (held is ImportScreenState.Empty) {
-                    LaunchedEffect(Unit) {
+                when (val s = held) {
+                    is ImportScreenState.Empty -> LaunchedEffect(Unit) {
                         if (nav.currentBackStackEntry?.destination?.route == IMPORT) {
                             nav.navigate(REVIEW) { popUpTo(nav.graph.id) { inclusive = true } }
                         }
                     }
+                    // Written, and nothing is said: the note list opens with Review under it, so Back
+                    // goes to Review and a sitting in progress is still there (ADR-0041 §3, #241). The
+                    // note list it lands on is a fresh one, so one left earlier is not restored over it.
+                    is ImportScreenState.Landed -> LaunchedEffect(s) {
+                        nav.clearBackStack(NOTES)
+                        nav.navigate(notesRoute(s.filterTo)) { popUpTo(REVIEW) }
+                        importModel.clear()
+                    }
+                    else -> {}
                 }
                 ImportScreen(importModel, onLeave = leave)
             }

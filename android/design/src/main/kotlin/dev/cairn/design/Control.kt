@@ -16,18 +16,19 @@ import dev.cairn.design.tokens.Controls
 /**
  * A text action: a label with no surface, in the link colour at the small tier (ADR-0034 §2). The one
  * frameless control, for a short set of alternatives sitting beside a primary. It keeps the 36 dp
- * height every control has, so it is as easy to hit as the framed ones.
+ * height every control has, so it is as easy to hit as the framed ones. One that cannot be pressed
+ * speaks in the weak ink, as [CairnControl] does.
  */
 @Composable
-fun CairnTextAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun CairnTextAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     Box(
         modifier
             .defaultMinSize(minWidth = Controls.HEIGHT.dp, minHeight = Controls.HEIGHT.dp)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = gap(1)),
         contentAlignment = Alignment.Center,
     ) {
-        CairnText(label, tier = Tier.Small, color = Cairn.colors.link)
+        CairnText(label, tier = Tier.Small, color = if (enabled) Cairn.colors.link else Cairn.colors.weak)
     }
 }
 

@@ -319,18 +319,6 @@ class ImportPreviewTest {
     }
 
     @Test
-    fun import_is_drawn_and_writes_nothing_yet() {
-        showApp()
-        pick(update.name)
-        rule.onNodeWithTag("gate-import").performClick()
-        rule.waitForIdle()
-        assertTrue(exists("import-screen"))
-        val stillPlanned = runBlocking { owner.use { it.openFile(FileArrival.PICKED, null, update.bytes, true).preview() } }
-        assertEquals(ImportGate.DECIDE, (stillPlanned as FilePreview.Plan).plan.gate)
-        assertEquals(6uL, stillPlanned.plan.decks[0].newNotes)
-    }
-
-    @Test
     fun the_kinds_a_file_adopts_are_each_wrapped_in_their_line() {
         // No bench file adopts a kind, so the plan is stated directly: the names are the file's own
         // and so hostile, like every other name in a sentence (ADR-0041 §2).

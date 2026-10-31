@@ -3,6 +3,7 @@ package dev.cairn.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.cairn.ffi.CairnException
+import dev.cairn.ffi.FileApplied
 import dev.cairn.ffi.FileArrival
 import dev.cairn.ffi.FilePreview
 import dev.cairn.ffi.InboundFileHandle
@@ -15,8 +16,19 @@ sealed interface ImportScreenState {
     /** No file is held: after a process kill the preview is not restored (#241), and the app opens on Review. */
     data object Empty : ImportScreenState
 
-    /** The file's name as it arrived, if it had one, and what importing it would do now. */
-    data class Preview(val name: String?, val preview: FilePreview) : ImportScreenState
+    /**
+     * The file's name as it arrived, if it had one, and what importing it would do now. While the
+     * write is [writing] the gate is disabled; [failure] is the store's account of a refused write.
+     */
+    data class Preview(
+        val name: String?,
+        val preview: FilePreview,
+        val writing: Boolean = false,
+        val failure: String? = null,
+    ) : ImportScreenState
+
+    /** Written: the note list is to open filtered to [filterTo], or unfiltered when the file held several decks. */
+    data class Landed(val filterTo: String?) : ImportScreenState
 
     data object Failed : ImportScreenState
 }
@@ -39,7 +51,7 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         try {
             file = owner.use { it.openFile(arrival, read.name, read.bytes, read.complete) }
             name = read.name
-            derive()
+            derive(failure = null)
         } catch (_: CairnException) {
             _state.value = ImportScreenState.Failed
         }
@@ -47,8 +59,36 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
 
     /** Derive the plan again against the collection as it stands. */
     fun refresh() {
-        viewModelScope.launch { derive() }
+        viewModelScope.launch { derive(failure = (_state.value as? ImportScreenState.Preview)?.failure) }
     }
+
+    /**
+     * *Import*: the plan is derived again and written, off the main thread (ADR-0022 §5), and nothing
+     * is said. The gate is disabled until the call returns. A refusal from a collection that changed
+     * under the preview is the preview's refusal now, so the plan is read again and shows it; a write
+     * the store refuses is said on the preview, the gate stays, and the plan is read again.
+     */
+    fun import() {
+        val held = file ?: return
+        val shown = _state.value as? ImportScreenState.Preview ?: return
+        if (shown.writing) return
+        _state.value = shown.copy(writing = true, failure = null)
+        viewModelScope.launch {
+            val applied = try {
+                owner.use { held.apply() }
+            } catch (e: CairnException) {
+                derive(failure = (e as? CairnException.Failed)?.reason ?: e.message.orEmpty())
+                return@launch
+            }
+            when (applied) {
+                is FileApplied.Landed -> if (file === held) _state.value = ImportScreenState.Landed(applied.filterTo)
+                is FileApplied.Refused -> derive(failure = null)
+            }
+        }
+    }
+
+    /** Whether a write is in flight: the gate, and Back with it, cannot be pressed until it returns. */
+    val writing: Boolean get() = (_state.value as? ImportScreenState.Preview)?.writing == true
 
     /** Let the file go: *Cancel*, *Close* and Back all end here, with nothing written and nothing kept. */
     fun clear() {
@@ -57,14 +97,15 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         _state.value = ImportScreenState.Empty
     }
 
-    private suspend fun derive() {
+    /** Derive the plan again, with a refused write's [failure] said under it, or none. */
+    private suspend fun derive(failure: String?) {
         val held = file ?: return
         try {
             val preview = owner.use { held.preview() }
             // A file let go while the plan was being derived stays let go.
-            if (file === held) _state.value = ImportScreenState.Preview(name, preview)
+            if (file === held) _state.value = ImportScreenState.Preview(name, preview, failure = failure)
         } catch (_: CairnException) {
-            _state.value = ImportScreenState.Failed
+            if (file === held) _state.value = ImportScreenState.Failed
         }
     }
 }

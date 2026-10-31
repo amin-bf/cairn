@@ -19,6 +19,8 @@ cairn-store.workspace = true
 uniffi.workspace = true
 
 [dev-dependencies]
+# A test names the attribute an import writes back by the writer's own constant (AGENTS.md rule 20).
+cairn-export.workspace = true
 tempfile.workspace = true
 
 [features]
