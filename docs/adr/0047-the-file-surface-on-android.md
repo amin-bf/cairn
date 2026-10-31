@@ -141,6 +141,11 @@ retires (ADR-0045 §5).
 > cross both ways, and the seam's Android arms stay, uncalled by the Kotlin app, until the egui
 > build retires.
 
+> **Note (31.10.2026):** [ADR-0052](0052-the-file-surface-on-android-is-import-only.md) takes deck
+> export off the map: no renderer has an export screen, and parity does not need one. In this map,
+> §3 and §4 serve the collection archive, which the backup slice builds. A deck file uses them when
+> a later effort builds deck export.
+
 ## Amendments to accepted ADRs
 
 All on Android only; the desktop reads each as written.
