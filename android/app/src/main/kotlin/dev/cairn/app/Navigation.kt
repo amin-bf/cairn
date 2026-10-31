@@ -109,20 +109,20 @@ private fun CairnPlaces(
     // The editor on screen, if one is: a file arriving settles it first (ADR-0021 §7, ADR-0052 §2).
     var openEditor by remember { mutableStateOf<EditorViewModel?>(null) }
     val resolver = LocalContext.current.contentResolver
-    // Every way in reaches the one preview (ADR-0022 §6): the document is read once, and the preview
-    // takes the screen over the place the person was on. A preview already up is replaced (#241).
-    val arrive: suspend (FileArrival, Uri) -> Unit = { arrival, uri ->
-        importModel.open(arrival, readDocument(resolver, uri))
+    // Every way in reaches the one preview (ADR-0022 §6) with the document it read once, and the
+    // preview takes the screen over the place the person was on. A preview already up is replaced (#241).
+    val arrive: suspend (FileArrival, DocumentRead) -> Unit = { arrival, document ->
+        importModel.open(arrival, document)
         // The back stack is the main thread's. The scope is too, but under an unconfined dispatcher
         // (the compose test's) the read resumes on the IO thread.
         withContext(Dispatchers.Main) { nav.navigate(IMPORT) { launchSingleTop = true } }
     }
     if (incoming != null) {
         LaunchedEffect(incoming) {
-            // A newer file cancels the one still being read: the newest is the one the person chose.
+            // A newer file cancels the one still being opened: the newest is the one the person chose.
             incoming.pending.filterNotNull().collectLatest { file ->
                 openEditor?.settleAllAndWait()
-                arrive(file.arrival, file.uri)
+                arrive(file.arrival, file.document)
                 incoming.handled(file)
             }
         }
@@ -188,7 +188,7 @@ private fun CairnPlaces(
                 // document is read once and its grant is never kept (ADR-0047 §1, ADR-0052).
                 val scope = rememberCoroutineScope()
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    if (uri != null) scope.launch { arrive(FileArrival.PICKED, uri) }
+                    if (uri != null) scope.launch { arrive(FileArrival.PICKED, readDocument(resolver, uri)) }
                 }
                 SettingsScreen(
                     model,

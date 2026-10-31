@@ -414,7 +414,7 @@ class ImportPreviewTest {
     fun a_file_replacing_the_preview_opens_at_the_top_of_its_page() {
         // A short host, so the bench's longest preview scrolls; the files arrive as another app hands
         // them over (#244). The same file twice: the second is a new arrival, though its name is the same.
-        val incoming = IncomingFiles()
+        val incoming = IncomingFiles(context as android.app.Application)
         rule.setContent {
             Box(Modifier.height(240.dp)) {
                 CairnAppearance(AppearanceState(ThemeChoice.LIGHT)) {

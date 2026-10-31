@@ -1,6 +1,7 @@
 package dev.cairn.app
 
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -54,11 +55,15 @@ class FileIntentTest {
     @After
     fun tearDown() {
         BenchProvider.files.clear()
+        BenchProvider.opened.clear()
     }
 
     private fun exists(tag: String) = rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun waitFor(tag: String) = rule.waitUntil(30_000) { exists(tag) }
+    // Longer than the suite's 10 s: each test starts the real activity, cold, and reads a file through it.
+    private fun waitUntil(condition: () -> Boolean) = rule.waitUntil(30_000, condition)
+
+    private fun waitFor(tag: String) = waitUntil { exists(tag) }
 
     private fun text(tag: String): String =
         rule.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text }
@@ -71,16 +76,24 @@ class FileIntentTest {
         exists("destinations") && selected("destination-review") && !exists("import-screen") &&
             (exists("start-all") || exists("state-caught-up"))
 
-    private fun view(uri: Uri, type: String = "application/octet-stream") =
-        Intent(Intent.ACTION_VIEW).setDataAndType(uri, type).setClass(context, MainActivity::class.java)
+    /** An intent at the activity, as the system delivers one another app sent. */
+    private fun toActivity(action: String) = Intent(action).setClass(context, MainActivity::class.java)
+
+    private fun view(uri: Uri) = toActivity(Intent.ACTION_VIEW).setDataAndType(uri, "application/octet-stream")
 
     private fun sendStream(uri: Uri) =
-        Intent(Intent.ACTION_SEND).setType("application/octet-stream").putExtra(Intent.EXTRA_STREAM, uri)
-            .setClass(context, MainActivity::class.java)
+        toActivity(Intent.ACTION_SEND).setType("application/octet-stream").putExtra(Intent.EXTRA_STREAM, uri)
 
     private fun sendClip(uri: Uri) =
-        Intent(Intent.ACTION_SEND).setType("application/octet-stream").setClass(context, MainActivity::class.java)
-            .also { it.clipData = ClipData.newRawUri(null, uri) }
+        toActivity(Intent.ACTION_SEND).setType("application/octet-stream").also { it.clipData = ClipData.newRawUri(null, uri) }
+
+    /** Review's entrance stays up: a second opening has every chance to show itself, and does not. */
+    private fun staysOnReviewsEntrance() {
+        waitUntil { onReviewsEntrance() }
+        Thread.sleep(1_000)
+        rule.waitForIdle()
+        assertTrue(onReviewsEntrance())
+    }
 
     /**
      * A file reaches the running app: singleTask brings the intent to `onNewIntent` rather than a second
@@ -108,11 +121,17 @@ class FileIntentTest {
             val browsable = Intent(view).addCategory(Intent.CATEGORY_BROWSABLE)
             val send = Intent(Intent.ACTION_SEND).setType(type).setPackage(context.packageName)
             for ((what, intent) in listOf("VIEW" to view, "VIEW, browsable" to browsable, "SEND" to send)) {
-                val found = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY).map { it.activityInfo.name }
-                assertTrue("$what for $type reaches the activity: $found", ours in found)
+                val found = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_RESOLVED_FILTER)
+                val match = found.firstOrNull { it.activityInfo.name == ours }
+                assertTrue("$what for $type reaches the activity: ${found.map { it.activityInfo.name }}", match != null)
+                // The filter's own declaration: its type, DEFAULT, and BROWSABLE on VIEW alone.
+                val filter = match!!.filter
+                assertTrue("$what's filter names $type", filter.hasDataType(type))
+                assertTrue("$what's filter is DEFAULT", filter.hasCategory(Intent.CATEGORY_DEFAULT))
+                assertEquals("$what's filter is BROWSABLE", intent.action == Intent.ACTION_VIEW, filter.hasCategory(Intent.CATEGORY_BROWSABLE))
             }
         }
-        val info = pm.getActivityInfo(android.content.ComponentName(context, MainActivity::class.java), 0)
+        val info = pm.getActivityInfo(ComponentName(context, MainActivity::class.java), 0)
         assertEquals(ActivityInfo.LAUNCH_SINGLE_TASK, info.launchMode)
     }
 
@@ -126,7 +145,7 @@ class FileIntentTest {
             assertEquals(update.name, text("import-heading"))
             assertFalse("the preview takes the whole screen", exists("destinations"))
             rule.onNodeWithTag("gate-cancel").performClick()
-            rule.waitUntil(30_000) { onReviewsEntrance() }
+            waitUntil { onReviewsEntrance() }
         }
     }
 
@@ -170,12 +189,12 @@ class FileIntentTest {
     fun a_second_file_replaces_the_first_and_back_returns_to_where_the_person_was() {
         ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use { scenario ->
             waitFor("import-screen")
-            rule.waitUntil(30_000) { exists("import-heading") && text("import-heading") == update.name }
+            waitUntil { exists("import-heading") && text("import-heading") == update.name }
             arriveWhileRunning(scenario, view(BenchProvider.uri(several.name)))
-            rule.waitUntil(30_000) { text("import-heading") == several.name }
+            waitUntil { text("import-heading") == several.name }
             pressBack(scenario)
             // One preview was up, not two: Back leaves for Review's entrance.
-            rule.waitUntil(30_000) { onReviewsEntrance() }
+            waitUntil { onReviewsEntrance() }
         }
     }
 
@@ -202,24 +221,26 @@ class FileIntentTest {
         ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use { scenario ->
             waitFor("gate-cancel")
             rule.onNodeWithTag("gate-cancel").performClick()
-            rule.waitUntil(30_000) { onReviewsEntrance() }
+            waitUntil { onReviewsEntrance() }
             scenario.recreate()
-            rule.waitUntil(30_000) { onReviewsEntrance() }
-            // Give a second opening every chance to show itself.
-            Thread.sleep(1_000)
-            rule.waitForIdle()
-            assertTrue(onReviewsEntrance())
+            staysOnReviewsEntrance()
+        }
+    }
+
+    @Test
+    fun a_rotation_mid_read_reads_the_document_once() {
+        ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name, "slow"))).use { scenario ->
+            waitUntil { BenchProvider.openings(update.name) == 1 }
+            scenario.recreate()
+            waitFor("import-deck-0")
+            assertEquals(update.name, text("import-heading"))
+            assertEquals("the document was read once", 1, BenchProvider.openings(update.name))
         }
     }
 
     @Test
     fun an_intent_brought_back_from_recents_is_not_opened_again() {
         val again = view(BenchProvider.uri(update.name)).addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
-        ActivityScenario.launch<MainActivity>(again).use {
-            rule.waitUntil(30_000) { onReviewsEntrance() }
-            Thread.sleep(1_000)
-            rule.waitForIdle()
-            assertTrue(onReviewsEntrance())
-        }
+        ActivityScenario.launch<MainActivity>(again).use { staysOnReviewsEntrance() }
     }
 }
