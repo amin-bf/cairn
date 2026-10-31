@@ -99,12 +99,15 @@ import does not.
 Deliberately [ADR-0013](../../../docs/adr/0013-the-sync-transport.md) §1's shape reused; the fourth
 operation is [ADR-0023](../../../docs/adr/0023-sending-a-written-file.md)'s. The Kotlin Android
 app does not use it: the system picker and save dialog hold the document, and the core takes and
-gives bytes ([ADR-0047 §6](../../../docs/adr/0047-the-file-surface-on-android.md)).
+gives bytes ([ADR-0047 §6](../../../docs/adr/0047-the-file-surface-on-android.md)). So the Android
+arm refuses every call; its `MediaStore` and share-sheet calls went with the egui Android build
+([ADR-0045 §8](../../../docs/adr/0045-the-native-android-client.md)), and the measurements below that
+name `MediaStore` are that build's.
 
 **Hand off**:
 Giving the written file to whatever surface the platform provides for passing a file onward — the
-system share sheet on Android, the file manager with the file **selected** on the desktop. It is not
-*sending*: both arms stop at the hand-over and the application never learns what happened next.
+file manager with the file **selected** on the desktop (the Kotlin app's share is its own, ADR-0047).
+It is not *sending*: it stops at the hand-over and the application never learns what happened next.
 
 **Revision**:
 A per-deck monotonic integer declared by the file, advancing only when the deck's content digest
@@ -195,21 +198,15 @@ The slot's other half is **personal** values, whose syncing is still open and wh
 - **Never put a credential in an archive**, and never put `writer_id` or `seq_highwater` in one. A
   restored device must mint a fresh writer id, or two devices become one writer and the union drops
   reviews.
-- **No file picker, on either platform.** Activity *results* need a Java subclass and therefore a
-  dex, which spends the Gradle-free APK. Launch intents, dropped files and **outbound sends** are
-  fine; results are not. The send was **measured** in the shipped APK shape — manifest plus one
-  `.so`, no `classes.dex`, no `res/`
-  ([evidence](../../../docs/research/android-outbound-share/README.md)) — so the picker's
-  disqualifying property genuinely does not reach it. **This binds the egui build only**: the Kotlin
-  Android app is an activity with a dex, and uses the picker and the save dialog
-  ([ADR-0045 §6](../../../docs/adr/0045-the-native-android-client.md),
-  [ADR-0047](../../../docs/adr/0047-the-file-surface-on-android.md)).
-- **`hand_off` never fires by itself, and the two arms are not a divergence to fix.** A sheet or a
-  file manager opening unasked takes the screen. Android sends and the desktop reveals because there
-  is no share portal on the desktop and nothing to drag on Android; making them symmetric means
+- **The Android file surface is the Kotlin app's.** The no-picker rule bound the egui Android build,
+  whose Gradle-free APK had no dex for an activity result; that build is retired
+  ([ADR-0045 §8](../../../docs/adr/0045-the-native-android-client.md)), and the Kotlin app uses the
+  picker and the save dialog ([ADR-0047](../../../docs/adr/0047-the-file-surface-on-android.md)).
+- **`hand_off` never fires by itself.** A file manager opening unasked takes the screen. The desktop
+  reveals rather than sends because there is no share portal on the desktop; a send would mean
   picking a mail client for the user.
-- **The hand-off delivers the bytes, not just a reference, and this is measured.** A `.cdeck` sent
-  from the handset arrived on a second device that has never held this application **byte for
+- **The hand-off delivers the bytes, not just a reference, and this is measured** — on the egui
+  Android build's share sheet, now retired. A `.cdeck` sent from the handset arrived on a second device that has never held this application **byte for
   byte** — same digest, same four members, `mimetype` still first and uncompressed
   ([#98](https://github.com/amin-bf/cairn/issues/98)). The **display name travels with it**,
   dedupe suffix and all, so the chooser's own preview showing a bare row id is cosmetic exactly as
@@ -235,7 +232,7 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   filename is derived from one.
 - **Read back what the platform wrote.** Never echo the requested filename: on a collision
   `MediaStore` **dedupes** — it does not overwrite and does not fail — so the name the user needs is
-  one only the platform knows. Measured through this crate's own seam on the handset
+  one only the platform knows. Measured through this crate's former Android arm on the handset
   ([#98](https://github.com/amin-bf/cairn/issues/98)): the same name written twice, with identical
   bytes, yields `Specimen (1).cdeck`, and a third write `Specimen (2).cdeck` — re-run through this
   seam after [ADR-0028 §3](../../../docs/adr/0028-the-application-is-named-cairn.md)'s rename

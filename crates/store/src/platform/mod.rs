@@ -37,14 +37,16 @@ compile_error!(
 
 /// Where `collection.db` and `derived.db` live (ADR-0007 §6).
 ///
-/// On Android this is `getFilesDir()`, which **is** in the Auto Backup set. That is deliberate: the
-/// collection should be restored onto a replacement phone. What must not be restored is the writer
-/// identity, which is why [`state_dir`] exists.
+/// On Android this refuses: the Kotlin app passes `getFilesDir()` in itself (ADR-0046), which **is**
+/// in the Auto Backup set. That is deliberate: the collection should be restored onto a replacement
+/// phone. What must not be restored is the writer identity, which is why [`state_dir`] exists.
 pub fn data_dir() -> Result<PathBuf, PlatformError> {
     imp::data_dir()
 }
 
 /// Where the writer marker lives — **outside the backup set** (ADR-0007 §6).
+///
+/// On Android this refuses too: the Kotlin app passes `getNoBackupFilesDir()` in itself.
 ///
 /// This is load-bearing, not tidiness. Auto Backup defaults to on and restores `getFilesDir()`
 /// wholesale, which would carry `local.writer_id` onto a replacement phone and make two devices the
