@@ -106,7 +106,8 @@ fun ImportPage(
                 val restore = preview is FilePreview.Restore
                 if (failure != null) {
                     Spacer(Modifier.height(gap(1)))
-                    Sentence(stringResource(if (restore) R.string.restore_write_failed else R.string.import_write_failed, failure), "import-failure")
+                    val failed = if (restore) R.string.restore_write_failed else R.string.import_write_failed
+                    Sentence(stringResource(failed, failure), "import-failure")
                 }
                 Spacer(Modifier.height(gap(2)))
                 Gate(preview.gate(), restore, onImport, onLeave, enabled = !writing)

@@ -163,9 +163,25 @@ pub enum StoreError {
     /// only says no leaves a device that will not talk to its account (ADR-0016 §10).
     CollectionIdMismatch { held: String, met: String },
     /// A restore met an archive line it cannot read, and so wrote nothing (ADR-0016 §4): which
-    /// member it was in (`"log"` or `"mutable"`) and its 1-based place there. An archive is written
-    /// whole by this system, so a broken line means a damaged file, and half of it is not a restore.
-    MalformedArchiveLine { member: &'static str, line: usize },
+    /// member it was in and its 1-based place there. An archive is written whole by this system, so
+    /// a broken line means a damaged file, and half of it is not a restore.
+    MalformedArchiveLine { member: ArchiveMember, line: usize },
+}
+
+/// The two payloads of an archive a restore reads line by line (ADR-0016 §2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveMember {
+    Log,
+    Mutable,
+}
+
+impl std::fmt::Display for ArchiveMember {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ArchiveMember::Log => "log",
+            ArchiveMember::Mutable => "mutable surface",
+        })
+    }
 }
 
 impl std::fmt::Display for StoreError {
@@ -396,7 +412,8 @@ impl Collection {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// Merge another source's log lines in (a restore, or a future sync). This is the **union merge**
+    /// Merge another source's log lines in (a future sync; a restore is [`Collection::restore`],
+    /// which unions the log the same way inside its own transaction). This is the **union merge**
     /// of ADR-0004 §2 and the one place `INSERT OR IGNORE` is correct: two rows with the same
     /// `(writer, seq)` *are* the same row, so a duplicate is dropped, not folded twice (ADR-0007 §8).
     /// Malformed and unknown-kind lines are skipped, never fatal (ADR-0004 §11). The [`MergeReport`]
@@ -466,25 +483,26 @@ impl Collection {
     /// with [`StoreError::MalformedArchiveLine`]. A log row of an unknown kind is skipped, as `ingest`
     /// skips it. Derived state needs nothing here, as `ingest` needs nothing: everything derived is
     /// read off the log and the mutable surface when asked for, and `derived.db` holds nothing a
-    /// merge could leave stale.
-    pub fn restore(
+    /// merge could leave stale. Unlike `ingest` it detects no clock skew: a restore reports nothing
+    /// after the fact (ADR-0022 §5), and the instants it stores still feed the guard on write.
+    pub fn restore<Line: AsRef<str>>(
         &mut self,
         collection_id: &str,
-        log: &[&str],
-        mutable: &[&str],
+        log: &[Line],
+        mutable: &[Line],
     ) -> Result<Restored, StoreError> {
         // Read every line before writing any: a line that cannot be read refuses the whole restore.
         // A log row of a kind this build does not know is skipped, as `ingest` skips it (ADR-0004 §11).
         let mut rows = Vec::with_capacity(log.len());
-        for (at, line) in log.iter().enumerate() {
+        for (at, line) in log.iter().map(AsRef::as_ref).enumerate() {
             let malformed = StoreError::MalformedArchiveLine {
-                member: "log",
+                member: ArchiveMember::Log,
                 line: at + 1,
             };
             match parse_line(line) {
                 ParsedLine::Row(row) => {
                     let writer = interchange::unhex16(&row.id().writer.0).ok_or(malformed)?;
-                    rows.push((*line, row, writer));
+                    rows.push((line, row, writer));
                 }
                 ParsedLine::UnknownKind => {}
                 ParsedLine::Malformed => return Err(malformed),
@@ -494,10 +512,12 @@ impl Collection {
             .iter()
             .enumerate()
             .map(|(at, line)| {
-                interchange::parse_mutable_line(line).ok_or(StoreError::MalformedArchiveLine {
-                    member: "mutable",
-                    line: at + 1,
-                })
+                interchange::parse_mutable_line(line.as_ref()).ok_or(
+                    StoreError::MalformedArchiveLine {
+                        member: ArchiveMember::Mutable,
+                        line: at + 1,
+                    },
+                )
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -505,15 +525,7 @@ impl Collection {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         // ADR-0016 §10's gate, asked inside the transaction it guards.
-        if collection_id != self.collection_id {
-            if !is_empty(&tx, &self.writer)? {
-                return Err(StoreError::CollectionIdMismatch {
-                    held: self.collection_id.clone(),
-                    met: collection_id.to_owned(),
-                });
-            }
-            write_local(&tx, "collection_id", collection_id)?;
-        }
+        adopt_or_verify(&tx, &self.writer, &self.collection_id, collection_id)?;
 
         let mut stored = 0usize;
         let mut highwater = read_local_i64(&tx, "seq_highwater")?.unwrap_or(0);
@@ -538,20 +550,14 @@ impl Collection {
 
         let mut settled = 0usize;
         for row in &settles {
-            settled += tx.execute(
-                "INSERT INTO mutable (entity, entity_id, attr, value, counter, writer) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
-                 ON CONFLICT(entity, entity_id, attr) DO UPDATE SET \
-                   value = excluded.value, counter = excluded.counter, writer = excluded.writer \
-                 WHERE (excluded.counter, excluded.writer) > (mutable.counter, mutable.writer)",
-                params![
-                    row.entity,
-                    row.entity_id,
-                    row.attr,
-                    row.value,
-                    row.counter,
-                    &row.writer[..]
-                ],
+            settled += settle(
+                &tx,
+                &row.entity,
+                &row.entity_id,
+                &row.attr,
+                row.value.as_deref(),
+                row.counter,
+                &row.writer,
             )?;
         }
 
@@ -611,19 +617,9 @@ impl Collection {
     /// A refusal names both ids **and** the way out (§10), because a device left holding only "no"
     /// cannot talk to its account and no code can substitute for the sentence.
     pub fn adopt_or_verify_collection_id(&mut self, met: &str) -> Result<(), StoreError> {
-        if met == self.collection_id {
-            return Ok(()); // already ours — normal sync / restore of our own archive
-        }
-        if self.is_empty()? {
-            // Adopt, never re-mint (ADR-0016 §4): overwrite the id minted at first launch.
-            write_local(&self.conn, "collection_id", met)?;
-            self.collection_id = met.to_owned();
-            return Ok(());
-        }
-        Err(StoreError::CollectionIdMismatch {
-            held: self.collection_id.clone(),
-            met: met.to_owned(),
-        })
+        adopt_or_verify(&self.conn, &self.writer, &self.collection_id, met)?;
+        self.collection_id = met.to_owned();
+        Ok(())
     }
 
     /// Set one value on the mutable surface (ADR-0004 §7, ADR-0007 §4): one attribute table, the
@@ -648,14 +644,7 @@ impl Collection {
 
         // Settle: the higher (counter, writer) wins. A fresh local counter always beats an existing
         // one, so this upsert only ever loses to a strictly newer stamp we have not yet seen.
-        tx.execute(
-            "INSERT INTO mutable (entity, entity_id, attr, value, counter, writer) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
-             ON CONFLICT(entity, entity_id, attr) DO UPDATE SET \
-               value = excluded.value, counter = excluded.counter, writer = excluded.writer \
-             WHERE (excluded.counter, excluded.writer) > (mutable.counter, mutable.writer)",
-            params![entity, entity_id, attr, value, counter, &self.writer[..]],
-        )?;
+        settle(&tx, entity, entity_id, attr, value, counter, &self.writer)?;
         tx.commit()?;
         Ok(())
     }
@@ -1349,6 +1338,50 @@ fn is_empty(conn: &Connection, writer: &[u8; 16]) -> Result<bool, StoreError> {
     let has_mutable: bool =
         conn.query_row("SELECT EXISTS(SELECT 1 FROM mutable)", [], |r| r.get(0))?;
     Ok(!has_own_log && !has_mutable)
+}
+
+/// ADR-0016 §10's gate over `conn`, shared by [`Collection::adopt_or_verify_collection_id`] and
+/// [`Collection::restore`] so the two seams cannot drift: an id already `held` passes, an empty
+/// collection adopts the one it `met` (written here), and anything else is refused.
+fn adopt_or_verify(
+    conn: &Connection,
+    writer: &[u8; 16],
+    held: &str,
+    met: &str,
+) -> Result<(), StoreError> {
+    if met == held {
+        return Ok(()); // already ours — normal sync / restore of our own archive
+    }
+    if is_empty(conn, writer)? {
+        // Adopt, never re-mint (ADR-0016 §4): overwrite the id minted at first launch.
+        return write_local(conn, "collection_id", met);
+    }
+    Err(StoreError::CollectionIdMismatch {
+        held: held.to_owned(),
+        met: met.to_owned(),
+    })
+}
+
+/// The one settling rule of the mutable surface (ADR-0004 §7), shared by a local edit and a restore:
+/// the higher `(counter, writer)` wins, an equal stamp is a no-op, and the stamp written is the one
+/// given. Returns 1 when the value settled, 0 when a newer or equal stamp was already held.
+fn settle(
+    conn: &Connection,
+    entity: &str,
+    entity_id: &[u8],
+    attr: &str,
+    value: Option<&str>,
+    counter: i64,
+    writer: &[u8; 16],
+) -> Result<usize, StoreError> {
+    Ok(conn.execute(
+        "INSERT INTO mutable (entity, entity_id, attr, value, counter, writer) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
+         ON CONFLICT(entity, entity_id, attr) DO UPDATE SET \
+           value = excluded.value, counter = excluded.counter, writer = excluded.writer \
+         WHERE (excluded.counter, excluded.writer) > (mutable.counter, mutable.writer)",
+        params![entity, entity_id, attr, value, counter, &writer[..]],
+    )?)
 }
 
 /// Store one row another source wrote — the union merge's `INSERT OR IGNORE` (ADR-0007 §8), shared by

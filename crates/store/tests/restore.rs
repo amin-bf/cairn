@@ -45,9 +45,7 @@ fn archive_of(coll: &Collection) -> Archive {
 }
 
 fn restore(coll: &mut Collection, a: &Archive) -> Result<(), StoreError> {
-    let log: Vec<&str> = a.log.iter().map(String::as_str).collect();
-    let mutable: Vec<&str> = a.mutable.iter().map(String::as_str).collect();
-    coll.restore(&a.id, &log, &mutable).map(|_| ())
+    coll.restore(&a.id, &a.log, &a.mutable).map(|_| ())
 }
 
 /// A collection with two notes and three reviews, and its archive.
@@ -218,7 +216,7 @@ fn a_deleted_notes_text_comes_back_after_undelete_and_restore() {
     // A device of the same collection that holds the note's delete marker and its undelete but not
     // its content — the content was discarded with the delete (ADR-0004 §7).
     let (mut here, _d2, _s2) = open();
-    here.restore(&archive.id, &[], &[]).unwrap();
+    here.restore::<&str>(&archive.id, &[], &[]).unwrap();
     here.mutable_set("note", &note.0, "deleted", Some("true"))
         .unwrap();
     here.mutable_set("note", &note.0, "deleted", None).unwrap();
