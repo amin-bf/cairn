@@ -23,10 +23,7 @@ const HEX: &[u8; 16] = b"0123456789abcdef";
 /// so the `log_replay` index order and the interchange tie-break order (ADR-0004 §9) agree.
 pub fn hex16(bytes: &[u8; 16]) -> String {
     let mut s = String::with_capacity(32);
-    for byte in bytes {
-        s.push(char::from(HEX[usize::from(byte >> 4)]));
-        s.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
+    push_hex(&mut s, bytes);
     s
 }
 
@@ -108,6 +105,63 @@ pub fn reviewed_line(
         day,
         duration_ms
     )
+}
+
+/// One row of the mutable surface as the archive's `mutable.jsonl` line (ADR-0016 §2), in the shape
+/// store `CONTEXT.md` records: `{"entity","id","attr","value","counter","writer"}`, in that order, ids
+/// as lowercase hex of their bytes, `value` a string or `null`. The stamp is the row's own `(counter,
+/// writer)`, carried as it settled.
+pub fn mutable_line(
+    entity: &str,
+    entity_id: &[u8],
+    attr: &str,
+    value: Option<&str>,
+    counter: i64,
+    writer: &[u8],
+) -> String {
+    let mut out = String::from("{\"entity\":");
+    json_string(&mut out, entity);
+    out.push_str(",\"id\":\"");
+    push_hex(&mut out, entity_id);
+    out.push_str("\",\"attr\":");
+    json_string(&mut out, attr);
+    out.push_str(",\"value\":");
+    match value {
+        Some(v) => json_string(&mut out, v),
+        None => out.push_str("null"),
+    }
+    out.push_str(&format!(",\"counter\":{counter},\"writer\":\""));
+    push_hex(&mut out, writer);
+    out.push_str("\"}");
+    out
+}
+
+/// Lowercase hex of any number of bytes, appended to `out`.
+fn push_hex(out: &mut String, bytes: &[u8]) {
+    for &b in bytes {
+        out.push(HEX[usize::from(b >> 4)] as char);
+        out.push(HEX[usize::from(b & 0x0f)] as char);
+    }
+}
+
+/// A JSON string literal with the escapes JSON requires. A value on the mutable surface is authored
+/// text — a quote, a newline or a control character in a field must survive the line intact.
+/// `cairn_export::json::string` writes the same literal; the store depends on no crate but
+/// `cairn-core`, so it keeps its own.
+fn json_string(out: &mut String, s: &str) {
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 /// The `history-cutoff-set` interchange line authored here (ADR-0004 §1, §8). The `d` token is the

@@ -18,3 +18,5 @@ unicode-bidi.workspace = true
 [dev-dependencies]
 # The session and deck logic is tested against a real store in a temp dir (there is no fake store).
 tempfile.workspace = true
+# The backup tests open the archive they built and read its members back.
+zip.workspace = true

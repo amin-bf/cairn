@@ -100,6 +100,10 @@ const NEW_CARD_RATE_ATTR: &str = "new_card_rate";
 /// `local` that is a choice rather than sync machinery. See [`Collection::theme_preference`].
 const THEME_PREFERENCE_KEY: &str = "theme_preference";
 
+/// The `local` key holding the last backup's creation instant (ADR-0053 §4). In `local`, so it never
+/// settles and never travels in the archive it describes.
+const LAST_BACKUP_KEY: &str = "last_backup";
+
 /// The mutable-surface entity holding per-card **suspension** (ADR-0010 §5). A distinct entity from
 /// `note`, `deck` and `setting`, keyed by a `CardRef`'s canonical 18-byte encoding, because
 /// suspension is **per card, not per note** — one cloze blank or one direction of a pair may be agony
@@ -676,6 +680,66 @@ impl Collection {
     /// exported. See [`Collection::theme_preference`] for why it is not on the settings singleton.
     pub fn set_theme_preference(&mut self, choice: &str) -> Result<(), StoreError> {
         write_local(&self.conn, THEME_PREFERENCE_KEY, choice)
+    }
+
+    /// The instant of the last backup this device wrote, as epoch-milliseconds, or `None` before the
+    /// first (ADR-0016 §6, ADR-0053 §4). **Device-local**: it lives in `local`, so it never settles,
+    /// never syncs and never travels in an archive — a backup writes nothing to the log and nothing
+    /// that settles. A value that does not parse reads as none.
+    pub fn last_backup(&self) -> Result<Option<i64>, StoreError> {
+        read_local_i64(&self.conn, LAST_BACKUP_KEY)
+    }
+
+    /// Record that an archive created at `created_ms` was written. The caller records it only once
+    /// the write has succeeded, so a cancelled or failed save leaves the nudge as it was (ADR-0053 §4).
+    pub fn record_backup(&mut self, created_ms: i64) -> Result<(), StoreError> {
+        write_local(&self.conn, LAST_BACKUP_KEY, &created_ms.to_string())
+    }
+
+    /// Every row of the mutable surface as one JSON line with its stamp — the archive's
+    /// `mutable.jsonl` (ADR-0016 §2), in the shape `CONTEXT.md` records. **Everything that settles and
+    /// nothing from `local`**: the writer id, the sequence high-water, the Lamport counter, the
+    /// collection id, the theme and "last backup" live there and so cannot travel. The stamp is the
+    /// one the row settled under, carried byte for byte, never restamped (ADR-0016 §2).
+    pub fn mutable_lines(&self) -> Result<Vec<String>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT entity, entity_id, attr, value, counter, writer FROM mutable \
+             ORDER BY entity, entity_id, attr",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(interchange::mutable_line(
+                &r.get::<_, String>(0)?,
+                &r.get::<_, Vec<u8>>(1)?,
+                &r.get::<_, String>(2)?,
+                r.get::<_, Option<String>>(3)?.as_deref(),
+                r.get(4)?,
+                &r.get::<_, Vec<u8>>(5)?,
+            ))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// How many reviews the log holds, from every writer — the figure the backup nudge states before
+    /// the first backup and the archive's manifest carries (ADR-0016 §6, §11).
+    pub fn review_count(&self) -> Result<u64, StoreError> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM log WHERE kind = 'reviewed'",
+            [],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
+    /// How many reviews were recorded strictly after `after_ms` — the nudge's *"reviews since"* the
+    /// last backup (ADR-0016 §6). Read off the derived `instant` column, which `ingest` fills for
+    /// merged rows too; a row whose instant did not parse is not counted, best-effort as §8 is.
+    pub fn reviews_after(&self, after_ms: i64) -> Result<u64, StoreError> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM log WHERE kind = 'reviewed' AND instant > ?1",
+            params![after_ms],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
     }
 
     /// The scheduler parameter vector currently in effect (ADR-0001 §6): the weights of the **latest**

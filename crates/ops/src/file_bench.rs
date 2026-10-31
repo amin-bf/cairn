@@ -126,7 +126,7 @@ impl FileSet {
                     wants: Wants::Several,
                 },
                 BenchFile {
-                    name: collection_filename(),
+                    name: collection_filename("2026-09-01"),
                     bytes: archive_file(),
                     wants: Wants::Archive,
                 },

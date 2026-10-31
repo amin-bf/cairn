@@ -114,6 +114,20 @@ One that has authored **no log rows under this device's own writer id and nothin
 surface**. The test that decides whether a device adopts a collection id it meets or refuses it. Not
 "has no notes" — an imported deck with no reviews is still empty by this test.
 
+**Mutable line**:
+One row of the mutable surface as `mutable_lines` hands it out — the archive's `mutable.jsonl`
+format. ADR-0016 §2 selects the rows; spec #248 set the line's shape:
+`{"entity":"note","id":"<hex>","attr":"Front","value":"chien","counter":9,"writer":"<hex>"}`. Keys
+in that order; `id` and `writer` lowercase hex of their bytes (a suspension's id is the 18-byte
+card key, so ids are not all sixteen bytes); `value` a string or `null`; `counter` and `writer` the
+stamp the row settled under, carried as it is and never restamped. Every row of `mutable` and
+nothing from `local`.
+
+**Last backup** (`local.last_backup`):
+The creation instant of the last archive this device wrote, epoch-milliseconds, none before the
+first. In `local`, so it never settles and never travels (ADR-0016 §6, ADR-0053 §4); recorded only
+after the write succeeded.
+
 **Line**:
 The `log.line` column: the interchange row exactly as received. **The only authoritative column** —
 every other column in the table, and everything in `derived.db`, is derived from it and may be

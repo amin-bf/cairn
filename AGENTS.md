@@ -661,10 +661,10 @@ A `.cdeck` file is a **zip archive** carrying deck content and never review prog
     ([evidence](./docs/research/android-outbound-share/README.md)), and the save dialog the Kotlin
     app writes through hands the name to a provider that may do the same, so its report states the
     name the document actually got ([ADR-0047 §4](./docs/adr/0047-the-file-surface-on-android.md)).
-    The Kotlin app writes nothing yet: the archive comes with the backup slice
-    ([ADR-0053](./docs/adr/0053-backup-and-restore-on-android.md)), and deck export with a later
+    The Kotlin app writes the collection archive, from the backup row
+    ([ADR-0053](./docs/adr/0053-backup-and-restore-on-android.md)); deck export comes with a later
     effort ([ADR-0052](./docs/adr/0052-the-file-surface-on-android-is-import-only.md)). This rule and
-    rule 12 bind them when they are built.
+    rule 12 bind both.
 12. **The Android write declares `application/octet-stream`, never a type of our own.** A declared
     type that disagrees with the name is the *only* reason a collision produced `French A1.cdeck (1)`
     instead of `French A1 (1).cdeck` — measured across three declarations on the egui build's
@@ -797,8 +797,8 @@ archiving against it.
    Android the refusals are lifted ([ADR-0045 §6](./docs/adr/0045-the-native-android-client.md)):
    they were properties of the retired egui build, so the backup slice
    ([ADR-0053](./docs/adr/0053-backup-and-restore-on-android.md)) uses the system picker and the
-   save dialog, where the user may type a name (ADR-0047). Until that slice is built, Android has no
-   backup or restore at all. **Archives are still never encrypted**, on ADR-0020 §1's
+   save dialog, where the user may type a name (ADR-0047). Backup is built on Android; restore is
+   not yet. **Archives are still never encrypted**, on ADR-0020 §1's
    own grounds (protection-at-rest rule 1), which never depended on the input method.
 6. **The platform seam rule is per crate.** `cairn-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm

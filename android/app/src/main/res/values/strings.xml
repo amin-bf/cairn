@@ -93,6 +93,22 @@
     <string name="settings_files_label">Files</string>
     <string name="settings_files_line">Choose a file to see what importing it would do.</string>
     <string name="settings_open_file">Open a file…</string>
+    <!-- Back up… and the nudge under it (ADR-0016 §6, ADR-0053 §4). Counts arrive grouped; the date is the day the last backup was made. -->
+    <string name="settings_back_up">Back up…</string>
+    <string name="settings_backing_up">Backing up…</string>
+    <string name="backup_nudge_none">No backup yet. %1$s across %2$s.</string>
+    <string name="backup_nudge_last">Last backup %1$s. %2$s since.</string>
+    <string name="backup_report">%1$s — %2$s, %3$s</string>
+    <string name="backup_report_unnamed">Backed up — %1$s, %2$s</string>
+    <string name="backup_failed">Could not write the backup: %1$s</string>
+    <plurals name="backup_reviews">
+        <item quantity="one">%1$s review</item>
+        <item quantity="other">%1$s reviews</item>
+    </plurals>
+    <plurals name="backup_notes">
+        <item quantity="one">%1$s note</item>
+        <item quantity="other">%1$s notes</item>
+    </plurals>
     <string name="settings_appearance_label">Appearance</string>
     <string name="settings_appearance_system">System</string>
     <string name="settings_appearance_light">Light</string>

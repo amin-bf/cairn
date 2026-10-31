@@ -51,7 +51,8 @@ suspend fun readDocument(resolver: ContentResolver, uri: Uri, ceiling: Int = REA
         }
     }
 
-private fun displayName(resolver: ContentResolver, uri: Uri): String? =
+/** The provider's `OpenableColumns.DISPLAY_NAME` for [uri], or none when it gives none. */
+internal fun displayName(resolver: ContentResolver, uri: Uri): String? =
     try {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)

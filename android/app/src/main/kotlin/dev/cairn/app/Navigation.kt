@@ -2,6 +2,7 @@ package dev.cairn.app
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -187,7 +188,9 @@ private fun CairnPlaces(
             }
             composable(SETTINGS) {
                 val appearance = LocalAppearance.current
-                val model = viewModel { SettingsViewModel(owner, appearance) }
+                val model = viewModel {
+                    SettingsViewModel(owner, appearance, saved = createSavedStateHandle(), documents = ResolverDocuments(resolver))
+                }
                 // Coming back to the page it is read again; a field mid-edit keeps what was typed.
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
                 // A run is polled while the screen is started, and not while it is stopped or left (client-stack rule 10).
@@ -206,9 +209,26 @@ private fun CairnPlaces(
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) scope.launch { arrive(FileArrival.PICKED, readDocument(resolver, uri)) }
                 }
+                // The system save dialog, opened on the dated name; closed with nothing, it does nothing
+                // (ADR-0053 §4). The grant is used for the one write and never kept.
+                val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+                    if (uri != null) model.backUp(uri) else model.backupDismissed()
+                }
+                // The backup's report stays until Settings is left; a rotation does not leave it.
+                val activity = LocalActivity.current
+                DisposableEffect(model) {
+                    onDispose { if (activity?.isChangingConfigurations != true) model.leaveBackup() }
+                }
                 SettingsScreen(
                     model,
                     onOpenFile = { picker.launch(arrayOf("*/*")) },
+                    onBackUp = {
+                        scope.launch {
+                            val name = model.startBackup()
+                            // The launcher is the main thread's, wherever the scope resumed (see `arrive`).
+                            withContext(Dispatchers.Main) { saver.launch(name) }
+                        }
+                    },
                     development = { DevelopmentBlock(owner, onRestart) },
                 )
             }
