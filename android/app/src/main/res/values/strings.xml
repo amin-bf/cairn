@@ -101,6 +101,10 @@
     <string name="backup_report">%1$s — %2$s, %3$s</string>
     <string name="backup_report_unnamed">Backed up — %1$s, %2$s</string>
     <string name="backup_failed">Could not write the backup: %1$s</string>
+    <!-- Beside the report: hands the saved archive to the system share sheet (ADR-0023). -->
+    <string name="backup_share">Share</string>
+    <!-- Under the report when the archive was written whole but "last backup" could not be recorded. -->
+    <string name="backup_unrecorded">Saved, but not recorded as the last backup: %1$s</string>
     <plurals name="backup_reviews">
         <item quantity="one">%1$s review</item>
         <item quantity="other">%1$s reviews</item>

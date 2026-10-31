@@ -41,9 +41,12 @@ class BackupRotationTest {
     private class Dialog(val holding: Boolean) : ActivityResultRegistryOwner {
         val pending = AtomicInteger(-1)
 
+        /** The intents started through the registry other than the save dialog: Share's chooser. */
+        val started: MutableList<Intent> = java.util.concurrent.CopyOnWriteArrayList()
+
         override val activityResultRegistry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
-                if (holding) pending.set(requestCode) else answer(requestCode)
+                if (input is Intent) started += input else if (holding) pending.set(requestCode) else answer(requestCode)
             }
         }
 
@@ -92,6 +95,23 @@ class BackupRotationTest {
             waitFor("settings-screen")
             waitFor("backup-report")
             assertEquals(report, text("backup-report"))
+        }
+    }
+
+    @Test
+    fun share_survives_a_rotation_with_the_report_and_still_hands_on_the_document() {
+        val dialog = Dialog(holding = false)
+        RotatingActivity.registry = dialog
+        ActivityScenario.launch(RotatingActivity::class.java).use { scenario ->
+            backUp()
+            waitFor("backup-share")
+            scenario.recreate()
+            waitFor("settings-screen")
+            waitFor("backup-share")
+            assertTrue("nothing was started by the turn", dialog.started.isEmpty())
+            rule.onNodeWithTag("backup-share").performScrollTo().performClick()
+            rule.waitUntil(10_000) { dialog.started.isNotEmpty() }
+            assertEquals(BenchProvider.uri(NAME), dialog.started.single().clipData!!.getItemAt(0).uri)
         }
     }
 
