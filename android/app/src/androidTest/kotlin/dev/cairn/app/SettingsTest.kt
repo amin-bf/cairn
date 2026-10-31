@@ -91,8 +91,8 @@ class SettingsTest {
         access: CollectionAccess = owner,
         initial: ThemeChoice = ThemeChoice.LIGHT,
         settingsTickMs: Long = SETTINGS_TICK_MS,
-        // Review shows its start button only when something is due; the history fixture's cards are not.
-        ready: String = "start-all",
+        // A first launch holds nothing, so Review says so; the history fixture's cards are not due either.
+        ready: String = "state-empty",
     ): AppearanceState {
         runBlocking { owner.use { it.setThemeChoice(initial) } }
         val appearance = AppearanceState(initial)
@@ -129,7 +129,7 @@ class SettingsTest {
             assertEquals(false, it.fetchSemanticsNode().config[SemanticsProperties.Selected])
         }
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        waitFor("start-all")
+        waitFor("state-empty")
         assertEquals(true, selected("destination-review"))
     }
 

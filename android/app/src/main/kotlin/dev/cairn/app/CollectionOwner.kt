@@ -43,7 +43,7 @@ class CollectionOwner(
     private val lock = Mutex()
     private var handle: CollectionHandle? = null
 
-    /** Run [block] on the collection, off the main thread. The first call opens it (and seeds a first launch). */
+    /** Run [block] on the collection, off the main thread. The first call opens it. */
     override suspend fun <T> use(block: (CollectionHandle) -> T): T = withContext(Dispatchers.IO) {
         block(opened())
     }

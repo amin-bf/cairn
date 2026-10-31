@@ -39,7 +39,7 @@ class NoDevelopmentBlockTest {
     fun no_development_control_is_drawn_on_settings() {
         val owner = CollectionOwner(context, File(root, "files"), File(root, "no_backup"))
         rule.setContent { CairnAppearance(AppearanceState(ThemeChoice.LIGHT)) { CairnNavHost(owner, keyboardUp = false) } }
-        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("start-all")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("state-empty")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("destination-settings").performClick()
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("rate-field")).fetchSemanticsNodes().isNotEmpty() }
         for (tag in listOf("development-heading", "reset-control", "bench-sentence")) {

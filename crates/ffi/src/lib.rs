@@ -167,12 +167,11 @@ impl CollectionHandle {
 
 #[uniffi::export]
 impl CollectionHandle {
-    /// Open the collection under the two directories the caller passes and, on a first launch, seed
-    /// the starter notes — `cairn_ops::open_collection`, the one place the seed is written, so both
-    /// renderers seed alike.
+    /// Open the collection under the two directories the caller passes. A first launch holds
+    /// nothing — `cairn_ops::open_unseeded`, so an archive restores into it (ADR-0016 §10).
     #[uniffi::constructor]
     pub fn open(data_dir: String, state_dir: String) -> Result<Self, CairnError> {
-        let coll = cairn_ops::open_collection(Path::new(&data_dir), Path::new(&state_dir))?;
+        let coll = cairn_ops::open_unseeded(Path::new(&data_dir), Path::new(&state_dir))?;
         Ok(Self {
             collection: Mutex::new(Some(coll)),
             data_dir: data_dir.into(),
@@ -182,7 +181,7 @@ impl CollectionHandle {
 
     /// Replace the collection with the named fixture (`caught-up`, `leeches`, `crossing`, `backlog`,
     /// `cloze`, `persian`, …) — the bench, reached by name. The files are wiped and reopened (a fixture
-    /// installs only into an empty collection, and `open` would seed one), so nothing of the old
+    /// installs only into an empty collection), so nothing of the old
     /// collection survives. An unknown name is refused and touches nothing. Any sitting begun before
     /// is stale after this and should be dropped.
     ///
@@ -208,8 +207,8 @@ impl CollectionHandle {
         Ok(installed?.to_string())
     }
 
-    /// Return the device to a first launch: close the collection, remove its files and open it again
-    /// through `open_collection`, so it is seeded as a fresh install is. Any sitting begun before is
+    /// Return the device to a first launch: close the collection, remove its files and open it again,
+    /// empty as a fresh install is. Any sitting begun before is
     /// stale after this and should be dropped.
     ///
     /// **This destroys the collection under the two directories `open` was given**, like
@@ -261,7 +260,7 @@ impl CollectionHandle {
         Ok(cairn_ops::session::due_count(&self.collection(), now_ms)? as u64)
     }
 
-    /// How many notes the collection holds — what a first launch's seed shows up as.
+    /// How many notes the collection holds.
     pub fn note_count(&self) -> Result<u64, CairnError> {
         let rows =
             cairn_ops::notes::list(&self.collection(), &cairn_ops::notes::Filter::default())?;
@@ -1823,7 +1822,6 @@ mod tests {
         assert_eq!(facts.state, ReviewStateKind::NewDeck { new: 5 });
         assert!(facts.shorter.is_empty());
 
-        // `open` seeds a first-launch deck, so the empty collection is only reached by name.
         let (handle, _d, _s) = benched("empty");
         let facts = handle.review_state(NOW).unwrap();
         assert_eq!(facts.state, ReviewStateKind::Empty);
@@ -1838,16 +1836,14 @@ mod tests {
 
     #[test]
     fn the_fresh_deck_and_new_only_states_are_reached_by_reviewing() {
-        let (data, state) = dirs();
-        let handle = open(&data, &state);
-        // A first launch seeds: a fresh deck.
+        // A fresh deck: new cards only, none reviewed.
+        let (handle, _d, _s) = benched("persian");
         assert!(matches!(
             handle.review_state(NOW).unwrap().state,
             ReviewStateKind::NewDeck { .. }
         ));
 
         // Review one card; the rest of the rate's new cards are left: new only, not a fresh deck.
-        let handle = Arc::new(handle);
         let sitting = handle.clone().start_sitting(1, 0, NOW).unwrap();
         sitting.card(NOW, 10).unwrap().unwrap();
         sitting.reveal().unwrap();
@@ -1877,13 +1873,16 @@ mod tests {
     fn reset_returns_the_handle_to_a_first_launch() {
         let (data, state) = dirs();
         let handle = open(&data, &state);
-        let seeded = handle.note_count().unwrap();
         handle.install_fixture("backlog".to_owned(), NOW).unwrap();
-        assert_ne!(handle.note_count().unwrap(), seeded);
+        assert_ne!(handle.note_count().unwrap(), 0);
 
         handle.reset().unwrap();
 
-        assert_eq!(handle.note_count().unwrap(), seeded);
+        assert_eq!(
+            handle.note_count().unwrap(),
+            0,
+            "a first launch holds nothing"
+        );
         // The handle is usable afterwards: it holds the reopened collection.
         assert!(handle.due_count(NOW).is_ok());
     }
@@ -2158,15 +2157,21 @@ mod tests {
     }
 
     #[test]
-    fn opening_lands_the_files_in_the_two_directories_and_seeds_a_first_launch() {
+    fn opening_lands_the_files_in_the_two_directories_and_a_first_launch_holds_nothing() {
         let (data, state) = dirs();
         let handle = open(&data, &state);
         assert!(data.path().join("collection.db").exists());
         assert!(state.path().join("derived.db").exists());
         assert!(state.path().join("writer.id").exists(), "the writer marker");
-        assert!(handle.note_count().unwrap() > 0, "a first launch seeds");
-        // The seed is all new cards, none yet due.
-        assert_eq!(handle.due_count(1_700_000_000_000).unwrap(), 0);
+        assert_eq!(
+            handle.note_count().unwrap(),
+            0,
+            "a first launch seeds nothing"
+        );
+        assert_eq!(
+            handle.review_state(NOW).unwrap().state,
+            ReviewStateKind::Empty
+        );
     }
 
     #[test]
@@ -2989,8 +2994,7 @@ mod tests {
 
     #[test]
     fn the_bench_archive_previews_a_restore_over_a_collection_holding_nothing() {
-        // `empty` wipes the store and authors nothing — what a fresh install would be without the
-        // starter notes `open_collection` seeds.
+        // `empty` wipes the store and authors nothing — what a fresh install is.
         let (handle, _d, _s) = benched("empty");
         let restore = restore_of(open_bench_file(&handle, &bench()[2]).preview().unwrap());
         assert_eq!(
@@ -3001,6 +3005,19 @@ mod tests {
                 reviews: 50,
                 gate: ImportGate::Decide,
             }
+        );
+    }
+
+    #[test]
+    fn a_first_launch_holds_nothing_so_the_archive_previews_a_restore_over_it() {
+        // ADR-0053 §1 restores only into an empty collection; a seeded first launch would refuse
+        // the archive on the one device it is meant for.
+        let (data, state) = dirs();
+        let handle = Arc::new(open(&data, &state));
+        let preview = open_bench_file(&handle, &bench()[2]).preview().unwrap();
+        assert!(
+            matches!(preview, FilePreview::Restore { .. }),
+            "{preview:?}"
         );
     }
 

@@ -67,6 +67,14 @@ pub fn open_collection(data: &Path, state: &Path) -> Result<Collection, String> 
     Ok(coll)
 }
 
+/// Open the collection under the two directories the caller passes, and seed nothing: the Kotlin
+/// app's open. A first launch on Android holds no notes, because ADR-0016 §10 restores only into an
+/// empty collection, and a seeded one would refuse the archive on the very device it was carried to
+/// (the repository owner, 31.10.2026, on #252). The desktop keeps [`open_collection`]'s seed.
+pub fn open_unseeded(data: &Path, state: &Path) -> Result<Collection, String> {
+    Collection::open(data, state).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

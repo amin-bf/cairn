@@ -105,6 +105,11 @@ Both on Android only.
 - **Domain work the slice needs**, none of it a decision: the mutable surface merged by stamp on
   restore, the restore applied in one transaction, "last backup" recorded in the store's local
   table, the nudge's counts, and the collection's size for ADR-0016 §7's line.
+- **A first launch on Android seeds no starter notes** (the repository owner, 31.10.2026, on #252).
+  An empty collection is the one a restore lands in (ADR-0016 §10), and issue #94's six starter
+  notes made every first launch non-empty, so the archive was refused on the very device it was
+  carried to. The Kotlin app opens through `cairn_ops::open_unseeded`, and the Development block's
+  reset leaves an empty collection; the desktop keeps `open_collection`'s seed.
 - `collection_filename()` still returns `collection.ccoll`. The slice moves it to ADR-0047 §3's
   dated name.
 - The map's *"Not yet specified"* item for backup and restore is now specified; the spec round
