@@ -37,9 +37,9 @@ use cairn_store::Collection;
 /// a first launch, seed a few `basic` notes so the walking skeleton has cards to review — issue #94's
 /// opening line.
 ///
-/// **The caller owns the directories**: the egui app passes the platform seam's, and the Kotlin app
-/// passes `filesDir` and `noBackupFilesDir`. Both then seed alike, because this is the one place the
-/// seed is written.
+/// **The caller owns the directories**: the egui app passes the platform seam's. This is the one
+/// place the seed is written, and only the desktop calls it; the Kotlin app opens through
+/// [`open_unseeded`] (ADR-0053 §5).
 ///
 /// **More than one note, deliberately.** A single card cannot exercise the session at all: the count
 /// picker collapses to one `All 1` button with none of ADR-0006 §1's choices reachable, and a sitting
@@ -68,9 +68,9 @@ pub fn open_collection(data: &Path, state: &Path) -> Result<Collection, String> 
 }
 
 /// Open the collection under the two directories the caller passes, and seed nothing: the Kotlin
-/// app's open. A first launch on Android holds no notes, because ADR-0016 §10 restores only into an
-/// empty collection, and a seeded one would refuse the archive on the very device it was carried to
-/// (the repository owner, 31.10.2026, on #252). The desktop keeps [`open_collection`]'s seed.
+/// app's open (ADR-0053 §5). Only an empty collection adopts an archive of another collection
+/// (ADR-0016 §10): a seeded first launch has minted its own id and holds log rows, so it would refuse
+/// the archive on the very device it was carried to. The desktop keeps [`open_collection`]'s seed.
 pub fn open_unseeded(data: &Path, state: &Path) -> Result<Collection, String> {
     Collection::open(data, state).map_err(|e| e.to_string())
 }

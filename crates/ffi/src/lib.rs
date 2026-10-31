@@ -168,7 +168,8 @@ impl CollectionHandle {
 #[uniffi::export]
 impl CollectionHandle {
     /// Open the collection under the two directories the caller passes. A first launch holds
-    /// nothing — `cairn_ops::open_unseeded`, so an archive restores into it (ADR-0016 §10).
+    /// nothing — `cairn_ops::open_unseeded` (ADR-0053 §5) — so it adopts an archive of the
+    /// collection the user carried to it (ADR-0016 §10).
     #[uniffi::constructor]
     pub fn open(data_dir: String, state_dir: String) -> Result<Self, CairnError> {
         let coll = cairn_ops::open_unseeded(Path::new(&data_dir), Path::new(&state_dir))?;
@@ -3017,8 +3018,8 @@ mod tests {
 
     #[test]
     fn a_first_launch_holds_nothing_so_the_archive_previews_a_restore_over_it() {
-        // ADR-0053 §1 restores only into an empty collection; a seeded first launch would refuse
-        // the archive on the one device it is meant for.
+        // Only an empty collection adopts an archive of another collection (ADR-0016 §10); a seeded
+        // first launch would refuse it on the one device it is meant for (ADR-0053 §5).
         let (data, state) = dirs();
         let handle = Arc::new(open(&data, &state));
         let preview = open_bench_file(&handle, &bench()[2]).preview().unwrap();

@@ -6,7 +6,8 @@
 - **Map**: [Map: Cairn as a Native Android App in Kotlin](https://github.com/amin-bf/cairn/issues/193)
 - **Decided by**: the repository owner, 31.10.2026, accepting the agent's recommendations on §1, §2
   and §3. §4 is the agent's, under [ADR-0045 §7](0045-the-native-android-client.md): each point
-  follows the platform's practice or an earlier ADR, so none was put to him
+  follows the platform's practice or an earlier ADR, so none was put to him. §5 is the repository
+  owner's, 31.10.2026, on #252
 - **Amends, on Android only**: [ADR-0041, *Consequences*](0041-the-file-surface.md) (restore has no
   surface), [ADR-0052 §3](0052-the-file-surface-on-android-is-import-only.md) (an archive meets the
   refusal until restore is built)
@@ -89,6 +90,16 @@ words beside the one door carry it.
 - **The read ceiling** (32 MiB, set by the file-surface spec) is revisited by the backup spec, since
   an archive may be larger than any deck file.
 
+### 5. A first launch on Android seeds no starter notes
+
+Decided by the repository owner on 31.10.2026, on #252, over two alternatives: counting untouched
+starter notes as empty, and leaving it to the restore ticket. Only an empty collection adopts an
+archive of another collection (ADR-0016 §10); a non-empty one refuses it. Issue #94's six starter
+notes gave every first launch log rows and its own collection id, so a new device refused the
+archive of the collection the user had carried to it. The Kotlin app opens through
+`cairn_ops::open_unseeded`, and the Development block's reset leaves an empty collection. The
+desktop keeps `open_collection`'s seed.
+
 ## Amendments to accepted ADRs
 
 Both on Android only.
@@ -105,11 +116,6 @@ Both on Android only.
 - **Domain work the slice needs**, none of it a decision: the mutable surface merged by stamp on
   restore, the restore applied in one transaction, "last backup" recorded in the store's local
   table, the nudge's counts, and the collection's size for ADR-0016 §7's line.
-- **A first launch on Android seeds no starter notes** (the repository owner, 31.10.2026, on #252).
-  An empty collection is the one a restore lands in (ADR-0016 §10), and issue #94's six starter
-  notes made every first launch non-empty, so the archive was refused on the very device it was
-  carried to. The Kotlin app opens through `cairn_ops::open_unseeded`, and the Development block's
-  reset leaves an empty collection; the desktop keeps `open_collection`'s seed.
 - `collection_filename()` still returns `collection.ccoll`. The slice moves it to ADR-0047 §3's
   dated name.
 - The map's *"Not yet specified"* item for backup and restore is now specified; the spec round
