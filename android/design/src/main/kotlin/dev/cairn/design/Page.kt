@@ -17,7 +17,9 @@ import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.cairn.design.tokens.Controls
 import dev.cairn.design.tokens.Frame
+import dev.cairn.design.tokens.Spacing
 
 /**
  * The page: the page colour edge to edge, and one centred column inside it, a margin from each edge
@@ -37,6 +39,16 @@ fun CairnPage(modifier: Modifier = Modifier, content: @Composable BoxScope.() ->
     ) {
         Box(Modifier.widthIn(max = Frame.MEASURE.dp).fillMaxSize(), content = content)
     }
+}
+
+/**
+ * The space under a control pinned at a page's foot, outside its scroll: the reach line when the
+ * control and the line take no more than a third of a page [page] tall, two units otherwise, so a
+ * short window keeps its room for the content (ADR-0031). Every pinned control asks here.
+ */
+fun reachLineBelow(page: Dp): Dp {
+    val full = (Frame.REACH_LINE + Controls.HEIGHT + Spacing.UNIT).dp
+    return if (page != Dp.Unspecified && full <= page / 3) Frame.REACH_LINE.dp else gap(2)
 }
 
 private enum class Slot { Top, Reach }
