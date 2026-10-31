@@ -56,8 +56,8 @@ sealed interface BackupRow {
 
     data object Running : BackupRow
 
-    /** Written: [name] is the document as the provider named it. */
-    data class Written(val name: String, val notes: Long, val reviews: Long) : BackupRow
+    /** Written: [name] is the document as the provider named it, or null when it gave none. */
+    data class Written(val name: String?, val notes: Long, val reviews: Long) : BackupRow
 
     data class Failed(val error: String) : BackupRow
 }
@@ -312,6 +312,9 @@ class SettingsViewModel(
      */
     fun backUp(uri: Uri) {
         if ((_state.value as? SettingsScreenState.Ready)?.backup == BackupRow.Running) return
+        // Taken once, as the dialog opened, and kept across a turn and a process death. Only a document
+        // with no dialog behind it, which the launcher never hands back, falls to now: there is no
+        // suggested name for the archive to disagree with then.
         val created = saved.get<Long>(BACKUP_CREATED) ?: nowWallMs()
         saved.remove<Long>(BACKUP_CREATED)
         setBackup(BackupRow.Running)
@@ -319,7 +322,8 @@ class SettingsViewModel(
             var written = false
             val row = try {
                 val built = owner.use { it.backup(created, offsetMinutes(created)) }
-                val name = documents.write(uri, built.bytes) ?: built.name
+                // The provider's name or none: the suggestion may not be what the document got (ADR-0047 §4).
+                val name = documents.write(uri, built.bytes)
                 written = true
                 owner.use { it.recordBackup(created) }
                 BackupRow.Written(name, built.notes.toLong(), built.reviews.toLong())

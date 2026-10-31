@@ -99,6 +99,7 @@
     <string name="backup_nudge_none">No backup yet. %1$s across %2$s.</string>
     <string name="backup_nudge_last">Last backup %1$s. %2$s since.</string>
     <string name="backup_report">%1$s — %2$s, %3$s</string>
+    <string name="backup_report_unnamed">Backed up — %1$s, %2$s</string>
     <string name="backup_failed">Could not write the backup: %1$s</string>
     <plurals name="backup_reviews">
         <item quantity="one">%1$s review</item>

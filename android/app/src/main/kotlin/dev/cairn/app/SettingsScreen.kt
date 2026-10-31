@@ -1,5 +1,6 @@
 package dev.cairn.app
 
+import android.text.BidiFormatter
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -180,13 +181,12 @@ private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit,
     when (val row = state.backup) {
         is BackupRow.Written -> {
             Spacer(Modifier.height(gap(1)))
+            val notes = counted(R.plurals.backup_notes, row.notes)
+            val reviews = counted(R.plurals.backup_reviews, row.reviews)
             CairnText(
-                stringResource(
-                    R.string.backup_report,
-                    row.name,
-                    counted(R.plurals.backup_notes, row.notes),
-                    counted(R.plurals.backup_reviews, row.reviews),
-                ),
+                // A name is the person's or the provider's, so it is isolated from the sentence (ADR-0041 §2).
+                row.name?.let { stringResource(R.string.backup_report, BidiFormatter.getInstance().unicodeWrap(it), notes, reviews) }
+                    ?: stringResource(R.string.backup_report_unnamed, notes, reviews),
                 Modifier.testTag("backup-report"),
             )
         }

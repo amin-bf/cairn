@@ -41,6 +41,8 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -253,6 +255,28 @@ class BackupTest {
         assertEquals(created, lastBackup())
         rule.waitUntil(10_000) { text("backup-nudge") == "Last backup ${today()}. 0 reviews since." }
         assertTrue(BenchProvider.deleted.isEmpty())
+    }
+
+    @Test
+    fun a_right_to_left_name_is_isolated_in_the_report() {
+        showApp()
+        openSettings()
+        val persian = "پشتیبان.ccoll"
+        backUpTo(BenchProvider.uri(persian))
+        waitFor("backup-report")
+        val wrapped = android.text.BidiFormatter.getInstance().unicodeWrap(persian)
+        assertNotEquals("the name is isolated", persian, wrapped)
+        assertEquals("$wrapped — 25 notes, 225 reviews", text("backup-report"))
+    }
+
+    @Test
+    fun a_document_the_provider_gives_no_name_is_reported_without_one_never_with_the_suggested_name() {
+        showApp()
+        openSettings()
+        backUpTo(BenchProvider.uri("Unnamed.ccoll", "nameless"))
+        waitFor("backup-report")
+        assertEquals("Backed up — 25 notes, 225 reviews", text("backup-report"))
+        assertNotNull(lastBackup())
     }
 
     @Test
