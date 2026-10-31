@@ -2949,6 +2949,36 @@ mod tests {
     }
 
     #[test]
+    fn applying_after_a_newer_revision_lands_underneath_refuses_and_writes_nothing() {
+        let (handle, _d, _s) = benched("decks");
+        let file = open_bench_file(&handle, &bench()[0]);
+        assert_eq!(plan_of(file.preview().unwrap()).gate, ImportGate::Decide);
+        let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
+        // Under the preview, a newer revision of the deck arrives — as a sync from a device that
+        // imported a later copy would leave it. The attribute is the one an import writes back
+        // (ADR-0008 §9, `cairn_export::DECK_REVISION_ATTR`).
+        let (deck, name) = cairn_ops::fixtures::DECKS[0];
+        let id = DeckId::parse_canonical(deck).unwrap();
+        handle
+            .collection()
+            .mutable_set_if_changed("deck", &id.0, "revision", Some("9"))
+            .unwrap();
+        // Import re-derives, so the file it was shown is now an older copy and nothing is written.
+        assert_eq!(
+            file.apply().unwrap(),
+            FileApplied::Refused {
+                refusal: FileRefusal::OlderCopy {
+                    deck: name.to_owned()
+                }
+            }
+        );
+        assert_eq!(
+            handle.note_list(DeckSelector::All, String::new()).unwrap(),
+            before
+        );
+    }
+
+    #[test]
     fn an_arrival_makes_no_difference_to_the_plan() {
         let (handle, _d, _s) = benched("decks");
         let file = &bench()[0];
