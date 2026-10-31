@@ -23,6 +23,7 @@ pub mod markdown;
 pub mod new_card_rate;
 pub mod notes;
 pub mod optimise;
+pub mod restore;
 pub mod review;
 pub mod session;
 pub mod sitting;
