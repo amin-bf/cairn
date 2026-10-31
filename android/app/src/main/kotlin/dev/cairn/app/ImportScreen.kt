@@ -14,9 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -106,18 +103,13 @@ fun ImportPage(
                     }
                     Spacer(Modifier.height(gap(2)))
                 }
-                // Until restore writes (#253), pressing it says so here and reaches no write.
-                var restorePressed by rememberSaveable(preview) { mutableStateOf(false) }
+                val restore = preview is FilePreview.Restore
                 if (failure != null) {
                     Spacer(Modifier.height(gap(1)))
-                    Sentence(stringResource(R.string.import_write_failed, failure), "import-failure")
-                } else if (restorePressed) {
-                    Spacer(Modifier.height(gap(1)))
-                    Sentence(stringResource(R.string.restore_not_yet), "restore-not-yet")
+                    Sentence(stringResource(if (restore) R.string.restore_write_failed else R.string.import_write_failed, failure), "import-failure")
                 }
                 Spacer(Modifier.height(gap(2)))
-                val restore = preview is FilePreview.Restore
-                Gate(preview.gate(), restore, if (restore) ({ restorePressed = true }) else onImport, onLeave, enabled = !writing)
+                Gate(preview.gate(), restore, onImport, onLeave, enabled = !writing)
                 Spacer(Modifier.height(reachLineBelow(page)))
             }
         }

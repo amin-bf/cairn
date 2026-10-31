@@ -187,6 +187,30 @@ class FileIntentTest {
     }
 
     @Test
+    fun an_open_editors_edit_is_settled_before_a_restore_preview_and_the_restore_keeps_it() {
+        val note = runBlocking { app.collection.use { it.noteList(DeckSelector.All, "").rows } }[0]
+        // The collection's own archive, made before the edit: its note is older than the edit.
+        val own = runBlocking { app.collection.use { it.backup(System.currentTimeMillis(), 0) } }
+        BenchProvider.files[own.name] = own.bytes
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitFor("destination-notes")
+            rule.onNodeWithTag("destination-notes").performClick()
+            waitFor("note-row")
+            rule.onAllNodes(hasTestTag("note-row"))[0].performClick()
+            waitFor("field-Front")
+            rule.onNodeWithTag("field-Front").performTextInput("zzz")
+            arriveWhileRunning(scenario, view(BenchProvider.uri(own.name)))
+            waitFor("gate-restore")
+            rule.onNodeWithTag("gate-restore").performClick()
+            waitFor("deck-filter")
+            val stored = runBlocking {
+                app.collection.use { h -> h.editNote(note.noteId).fields().first { it.name == "Front" }.value }
+            }
+            assertTrue("the edit outlives the restore: $stored", "zzz" in stored)
+        }
+    }
+
+    @Test
     fun a_second_file_replaces_the_first_and_back_returns_to_where_the_person_was() {
         ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use { scenario ->
             waitFor("import-screen")
