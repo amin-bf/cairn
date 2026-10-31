@@ -116,6 +116,7 @@ private fun CairnPlaces(
     // The editor on screen, if one is: a file arriving settles it first (ADR-0021 §7, ADR-0052 §2).
     var openEditor by remember { mutableStateOf<EditorViewModel?>(null) }
     val resolver = LocalContext.current.contentResolver
+    val ceiling = readCeiling(LocalContext.current)
     // Every way in reaches the one preview (ADR-0022 §6) with the document it read once, and the
     // preview takes the screen over the place the person was on. A preview already up is replaced (#241).
     val arrive: suspend (FileArrival, DocumentRead) -> Unit = { arrival, document ->
@@ -207,7 +208,7 @@ private fun CairnPlaces(
                 // document is read once and its grant is never kept (ADR-0047 §1, ADR-0052).
                 val scope = rememberCoroutineScope()
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    if (uri != null) scope.launch { arrive(FileArrival.PICKED, readDocument(resolver, uri)) }
+                    if (uri != null) scope.launch { arrive(FileArrival.PICKED, readDocument(resolver, uri, ceiling)) }
                 }
                 // The system save dialog, opened on the dated name; closed with nothing, it does nothing
                 // (ADR-0053 §4). The grant is used for the one write and never kept.

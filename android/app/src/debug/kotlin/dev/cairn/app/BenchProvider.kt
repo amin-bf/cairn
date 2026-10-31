@@ -16,7 +16,8 @@ import java.io.File
  * A debug-only provider that serves bytes the way a document provider does: a `DISPLAY_NAME` for a
  * query and a stream for a read. A URI with `?nameless` answers a query with no row, as a share that
  * carries no name does (ADR-0024 §1), and one with `?fails` cannot be opened at all. One with `?slow`
- * takes a while to open, so a test can turn the phone mid-read; every opening is counted.
+ * takes a while to open, so a test can turn the phone mid-read; every opening is counted. One with
+ * `?smaller` or `?larger` states a `SIZE` the stream does not keep to.
  *
  * It takes writes too, as the document the save dialog created (BackupTest): what is written lands in
  * [files] under the name once the stream is closed, and the name is what a query answers, so the
@@ -29,7 +30,14 @@ class BenchProvider : ContentProvider() {
         if (uri.getQueryParameter("nameless") != null) return MatrixCursor(arrayOf(OpenableColumns.DISPLAY_NAME))
         val cursor = MatrixCursor(arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE))
         val name = uri.lastPathSegment ?: return cursor
-        cursor.addRow(arrayOf(name, files[name]?.size?.toLong() ?: 0L))
+        val size = files[name]?.size?.toLong() ?: 0L
+        // `?smaller` and `?larger` state a size the stream does not keep to, as a provider may.
+        val stated = when {
+            uri.getQueryParameter("smaller") != null -> size / 2
+            uri.getQueryParameter("larger") != null -> size * 4
+            else -> size
+        }
+        cursor.addRow(arrayOf(name, stated))
         return cursor
     }
 

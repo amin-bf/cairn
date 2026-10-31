@@ -42,13 +42,14 @@ fun arrivingFrom(intent: Intent?): ArrivingFile? =
  */
 class IncomingFiles(app: Application) : AndroidViewModel(app) {
     private val resolver = app.contentResolver
+    private val ceiling = readCeiling(app)
     private val _pending = MutableStateFlow<ReadFile?>(null)
     val pending: StateFlow<ReadFile?> = _pending
     private var reading: Job? = null
 
     fun arrive(file: ArrivingFile) {
         reading?.cancel()
-        reading = viewModelScope.launch { _pending.value = ReadFile(file.arrival, readDocument(resolver, file.uri)) }
+        reading = viewModelScope.launch { _pending.value = ReadFile(file.arrival, readDocument(resolver, file.uri, ceiling)) }
     }
 
     /** [file] has reached the preview; a newer one that came meanwhile stays pending. */
