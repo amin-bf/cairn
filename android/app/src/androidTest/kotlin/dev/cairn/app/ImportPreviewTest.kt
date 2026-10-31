@@ -9,7 +9,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.core.app.ActivityOptionsCompat
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -71,9 +75,13 @@ class ImportPreviewTest {
     /** What the stubbed picker answers with; null is a picker closed with nothing chosen. */
     private val chosen = AtomicReference<Uri?>(null)
 
+    /** What the app asked the picker for, as the picker was launched. */
+    private val asked = AtomicReference<Any?>(null)
+
     private val picker = object : ActivityResultRegistryOwner {
         override val activityResultRegistry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
+                asked.set(input)
                 val uri = chosen.get()
                 if (uri == null) {
                     dispatchResult(requestCode, Activity.RESULT_CANCELED, null)
@@ -104,6 +112,8 @@ class ImportPreviewTest {
         rule.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text }
 
     private fun top(tag: String): Float = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+
+    private fun bottom(tag: String): Float = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.bottom
 
     private fun showApp(initial: ThemeChoice = ThemeChoice.LIGHT) {
         val appearance = AppearanceState(initial)
@@ -156,7 +166,9 @@ class ImportPreviewTest {
         assertEquals("Open a file…", text("open-file"))
         assertTrue(top("group-device") < top("label-Files"))
         assertTrue(top("label-Files") < top("open-file"))
-        assertTrue(top("open-file") < top("label-Appearance"))
+        // The line sits under the button, as the Optimise block's does.
+        assertTrue(top("open-file") < top("files-line"))
+        assertTrue(top("files-line") < top("label-Appearance"))
     }
 
     @Test
@@ -169,6 +181,41 @@ class ImportPreviewTest {
         assertTrue(exists("destinations"))
     }
 
+    @Test
+    fun the_picker_is_asked_for_a_file_of_any_type() {
+        showApp()
+        openFilePicking(null)
+        rule.waitForIdle()
+        // A deck file has no type a provider is sure to know, so nothing is filtered out (ADR-0047 §1).
+        assertEquals(listOf("*/*"), (asked.get() as Array<*>).toList())
+    }
+
+    @Test
+    fun after_a_killed_process_the_import_route_comes_back_on_review() {
+        // The models live in a store the test can throw away, as a killed process does; the saved
+        // back stack outlives it.
+        var store = ViewModelStore()
+        val stores = object : ViewModelStoreOwner {
+            override val viewModelStore: ViewModelStore get() = store
+        }
+        val restoration = StateRestorationTester(rule)
+        val appearance = AppearanceState(ThemeChoice.LIGHT)
+        restoration.setContent {
+            CompositionLocalProvider(LocalActivityResultRegistryOwner provides picker, LocalViewModelStoreOwner provides stores) {
+                CairnAppearance(appearance) { CairnNavHost(owner, keyboardUp = false) }
+            }
+        }
+        waitFor("destinations")
+        pick(update.name)
+        store.clear()
+        store = ViewModelStore()
+        restoration.emulateSavedInstanceStateRestore()
+        // The bytes were never saved, so the preview is not restored and the app opens on Review (#241).
+        waitFor("destinations")
+        assertFalse(exists("import-screen"))
+        assertEquals(true, rule.onNodeWithTag("destination-review").fetchSemanticsNode().config[SemanticsProperties.Selected])
+    }
+
     // --- The preview and its gate (ADR-0022 §3, ADR-0041 §1-§3).
 
     @Test
@@ -179,6 +226,10 @@ class ImportPreviewTest {
         assertEquals("by Marjan Rahimi · CC BY-SA 4.0", text("import-claim-0"))
         assertEquals("A1 vocabulary for the first ten chapters.", text("import-claim-1"))
         assertTrue(exists("import-header-rule"))
+        // The rule has gap(2) on either side (ADR-0041 §1).
+        val gap2 = with(rule.density) { dev.cairn.design.gap(2).toPx() }
+        assertEquals(gap2, top("import-header-rule") - bottom("import-claim-1"), 1f)
+        assertEquals(gap2, top("import-deck-0") - bottom("import-header-rule"), 1f)
         assertEquals("French A1", text("import-deck-0"))
         assertEquals("updating a deck you already have", text("import-caption-0"))
         assertEquals(
@@ -279,6 +330,37 @@ class ImportPreviewTest {
         assertEquals(6uL, stillPlanned.plan.decks[0].newNotes)
     }
 
+    @Test
+    fun the_kinds_a_file_adopts_are_each_wrapped_in_their_line() {
+        // No bench file adopts a kind, so the plan is stated directly: the names are the file's own
+        // and so hostile, like every other name in a sentence (ADR-0041 §2).
+        val plan = dev.cairn.ffi.ImportPlanFacts(
+            author = "",
+            licence = "",
+            description = "",
+            decks = listOf(
+                dev.cairn.ffi.DeckEffects(
+                    name = "French A1",
+                    path = dev.cairn.ffi.DeckPath.CREATE,
+                    newNotes = 1u,
+                    alreadyYours = 0u,
+                    movingIn = emptyList(),
+                    deleted = 0u,
+                    renamedFrom = null,
+                    noChange = false,
+                    revisionConflict = false,
+                ),
+            ),
+            adoptedKinds = listOf("واژه", "Cloze"),
+            emptiedDecks = emptyList(),
+            gate = ImportGate.DECIDE,
+        )
+        rule.setContent { CairnTheme(false) { ImportPage("kinds.cdeck", FilePreview.Plan(plan), onImport = {}, onLeave = {}) } }
+        val wrap = android.text.BidiFormatter.getInstance()
+        val expected = "Adds a card type this build doesn't have: ${wrap.unicodeWrap("واژه")}, ${wrap.unicodeWrap("Cloze")}"
+        assertTrue(rawLines().contains(expected))
+    }
+
     // --- Leaving (ADR-0052: Back is the gate's dismissal).
 
     @Test
@@ -311,7 +393,7 @@ class ImportPreviewTest {
     private var darkScene by androidx.compose.runtime.mutableStateOf(false)
 
     private fun shoot(name: String, dark: Boolean, content: @androidx.compose.runtime.Composable () -> Unit) {
-        val dir = File(context.cacheDir, "import-shots").apply { mkdirs() }
+        val dir = context.getExternalFilesDir("import-shots")!!
         darkScene = dark
         scene = content
         rule.waitForIdle()
