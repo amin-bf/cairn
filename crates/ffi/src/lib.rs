@@ -1579,18 +1579,21 @@ impl InboundFileHandle {
 
     /// Re-derive the plan and write it. A store failure is the binding's one error.
     ///
-    /// **Restoring is not built yet** (#253): an archive the re-read refuses says why, and one this
-    /// device would accept is an error, with nothing written either way.
+    /// An archive is restored: it lands with no deck to filter to, since a restore is the whole
+    /// collection, or is refused when the collection changed under its preview, with nothing written.
     pub fn apply(&self) -> Result<FileApplied, CairnError> {
         if self.archive {
-            return match self.restore()? {
-                Err(refusal) => Ok(FileApplied::Refused {
+            let restored = restore::apply(
+                &self.inbound.bytes,
+                self.complete,
+                &mut self.owner.collection(),
+            )?;
+            return Ok(match restored {
+                Ok(_) => FileApplied::Landed { filter_to: None },
+                Err(refusal) => FileApplied::Refused {
                     refusal: refusal.into(),
-                }),
-                Ok(_) => Err(CairnError::Failed {
-                    reason: "restoring an archive is not built yet".to_owned(),
-                }),
-            };
+                },
+            });
         }
         if !self.complete {
             return Ok(FileApplied::Refused {
@@ -3083,11 +3086,31 @@ mod tests {
     }
 
     #[test]
-    fn applying_an_archive_writes_nothing_whether_or_not_it_is_refused() {
-        let (handle, _d, _s) = benched("decks");
-        let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
+    fn applying_an_archive_over_an_empty_collection_lands_with_no_deck_and_holds_its_notes() {
+        let (empty, _d, _s) = benched("empty");
+        let file = open_bench_file(&empty, &bench()[2]);
+        let notes = restore_of(file.preview().unwrap()).notes;
+        assert!(notes > 0);
+
         assert_eq!(
-            open_bench_file(&handle, &bench()[2]).apply().unwrap(),
+            file.apply().unwrap(),
+            FileApplied::Landed { filter_to: None }
+        );
+        assert_eq!(empty.note_count().unwrap(), notes);
+        // Its own archive now: the same bytes preview as a merge into the collection they came from.
+        assert_eq!(restore_of(file.preview().unwrap()).gate, ImportGate::Decide);
+    }
+
+    #[test]
+    fn applying_an_archive_the_collection_changed_under_refuses_and_writes_nothing() {
+        let (handle, _d, _s) = benched("empty");
+        let file = open_bench_file(&handle, &bench()[2]);
+        assert_eq!(restore_of(file.preview().unwrap()).gate, ImportGate::Decide);
+        handle.install_fixture("decks".to_owned(), NOW).unwrap();
+        let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
+
+        assert_eq!(
+            file.apply().unwrap(),
             FileApplied::Refused {
                 refusal: FileRefusal::AnotherCollection
             }
@@ -3096,14 +3119,6 @@ mod tests {
             handle.note_list(DeckSelector::All, String::new()).unwrap(),
             before
         );
-
-        // Restoring is the next ticket's: an archive this device would accept is not written yet.
-        let (empty, _d2, _s2) = benched("empty");
-        assert!(matches!(
-            open_bench_file(&empty, &bench()[2]).apply(),
-            Err(CairnError::Failed { .. })
-        ));
-        assert_eq!(empty.note_count().unwrap(), 0);
     }
 
     #[test]
