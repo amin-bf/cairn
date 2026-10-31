@@ -51,6 +51,9 @@ pub enum Refusal {
     /// The platform stopped reading at its ceiling and the head it holds is an archive's: too large
     /// to open here, which is a different thing from unreadable.
     TooLarge,
+    /// The manifest passed the gate but the log or the mutable surface will not read: met only by
+    /// [`apply`], the one reader that inflates them, so the preview never shows it.
+    Damaged,
 }
 
 /// Whether these bytes — the whole file or only its head — are a collection archive. The sniff reads
@@ -76,14 +79,16 @@ pub fn read(
             reviews: plan.reviews as u64,
             adoption: plan.adoption,
         }),
-        Err(refusal) => Err(refused(refusal)),
+        Err(refusal) => Err(from_export(refusal)),
     })
 }
 
 /// Restore an archive into `coll` (ADR-0016 §4 §10, ADR-0053 §4): the gate derived again, since the
 /// collection may have changed while the preview was open, and then the whole archive merged in one
-/// transaction. Refuses as [`read`] refuses, with nothing written; a line the store cannot read means
-/// a damaged file and is [`Refusal::Unreadable`], also with nothing written.
+/// transaction. Refuses as [`read`] refuses, with nothing written; a payload that will not inflate or
+/// a line the store cannot read means a damaged file and is [`Refusal::Damaged`], also with nothing
+/// written. That is the one refusal reached only by inflating a payload (AGENTS.md deck export rule
+/// 9 keeps them out of the gate, and this is past it).
 pub fn apply(
     bytes: &[u8],
     complete: bool,
@@ -94,21 +99,24 @@ pub fn apply(
     }
     let contents = match restore_read(bytes, &target(coll)?) {
         Ok(contents) => contents,
-        Err(refusal) => return Ok(Err(refused(refusal))),
+        Err(refusal) => return Ok(Err(from_export(refusal))),
     };
-    let log: Vec<&str> = contents.log.iter().map(String::as_str).collect();
-    let mutable: Vec<&str> = contents.mutable.iter().map(String::as_str).collect();
-    match coll.restore(&contents.collection_id.to_canonical(), &log, &mutable) {
+    match coll.restore(
+        &contents.collection_id.to_canonical(),
+        &contents.log,
+        &contents.mutable,
+    ) {
         Ok(restored) => Ok(Ok(restored)),
         // The gate is asked again inside the store's transaction; a write landing between the two
         // reads is refused there.
         Err(StoreError::CollectionIdMismatch { .. }) => Ok(Err(Refusal::AnotherCollection)),
-        Err(StoreError::MalformedArchiveLine { .. }) => Ok(Err(Refusal::Unreadable)),
+        Err(StoreError::MalformedArchiveLine { .. }) => Ok(Err(Refusal::Damaged)),
         Err(e) => Err(e),
     }
 }
 
-/// What a head cut at the platform's read ceiling is: too large when it is an archive's.
+/// What a head cut at the platform's read ceiling is: too large when it is an archive's. The deck
+/// side's twin is [`crate::inbound::head_refusal`], where the same head is a refusal of its own.
 fn incomplete(head: &[u8]) -> Refusal {
     if is_archive(head) {
         Refusal::TooLarge
@@ -126,8 +134,10 @@ fn target(coll: &Collection) -> Result<RestoreTarget, StoreError> {
     })
 }
 
-fn refused(refusal: RestoreRefusal) -> Refusal {
+/// The export crate's refusal as this module's.
+fn from_export(refusal: RestoreRefusal) -> Refusal {
     match refusal {
+        RestoreRefusal::Damaged => Refusal::Damaged,
         RestoreRefusal::Unreadable => Refusal::Unreadable,
         RestoreRefusal::UnknownFormat(format) => Refusal::UnknownFormat(format),
         RestoreRefusal::WrongProfile => Refusal::WrongProfile,
@@ -343,7 +353,7 @@ mod tests {
         let held = here.collection_id().to_owned();
         assert_eq!(
             apply(&damaged, true, &mut here).unwrap().map(|_| ()),
-            Err(Refusal::Unreadable)
+            Err(Refusal::Damaged)
         );
         assert_eq!(here.collection_id(), held);
     }

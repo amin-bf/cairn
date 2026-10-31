@@ -1370,6 +1370,9 @@ impl From<restore::Refusal> for FileRefusal {
             restore::Refusal::UnknownFormat(_) => Self::NeedsNewerVersion,
             restore::Refusal::AnotherCollection => Self::AnotherCollection,
             restore::Refusal::TooLarge => Self::TooLargeToRead,
+            // Never crosses as a refusal: `apply` fails with it instead, since the preview cannot
+            // show it (see `InboundFileHandle::apply`).
+            restore::Refusal::Damaged => Self::Unreadable,
         }
     }
 }
@@ -1553,7 +1556,7 @@ impl InboundFileHandle {
     }
 
     /// The restore preview, derived against the collection as it stands now.
-    fn restore(&self) -> Result<Result<restore::Preview, restore::Refusal>, CairnError> {
+    fn restore_preview(&self) -> Result<Result<restore::Preview, restore::Refusal>, CairnError> {
         Ok(restore::read(
             &self.inbound.bytes,
             self.complete,
@@ -1568,7 +1571,7 @@ impl InboundFileHandle {
     /// can't.
     pub fn preview(&self) -> Result<FilePreview, CairnError> {
         if self.archive {
-            return Ok(FilePreview::of_restore(self.restore()?));
+            return Ok(FilePreview::of_restore(self.restore_preview()?));
         }
         if !self.complete {
             return Ok(FilePreview::of(Err(self.head_refusal())));
@@ -1580,7 +1583,10 @@ impl InboundFileHandle {
     /// Re-derive the plan and write it. A store failure is the binding's one error.
     ///
     /// An archive is restored: it lands with no deck to filter to, since a restore is the whole
-    /// collection, or is refused when the collection changed under its preview, with nothing written.
+    /// collection, or is refused as its preview refuses — when the collection changed under it, say —
+    /// with nothing written. A damaged payload is the one exception: the manifest-only preview cannot
+    /// see it, so a preview read again would offer *Restore* once more, and it fails instead, also
+    /// writing nothing.
     pub fn apply(&self) -> Result<FileApplied, CairnError> {
         if self.archive {
             let restored = restore::apply(
@@ -1588,12 +1594,15 @@ impl InboundFileHandle {
                 self.complete,
                 &mut self.owner.collection(),
             )?;
-            return Ok(match restored {
-                Ok(_) => FileApplied::Landed { filter_to: None },
-                Err(refusal) => FileApplied::Refused {
+            return match restored {
+                Ok(_) => Ok(FileApplied::Landed { filter_to: None }),
+                Err(restore::Refusal::Damaged) => Err(CairnError::Failed {
+                    reason: "its contents cannot be read; nothing was restored".to_owned(),
+                }),
+                Err(refusal) => Ok(FileApplied::Refused {
                     refusal: refusal.into(),
-                },
-            });
+                }),
+            };
         }
         if !self.complete {
             return Ok(FileApplied::Refused {
@@ -3119,6 +3128,30 @@ mod tests {
             handle.note_list(DeckSelector::All, String::new()).unwrap(),
             before
         );
+    }
+
+    #[test]
+    fn applying_an_archive_whose_payload_is_damaged_fails_and_writes_nothing() {
+        // A manifest the preview passes over a log line nobody can read: only the write finds it, and
+        // a preview read again would offer *Restore* once more, so it fails rather than refuses.
+        let id = cairn_core::identity::CollectionId([0x5a; 16]);
+        let damaged = cairn_export::build_collection(&cairn_export::CollectionArchive {
+            collection_id: &id,
+            created: "2026-03-03T09:00:00.000Z",
+            notes: 0,
+            reviews: 0,
+            log: &["{\"k\":\"rev\",".to_owned()],
+            mutable: &[],
+        });
+        let (handle, _d, _s) = benched("empty");
+        let file = handle
+            .clone()
+            .open_file(FileArrival::Picked, None, damaged, true);
+        assert_eq!(restore_of(file.preview().unwrap()).gate, ImportGate::Decide);
+
+        assert!(matches!(file.apply(), Err(CairnError::Failed { .. })));
+        assert_eq!(handle.note_count().unwrap(), 0);
+        assert_eq!(restore_of(file.preview().unwrap()).gate, ImportGate::Decide);
     }
 
     #[test]

@@ -149,6 +149,9 @@ pub enum RestoreRefusal {
     /// This device already holds a **different** collection (ADR-0016 §10). Names the archive's
     /// collection id so the interface can state the mismatch; the way out is [`RESTORE_MISMATCH_WAY_OUT`].
     IdentityMismatch { archive: String },
+    /// A log or mutable member the gate passed over that will not read: met only by
+    /// [`restore_read`], since the preview never inflates them, so it is never shown in its place.
+    Damaged,
 }
 
 /// A restore this device may perform, described in the one line the preview shows (ADR-0016 §11,
@@ -198,14 +201,13 @@ pub fn restore_preview(
     bytes: &[u8],
     target: &RestoreTarget,
 ) -> Result<RestorePlan, RestoreRefusal> {
-    gate(bytes, target).map(|(_, plan, _)| plan)
+    gate(bytes, target).map(|cleared| cleared.plan)
 }
 
 /// What a restore writes, read whole from a `.ccoll` once [`restore_preview`]'s gate has cleared it:
-/// the plan the preview showed, the archive's collection id, and both payloads as their verbatim lines.
+/// the archive's collection id, and both payloads as their verbatim lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RestoreContents {
-    pub plan: RestorePlan,
     pub collection_id: CollectionId,
     /// `log.jsonl`, one line per entry, as the archive carries them (ADR-0004 §11).
     pub log: Vec<String>,
@@ -221,13 +223,17 @@ pub fn restore_read(
     bytes: &[u8],
     target: &RestoreTarget,
 ) -> Result<RestoreContents, RestoreRefusal> {
-    let (mut archive, plan, collection_id) = gate(bytes, target)?;
+    let Cleared {
+        mut archive,
+        collection_id,
+        ..
+    } = gate(bytes, target)?;
     let mut lines = |name: &str| -> Result<Vec<String>, RestoreRefusal> {
         if archive.index_for_name(name).is_none() {
             return Ok(Vec::new());
         }
         let text =
-            container::read_member(&mut archive, name).map_err(|_| RestoreRefusal::Unreadable)?;
+            container::read_member(&mut archive, name).map_err(|_| RestoreRefusal::Damaged)?;
         Ok(text
             .split('\n')
             .filter(|line| !line.is_empty())
@@ -237,15 +243,19 @@ pub fn restore_read(
     let log = lines(LOG_MEMBER)?;
     let mutable = lines(MUTABLE_MEMBER)?;
     Ok(RestoreContents {
-        plan,
         collection_id,
         log,
         mutable,
     })
 }
 
-/// A `.ccoll` the gate cleared: the archive kept open for a payload read, the plan, the archive's id.
-type Cleared<'a> = (zip::ZipArchive<Cursor<&'a [u8]>>, RestorePlan, CollectionId);
+/// A `.ccoll` the gate cleared.
+struct Cleared<'a> {
+    /// Kept open for the payload read that follows.
+    archive: zip::ZipArchive<Cursor<&'a [u8]>>,
+    plan: RestorePlan,
+    collection_id: CollectionId,
+}
 
 /// The gate both reads share: the profile, the member paths, the manifest's format and profile and
 /// the identity check.
@@ -308,13 +318,16 @@ fn gate<'a>(bytes: &'a [u8], target: &RestoreTarget) -> Result<Cleared<'a>, Rest
     let notes = manifest.get("notes").and_then(Json::as_u64).unwrap_or(0) as usize;
     let reviews = manifest.get("reviews").and_then(Json::as_u64).unwrap_or(0) as usize;
 
-    let plan = RestorePlan {
-        created,
-        notes,
-        reviews,
-        adoption,
-    };
-    Ok((archive, plan, archive_id))
+    Ok(Cleared {
+        archive,
+        plan: RestorePlan {
+            created,
+            notes,
+            reviews,
+            adoption,
+        },
+        collection_id: archive_id,
+    })
 }
 
 /// Whether a member is one the restore reader accepts: traversal-safe (the shared
@@ -602,7 +615,6 @@ mod tests {
         };
 
         let read = restore_read(&bytes, &target).unwrap();
-        assert_eq!(read.plan, restore_preview(&bytes, &target).unwrap());
         assert_eq!(read.collection_id, id);
         assert_eq!(read.log, log);
         assert_eq!(read.mutable, mutable);
@@ -631,14 +643,36 @@ mod tests {
             own_id: cid(0x22),
         };
         assert_eq!(
-            restore_read(&bytes, &stranger).map(|r| r.plan),
+            restore_read(&bytes, &stranger).map(|_| ()),
             Err(RestoreRefusal::IdentityMismatch {
                 archive: archive_id.to_canonical(),
             })
         );
         assert_eq!(
-            restore_read(b"not a zip", &stranger).map(|r| r.plan),
+            restore_read(b"not a zip", &stranger).map(|_| ()),
             Err(RestoreRefusal::Unreadable)
+        );
+    }
+
+    #[test]
+    fn a_payload_the_preview_passed_but_that_will_not_read_is_damaged() {
+        let id = cid(0x11);
+        let target = RestoreTarget {
+            empty: true,
+            own_id: cid(0x99),
+        };
+        let bytes = container::build(&[
+            Member::stored(container::MIMETYPE_MEMBER, COLLECTION_MEDIA_TYPE),
+            Member::deflated(
+                MANIFEST_MEMBER,
+                manifest(&sample(&id, &[], &[])).into_bytes(),
+            ),
+            Member::deflated(LOG_MEMBER, vec![0xff, 0xfe, 0xfd]),
+        ]);
+        assert!(restore_preview(&bytes, &target).is_ok());
+        assert_eq!(
+            restore_read(&bytes, &target).map(|_| ()),
+            Err(RestoreRefusal::Damaged)
         );
     }
 }
