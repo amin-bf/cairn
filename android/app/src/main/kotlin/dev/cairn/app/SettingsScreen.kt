@@ -1,12 +1,15 @@
 package dev.cairn.app
 
+import android.net.Uri
 import android.text.BidiFormatter
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
@@ -33,6 +37,7 @@ import dev.cairn.design.CairnPage
 import dev.cairn.design.CairnProgress
 import dev.cairn.design.CairnRule
 import dev.cairn.design.CairnText
+import dev.cairn.design.CairnTextAction
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Destination
 import dev.cairn.design.Family
@@ -46,6 +51,7 @@ fun SettingsScreen(
     model: SettingsViewModel,
     onOpenFile: () -> Unit = {},
     onBackUp: () -> Unit = {},
+    onShare: (Uri) -> Unit = {},
     development: @Composable () -> Unit = {},
 ) {
     val state by model.state.collectAsStateWithLifecycle()
@@ -60,6 +66,7 @@ fun SettingsScreen(
             onCancelOptimise = model::cancelOptimise,
             onOpenFile = onOpenFile,
             onBackUp = onBackUp,
+            onShare = onShare,
             development = development,
         )
         is SettingsScreenState.Failed ->
@@ -83,6 +90,7 @@ fun SettingsPage(
     onCancelOptimise: () -> Unit,
     onOpenFile: () -> Unit = {},
     onBackUp: () -> Unit = {},
+    onShare: (Uri) -> Unit = {},
     development: @Composable () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
@@ -108,7 +116,7 @@ fun SettingsPage(
 
             Spacer(Modifier.height(gap(2)))
             GroupHeading(stringResource(R.string.settings_device), stringResource(R.string.settings_device_caption), "group-device")
-            FilesBlock(state, onOpenFile, onBackUp)
+            FilesBlock(state, onOpenFile, onBackUp, onShare)
             // The rule between two blocks of a group, as above.
             Spacer(Modifier.height(gap(3)))
             CairnRule()
@@ -158,10 +166,11 @@ private fun RateBlock(state: SettingsScreenState.Ready, onChange: (String) -> Un
 
 /**
  * *Files* (ADR-0051 §5, ADR-0053 §4): the system picker for a deck file, styled as Optimise is, then
- * *Back up…* the same way with its nudge under it, and what the last backup wrote or why it could not.
+ * *Back up…* the same way with its nudge under it, and what the last backup wrote, with *Share*, or
+ * why it could not.
  */
 @Composable
-private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit, onBackUp: () -> Unit) {
+private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit, onBackUp: () -> Unit, onShare: (Uri) -> Unit) {
     CairnFieldLabel(stringResource(R.string.settings_files_label), Modifier.testTag("label-Files"))
     CairnControl(stringResource(R.string.settings_open_file), onOpenFile, Modifier.fillMaxWidth().testTag("open-file"))
     Spacer(Modifier.height(gap(1)))
@@ -178,17 +187,31 @@ private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit,
         Spacer(Modifier.height(gap(1)))
         CairnText(backupNudgeSentence(it), Modifier.testTag("backup-nudge"))
     }
+    state.backupOverQuotaMb?.let {
+        Spacer(Modifier.height(gap(1)))
+        CairnText(stringResource(R.string.backup_size_over, grouped(it)), Modifier.testTag("backup-size"))
+    }
     when (val row = state.backup) {
         is BackupRow.Written -> {
             Spacer(Modifier.height(gap(1)))
             val notes = counted(R.plurals.backup_notes, row.notes)
             val reviews = counted(R.plurals.backup_reviews, row.reviews)
-            CairnText(
-                // A name is the person's or the provider's, so it is isolated from the sentence (ADR-0041 §2).
-                row.name?.let { stringResource(R.string.backup_report, BidiFormatter.getInstance().unicodeWrap(it), notes, reviews) }
-                    ?: stringResource(R.string.backup_report_unnamed, notes, reviews),
-                Modifier.testTag("backup-report"),
-            )
+            // The report, and *Share* beside it as a text action; it lives as long as the report does
+            // and opens nothing until it is pressed (ADR-0023 §5).
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CairnText(
+                    // A name is the person's or the provider's, so it is isolated from the sentence (ADR-0041 §2).
+                    row.name?.let { stringResource(R.string.backup_report, BidiFormatter.getInstance().unicodeWrap(it), notes, reviews) }
+                        ?: stringResource(R.string.backup_report_unnamed, notes, reviews),
+                    Modifier.weight(1f).testTag("backup-report"),
+                )
+                Spacer(Modifier.width(gap(1)))
+                CairnTextAction(stringResource(R.string.backup_share), { onShare(row.document) }, Modifier.testTag("backup-share"))
+            }
+            row.unrecorded?.let {
+                Spacer(Modifier.height(gap(1)))
+                CairnText(stringResource(R.string.backup_unrecorded, it), Modifier.testTag("backup-unrecorded"))
+            }
         }
         is BackupRow.Failed -> {
             Spacer(Modifier.height(gap(1)))
@@ -278,4 +301,4 @@ private fun nudgeSentence(nudge: Nudge): String = when (nudge) {
 
 @Composable
 private fun counted(plural: Int, n: Long): String =
-    pluralStringResource(plural, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), String.format(java.util.Locale.ENGLISH, "%,d", n))
+    pluralStringResource(plural, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), grouped(n))

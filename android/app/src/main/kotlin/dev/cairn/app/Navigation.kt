@@ -215,6 +215,10 @@ private fun CairnPlaces(
                 val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
                     if (uri != null) model.backUp(uri) else model.backupDismissed()
                 }
+                // *Share* opens the share sheet over the saved document, from the activity and only when
+                // pressed (ADR-0023 §5). Started through the registry, as the two dialogs are; what the
+                // sheet hands back says nothing, so it is not read.
+                val sharer = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
                 // The backup's report stays until Settings is left; a rotation does not leave it.
                 val activity = LocalActivity.current
                 DisposableEffect(model) {
@@ -230,6 +234,7 @@ private fun CairnPlaces(
                             withContext(Dispatchers.Main) { saver.launch(name) }
                         }
                     },
+                    onShare = { sharer.launch(shareSheet(it)) },
                     development = { DevelopmentBlock(owner, onRestart) },
                 )
             }

@@ -326,6 +326,8 @@ impl CollectionHandle {
             reviews_since: nudge.reviews_since,
             reviews: nudge.reviews,
             notes: nudge.notes,
+            size_mb: nudge.size.mb,
+            over_quota: nudge.size.over_quota,
         })
     }
 
@@ -1150,6 +1152,11 @@ pub struct BackupNudge {
     pub reviews_since: u64,
     pub reviews: u64,
     pub notes: u64,
+    /// The collection's size in whole MB, rounded up, in the unit Android's automatic backup
+    /// measures (ADR-0016 §7).
+    pub size_mb: u64,
+    /// Whether that size is past the automatic backup's quota, where the size line appears.
+    pub over_quota: bool,
 }
 
 /// The name a backup made at `created_ms` suggests, `offset_minutes` east of UTC — what the save
@@ -3273,6 +3280,29 @@ mod tests {
         assert_eq!(after.last_backup_ms, Some(NOW));
         assert_eq!(after.reviews_since, 0);
         assert_eq!((after.reviews, after.notes), (before.reviews, before.notes));
+    }
+
+    #[test]
+    fn the_nudge_states_the_size_of_the_data_directory_against_the_quota() {
+        let (handle, data, state) = benched("history");
+        let under = handle.backup_nudge().unwrap();
+        assert!(under.size_mb >= 1, "{under:?}");
+        assert!(!under.over_quota);
+
+        // Whatever else sits in the data directory is in the backup set too. A sparse file of
+        // exactly the quota puts the collection past it, and nothing in the state directory counts.
+        std::fs::File::create(state.path().join("elsewhere.bin"))
+            .unwrap()
+            .set_len(2 * cairn_ops::backup::QUOTA_BYTES)
+            .unwrap();
+        assert_eq!(handle.backup_nudge().unwrap(), under);
+        std::fs::File::create(data.path().join("padding.bin"))
+            .unwrap()
+            .set_len(cairn_ops::backup::QUOTA_BYTES)
+            .unwrap();
+        let over = handle.backup_nudge().unwrap();
+        assert!(over.over_quota);
+        assert!(over.size_mb > 25, "{over:?}");
     }
 
     #[test]

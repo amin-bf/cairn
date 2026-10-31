@@ -56,8 +56,12 @@ sealed interface BackupRow {
 
     data object Running : BackupRow
 
-    /** Written: [name] is the document as the provider named it, or null when it gave none. */
-    data class Written(val name: String?, val notes: Long, val reviews: Long) : BackupRow
+    /**
+     * Written: [name] is the document as the provider named it, or null when it gave none; [document] is
+     * what *Share* hands on. [unrecorded] is why "last backup" could not be written after the archive
+     * was, if it could not: the archive is whole all the same, and the nudge stays where it was.
+     */
+    data class Written(val name: String?, val notes: Long, val reviews: Long, val document: Uri, val unrecorded: String? = null) : BackupRow
 
     data class Failed(val error: String) : BackupRow
 }
@@ -103,10 +107,15 @@ sealed interface SettingsScreenState {
         val updated: Boolean = false,
         val backupNudge: BackupNudgeShown? = null,
         val backup: BackupRow = BackupRow.Idle,
+        /** The collection's size in whole MB once it is past the automatic backup's quota; null under it. */
+        val backupOverQuotaMb: Long? = null,
     ) : SettingsScreenState
 
     data object Failed : SettingsScreenState
 }
+
+/** A failure as the row words it: the binding's own reason, or the exception's message. */
+private fun Exception.failureReason(): String = (this as? CairnException.Failed)?.reason ?: message ?: javaClass.simpleName
 
 private fun BackupNudge.shown(nowMs: Long): BackupNudgeShown = when (val at = lastBackupMs) {
     null -> BackupNudgeShown.None(reviews.toLong(), notes.toLong())
@@ -167,7 +176,8 @@ class SettingsViewModel(
     private suspend fun read(rateRefused: Boolean, appearanceRefused: Boolean, rereadRate: Boolean = false) {
         try {
             val (rate, choice, nudge) = owner.use { Triple(it.newCardRate(), it.themeChoice(), it.optimisationNudge().toNudge()) }
-            val backupNudge = owner.use { it.backupNudge() }.shown(nowWallMs())
+            val backupFacts = owner.use { it.backupNudge() }
+            val backupNudge = backupFacts.shown(nowWallMs())
             val before = _state.value as? SettingsScreenState.Ready
             val shown = before?.rate
             val keep = editing && !rereadRate && shown != null
@@ -182,6 +192,7 @@ class SettingsViewModel(
                 updated = before?.updated ?: false,
                 backupNudge = backupNudge,
                 backup = before?.backup ?: BackupRow.Idle,
+                backupOverQuotaMb = backupFacts.sizeMb.toLong().takeIf { backupFacts.overQuota },
             )
         } catch (_: CairnException) {
             _state.value = SettingsScreenState.Failed
@@ -308,7 +319,8 @@ class SettingsViewModel(
     /**
      * A document was chosen: build the archive at the kept instant, write it, and only then record it
      * and read the nudge again. A failed build or write is said in the row, nothing is recorded, and
-     * the half-written document is deleted if the provider allows it.
+     * the half-written document is deleted if the provider allows it. A written archive whose recording
+     * fails is kept and reported, with the failure under the report.
      */
     fun backUp(uri: Uri) {
         if ((_state.value as? SettingsScreenState.Ready)?.backup == BackupRow.Running) return
@@ -319,20 +331,27 @@ class SettingsViewModel(
         saved.remove<Long>(BACKUP_CREATED)
         setBackup(BackupRow.Running)
         viewModelScope.launch {
-            var written = false
             val row = try {
                 val built = owner.use { it.backup(created, offsetMinutes(created)) }
                 // The provider's name or none: the suggestion may not be what the document got (ADR-0047 §4).
                 val name = documents.write(uri, built.bytes)
-                written = true
-                owner.use { it.recordBackup(created) }
-                BackupRow.Written(name, built.notes.toLong(), built.reviews.toLong())
+                val written = BackupRow.Written(name, built.notes.toLong(), built.reviews.toLong(), uri)
+                // The archive is whole and kept from here on, so it is reported and can be shared; a
+                // failure to record it only leaves the nudge where it was, and the row says so.
+                try {
+                    owner.use { it.recordBackup(created) }
+                    written
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    written.copy(unrecorded = e.failureReason())
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // A whole archive is kept though recording it failed; only a half-written one goes.
-                if (!written) documents.delete(uri)
-                BackupRow.Failed(e.message ?: e.javaClass.simpleName)
+                // Only a build or a write failed here: the document holds no whole archive, so it goes.
+                documents.delete(uri)
+                BackupRow.Failed(e.failureReason())
             }
             setBackup(row)
             read(rateRefused = false, appearanceRefused = false)

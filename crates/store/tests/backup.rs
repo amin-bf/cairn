@@ -171,3 +171,50 @@ fn the_counts_include_reviews_merged_from_another_writer() {
     assert_eq!(coll.review_count().unwrap(), 1);
     assert_eq!(coll.reviews_after(DAY0_MS).unwrap(), 1);
 }
+
+// --- The size Android's automatic backup measures (ADR-0016 §7, docs/research/auto-backup-quota/).
+
+fn write(path: &std::path::Path, len: usize) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, vec![b'x'; len]).unwrap();
+}
+
+#[test]
+fn a_data_directory_is_measured_in_tar_blocks_without_the_no_backup_directory() {
+    let data = TempDir::new().unwrap();
+    let dir = data.path();
+    // Each file is a 512-byte header plus its bytes padded to 512; a directory is nothing.
+    write(&dir.join("short.txt"), 343); // 512 + 512
+    write(&dir.join("block.bin"), 512); // 512 + 512
+    write(&dir.join("empty"), 0); // 512
+    write(&dir.join("nested/deeper/over.bin"), 513); // 512 + 1,024
+    std::fs::create_dir_all(dir.join("hollow")).unwrap();
+    // The no-backup directory never counts, even where it sits inside the data directory.
+    write(&dir.join("no_backup/writer.id"), 40_000);
+
+    assert_eq!(
+        cairn_store::backup_size(dir, &dir.join("no_backup")).unwrap(),
+        4_096
+    );
+    // Beside the data directory it is simply not reached, and what is excluded is the directory
+    // named, not a name: the nested one now counts, 40,000 bytes padded to 40,448.
+    let beside = TempDir::new().unwrap();
+    write(&beside.path().join("derived.db"), 40_000);
+    assert_eq!(
+        cairn_store::backup_size(dir, beside.path()).unwrap(),
+        4_096 + 512 + 40_448
+    );
+}
+
+#[test]
+fn the_collection_measures_its_own_data_directory_and_not_its_state_directory() {
+    let (coll, data, state) = open();
+    let before = coll.backup_size().unwrap();
+    // collection.db is in the backup set, so the size is at least its header and one block.
+    assert!(before >= 1_024, "{before}");
+
+    write(&data.path().join("beside.txt"), 343);
+    assert_eq!(coll.backup_size().unwrap(), before + 1_024);
+    write(&state.path().join("elsewhere.bin"), 40_000);
+    assert_eq!(coll.backup_size().unwrap(), before + 1_024);
+}

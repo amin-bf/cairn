@@ -823,7 +823,8 @@ archiving against it.
    and inherits none of the inner one's flags, so `FLAG_GRANT_READ_URI_PERMISSION` set only on the
    inner intent fails *after* the user has picked an application. (The retired egui build also
    needed `FLAG_ACTIVITY_NEW_TASK` there, because it started activities from the `Application`
-   context; the Kotlin app, which has no share yet, will start it from its activity.)
+   context; the Kotlin app's *Share* beside the backup report starts it from its activity, so it needs
+   no such flag.)
 
 ### What the user sees
 

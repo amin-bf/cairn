@@ -32,6 +32,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.cairn.design.CairnTheme
 import dev.cairn.design.pageArgb
+import dev.cairn.ffi.CairnException
+import dev.cairn.ffi.CollectionHandle
 import dev.cairn.ffi.FileArrival
 import dev.cairn.ffi.FilePreview
 import dev.cairn.ffi.ImportGate
@@ -51,10 +53,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipInputStream
@@ -85,9 +89,16 @@ class BackupTest {
 
     private val pending = AtomicInteger(-1)
 
+    /** Every intent the app started through the registry other than the save dialog: the share sheet's chooser. */
+    private val started: MutableList<Intent> = CopyOnWriteArrayList()
+
     private val dialog = object : ActivityResultRegistryOwner {
         override val activityResultRegistry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
+                if (input is Intent) {
+                    started += input
+                    return
+                }
                 asked.set(input)
                 if (holding) pending.set(requestCode) else answer(requestCode)
             }
@@ -222,6 +233,72 @@ class BackupTest {
         val late = 1_772_494_200_000L
         assertEquals("2 March", backupDate(late, march, utc))
         assertEquals("3 March", backupDate(late, march, TimeZone.getTimeZone("GMT+01:00")))
+    }
+
+    // --- The size against the automatic backup's quota (ADR-0016 §7, #250).
+
+    private val overQuota = "Your collection is 31 MB. Android's automatic backup stops above 25 MB."
+
+    @Test
+    fun the_size_line_stands_under_the_nudge_over_the_quota_and_is_absent_under_it() {
+        var shown by mutableStateOf(SettingsScreenState.Ready("5", ThemeChoice.LIGHT, backupNudge = BackupNudgeShown.None(4200, 812)))
+        rule.setContent { CairnTheme(dark = false) { SettingsPage(shown, {}, {}, {}, {}, {}) } }
+        rule.waitForIdle()
+        assertFalse(exists("backup-size"))
+
+        shown = shown.copy(backupOverQuotaMb = 31)
+        rule.waitForIdle()
+        assertEquals(overQuota, text("backup-size"))
+        assertTrue(top("backup-nudge") < top("backup-size"))
+        assertTrue(top("backup-size") < top("label-Appearance"))
+
+        // It stays under a report too, since the size is the collection's and not the backup's.
+        shown = shown.copy(backup = BackupRow.Written("Cairn backup 2026-10-31.ccoll", 812, 4200, BenchProvider.uri("Cairn backup 2026-10-31.ccoll")))
+        rule.waitForIdle()
+        assertEquals(overQuota, text("backup-size"))
+        assertTrue(top("backup-size") < top("backup-report"))
+
+        // A size past a thousand MB is grouped as the counts are.
+        shown = shown.copy(backupOverQuotaMb = 1024)
+        rule.waitForIdle()
+        assertEquals("Your collection is 1,024 MB. Android's automatic backup stops above 25 MB.", text("backup-size"))
+    }
+
+    @Test
+    fun the_binding_states_the_size_of_the_files_directory_once_it_is_past_the_quota() {
+        showApp()
+        openSettings()
+        assertFalse(exists("backup-size"))
+
+        // A sparse file of exactly the quota puts the files directory past it without writing 25 MiB.
+        RandomAccessFile(File(root, "files/padding.bin"), "rw").use { it.setLength(26_214_400) }
+        rule.onNodeWithTag("destination-review").performClick()
+        rule.waitForIdle()
+        openSettings()
+        waitFor("backup-size")
+        val mb = runBlocking { owner.use { it.backupNudge().sizeMb } }
+        assertTrue("$mb", mb > 25u)
+        assertEquals("Your collection is $mb MB. Android's automatic backup stops above 25 MB.", text("backup-size"))
+    }
+
+    @Test
+    fun the_files_block_is_captured_with_the_size_line_in_both_themes() {
+        val dir = context.getExternalFilesDir("settings-shots")!!
+        val state = SettingsScreenState.Ready("5", ThemeChoice.LIGHT, backupNudge = BackupNudgeShown.Last("3 March", 1240), backupOverQuotaMb = 31)
+        var dark by mutableStateOf(false)
+        rule.setContent { CairnTheme(dark) { SettingsPage(state, {}, {}, {}, {}, {}) } }
+        for (isDark in listOf(false, true)) {
+            dark = isDark
+            rule.waitForIdle()
+            rule.onNodeWithTag("backup-size").performScrollTo()
+            rule.waitForIdle()
+            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+            FileOutputStream(File(dir, "backup-size-${if (isDark) "dark" else "light"}.png")).use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+            assertEquals(pageArgb(isDark), bitmap.getPixel(2, bitmap.height / 2))
+        }
+        assertEquals(overQuota, text("backup-size"))
     }
 
     // --- The flow (ADR-0053 §4).
@@ -395,6 +472,115 @@ class BackupTest {
         assertEquals(created, lastBackup())
     }
 
+    // --- Share (ADR-0023 §3 §5 §7, ADR-0047 §4).
+
+    @Test
+    fun share_hands_the_saved_document_to_a_chooser_that_carries_the_stream_and_the_grant() {
+        showApp()
+        openSettings()
+        val document = BenchProvider.uri("Shared.ccoll")
+        backUpTo(document)
+        waitFor("backup-report")
+        assertEquals("Share", text("backup-share"))
+        rule.onNodeWithTag("backup-share").performScrollTo().performClick()
+        rule.waitUntil(10_000) { started.isNotEmpty() }
+
+        val chooser = started.single()
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        // The grant and the URI as ClipData are on the chooser itself: createChooser inherits neither.
+        assertTrue(chooser.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertEquals(document, chooser.clipData!!.getItemAt(0).uri)
+        @Suppress("DEPRECATION")
+        val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        assertEquals(Intent.ACTION_SEND, send.action)
+        assertEquals("application/octet-stream", send.type)
+        @Suppress("DEPRECATION")
+        assertEquals(document, send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+    }
+
+    @Test
+    fun nothing_launches_when_a_backup_finishes_before_share_is_pressed() {
+        showApp()
+        openSettings()
+        backUpTo(BenchProvider.uri("Unshared.ccoll"))
+        waitFor("backup-report")
+        rule.waitUntil(10_000) { text("backup-nudge").startsWith("Last backup") }
+        rule.waitForIdle()
+        assertTrue(exists("backup-share"))
+        assertTrue("nothing was started: $started", started.isEmpty())
+    }
+
+    @Test
+    fun share_is_absent_without_a_report() {
+        showApp()
+        openSettings()
+        assertFalse(exists("backup-share"))
+        // A write that failed leaves no document to hand on.
+        backUpTo(BenchProvider.uri("Refusing.ccoll", "fails"))
+        waitFor("backup-failed")
+        assertFalse(exists("backup-share"))
+        // Settings left and come back to: the report is gone, and Share with it.
+        backUpTo(BenchProvider.uri("Kept.ccoll"))
+        waitFor("backup-share")
+        rule.onNodeWithTag("destination-review").performClick()
+        rule.waitForIdle()
+        openSettings()
+        assertFalse(exists("backup-share"))
+        assertTrue(started.isEmpty())
+    }
+
+    @Test
+    fun a_written_archive_whose_recording_fails_is_still_reported_with_share_and_says_it_was_not_recorded() =
+        recordingRefused(CairnException.Failed("disk full"), "disk full")
+
+    @Test
+    fun a_written_archive_is_kept_whatever_the_recording_throws() =
+        recordingRefused(IllegalStateException("collection closed"), "collection closed")
+
+    private fun recordingRefused(thrown: Exception, said: String) {
+        // The real collection, except that the call after the write, recording it, throws.
+        val refusing = object : CollectionAccess {
+            @Volatile
+            var refuseNext = false
+
+            override suspend fun <T> use(block: (CollectionHandle) -> T): T {
+                if (refuseNext) {
+                    refuseNext = false
+                    throw thrown
+                }
+                return owner.use(block)
+            }
+        }
+        val documents = object : DocumentWriter {
+            val real = ResolverDocuments(context.contentResolver)
+
+            override suspend fun write(uri: Uri, bytes: ByteArray): String? = real.write(uri, bytes).also { refusing.refuseNext = true }
+
+            override suspend fun delete(uri: Uri) = real.delete(uri)
+        }
+        val model = SettingsViewModel(owner = refusing, appearance = AppearanceState(ThemeChoice.LIGHT), documents = documents)
+        rule.setContent {
+            CompositionLocalProvider(LocalActivityResultRegistryOwner provides dialog) {
+                CairnTheme(dark = false) { SettingsScreen(model) }
+            }
+        }
+        waitFor("backup-nudge")
+        val document = BenchProvider.uri("Unrecorded.ccoll")
+        rule.runOnUiThread { model.backUp(document) }
+        waitFor("backup-report")
+
+        // The archive is whole and kept: it is reported, Share hands it on, and the row says what failed.
+        assertEquals("Unrecorded.ccoll — 25 notes, 225 reviews", text("backup-report"))
+        assertTrue(exists("backup-share"))
+        assertEquals("Saved, but not recorded as the last backup: $said", text("backup-unrecorded"))
+        assertFalse(exists("backup-failed"))
+        assertTrue(BenchProvider.files.containsKey("Unrecorded.ccoll"))
+        assertTrue(BenchProvider.deleted.isEmpty())
+        // Nothing was recorded, so the nudge still says what it said.
+        assertNull(lastBackup())
+        assertEquals(noBackupYet, text("backup-nudge"))
+    }
+
     // --- The Files block, drawn (ADR-0053 §4).
 
     @Test
@@ -407,7 +593,19 @@ class BackupTest {
                 "5",
                 ThemeChoice.LIGHT,
                 backupNudge = BackupNudgeShown.Last("31 October", 0),
-                backup = BackupRow.Written("Cairn backup 2026-10-31.ccoll", 812, 4200),
+                backup = BackupRow.Written("Cairn backup 2026-10-31.ccoll", 812, 4200, BenchProvider.uri("Cairn backup 2026-10-31.ccoll")),
+            ),
+            "unrecorded" to SettingsScreenState.Ready(
+                "5",
+                ThemeChoice.LIGHT,
+                backupNudge = BackupNudgeShown.Last("3 March", 1240),
+                backup = BackupRow.Written(
+                    "Cairn backup 2026-10-31.ccoll",
+                    812,
+                    4200,
+                    BenchProvider.uri("Cairn backup 2026-10-31.ccoll"),
+                    unrecorded = "disk full",
+                ),
             ),
             "failed" to SettingsScreenState.Ready(
                 "5",
@@ -424,7 +622,8 @@ class BackupTest {
                 dark = isDark
                 shown = state
                 rule.waitForIdle()
-                rule.onNodeWithTag("backup-nudge").performScrollTo()
+                // The row's last line in view: what the report says under it, the report, or the nudge.
+                rule.onNodeWithTag(listOf("backup-unrecorded", "backup-share").firstOrNull(::exists) ?: "backup-nudge").performScrollTo()
                 rule.waitForIdle()
                 val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
                 FileOutputStream(File(dir, "backup-$name-${if (isDark) "dark" else "light"}.png")).use {
@@ -436,6 +635,15 @@ class BackupTest {
         shown = states.getValue("report")
         rule.waitForIdle()
         assertEquals("Cairn backup 2026-10-31.ccoll — 812 notes, 4,200 reviews", text("backup-report"))
+        assertEquals("Share", text("backup-share"))
+        // Share sits beside the report: after it along the line, and level with it.
+        val report = rule.onNodeWithTag("backup-report").fetchSemanticsNode().boundsInRoot
+        val share = rule.onNodeWithTag("backup-share").fetchSemanticsNode().boundsInRoot
+        assertTrue("$share after $report", share.left >= report.right)
+        assertTrue("$share level with $report", share.top < report.bottom && report.top < share.bottom)
+        shown = states.getValue("unrecorded")
+        rule.waitForIdle()
+        assertEquals("Saved, but not recorded as the last backup: disk full", text("backup-unrecorded"))
         shown = states.getValue("failed")
         rule.waitForIdle()
         assertEquals("Could not write the backup: refused", text("backup-failed"))

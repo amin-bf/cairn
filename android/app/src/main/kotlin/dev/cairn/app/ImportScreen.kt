@@ -312,7 +312,8 @@ private fun Sentence(text: String, tag: String) {
 /** A name inside a sentence is isolated, as the note list's delete question does. */
 private fun wrapped(name: String): String = BidiFormatter.getInstance().unicodeWrap(name)
 
-private fun grouped(n: Long): String = String.format(java.util.Locale.ENGLISH, "%,d", n)
+/** A count grouped by thousands, as every count the screens state is. */
+internal fun grouped(n: Long): String = String.format(java.util.Locale.ENGLISH, "%,d", n)
 
 @Composable
 private fun counted(plural: Int, n: Long): String =

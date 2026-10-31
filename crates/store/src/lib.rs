@@ -12,7 +12,7 @@ mod interchange;
 pub mod platform;
 
 pub use collection::{
-    Collection, MergeReport, SkewWarning, StoreError, TAG_ATTR_PREFIX, remove_files,
+    Collection, MergeReport, SkewWarning, StoreError, TAG_ATTR_PREFIX, backup_size, remove_files,
 };
 /// The reverse of [`iso8601_millis`], for exactly the form it writes — how a restore preview reads the
 /// manifest's `created` back as an instant to show in local time.
