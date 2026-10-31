@@ -55,6 +55,11 @@ pub const RESTORE_IS_A_MERGE: &str =
 pub const RESTORE_MISMATCH_WAY_OUT: &str = "This archive is from a different collection. \
      To use it on this device: back up what is here, clear the app's data, restore, then enrol.";
 
+/// The way out as the Kotlin app states it: the same steps ending at the restore, because that app
+/// has no enrolment to send anyone to yet (ADR-0053 §2).
+pub const RESTORE_MISMATCH_WAY_OUT_ANDROID: &str = "This archive is from a different collection. \
+     To use it on this device: back up what is here, clear the app's data, restore.";
+
 /// Everything a `.ccoll` archive carries, handed in by the caller (the store, which owns the log,
 /// the mutable surface and the minted [`CollectionId`]). Both payloads are **verbatim lines** — this
 /// crate assembles the container and never parses their schema, which is what keeps stamps byte for
@@ -297,6 +302,20 @@ mod tests {
             log,
             mutable,
         }
+    }
+
+    #[test]
+    fn the_android_way_out_is_the_desktop_one_without_the_enrolment() {
+        // The Kotlin app has no enrolment yet (ADR-0053 §2), so its way out ends at the restore.
+        assert_eq!(
+            RESTORE_MISMATCH_WAY_OUT_ANDROID,
+            "This archive is from a different collection. To use it on this device: back up what \
+             is here, clear the app's data, restore."
+        );
+        assert_eq!(
+            RESTORE_MISMATCH_WAY_OUT.replace(", then enrol.", "."),
+            RESTORE_MISMATCH_WAY_OUT_ANDROID
+        );
     }
 
     #[test]

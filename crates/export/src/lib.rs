@@ -31,8 +31,9 @@ pub mod platform;
 pub mod summary;
 
 pub use collection::{
-    CollectionArchive, RESTORE_IS_A_MERGE, RESTORE_MISMATCH_WAY_OUT, RestorePlan, RestoreRefusal,
-    RestoreTarget, build_collection, collection_filename, restore_preview,
+    CollectionArchive, RESTORE_IS_A_MERGE, RESTORE_MISMATCH_WAY_OUT,
+    RESTORE_MISMATCH_WAY_OUT_ANDROID, RestorePlan, RestoreRefusal, RestoreTarget, build_collection,
+    collection_filename, restore_preview,
 };
 pub use container::{COLLECTION_MEDIA_TYPE, DECK_MEDIA_TYPE, FORMAT};
 pub use deck::{
