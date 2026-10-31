@@ -70,6 +70,10 @@ screen nobody has designed between the map and its destination.
 > *"This is a collection archive, not a deck file."*, as it does on the desktop (ADR-0041,
 > *Consequences*).**
 
+> **Note (31.10.2026):** [ADR-0053](0053-backup-and-restore-on-android.md) settles that slice:
+> restore is reached by opening the archive, so once the slice lands an archive opened on Android
+> shows the restore preview instead of this refusal.
+
 ## Amendments to accepted ADRs
 
 Both on Android only.
