@@ -201,12 +201,13 @@ class FileIntentTest {
             rule.onNodeWithTag("field-Front").performTextInput("zzz")
             arriveWhileRunning(scenario, view(BenchProvider.uri(own.name)))
             waitFor("gate-restore")
-            rule.onNodeWithTag("gate-restore").performClick()
-            waitFor("deck-filter")
-            val stored = runBlocking {
+            fun stored() = runBlocking {
                 app.collection.use { h -> h.editNote(note.noteId).fields().first { it.name == "Front" }.value }
             }
-            assertTrue("the edit outlives the restore: $stored", "zzz" in stored)
+            assertTrue("the edit is in the store when the preview is up: ${stored()}", "zzz" in stored())
+            rule.onNodeWithTag("gate-restore").performClick()
+            waitFor("deck-filter")
+            assertTrue("the edit outlives the restore: ${stored()}", "zzz" in stored())
         }
     }
 

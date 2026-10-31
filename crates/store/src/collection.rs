@@ -480,8 +480,9 @@ impl Collection {
     ///   device's own writer id, so no sequence number is reused.
     ///
     /// Every line is read before anything is written: one that cannot be read refuses the restore
-    /// with [`StoreError::MalformedArchiveLine`]. A log row of an unknown kind is skipped, as `ingest`
-    /// skips it. Derived state needs nothing here, as `ingest` needs nothing: everything derived is
+    /// with [`StoreError::MalformedArchiveLine`]. That counts a row whose writer is not a 16-byte hex
+    /// id, which `ingest` skips as noise: an archive is this collection's own, so a bad line in it is
+    /// damage, not noise. A log row of an unknown kind is skipped, as `ingest` skips it. Derived state needs nothing here, as `ingest` needs nothing: everything derived is
     /// read off the log and the mutable surface when asked for, and `derived.db` holds nothing a
     /// merge could leave stale. Unlike `ingest` it detects no clock skew: a restore reports nothing
     /// after the fact (ADR-0022 §5), and the instants it stores still feed the guard on write.
