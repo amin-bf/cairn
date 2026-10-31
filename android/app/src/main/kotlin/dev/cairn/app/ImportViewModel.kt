@@ -17,12 +17,15 @@ sealed interface ImportScreenState {
     data object Empty : ImportScreenState
 
     /**
-     * The file's name as it arrived, if it had one, and what importing it would do now. While the
-     * write is [writing] the gate is disabled; [failure] is the store's account of a refused write.
+     * The file's name as it arrived, if it had one, and what importing it would do now. [opened]
+     * counts the files opened so far, so a file replacing another is a new page, though its name is the
+     * same. While the write is [writing] the gate is disabled; [failure] is the store's account of a
+     * refused write.
      */
     data class Preview(
         val name: String?,
         val preview: FilePreview,
+        val opened: Int,
         val writing: Boolean = false,
         val failure: String? = null,
     ) : ImportScreenState
@@ -45,12 +48,14 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
 
     private var file: InboundFileHandle? = null
     private var name: String? = null
+    private var opened = 0
 
     /** Hand the model a document that was read; the preview is derived before this returns. */
     suspend fun open(arrival: FileArrival, read: DocumentRead) {
         try {
             file = owner.use { it.openFile(arrival, read.name, read.bytes, read.complete) }
             name = read.name
+            opened++
             derive(failure = null)
         } catch (_: CairnException) {
             _state.value = ImportScreenState.Failed
@@ -103,7 +108,7 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         try {
             val preview = owner.use { held.preview() }
             // A file let go while the plan was being derived stays let go.
-            if (file === held) _state.value = ImportScreenState.Preview(name, preview, failure = failure)
+            if (file === held) _state.value = ImportScreenState.Preview(name, preview, opened, failure = failure)
         } catch (_: CairnException) {
             if (file === held) _state.value = ImportScreenState.Failed
         }

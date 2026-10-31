@@ -14,10 +14,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.createSavedStateHandle
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -36,6 +38,8 @@ import dev.cairn.design.Destination
 import dev.cairn.design.rememberKeyboardUp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -77,6 +81,7 @@ fun CairnNavHost(
     owner: CollectionAccess,
     keyboardUp: Boolean = rememberKeyboardUp(),
     settingsTickMs: Long = SETTINGS_TICK_MS,
+    incoming: IncomingFiles? = null,
 ) {
     // After a reset or a fixture install the app starts afresh (#237): the whole graph is composed again
     // under a new key, so the back stack is Review and no place keeps a ViewModel of the replaced
@@ -85,7 +90,7 @@ fun CairnNavHost(
     val appearance = LocalAppearance.current
     val scope = rememberCoroutineScope()
     key(generation) {
-        CairnPlaces(owner, generation, keyboardUp, settingsTickMs) {
+        CairnPlaces(owner, generation, keyboardUp, settingsTickMs, incoming) {
             scope.launch {
                 appearance.choice = owner.themeChoiceOrSystem()
                 generation++
@@ -95,11 +100,39 @@ fun CairnNavHost(
 }
 
 @Composable
-private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Boolean, settingsTickMs: Long, onRestart: () -> Unit) {
+private fun CairnPlaces(
+    owner: CollectionAccess,
+    generation: Int,
+    keyboardUp: Boolean,
+    settingsTickMs: Long,
+    incoming: IncomingFiles?,
+    onRestart: () -> Unit,
+) {
     val nav = rememberNavController()
     // The file arrives before the screen that shows it, so the model is the activity's: it survives a
     // rotation, and a replaced collection (#237) gets a fresh one.
     val importModel = viewModel(key = "import-$generation") { ImportViewModel(owner) }
+    // The editor on screen, if one is: a file arriving settles it first (ADR-0021 §7, ADR-0052 §2).
+    var openEditor by remember { mutableStateOf<EditorViewModel?>(null) }
+    val resolver = LocalContext.current.contentResolver
+    // Every way in reaches the one preview (ADR-0022 §6) with the document it read once, and the
+    // preview takes the screen over the place the person was on. A preview already up is replaced (#241).
+    val arrive: suspend (FileArrival, DocumentRead) -> Unit = { arrival, document ->
+        importModel.open(arrival, document)
+        // The back stack is the main thread's. The scope is too, but under an unconfined dispatcher
+        // (the compose test's) the read resumes on the IO thread.
+        withContext(Dispatchers.Main) { nav.navigate(IMPORT) { launchSingleTop = true } }
+    }
+    if (incoming != null) {
+        LaunchedEffect(incoming) {
+            // A newer file cancels the one still being opened: the newest is the one the person chose.
+            incoming.pending.filterNotNull().collectLatest { file ->
+                openEditor?.settleAllAndWait()
+                arrive(file.arrival, file.document)
+                incoming.handled(file)
+            }
+        }
+    }
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
         Destination(stringResource(R.string.destination_review), route == REVIEW || route == LEECHES, "destination-review") { nav.goTo(REVIEW) },
@@ -169,17 +202,9 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                 }
                 // The system picker, for any type; a picker closed with nothing chosen does nothing. The
                 // document is read once and its grant is never kept (ADR-0047 §1, ADR-0052).
-                val resolver = LocalContext.current.contentResolver
                 val scope = rememberCoroutineScope()
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    if (uri != null) {
-                        scope.launch {
-                            importModel.open(FileArrival.PICKED, readDocument(resolver, uri))
-                            // The back stack is the main thread's. The scope is too, but under an
-                            // unconfined dispatcher (the compose test's) the read resumes on the IO thread.
-                            withContext(Dispatchers.Main) { nav.navigate(IMPORT) { launchSingleTop = true } }
-                        }
-                    }
+                    if (uri != null) scope.launch { arrive(FileArrival.PICKED, readDocument(resolver, uri)) }
                 }
                 SettingsScreen(
                     model,
@@ -234,6 +259,10 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                 },
             ) {
                 val model = viewModel { EditorViewModel(owner, createSavedStateHandle()) }
+                DisposableEffect(model) {
+                    openEditor = model
+                    onDispose { if (openEditor === model) openEditor = null }
+                }
                 EditorScreen(
                     model,
                     onDone = { nav.popBackStack() },

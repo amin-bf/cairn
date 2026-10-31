@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -50,8 +51,11 @@ fun ImportScreen(model: ImportViewModel, onLeave: () -> Unit) {
         // Nothing is held, or the file was written: the caller has already left, or is about to (a
         // killed process is not restored, and a landing goes on to the note list).
         is ImportScreenState.Empty, is ImportScreenState.Landed -> CairnPage {}
+        // A file replacing another opens at its page's top (#241); a plan read again keeps the place.
         is ImportScreenState.Preview ->
-            ImportPage(s.name, s.preview, onImport = model::import, onLeave = onLeave, writing = s.writing, failure = s.failure)
+            key(s.opened) {
+                ImportPage(s.name, s.preview, onImport = model::import, onLeave = onLeave, writing = s.writing, failure = s.failure)
+            }
         is ImportScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("import-failed")) }
     }
