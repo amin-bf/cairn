@@ -115,12 +115,12 @@ pub fn build_collection(a: &CollectionArchive) -> Vec<u8> {
     ])
 }
 
-/// The `.ccoll` filename a write requests — a plain `collection.ccoll`. The user chose neither the
-/// name nor the location (there is no picker, ADR-0016 §5), and a collision **dedupes** to
-/// `collection (1).ccoll` at the seam (ADR-0024 §4), so archives made on different days are told
-/// apart by the manifest date the list reads, not by the filename (ADR-0022 §11).
-pub fn collection_filename() -> String {
-    format!("collection.{COLLECTION_EXTENSION}")
+/// The `.ccoll` filename a backup suggests — `Cairn backup YYYY-MM-DD.ccoll` (ADR-0047 §3,
+/// ADR-0053 §4). `date` is the creation instant's day **in the device's local time**, which the
+/// caller works out: this crate knows no time zone. The person may change the name in the save
+/// dialog, and the provider may dedupe it; the manifest's `created` stays the instant either way.
+pub fn collection_filename(date: &str) -> String {
+    format!("Cairn backup {date}.{COLLECTION_EXTENSION}")
 }
 
 /// This device, as the restore identity gate needs to see it (ADR-0016 §10). `empty` is the store's
@@ -297,6 +297,14 @@ mod tests {
             log,
             mutable,
         }
+    }
+
+    #[test]
+    fn the_filename_is_dated_by_the_day_it_is_given() {
+        assert_eq!(
+            collection_filename("2026-03-03"),
+            "Cairn backup 2026-03-03.ccoll"
+        );
     }
 
     #[test]

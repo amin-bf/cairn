@@ -914,7 +914,7 @@ mod tests {
     #[test]
     fn a_head_cut_short_still_tells_a_collection_archive_apart() {
         assert_eq!(
-            head_refusal(&bench_head("collection.ccoll")),
+            head_refusal(&bench_head("Cairn backup 2026-09-01.ccoll")),
             Refusal::WrongProfile
         );
     }
