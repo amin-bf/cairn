@@ -121,7 +121,11 @@ impl OptimiseJob {
         let handle = self.handle.take()?;
         let outcome = handle.join().unwrap_or(None);
         // A Cancel that came after the worker was done still means no write.
-        Some(if self.progress.is_aborted() { None } else { outcome })
+        Some(if self.progress.is_aborted() {
+            None
+        } else {
+            outcome
+        })
     }
 }
 
@@ -318,7 +322,10 @@ mod tests {
             }
         );
         // A run that has been collected has nothing further to write.
-        assert_eq!(finish(&mut coll, &mut job, NOW).unwrap(), Finish::NothingWritten);
+        assert_eq!(
+            finish(&mut coll, &mut job, NOW).unwrap(),
+            Finish::NothingWritten
+        );
     }
 
     #[test]
@@ -330,7 +337,10 @@ mod tests {
         let rows = coll.log_lines().unwrap().len();
 
         let mut again = start(&coll).unwrap();
-        assert_eq!(run_to_the_end(&mut coll, &mut again), Finish::NothingWritten);
+        assert_eq!(
+            run_to_the_end(&mut coll, &mut again),
+            Finish::NothingWritten
+        );
         assert_eq!(coll.log_lines().unwrap().len(), rows, "no row was appended");
     }
 
@@ -344,7 +354,10 @@ mod tests {
         job.cancel();
         assert_eq!(run_to_the_end(&mut coll, &mut job), Finish::NothingWritten);
         assert_eq!(coll.log_lines().unwrap().len(), rows);
-        assert!(matches!(nudge(&coll).unwrap(), OptimisationNudge::Standard { .. }));
+        assert!(matches!(
+            nudge(&coll).unwrap(),
+            OptimisationNudge::Standard { .. }
+        ));
     }
 
     #[test]
@@ -360,7 +373,10 @@ mod tests {
             std::thread::yield_now();
         }
         job.cancel();
-        assert_eq!(finish(&mut coll, &mut job, NOW).unwrap(), Finish::NothingWritten);
+        assert_eq!(
+            finish(&mut coll, &mut job, NOW).unwrap(),
+            Finish::NothingWritten
+        );
         assert_eq!(coll.log_lines().unwrap().len(), rows);
     }
 }
