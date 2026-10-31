@@ -43,6 +43,9 @@ pub enum Arrival {
     /// [`cairn_export::platform::list`] and re-read on selection (issue #108). It reaches this same
     /// read so the list and an arriving file share one identification path, not two (ADR-0022 §5).
     Listed,
+    /// A file chosen in the system picker — *Open a file…* on Android, whose grant is used once and
+    /// kept nowhere (ADR-0047 §1). It names the arrival in the log and changes nothing else.
+    Picked,
 }
 
 impl Arrival {
@@ -53,8 +56,36 @@ impl Arrival {
             Arrival::Shared => "shared (ACTION_SEND)",
             Arrival::Dropped => "dropped on the window",
             Arrival::Listed => "chosen from the file list",
+            Arrival::Picked => "chosen in the system picker",
         }
     }
+}
+
+/// What the pinned band offers under a preview (ADR-0022 §1, §4; ADR-0041 §3). Decided here, once,
+/// so the desktop and Android cannot disagree about whether a file can be imported (ADR-0046 §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gate {
+    /// *Import* and *Cancel* — a plan that changes something, the only state in which an import can
+    /// be accepted.
+    Decide,
+    /// A lone *Close*. A refusal has one way out, and so does a file whose import would change
+    /// nothing: ADR-0022 §4 says the no-op *"costs one dismissal"*.
+    Dismiss,
+}
+
+/// Which gate a derived outcome is owed.
+pub fn gate_for(outcome: &Result<Plan, Refusal>) -> Gate {
+    match outcome {
+        Ok(plan) if !changes_nothing(plan) => Gate::Decide,
+        _ => Gate::Dismiss,
+    }
+}
+
+/// Whether accepting this plan would write nothing: every deck unchanged, and no file-level effect.
+fn changes_nothing(plan: &Plan) -> bool {
+    plan.decks.iter().all(|d| d.no_change)
+        && plan.adopted_kinds.is_empty()
+        && plan.emptied_decks.is_empty()
 }
 
 /// A file the platform handed us, before it is identified: how it arrived, whatever display name
@@ -784,5 +815,80 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(applied.filter_to, Some(deck));
+    }
+
+    // ---- The gate ---------------------------------------------------------------------------------
+
+    fn deck_plan(no_change: bool) -> cairn_export::DeckPlan {
+        cairn_export::DeckPlan {
+            id: DeckId([1; 16]),
+            name: "French A1".to_owned(),
+            path: import::Path::Update,
+            new_notes: 0,
+            already_yours: 0,
+            moving_in: Vec::new(),
+            deleted: 0,
+            renamed_from: None,
+            no_change,
+            revision_conflict: false,
+        }
+    }
+
+    fn plan_of(decks: Vec<cairn_export::DeckPlan>) -> Plan {
+        Plan {
+            header: cairn_export::Header::default(),
+            decks,
+            adopted_kinds: Vec::new(),
+            emptied_decks: Vec::new(),
+        }
+    }
+
+    /// Every refusal has one way out (ADR-0022 §4).
+    #[test]
+    fn every_refusal_is_dismissed() {
+        for refusal in [
+            Refusal::Unreadable,
+            Refusal::UnknownFormat(9),
+            Refusal::WrongProfile,
+            Refusal::BrokenPath,
+            Refusal::Older {
+                deck: "French".to_owned(),
+            },
+        ] {
+            assert_eq!(gate_for(&Err(refusal)), Gate::Dismiss);
+        }
+    }
+
+    /// A plan where every deck is unchanged, with no adopted kinds and no emptied decks, changes
+    /// nothing — and an *Import* that writes nothing is a second button that only leaves.
+    #[test]
+    fn a_plan_that_changes_nothing_is_dismissed() {
+        let plan = plan_of(vec![deck_plan(true)]);
+        assert_eq!(gate_for(&Ok(plan)), Gate::Dismiss);
+    }
+
+    #[test]
+    fn a_plan_that_changes_something_is_decided() {
+        assert_eq!(
+            gate_for(&Ok(plan_of(vec![deck_plan(false)]))),
+            Gate::Decide
+        );
+        // One unchanged deck beside a changing one still changes something.
+        assert_eq!(
+            gate_for(&Ok(plan_of(vec![deck_plan(true), deck_plan(false)]))),
+            Gate::Decide
+        );
+        // Unchanged decks, but the file adopts a kind or leaves a held deck empty.
+        let mut adopts = plan_of(vec![deck_plan(true)]);
+        adopts.adopted_kinds.push("odd".to_owned());
+        assert_eq!(gate_for(&Ok(adopts)), Gate::Decide);
+        let mut empties = plan_of(vec![deck_plan(true)]);
+        empties.emptied_decks.push("Mine".to_owned());
+        assert_eq!(gate_for(&Ok(empties)), Gate::Decide);
+    }
+
+    #[test]
+    fn a_picked_file_is_named_in_the_log() {
+        assert_eq!(Arrival::Picked.label(), "chosen in the system picker");
     }
 }

@@ -25,20 +25,11 @@
 
 use cairn_export::{DeckPlan, Header, Path, Plan, Refusal};
 
+// The gate's decision is `cairn-ops`'s, shared with the Android client (ADR-0046 §3); this screen
+// only draws it.
+pub(crate) use crate::inbound::{Gate, gate_for};
 use crate::inbound::Report;
 use crate::{bidi, body, frame, spacing};
-
-/// What the pinned band offers under the screen (ADR-0022 §1, §4; ADR-0041 §3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Gate {
-    /// *Import* as the primary with *Cancel* beside it as a text action — a plan that changes
-    /// something, which is the only state in which an import can be accepted.
-    Decide,
-    /// A lone *Close*, as the primary. A refusal has one way out, and so does a file whose import
-    /// would change nothing: ADR-0022 §4 says the no-op *"costs one dismissal"*, and an *Import* that
-    /// writes nothing is a second button whose only effect is to leave the screen.
-    Dismiss,
-}
 
 /// What the person pressed in the band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,21 +76,6 @@ pub(crate) fn gate(ui: &mut egui::Ui, gate: Gate) -> Option<Pressed> {
             pressed
         }
     }
-}
-
-/// Which gate a derived report is owed.
-pub(crate) fn gate_for(outcome: &Result<Plan, Refusal>) -> Gate {
-    match outcome {
-        Ok(plan) if !changes_nothing(plan) => Gate::Decide,
-        _ => Gate::Dismiss,
-    }
-}
-
-/// Whether accepting this plan would write nothing: every deck unchanged, and no file-level effect.
-fn changes_nothing(plan: &Plan) -> bool {
-    plan.decks.iter().all(|d| d.no_change)
-        && plan.adopted_kinds.is_empty()
-        && plan.emptied_decks.is_empty()
 }
 
 /// The screen's heading: the file's name as it arrived — the object the person opened — or, for a
