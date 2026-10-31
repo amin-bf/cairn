@@ -41,7 +41,12 @@ import dev.cairn.ffi.ThemeChoice
 
 /** Settings over its model: the page, or the failure page when the collection cannot be read. */
 @Composable
-fun SettingsScreen(model: SettingsViewModel, onOpenFile: () -> Unit = {}, development: @Composable () -> Unit = {}) {
+fun SettingsScreen(
+    model: SettingsViewModel,
+    onOpenFile: () -> Unit = {},
+    onBackUp: () -> Unit = {},
+    development: @Composable () -> Unit = {},
+) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
         is SettingsScreenState.Loading -> CairnPage {}
@@ -53,6 +58,7 @@ fun SettingsScreen(model: SettingsViewModel, onOpenFile: () -> Unit = {}, develo
             onOptimise = model::optimise,
             onCancelOptimise = model::cancelOptimise,
             onOpenFile = onOpenFile,
+            onBackUp = onBackUp,
             development = development,
         )
         is SettingsScreenState.Failed ->
@@ -75,6 +81,7 @@ fun SettingsPage(
     onOptimise: () -> Unit,
     onCancelOptimise: () -> Unit,
     onOpenFile: () -> Unit = {},
+    onBackUp: () -> Unit = {},
     development: @Composable () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
@@ -100,7 +107,7 @@ fun SettingsPage(
 
             Spacer(Modifier.height(gap(2)))
             GroupHeading(stringResource(R.string.settings_device), stringResource(R.string.settings_device_caption), "group-device")
-            FilesBlock(onOpenFile)
+            FilesBlock(state, onOpenFile, onBackUp)
             // The rule between two blocks of a group, as above.
             Spacer(Modifier.height(gap(3)))
             CairnRule()
@@ -148,13 +155,58 @@ private fun RateBlock(state: SettingsScreenState.Ready, onChange: (String) -> Un
     CairnText(stringResource(R.string.settings_rate_consequence), Modifier.testTag("rate-consequence"))
 }
 
-/** *Files* (ADR-0051 §5): the system picker for a deck file, styled as Optimise is. */
+/**
+ * *Files* (ADR-0051 §5, ADR-0053 §4): the system picker for a deck file, styled as Optimise is, then
+ * *Back up…* the same way with its nudge under it, and what the last backup wrote or why it could not.
+ */
 @Composable
-private fun FilesBlock(onOpenFile: () -> Unit) {
+private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit, onBackUp: () -> Unit) {
     CairnFieldLabel(stringResource(R.string.settings_files_label), Modifier.testTag("label-Files"))
     CairnControl(stringResource(R.string.settings_open_file), onOpenFile, Modifier.fillMaxWidth().testTag("open-file"))
     Spacer(Modifier.height(gap(1)))
     CairnText(stringResource(R.string.settings_files_line), Modifier.testTag("files-line"))
+    Spacer(Modifier.height(gap(2)))
+    val running = state.backup == BackupRow.Running
+    CairnControl(
+        stringResource(if (running) R.string.settings_backing_up else R.string.settings_back_up),
+        onBackUp,
+        Modifier.fillMaxWidth().testTag("back-up"),
+        enabled = !running,
+    )
+    state.backupNudge?.let {
+        Spacer(Modifier.height(gap(1)))
+        CairnText(backupNudgeSentence(it), Modifier.testTag("backup-nudge"))
+    }
+    when (val row = state.backup) {
+        is BackupRow.Written -> {
+            Spacer(Modifier.height(gap(1)))
+            CairnText(
+                stringResource(
+                    R.string.backup_report,
+                    row.name,
+                    counted(R.plurals.backup_notes, row.notes),
+                    counted(R.plurals.backup_reviews, row.reviews),
+                ),
+                Modifier.testTag("backup-report"),
+            )
+        }
+        is BackupRow.Failed -> {
+            Spacer(Modifier.height(gap(1)))
+            CairnText(stringResource(R.string.backup_failed, row.error), Modifier.testTag("backup-failed"))
+        }
+        else -> {}
+    }
+}
+
+/** The backup nudge in words (ADR-0016 §6): counts grouped by thousands, nouns agreeing with them. */
+@Composable
+private fun backupNudgeSentence(nudge: BackupNudgeShown): String = when (nudge) {
+    is BackupNudgeShown.None -> stringResource(
+        R.string.backup_nudge_none,
+        counted(R.plurals.backup_reviews, nudge.reviews),
+        counted(R.plurals.backup_notes, nudge.notes),
+    )
+    is BackupNudgeShown.Last -> stringResource(R.string.backup_nudge_last, nudge.date, counted(R.plurals.backup_reviews, nudge.reviewsSince))
 }
 
 @Composable

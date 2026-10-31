@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
@@ -250,7 +251,8 @@ class SettingsTest {
         assertEquals(false, selected("appearance-dark"))
         val before = rule.onRoot().captureToImage().asAndroidBitmap().getPixel(2, 400)
         assertEquals(pageArgb(false), before)
-        rule.onNodeWithTag("appearance-dark").performClick()
+        // Appearance sits below the fold since the backup row came in: scrolled to, as a person would.
+        rule.onNodeWithTag("appearance-dark").performScrollTo().performClick()
         rule.waitUntil(10_000) { appearance.choice == ThemeChoice.DARK }
         rule.waitForIdle()
         assertEquals(true, selected("appearance-dark"))
@@ -262,7 +264,7 @@ class SettingsTest {
     fun the_chosen_appearance_is_stored_and_a_fresh_state_reads_it_back() {
         showApp(initial = ThemeChoice.SYSTEM)
         openSettings()
-        rule.onNodeWithTag("appearance-light").performClick()
+        rule.onNodeWithTag("appearance-light").performScrollTo().performClick()
         rule.waitUntil(10_000) { storedTheme() == ThemeChoice.LIGHT }
         // A relaunch reads the stored choice before its first frame.
         val relaunched = AppearanceState(storedTheme())
@@ -276,7 +278,7 @@ class SettingsTest {
         openSettings()
         rule.waitForIdle()
         access.failAt = access.calls.get() + 1
-        rule.onNodeWithTag("appearance-dark").performClick()
+        rule.onNodeWithTag("appearance-dark").performScrollTo().performClick()
         waitFor("appearance-refused")
         rule.onNodeWithTag("appearance-refused").assertTextEquals("The appearance could not be saved.")
         assertEquals(ThemeChoice.LIGHT, appearance.choice)

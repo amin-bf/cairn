@@ -174,7 +174,9 @@ class ImportPreviewTest {
         assertTrue(top("label-Files") < top("open-file"))
         // The line sits under the button, as the Optimise block's does.
         assertTrue(top("open-file") < top("files-line"))
-        assertTrue(top("files-line") < top("label-Appearance"))
+        // Appearance is below the fold since the backup row came in, where the clipped bounds can't place it.
+        val position = { tag: String -> rule.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y }
+        assertTrue(position("files-line") < position("label-Appearance"))
     }
 
     @Test
