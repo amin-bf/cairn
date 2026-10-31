@@ -162,6 +162,10 @@ pub enum StoreError {
     /// and the id met; its `Display` names both **and** states the way out, because a refusal that
     /// only says no leaves a device that will not talk to its account (ADR-0016 §10).
     CollectionIdMismatch { held: String, met: String },
+    /// A restore met an archive line it cannot read, and so wrote nothing (ADR-0016 §4): which
+    /// member it was in (`"log"` or `"mutable"`) and its 1-based place there. An archive is written
+    /// whole by this system, so a broken line means a damaged file, and half of it is not a restore.
+    MalformedArchiveLine { member: &'static str, line: usize },
 }
 
 impl std::fmt::Display for StoreError {
@@ -180,6 +184,10 @@ impl std::fmt::Display for StoreError {
                 "this collection is {held}, but the one it met is {met}; they cannot be joined. \
                  To use this device with {met}: make an archive, clear this app's data, then \
                  restore the archive and enrol."
+            ),
+            StoreError::MalformedArchiveLine { member, line } => write!(
+                f,
+                "line {line} of the archive's {member} cannot be read; nothing was restored"
             ),
         }
     }
@@ -211,6 +219,13 @@ pub struct MergeReport {
     /// Set when an ingested `reviewed` row is dated implausibly ahead of this device's clock. The
     /// merge still stores it: §8 detects and warns, never blocks.
     pub skew: Option<SkewWarning>,
+}
+
+/// What a restore merged in: the log rows newly stored, and the mutable rows its stamps won.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Restored {
+    pub stored: usize,
+    pub settled: usize,
 }
 
 /// The two facts a clock-skew warning is built from (ADR-0004 §8): what this device's clock said at
@@ -293,15 +308,7 @@ impl Collection {
     /// collection id it meets or refuses it. Not "has no notes": an imported deck with no reviews is
     /// still empty.
     pub fn is_empty(&self) -> Result<bool, StoreError> {
-        let has_own_log: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM log WHERE writer = ?1)",
-            params![&self.writer[..]],
-            |r| r.get(0),
-        )?;
-        let has_mutable: bool =
-            self.conn
-                .query_row("SELECT EXISTS(SELECT 1 FROM mutable)", [], |r| r.get(0))?;
-        Ok(!has_own_log && !has_mutable)
+        is_empty(&self.conn, &self.writer)
     }
 
     /// Append one `reviewed` row authored on this device (ADR-0004 §5), returning its allocated
@@ -417,32 +424,8 @@ impl Collection {
             let Some(writer) = interchange::unhex16(&row.id().writer.0) else {
                 continue; // every writer id this system mints is 16-byte hex; anything else is noise
             };
-            let (kind, note, ordinal, day): (&str, Option<[u8; 16]>, Option<i64>, i64) = match &row
-            {
-                Row::Reviewed(r) => (
-                    "reviewed",
-                    Some(r.card.note.0),
-                    Some(i64::from(r.card.ordinal)),
-                    r.day,
-                ),
-                Row::ConfigSet(r) => ("config-set", None, None, r.day),
-                Row::HistoryCutoff(r) => ("history-cutoff-set", None, None, r.day),
-            };
             let instant_ms = interchange::epoch_millis_from_iso8601(row.instant());
-            let changed = tx.execute(
-                "INSERT OR IGNORE INTO log (writer, seq, line, kind, note, ordinal, day, instant) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    &writer[..],
-                    row.id().sequence as i64,
-                    line.as_bytes(),
-                    kind,
-                    note.as_ref().map(|n| &n[..]),
-                    ordinal,
-                    day,
-                    instant_ms,
-                ],
-            )?;
+            let changed = insert_merged(&tx, line, &row, &writer)?;
             stored += changed;
 
             // Detect skew only on reviewed rows (a review cannot be dated after the true present) and
@@ -464,6 +447,117 @@ impl Collection {
                 ahead_instant,
             }),
         })
+    }
+
+    /// Restore an archive in **one immediate transaction** (ADR-0016 §4 §10, ADR-0053 §4): its
+    /// collection id, its log lines and its mutable lines, merged in together or not at all.
+    ///
+    /// - The identity: an id already ours is kept, and an empty collection adopts the archive's. The
+    ///   writer id is never adopted and the collection id never re-minted.
+    /// - The log: unioned on `(writer, seq)` as [`Collection::ingest`] unions it.
+    /// - The mutable surface: each line settles by its own stamp, the higher `(counter, writer)`
+    ///   winning and an equal one a no-op. **Never restamped**: a restore is not an edit, so an
+    ///   overwritten field keeps its newer stamp and wins (ADR-0004 §7), and a restore only adds.
+    /// - The counters: the Lamport counter rises to the highest counter merged, so the next local
+    ///   edit outranks them all, and the sequence high-water past every restored row under this
+    ///   device's own writer id, so no sequence number is reused.
+    ///
+    /// Every line is read before anything is written: one that cannot be read refuses the restore
+    /// with [`StoreError::MalformedArchiveLine`]. A log row of an unknown kind is skipped, as `ingest`
+    /// skips it. Derived state needs nothing here, as `ingest` needs nothing: everything derived is
+    /// read off the log and the mutable surface when asked for, and `derived.db` holds nothing a
+    /// merge could leave stale.
+    pub fn restore(
+        &mut self,
+        collection_id: &str,
+        log: &[&str],
+        mutable: &[&str],
+    ) -> Result<Restored, StoreError> {
+        // Read every line before writing any: a line that cannot be read refuses the whole restore.
+        // A log row of a kind this build does not know is skipped, as `ingest` skips it (ADR-0004 §11).
+        let mut rows = Vec::with_capacity(log.len());
+        for (at, line) in log.iter().enumerate() {
+            let malformed = StoreError::MalformedArchiveLine {
+                member: "log",
+                line: at + 1,
+            };
+            match parse_line(line) {
+                ParsedLine::Row(row) => {
+                    let writer = interchange::unhex16(&row.id().writer.0).ok_or(malformed)?;
+                    rows.push((*line, row, writer));
+                }
+                ParsedLine::UnknownKind => {}
+                ParsedLine::Malformed => return Err(malformed),
+            }
+        }
+        let settles = mutable
+            .iter()
+            .enumerate()
+            .map(|(at, line)| {
+                interchange::parse_mutable_line(line).ok_or(StoreError::MalformedArchiveLine {
+                    member: "mutable",
+                    line: at + 1,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        // ADR-0016 §10's gate, asked inside the transaction it guards.
+        if collection_id != self.collection_id {
+            if !is_empty(&tx, &self.writer)? {
+                return Err(StoreError::CollectionIdMismatch {
+                    held: self.collection_id.clone(),
+                    met: collection_id.to_owned(),
+                });
+            }
+            write_local(&tx, "collection_id", collection_id)?;
+        }
+
+        let mut stored = 0usize;
+        let mut highwater = read_local_i64(&tx, "seq_highwater")?.unwrap_or(0);
+        for (line, row, writer) in &rows {
+            stored += insert_merged(&tx, line, row, writer)?;
+            // A row this writer authored before the device was wiped: the next one continues past
+            // it, so a sequence number is never reused and the self-heal never mistakes it for a copy
+            // writing as us (ADR-0007 §5).
+            if *writer == self.writer {
+                highwater = highwater.max(row.id().sequence as i64);
+            }
+        }
+        write_local(&tx, "seq_highwater", &highwater.to_string())?;
+
+        // The Lamport counter jumps above every counter merged (ADR-0004 §7), so the next local edit
+        // outranks all of them.
+        let lamport = settles
+            .iter()
+            .map(|row| row.counter)
+            .fold(read_local_i64(&tx, "lamport")?.unwrap_or(0), i64::max);
+        write_local(&tx, "lamport", &lamport.to_string())?;
+
+        let mut settled = 0usize;
+        for row in &settles {
+            settled += tx.execute(
+                "INSERT INTO mutable (entity, entity_id, attr, value, counter, writer) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
+                 ON CONFLICT(entity, entity_id, attr) DO UPDATE SET \
+                   value = excluded.value, counter = excluded.counter, writer = excluded.writer \
+                 WHERE (excluded.counter, excluded.writer) > (mutable.counter, mutable.writer)",
+                params![
+                    row.entity,
+                    row.entity_id,
+                    row.attr,
+                    row.value,
+                    row.counter,
+                    &row.writer[..]
+                ],
+            )?;
+        }
+
+        tx.commit()?;
+        self.collection_id = collection_id.to_owned();
+        Ok(Restored { stored, settled })
     }
 
     /// Write a `history-cutoff-set` row (ADR-0004 §1, §8): replay will ignore every `reviewed` row
@@ -1244,6 +1338,54 @@ fn validate_cache(conn: &Connection) -> Result<(), StoreError> {
 }
 
 // --- `local` helpers -----------------------------------------------------------------------------
+
+/// [`Collection::is_empty`] on any connection, so a restore can ask inside its own transaction.
+fn is_empty(conn: &Connection, writer: &[u8; 16]) -> Result<bool, StoreError> {
+    let has_own_log: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM log WHERE writer = ?1)",
+        params![&writer[..]],
+        |r| r.get(0),
+    )?;
+    let has_mutable: bool =
+        conn.query_row("SELECT EXISTS(SELECT 1 FROM mutable)", [], |r| r.get(0))?;
+    Ok(!has_own_log && !has_mutable)
+}
+
+/// Store one row another source wrote — the union merge's `INSERT OR IGNORE` (ADR-0007 §8), shared by
+/// [`Collection::ingest`] and [`Collection::restore`]. Returns 1 when the row is new, 0 when its
+/// `(writer, seq)` was already held. The derived `instant` is filled when the token parses, so the
+/// clock-skew guard on write sees merged rows too (ADR-0004 §8).
+fn insert_merged(
+    conn: &Connection,
+    line: &str,
+    row: &Row,
+    writer: &[u8; 16],
+) -> Result<usize, StoreError> {
+    let (kind, note, ordinal, day): (&str, Option<[u8; 16]>, Option<i64>, i64) = match row {
+        Row::Reviewed(r) => (
+            "reviewed",
+            Some(r.card.note.0),
+            Some(i64::from(r.card.ordinal)),
+            r.day,
+        ),
+        Row::ConfigSet(r) => ("config-set", None, None, r.day),
+        Row::HistoryCutoff(r) => ("history-cutoff-set", None, None, r.day),
+    };
+    Ok(conn.execute(
+        "INSERT OR IGNORE INTO log (writer, seq, line, kind, note, ordinal, day, instant) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            &writer[..],
+            row.id().sequence as i64,
+            line.as_bytes(),
+            kind,
+            note.as_ref().map(|n| &n[..]),
+            ordinal,
+            day,
+            interchange::epoch_millis_from_iso8601(row.instant()),
+        ],
+    )?)
+}
 
 /// The highest instant (epoch-millis) held in the log, across our own rows and every ingested one —
 /// the lower bound on the true time the clock-skew guard writes above (ADR-0004 §8). NULL instants
