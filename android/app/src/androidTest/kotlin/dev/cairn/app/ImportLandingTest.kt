@@ -61,7 +61,7 @@ class ImportLandingTest {
     private val owner = CollectionOwner(context, File(root, "files"), File(root, "no_backup"))
 
     // The bench's files in the order the set builds them.
-    private val bench = benchFiles()
+    private val bench = benchFiles(context.cacheDir.path)
     private val update = bench[0]
     private val several = bench[1]
 
@@ -148,6 +148,7 @@ class ImportLandingTest {
         when (val preview = owner.use { it.openFile(FileArrival.PICKED, null, update.bytes, true).preview() }) {
             is FilePreview.Plan -> preview.plan.gate
             is FilePreview.Refused -> preview.gate
+            is FilePreview.Restore -> preview.restore.gate
         }
     }
 

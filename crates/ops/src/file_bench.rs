@@ -532,8 +532,9 @@ fn archive_collection() -> CollectionId {
 /// The writer id the archive's rows carry in place of the one its store minted at random.
 const ARCHIVE_WRITER: &str = "f1c70a00000040008000000000000001";
 
-/// The archive's creation instant, 2026-09-01T00:00:00Z — the day its name carries.
-const ARCHIVE_CREATED_MS: i64 = 20_697 * 86_400_000;
+/// The archive's creation instant, 2026-09-01T00:00:00Z — the day its name carries. Public so the
+/// binding's tests can state the preview it reads.
+pub const ARCHIVE_CREATED_MS: i64 = 20_697 * 86_400_000;
 
 /// A collection archive — the other profile in the same container, and the file a restore preview is
 /// read from: a backup of a store holding [`Fixture::Decks`], built through [`backup::build`] in a

@@ -91,7 +91,7 @@
     <string name="settings_device_caption">Stays on this machine.</string>
     <!-- The Files block (ADR-0051 §5): new in this build, the egui build's Files block being a list. -->
     <string name="settings_files_label">Files</string>
-    <string name="settings_files_line">Choose a file to see what importing it would do.</string>
+    <string name="settings_files_line">Choose a file to see what importing or restoring it would do.</string>
     <string name="settings_open_file">Open a file…</string>
     <!-- Back up… and the nudge under it (ADR-0016 §6, ADR-0053 §4). Counts arrive grouped; the date is the day the last backup was made. -->
     <string name="settings_back_up">Back up…</string>
@@ -188,11 +188,28 @@
     <string name="import_history_untouched">Your review history is untouched.</string>
     <string name="import_refusal_unreadable">This file could not be read as a deck.</string>
     <string name="import_refusal_newer">This file needs a newer version of the app.</string>
-    <string name="import_refusal_archive">This is a collection archive, not a deck file.</string>
     <string name="import_refusal_not_a_deck">This file is not put together the way a deck is.</string>
     <string name="import_refusal_older">This is an older copy of %1$s than the one you have.</string>
     <string name="import_import">Import</string>
     <string name="import_cancel">Cancel</string>
     <string name="import_close">Close</string>
     <string name="import_write_failed">Could not write the import: %1$s</string>
+
+    <!-- The restore preview (ADR-0053 §2, ADR-0016 §11): an archive opened by any way in. The date is the archive's day in local time, with its year. -->
+    <string name="restore_untitled">A collection archive</string>
+    <string name="restore_summary">Collection archive, %1$s. %2$s, %3$s.</string>
+    <string name="restore_summary_undated">Collection archive. %1$s, %2$s.</string>
+    <plurals name="restore_notes">
+        <item quantity="one">%1$s note</item>
+        <item quantity="other">%1$s notes</item>
+    </plurals>
+    <plurals name="restore_reviews">
+        <item quantity="one">%1$s review</item>
+        <item quantity="other">%1$s reviews</item>
+    </plurals>
+    <string name="restore_adds">Restore adds to this collection. It never removes anything you already hold.</string>
+    <string name="restore_restore">Restore</string>
+    <!-- Word for word cairn-export's RESTORE_MISMATCH_WAY_OUT_ANDROID (ADR-0016 §10): the desktop's way out, without enrolment. -->
+    <string name="restore_refusal_another_collection">This archive is from a different collection. To use it on this device: back up what is here, clear the app\'s data, restore.</string>
+    <string name="restore_refusal_too_large">This archive is too large to open on this phone.</string>
 </resources>

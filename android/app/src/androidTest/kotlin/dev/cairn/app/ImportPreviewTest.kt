@@ -72,7 +72,7 @@ class ImportPreviewTest {
     private val owner = CollectionOwner(context, File(root, "files"), File(root, "no_backup"))
 
     // The bench's files in the order the set builds them.
-    private val bench = benchFiles()
+    private val bench = benchFiles(context.cacheDir.path)
     private val update = bench[0]
     private val several = bench[1]
     private val archive = bench[2]
@@ -168,7 +168,7 @@ class ImportPreviewTest {
         rule.onNodeWithTag("destination-settings").performClick()
         waitFor("open-file")
         assertEquals("Files", text("label-Files"))
-        assertEquals("Choose a file to see what importing it would do.", text("files-line"))
+        assertEquals("Choose a file to see what importing or restoring it would do.", text("files-line"))
         assertEquals("Open a file…", text("open-file"))
         assertTrue(top("group-device") < top("label-Files"))
         assertTrue(top("label-Files") < top("open-file"))
@@ -278,11 +278,16 @@ class ImportPreviewTest {
     }
 
     @Test
-    fun a_collection_archive_is_refused_in_one_sentence_with_a_lone_close() {
+    fun another_collections_archive_is_refused_in_one_sentence_with_a_lone_close() {
+        // The bench archive is a backup of `Fixture::Decks` under an id no installed fixture holds,
+        // and this collection has notes of its own: the identity gate refuses it (ADR-0016 §10).
         showApp()
         pick(archive.name)
         assertEquals(archive.name, text("import-heading"))
-        assertEquals("This is a collection archive, not a deck file.", text("import-refusal"))
+        assertEquals(
+            "This archive is from a different collection. To use it on this device: back up what is here, clear the app's data, restore.",
+            text("import-refusal"),
+        )
         assertTrue(exists("gate-close"))
         assertFalse(exists("gate-import") || exists("gate-cancel"))
         assertFalse(exists("import-line"))

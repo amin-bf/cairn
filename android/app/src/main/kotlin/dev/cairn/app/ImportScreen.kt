@@ -42,6 +42,11 @@ import dev.cairn.ffi.FilePreview
 import dev.cairn.ffi.FileRefusal
 import dev.cairn.ffi.ImportGate
 import dev.cairn.ffi.ImportPlanFacts
+import dev.cairn.ffi.RestorePreviewFacts
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /** The import screen over its model: the preview, or the failure page when the file cannot be read. */
 @Composable
@@ -64,7 +69,8 @@ fun ImportScreen(model: ImportViewModel, onLeave: () -> Unit) {
 /**
  * The import preview (ADR-0022 §3, ADR-0041 §1-§3): the file's name as it arrived, its own claims in
  * weak text above a hairline, each deck in its own direction with its effects under it, and the line
- * that is always there. A refusal is its sentence alone. The gate is pinned on the reach line outside
+ * that is always there. A collection archive states its restore instead (ADR-0053 §2), headed
+ * *A collection archive* when it came with no name. A refusal is its sentence alone. The gate is pinned on the reach line outside
  * the scroll, and the page above it opens at its top. While the plan is [writing] the gate cannot be
  * pressed; a write the store refused is said as [failure] just above the gate, where the press was.
  */
@@ -83,7 +89,7 @@ fun ImportPage(
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = gap(1))) {
                     CairnText(
-                        name ?: stringResource(R.string.import_untitled),
+                        name ?: stringResource(if (preview.isArchive()) R.string.restore_untitled else R.string.import_untitled),
                         Modifier.fillMaxWidth().testTag("import-heading"),
                         tier = Tier.Heading,
                     )
@@ -93,6 +99,7 @@ fun ImportPage(
                             Sentence(refusalSentence(preview.refusal), "import-refusal")
                         }
                         is FilePreview.Plan -> PlanBody(preview.plan)
+                        is FilePreview.Restore -> RestoreBody(preview.restore)
                     }
                     Spacer(Modifier.height(gap(2)))
                 }
@@ -101,7 +108,7 @@ fun ImportPage(
                     Sentence(stringResource(R.string.import_write_failed, failure), "import-failure")
                 }
                 Spacer(Modifier.height(gap(2)))
-                Gate(preview.gate(), onImport, onLeave, enabled = !writing)
+                Gate(preview.gate(), restore = preview is FilePreview.Restore, onImport, onLeave, enabled = !writing)
                 Spacer(Modifier.height(reachLineBelow(page)))
             }
         }
@@ -111,11 +118,23 @@ fun ImportPage(
 private fun FilePreview.gate(): ImportGate = when (this) {
     is FilePreview.Refused -> gate
     is FilePreview.Plan -> plan.gate
+    is FilePreview.Restore -> restore.gate
 }
 
-/** *Import* as the primary with *Cancel* beside it as a text action, or a lone *Close* (ADR-0041 §3). */
+/** Whether the file is known to be a collection archive: a restore preview, or a refusal only an archive meets. */
+private fun FilePreview.isArchive(): Boolean = when (this) {
+    is FilePreview.Restore -> true
+    is FilePreview.Refused -> refusal is FileRefusal.AnotherCollection || refusal is FileRefusal.TooLargeToRead
+    is FilePreview.Plan -> false
+}
+
+/**
+ * *Import* — or *Restore*, for an archive — as the primary with *Cancel* beside it as a text action, or
+ * a lone *Close* (ADR-0041 §3, ADR-0053 §2). The primary goes to [onImport] either way: the binding
+ * derives which write it is.
+ */
 @Composable
-private fun Gate(gate: ImportGate, onImport: () -> Unit, onLeave: () -> Unit, enabled: Boolean) {
+private fun Gate(gate: ImportGate, restore: Boolean, onImport: () -> Unit, onLeave: () -> Unit, enabled: Boolean) {
     when (gate) {
         ImportGate.DISMISS -> CairnControl(
             stringResource(R.string.import_close),
@@ -126,9 +145,9 @@ private fun Gate(gate: ImportGate, onImport: () -> Unit, onLeave: () -> Unit, en
         )
         ImportGate.DECIDE -> Row(verticalAlignment = Alignment.CenterVertically) {
             CairnControl(
-                stringResource(R.string.import_import),
+                stringResource(if (restore) R.string.restore_restore else R.string.import_import),
                 onImport,
-                Modifier.weight(1f).testTag("gate-import"),
+                Modifier.weight(1f).testTag(if (restore) "gate-restore" else "gate-import"),
                 primary = true,
                 enabled = enabled,
             )
@@ -238,11 +257,33 @@ private fun effectLines(deck: DeckEffects): List<String> {
 private fun refusalSentence(refusal: FileRefusal): String = when (refusal) {
     is FileRefusal.Unreadable -> stringResource(R.string.import_refusal_unreadable)
     is FileRefusal.NeedsNewerVersion -> stringResource(R.string.import_refusal_newer)
-    is FileRefusal.CollectionArchive -> stringResource(R.string.import_refusal_archive)
     is FileRefusal.NotADeck -> stringResource(R.string.import_refusal_not_a_deck)
     // Named as older, never as damaged (ADR-0022 §4), and it names the held deck.
     is FileRefusal.OlderCopy -> stringResource(R.string.import_refusal_older, wrapped(refusal.deck))
+    is FileRefusal.AnotherCollection -> stringResource(R.string.restore_refusal_another_collection)
+    is FileRefusal.TooLargeToRead -> stringResource(R.string.restore_refusal_too_large)
 }
+
+/**
+ * The restore preview's two sentences (ADR-0016 §11, ADR-0053 §2): what the archive holds, dated by its
+ * day in local time, and the line that is always there. An archive dated in a form this app does not
+ * write states its counts alone.
+ */
+@Composable
+private fun RestoreBody(restore: RestorePreviewFacts) {
+    val notes = counted(R.plurals.restore_notes, restore.notes.toLong())
+    val reviews = counted(R.plurals.restore_reviews, restore.reviews.toLong())
+    val summary = restore.createdMs?.let { stringResource(R.string.restore_summary, archiveDate(it), notes, reviews) }
+        ?: stringResource(R.string.restore_summary_undated, notes, reviews)
+    Spacer(Modifier.height(gap(2)))
+    Sentence(summary, "restore-summary")
+    Spacer(Modifier.height(gap(2)))
+    Sentence(stringResource(R.string.restore_adds), "restore-line")
+}
+
+/** The day an archive was made, in [zone], always with its year: *1 September 2026*. English, as every sentence round it is. */
+fun archiveDate(atMs: Long, zone: TimeZone = TimeZone.getDefault()): String =
+    SimpleDateFormat("d MMMM yyyy", Locale.ENGLISH).apply { timeZone = zone }.format(Date(atMs))
 
 /** Body lines, one unit apart, each in the interface's own direction so a name cannot turn the line round. */
 @Composable

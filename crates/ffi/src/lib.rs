@@ -19,6 +19,7 @@ use cairn_ops::inbound::{self, Plan, Refusal};
 use cairn_ops::leeches;
 use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::optimise;
+use cairn_ops::restore;
 use cairn_ops::review::{self, Review};
 use cairn_ops::session::ReviewState as CoreState;
 use cairn_ops::sitting::{GradeRefused, RevealRefused};
@@ -1327,12 +1328,14 @@ pub enum FileRefusal {
     Unreadable,
     /// A `format` this build cannot read.
     NeedsNewerVersion,
-    /// A collection archive, not a deck.
-    CollectionArchive,
     /// An absolute path, a `..` segment, a symlink or an unknown member.
     NotADeck,
     /// An older revision of a deck the collection holds, named by the held deck's name.
     OlderCopy { deck: String },
+    /// A collection archive from a collection other than the one this device holds (ADR-0016 §10).
+    AnotherCollection,
+    /// A read stopped at its ceiling whose head is a collection archive's.
+    TooLargeToRead,
 }
 
 impl From<Refusal> for FileRefusal {
@@ -1340,9 +1343,26 @@ impl From<Refusal> for FileRefusal {
         match refusal {
             Refusal::Unreadable => Self::Unreadable,
             Refusal::UnknownFormat(_) => Self::NeedsNewerVersion,
-            Refusal::WrongProfile => Self::CollectionArchive,
+            // An archive is routed to `restore` before `inbound` reads it, so a deck read never
+            // meets the other profile; were one to, it is not a deck this application can read.
+            Refusal::WrongProfile => Self::Unreadable,
             Refusal::BrokenPath => Self::NotADeck,
             Refusal::Older { deck } => Self::OlderCopy { deck },
+        }
+    }
+}
+
+impl From<restore::Refusal> for FileRefusal {
+    fn from(refusal: restore::Refusal) -> Self {
+        match refusal {
+            // A broken archive is not a deck put together wrongly: it is a file this application
+            // cannot read.
+            restore::Refusal::Unreadable
+            | restore::Refusal::WrongProfile
+            | restore::Refusal::BrokenPath => Self::Unreadable,
+            restore::Refusal::UnknownFormat(_) => Self::NeedsNewerVersion,
+            restore::Refusal::AnotherCollection => Self::AnotherCollection,
+            restore::Refusal::TooLarge => Self::TooLargeToRead,
         }
     }
 }
@@ -1407,7 +1427,19 @@ pub struct ImportPlanFacts {
     pub gate: ImportGate,
 }
 
-/// A refusal or a plan, each with its gate.
+/// What restoring a collection archive would bring in, as its manifest declares it (ADR-0016 §11).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RestorePreviewFacts {
+    /// The archive's creation instant in epoch milliseconds, for Kotlin to show in local time;
+    /// `None` when the archive states it in a form this application does not write.
+    pub created_ms: Option<i64>,
+    pub notes: u64,
+    pub reviews: u64,
+    /// Always *decide*: a restore adds and never removes, so there is always a choice to make.
+    pub gate: ImportGate,
+}
+
+/// A refusal, an import plan or a restore preview, each with its gate.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum FilePreview {
     Refused {
@@ -1416,6 +1448,9 @@ pub enum FilePreview {
     },
     Plan {
         plan: ImportPlanFacts,
+    },
+    Restore {
+        restore: RestorePreviewFacts,
     },
 }
 
@@ -1430,6 +1465,23 @@ pub enum FileApplied {
 }
 
 impl FilePreview {
+    fn of_restore(outcome: Result<restore::Preview, restore::Refusal>) -> Self {
+        match outcome {
+            Ok(preview) => Self::Restore {
+                restore: RestorePreviewFacts {
+                    created_ms: preview.created_ms,
+                    notes: preview.notes,
+                    reviews: preview.reviews,
+                    gate: ImportGate::Decide,
+                },
+            },
+            Err(refusal) => Self::Refused {
+                refusal: refusal.into(),
+                gate: ImportGate::Dismiss,
+            },
+        }
+    }
+
     fn of(outcome: Result<Plan, Refusal>) -> Self {
         let gate = inbound::gate_for(&outcome).into();
         match outcome {
@@ -1482,6 +1534,9 @@ pub struct InboundFileHandle {
     inbound: inbound::Inbound,
     /// False when Kotlin stopped at the read ceiling: only the head is held.
     complete: bool,
+    /// Whether the head is a collection archive's, sniffed once when the file is opened: an archive
+    /// is read by `restore`, anything else by `inbound` (ADR-0053 §2).
+    archive: bool,
 }
 
 impl InboundFileHandle {
@@ -1489,12 +1544,25 @@ impl InboundFileHandle {
     fn head_refusal(&self) -> Refusal {
         inbound::head_refusal(&self.inbound.bytes)
     }
+
+    /// The restore preview, derived against the collection as it stands now.
+    fn restore(&self) -> Result<Result<restore::Preview, restore::Refusal>, CairnError> {
+        Ok(restore::read(
+            &self.inbound.bytes,
+            self.complete,
+            &self.owner.collection(),
+        )?)
+    }
 }
 
 #[uniffi::export]
 impl InboundFileHandle {
-    /// What importing the file would do to the collection as it stands now, or why it can't.
+    /// What importing or restoring the file would do to the collection as it stands now, or why it
+    /// can't.
     pub fn preview(&self) -> Result<FilePreview, CairnError> {
+        if self.archive {
+            return Ok(FilePreview::of_restore(self.restore()?));
+        }
         if !self.complete {
             return Ok(FilePreview::of(Err(self.head_refusal())));
         }
@@ -1503,7 +1571,20 @@ impl InboundFileHandle {
     }
 
     /// Re-derive the plan and write it. A store failure is the binding's one error.
+    ///
+    /// **Restoring is not built yet** (#253): an archive the re-read refuses says why, and one this
+    /// device would accept is an error, with nothing written either way.
     pub fn apply(&self) -> Result<FileApplied, CairnError> {
+        if self.archive {
+            return match self.restore()? {
+                Err(refusal) => Ok(FileApplied::Refused {
+                    refusal: refusal.into(),
+                }),
+                Ok(_) => Err(CairnError::Failed {
+                    reason: "restoring an archive is not built yet".to_owned(),
+                }),
+            };
+        }
         if !self.complete {
             return Ok(FileApplied::Refused {
                 refusal: self.head_refusal().into(),
@@ -1534,6 +1615,7 @@ impl CollectionHandle {
     ) -> Arc<InboundFileHandle> {
         Arc::new(InboundFileHandle {
             owner: self,
+            archive: restore::is_archive(&bytes),
             inbound: inbound::Inbound {
                 arrival: arrival.into(),
                 name,
@@ -1551,12 +1633,16 @@ pub struct BenchFileFact {
     pub bytes: Vec<u8>,
 }
 
-/// The bench's deck files, built against `Fixture::Decks`. Like [`fixtures`], in every build of the
+/// The bench's files, built against `Fixture::Decks`. Like [`fixtures`], in every build of the
 /// binding, so the tests and the handset session use the files the desktop bench writes.
+///
+/// `scratch_dir` is a directory the app may write to — its cache directory on Android, where the
+/// system temp directory is not the app's: the archive is a backup of a store opened and removed
+/// again under it.
 #[uniffi::export]
-pub fn bench_files() -> Vec<BenchFileFact> {
+pub fn bench_files(scratch_dir: String) -> Vec<BenchFileFact> {
     let set = cairn_ops::file_bench::FileSet::Imports;
-    set.files()
+    set.files_in(Path::new(&scratch_dir))
         // The set is built from the bench's own constant fixtures, never from input, and
         // `file_bench`'s tests build it on every run: a failure here is a broken build, not a state.
         .expect("the bench's files build")
@@ -2815,7 +2901,7 @@ mod tests {
     /// The bench's files in the order `FileSet::Imports` builds them: the update deck, the
     /// three-deck file, a collection archive, and a file this application wrote and cannot parse.
     fn bench() -> Vec<BenchFileFact> {
-        let files = bench_files();
+        let files = bench_files(std::env::temp_dir().display().to_string());
         assert_eq!(files.len(), 4);
         files
     }
@@ -2894,17 +2980,80 @@ mod tests {
         assert_eq!(plan.gate, ImportGate::Decide);
     }
 
+    fn restore_of(preview: FilePreview) -> RestorePreviewFacts {
+        match preview {
+            FilePreview::Restore { restore } => restore,
+            other => panic!("expected a restore preview, got {other:?}"),
+        }
+    }
+
     #[test]
-    fn an_archive_is_refused_as_a_collection_archive_with_a_lone_close() {
+    fn the_bench_archive_previews_a_restore_over_a_collection_holding_nothing() {
+        // `empty` wipes the store and authors nothing — what a fresh install would be without the
+        // starter notes `open_collection` seeds.
+        let (handle, _d, _s) = benched("empty");
+        let restore = restore_of(open_bench_file(&handle, &bench()[2]).preview().unwrap());
+        assert_eq!(
+            restore,
+            RestorePreviewFacts {
+                created_ms: Some(cairn_ops::file_bench::ARCHIVE_CREATED_MS),
+                notes: 25,
+                reviews: 50,
+                gate: ImportGate::Decide,
+            }
+        );
+    }
+
+    #[test]
+    fn the_bench_archive_over_an_installed_decks_fixture_is_another_collections() {
         let (handle, _d, _s) = benched("decks");
         let preview = open_bench_file(&handle, &bench()[2]).preview().unwrap();
         assert_eq!(
             preview,
             FilePreview::Refused {
-                refusal: FileRefusal::CollectionArchive,
+                refusal: FileRefusal::AnotherCollection,
                 gate: ImportGate::Dismiss
             }
         );
+    }
+
+    #[test]
+    fn an_archive_is_previewed_again_once_the_collection_stops_being_empty() {
+        let (handle, _d, _s) = benched("empty");
+        let file = open_bench_file(&handle, &bench()[2]);
+        assert_eq!(restore_of(file.preview().unwrap()).gate, ImportGate::Decide);
+        handle.install_fixture("decks".to_owned(), NOW).unwrap();
+        assert_eq!(
+            file.preview().unwrap(),
+            FilePreview::Refused {
+                refusal: FileRefusal::AnotherCollection,
+                gate: ImportGate::Dismiss
+            }
+        );
+    }
+
+    #[test]
+    fn applying_an_archive_writes_nothing_whether_or_not_it_is_refused() {
+        let (handle, _d, _s) = benched("decks");
+        let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
+        assert_eq!(
+            open_bench_file(&handle, &bench()[2]).apply().unwrap(),
+            FileApplied::Refused {
+                refusal: FileRefusal::AnotherCollection
+            }
+        );
+        assert_eq!(
+            handle.note_list(DeckSelector::All, String::new()).unwrap(),
+            before
+        );
+
+        // Restoring is the next ticket's: an archive this device would accept is not written yet.
+        let (empty, _d2, _s2) = benched("empty");
+        assert!(matches!(
+            open_bench_file(&empty, &bench()[2]).apply(),
+            Err(CairnError::Failed { .. })
+        ));
+        assert_eq!(empty.note_count().unwrap(), 0);
     }
 
     #[test]
@@ -2924,7 +3073,8 @@ mod tests {
     fn an_incomplete_read_is_told_apart_by_its_head() {
         let (handle, _d, _s) = benched("decks");
         let files = bench();
-        // The head of an archive still says what it is: the sniff reads only the first member.
+        // The head of an archive still says what it is: the sniff reads only the first member, so
+        // a read stopped at the ceiling is too large, not unreadable.
         let head = files[2].bytes[..512.min(files[2].bytes.len())].to_vec();
         let archive = handle
             .clone()
@@ -2932,8 +3082,14 @@ mod tests {
         assert_eq!(
             archive.preview().unwrap(),
             FilePreview::Refused {
-                refusal: FileRefusal::CollectionArchive,
+                refusal: FileRefusal::TooLargeToRead,
                 gate: ImportGate::Dismiss
+            }
+        );
+        assert_eq!(
+            archive.apply().unwrap(),
+            FileApplied::Refused {
+                refusal: FileRefusal::TooLargeToRead
             }
         );
         // The head of a deck is not enough to plan from, so it is unreadable, never a plan.
@@ -2980,11 +3136,11 @@ mod tests {
     fn applying_a_refused_file_says_why_and_writes_nothing() {
         let (handle, _d, _s) = benched("decks");
         let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
-        let file = open_bench_file(&handle, &bench()[2]);
+        let file = open_bench_file(&handle, &bench()[3]);
         assert_eq!(
             file.apply().unwrap(),
             FileApplied::Refused {
-                refusal: FileRefusal::CollectionArchive
+                refusal: FileRefusal::Unreadable
             }
         );
         assert_eq!(
@@ -3053,18 +3209,22 @@ mod tests {
         // Building wrote nothing down.
         assert_eq!(handle.backup_nudge().unwrap(), before);
 
-        // The bytes are an archive the binding itself recognises when the file is opened again.
+        // Opened again over the collection it came from, the archive previews its restore.
         let opened =
             handle
                 .clone()
                 .open_file(FileArrival::Opened, Some(backup.name), backup.bytes, true);
-        assert!(matches!(
+        assert_eq!(
             opened.preview().unwrap(),
-            FilePreview::Refused {
-                refusal: FileRefusal::CollectionArchive,
-                ..
+            FilePreview::Restore {
+                restore: RestorePreviewFacts {
+                    created_ms: Some(NOW),
+                    notes,
+                    reviews: before.reviews,
+                    gate: ImportGate::Decide,
+                }
             }
-        ));
+        );
 
         handle.record_backup(NOW).unwrap();
         let after = handle.backup_nudge().unwrap();
