@@ -166,7 +166,6 @@ pub fn pinned_band(viewport_height: f32) -> f32 {
 /// what the widgets already drawn have claimed, never what the screen has left. The clip rect is the
 /// viewport, and the viewport is what a thumb can reach. This was found by a prototype rendering
 /// pixel-identically to the thing it was varying, with nothing failing.
-///
 pub fn page_room(ui: &egui::Ui) -> f32 {
     (ui.clip_rect().bottom() - ui.cursor().top()).max(0.0)
 }
@@ -281,9 +280,9 @@ mod tests {
     ///
     /// #131's trap was that the editor's side-by-side test could be evaluated against a *column*
     /// rather than the window and pass or fail accidentally, with nothing erroring. #163 removed the
-    /// trap by removing the width: there is no expression left that could be handed the wrong one.
-    /// What this catches is a later ticket reaching for `viewport_rect().width()` again, to add a
-    /// floor, a tablet case or a landscape rule — a width creeping back in is what makes it move.
+    /// trap by removing the width: there is no expression left that could be handed the wrong one,
+    /// and `cap_for` taking no width is what keeps it so. This pins the two caps the editor flag
+    /// chooses between.
     #[test]
     fn the_arrangement_does_not_depend_on_how_wide_the_window_is() {
         assert_eq!(

@@ -382,8 +382,8 @@ impl eframe::App for CairnApp {
     /// `eframe::App::ui`'s contract says the `Ui` it hands you *"has no margin or background
     /// color"*, and this app neither wrapped its content in a `CentralPanel` nor overrode this —
     /// so the page was eframe's own default, a hard-coded `rgba(12, 12, 12, 180)` compositing to
-    /// `#080808`, on every screen. `panel_fill` reached only the nav strip and the (since retired) inset bands,
-    /// which is why the strip was visibly *lighter* than the page under it.
+    /// `#080808`, on every screen. `panel_fill` reached only the nav strip and the (since retired)
+    /// inset bands, which is why the strip was visibly *lighter* than the page under it.
     ///
     /// `#080808` sits **below every rung of the stone ramp**, so it was not merely unnamed but
     /// unreachable: [`theme::card_fill`] measures 1.07:1 against it, and a card drawn as a well
@@ -661,8 +661,8 @@ impl eframe::App for CairnApp {
 }
 
 /// The nav row: three buttons, the current one marked. This is the persistent affordance ADR-0021 §1
-/// fixes. **Where it sits is settled** — pinned above the scroll area, yielding to the soft keyboard
-/// (see the call site) — which is the *layout pass*'s half; how it **looks** is the *finish pass*'s,
+/// fixes. **Where it sits is settled** — pinned above the scroll area — which is the *layout pass*'s
+/// half; how it **looks** is the *finish pass*'s,
 /// and a row of buttons is the honest floor.
 fn nav_bar(ui: &mut egui::Ui, dest: &mut Destination, cap: f32) {
     // **Inside the page frame, so the row starts on the same vertical line the content does.** The

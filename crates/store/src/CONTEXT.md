@@ -183,6 +183,6 @@ resolved it: a crate that must touch the platform for an unrelated reason gets *
 module under the same three-arm discipline. `cairn-export` has one (put/get/list/hand_off for
 user-visible files); `cairn-app` had a third — the window's insets
 ([ADR-0025 §2](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)) — which went
-with the egui Android build. **This module still stays at two functions**, and that limit is now load-bearing rather than merely
-tidy — it is the reason the erosion signal still means anything. The signal is a **fourth function
+with the egui Android build. **This module still stays at two functions**, and that limit is now
+load-bearing rather than merely tidy — it is the reason the erosion signal still means anything. The signal is a **fourth function
 here**, never a fourth module elsewhere.

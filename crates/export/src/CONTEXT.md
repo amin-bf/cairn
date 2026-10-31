@@ -206,8 +206,8 @@ The slot's other half is **personal** values, whose syncing is still open and wh
   reveals rather than sends because there is no share portal on the desktop; a send would mean
   picking a mail client for the user.
 - **The hand-off delivers the bytes, not just a reference, and this is measured** — on the egui
-  Android build's share sheet, now retired. A `.cdeck` sent from the handset arrived on a second device that has never held this application **byte for
-  byte** — same digest, same four members, `mimetype` still first and uncompressed
+  Android build's share sheet, now retired. A `.cdeck` sent from the handset arrived on a second
+  device that has never held this application **byte for byte** — same digest, same four members, `mimetype` still first and uncompressed
   ([#98](https://github.com/amin-bf/cairn/issues/98)). The **display name travels with it**,
   dedupe suffix and all, so the chooser's own preview showing a bare row id is cosmetic exactly as
   ADR-0023 §7 argued. This is what makes ADR-0008 §2's *"arrives with someone who does not have our

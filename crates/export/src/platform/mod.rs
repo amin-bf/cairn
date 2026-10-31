@@ -60,8 +60,9 @@ pub fn list() -> Result<Vec<String>, PlatformError> {
 }
 
 /// Hand the written file to the surface the platform provides for passing a file onward, and stop
-/// there (ADR-0023 §1). The desktop reveals the file **selected** in the file manager. It **never fires by itself** — the caller invokes it from a
-/// user action, never on an export completing (ADR-0023 §5).
+/// there (ADR-0023 §1). The desktop reveals the file **selected** in the file manager. It **never
+/// fires by itself** — the caller invokes it from a user action, never on an export completing
+/// (ADR-0023 §5).
 pub fn hand_off(name: &str) -> Result<(), PlatformError> {
     imp::hand_off(name)
 }

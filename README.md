@@ -54,7 +54,7 @@ in [`android/`](./android), over `cairn-ffi`:
 | `cairn-ops` | The application's operations, which both renderers call. No renderer, no binding. |
 | `cairn-ffi` | The Kotlin binding: the one crate that depends on uniffi. |
 | `cairn-app` | The egui application, desktop only since the egui Android build retired ([ADR-0045 §8](./docs/adr/0045-the-native-android-client.md)). |
-| `cairn-desktop` | The desktop binary: a twenty-line shim over `cairn-app`. Keep it empty. |
+| `cairn-desktop` | The desktop binaries, `cairn` and `cairn-fixture`: shims over `cairn-app`. Keep them empty. |
 
 ## Stack
 
@@ -115,8 +115,8 @@ On Android the Kotlin app passes its own directories in
 ([ADR-0046 §5](./docs/adr/0046-the-line-between-kotlin-and-rust.md)), and the seam's Android arm
 only refuses.
 
-**The platform surface is per crate, not per workspace** ([ADR-0016 §5](./docs/adr/0016-backup-and-restore.md)):
-`cairn_store::platform` answers the two directories below and `cairn_export::platform` the
+**The platform surface is per crate, not per workspace**
+([ADR-0016 §5](./docs/adr/0016-backup-and-restore.md)): `cairn_store::platform` answers the two directories below and `cairn_export::platform` the
 user-visible files, each under the same three-arm `#[cfg]` discipline. A **fourth function
 appearing in either** is the erosion signal, not a third module.
 

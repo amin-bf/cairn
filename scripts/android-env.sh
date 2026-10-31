@@ -1,4 +1,4 @@
-# Android toolchain environment for cairn-app.
+# Android toolchain environment for the Kotlin app's Gradle build and cairn-ffi's cargo ndk build.
 #
 # Source this before any Android build:  source scripts/android-env.sh
 #

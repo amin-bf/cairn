@@ -7,8 +7,8 @@ license.workspace = true
 
 # The desktop binaries' home. It was split out of `cairn-app` for the egui Android build's packager
 # (ADR-0003 §5), which is retired (ADR-0045 §8); it stays because the scripts, captures and docs run
-# `-p cairn-desktop`, and a shim costs nothing. Keep it one: logic belongs in `cairn-app`, where the
-# tests reach it.
+# `-p cairn-desktop`, and a shim costs nothing. Keep it one: logic belongs in `cairn-app` or
+# `cairn-ops`, where the tests reach it (crates/app/src/CONTEXT.md).
 #
 # It depends on `cairn-app` and nothing else — `eframe` arrives by re-export. That is not
 # tidiness: a direct `eframe` here could resolve different features from the ones `cairn-app` was

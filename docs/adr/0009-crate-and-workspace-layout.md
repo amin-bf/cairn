@@ -52,6 +52,11 @@ Two of these lines are forced by the toolchain. `desktop` is separate because of
 panic above. `app` is separate from `store` because only one of them is a cdylib and only one of
 them splits `eframe` per target.
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026): neither line is
+> forced any more.** The egui Android build is retired, so there is no `cargo-apk`, no `cdylib` and
+> no per-target `eframe`. Both boundaries stay by choice: `desktop` because the scripts and docs run
+> `-p cairn-desktop`, and `app` because `store` holds no UI.
+
 The rest are chosen, and §2, §4 and §11 say why.
 
 > **Extended by [ADR-0013 §11](0013-the-sync-transport.md)**: a sixth crate, `crates/sync/`

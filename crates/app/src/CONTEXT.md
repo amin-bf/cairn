@@ -12,12 +12,10 @@ rules ADR-0025 and ADR-0026 added describe a client that no longer exists.
 ADR-0006 §1 and §2** — read those amendments before touching the session;
 [ADR-0012](../../../docs/adr/0012-the-note-authoring-experience.md),
 [ADR-0018](../../../docs/adr/0018-the-card-pane-ordering.md) and
-[ADR-0025](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), the second of which
-**amends ADR-0012 §1 and §5** and the third of which **moves §5's warning above the fields and adds
-the inset seam** — read those amendments before touching the authoring pane; and
-[ADR-0026](../../../docs/adr/0026-the-per-tap-keyboard-re-pop.md), which **amends ADR-0025 §2 and §3**
-— the seam's return type, and a third guard — and puts the keyboard raise in the shared text-field
-wrapper; also by
+[ADR-0025 §4](../../../docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), the second of
+which **amends ADR-0012 §1 and §5** and the third of which **moves §5's warning above the fields** —
+read those amendments before touching the authoring pane (the rest of ADR-0025, and ADR-0026, went
+with the egui Android build); also by
 [ADR-0002 §4](../../../docs/adr/0002-the-card-model.md) (layout is data, stored once per kind) and
 [ADR-0015](../../../docs/adr/0015-the-sync-experience.md) and
 [ADR-0019](../../../docs/adr/0019-naming-the-account-at-enrolment.md) (everything the user sees about
@@ -472,7 +470,8 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
 **Import preview**:
 The one gate in this specification (ADR-0022 §1), and **the one screen that belongs to no
 destination**. Every entry point — the file list and a desktop drop here, a launch intent in the
-Kotlin app — produces **one** screen (in the Kotlin app the **system picker** takes the list's place, ADR-0047 §2), which must be **cold-start capable**, because the intent can start the
+Kotlin app — produces **one** screen (in the Kotlin app the **system picker** takes the list's
+place, ADR-0047 §2), which must be **cold-start capable**, because the intent can start the
 application directly into an import. So it is drawn without the nav row: there may not be a
 destination behind it. Applying returns to the **note list**, with the deck filter set to the
 imported deck when the file carried one and left unfiltered when it carried several; **cancelling

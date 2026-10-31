@@ -7,7 +7,8 @@
   *Out of scope*
 - **Supersedes**: [ADR-0003](0003-client-stack.md) **on Android only**;
   [ADR-0016 §5](0016-backup-and-restore.md)'s *no file picker* and *no text field for a filename*
-  **on Android only**
+  **on Android only**; by §8, [ADR-0026](0026-the-per-tap-keyboard-re-pop.md) whole and
+  [ADR-0025](0025-the-authoring-screen-under-a-soft-keyboard.md) except its §4
 - **Related**: [ADR-0006 §5](0006-the-review-session-experience.md) and
   [ADR-0038 §6](0038-the-mark-and-the-icon-rule.md) (native clients are being built; the gesture
   belongs to the platform), [ADR-0021 §7](0021-note-ordering-saving-and-the-note-list.md) and
@@ -73,6 +74,14 @@ decision so that it would transfer to a native renderer; this ADR is the rendere
    **Backup and restore are not lost by this.** The egui build never had them on Android;
    [ADR-0053](0053-backup-and-restore-on-android.md) builds them in the Kotlin app as the next slice.
 
+What the Kotlin app inherits unchanged: the domain and store rules through the shared core; the design
+system's values and rules (ADR-0031 to ADR-0044, stated in logical pixels and in terms of *touch*
+rather than of a renderer); the shipped faces, Cairn Icons included (ADR-0038 §1); and the platform
+facts the egui build measured (storage locations and Auto Backup, the intent-filter rules of ADR-0024,
+and the frozen background of client-stack rule 10). The `MediaStore` facts of ADR-0023 and ADR-0024
+were the egui build's write path; the Kotlin app writes through the save dialog (ADR-0047 §3), and
+only their lesson on the declared type carries over (`AGENTS.md` deck-export rule 12).
+
 ## Amendments to accepted ADRs
 
 §8 retires what these describe on Android; each now holds for the desktop, or as history.
@@ -82,6 +91,8 @@ decision so that it would transfer to a native renderer; this ADR is the rendere
   `cairn-desktop` out of `cairn-app` stays, for the reason above.
 - **[ADR-0007 §6](0007-the-local-store.md)** — the Android data directory is passed in by the
   Kotlin app; the hand-written JNI is gone. The locations are unchanged.
+- **[ADR-0009 §1](0009-crate-and-workspace-layout.md)** — the two boundaries `cargo-apk` and the
+  `cdylib` forced stand by choice now.
 - **[ADR-0015 §9](0015-the-sync-experience.md)** — the advance statement of the Android text-input
   limitation has nothing to state: the Kotlin app takes composed text.
 - **[ADR-0016 §5 §8](0016-backup-and-restore.md)** — §5's seam keeps its Android arms, which refuse;
@@ -95,12 +106,6 @@ decision so that it would transfer to a native renderer; this ADR is the rendere
   draws only the pointer's row; the Kotlin app's grades are its own Review slice's.
 - **[ADR-0047](0047-the-file-surface-on-android.md)** — its Consequences' re-wording of the
   `MediaStore` rules is done: `AGENTS.md` deck-export rules 11–15 and backup rules 5, 6 and 8.
-
-What the Kotlin app inherits unchanged: the domain and store rules through the shared core; the design
-system's values and rules (ADR-0031 to ADR-0044, stated in logical pixels and in terms of *touch*
-rather than of a renderer); the shipped faces, Cairn Icons included (ADR-0038 §1); and the platform
-facts the egui build measured (storage locations and Auto Backup, the MediaStore and intent-filter
-rules of ADR-0023 and ADR-0024, and the frozen background of client-stack rule 10).
 
 ## Out of scope here
 

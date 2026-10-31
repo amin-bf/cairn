@@ -523,8 +523,8 @@ because they are validated findings, not because a web build ships.
     #166): named on a `files <name>` line, installed **after** the fixture it is built against, and
     refused unless every file plans against that collection the way the set says. On the desktop it is
     written through `cairn_export::platform::put`, never copied into a folder; the Kotlin app takes the
-    same set's bytes from the binding's `bench_files()`. So `capture-desktop.sh` redirects **`XDG_DOCUMENTS_DIR`** as well, on every run: it was the one base
-    left pointing at the operator's real `~/Documents`, and a hand run of `cairn-fixture files` owes
+    same set's bytes from the binding's `bench_files()`. So `capture-desktop.sh` redirects
+    **`XDG_DOCUMENTS_DIR`** as well, on every run: it was the one base left pointing at the operator's real `~/Documents`, and a hand run of `cairn-fixture files` owes
     it the same redirect.
     **And every control below the last card is now reached by `%BY-n%`, never a literal y**
     ([ADR-0038 §5](./docs/adr/0038-the-mark-and-the-icon-rule.md)). ADR-0035 §1 anchors a screen's
@@ -658,15 +658,20 @@ A `.cdeck` file is a **zip archive** carrying deck content and never review prog
     ([ADR-0041 §2](./docs/adr/0041-the-file-surface.md)).
 11. **Read back the filename the platform wrote; never echo the one requested.** A provider may rename
     what it is asked to write: the retired egui build's `MediaStore` insert **deduped** on the handset
-    ([evidence](./docs/research/android-outbound-share/README.md)), and the Kotlin app's save dialog
-    hands the name to a provider that may do the same, so its report states the name the document
-    actually got ([ADR-0047 §4](./docs/adr/0047-the-file-surface-on-android.md)).
+    ([evidence](./docs/research/android-outbound-share/README.md)), and the save dialog the Kotlin
+    app writes through hands the name to a provider that may do the same, so its report states the
+    name the document actually got ([ADR-0047 §4](./docs/adr/0047-the-file-surface-on-android.md)).
+    The Kotlin app writes nothing yet: the archive comes with the backup slice
+    ([ADR-0053](./docs/adr/0053-backup-and-restore-on-android.md)), and deck export with a later
+    effort ([ADR-0052](./docs/adr/0052-the-file-surface-on-android-is-import-only.md)). This rule and
+    rule 12 bind them when they are built.
 12. **The Android write declares `application/octet-stream`, never a type of our own.** A declared
     type that disagrees with the name is the *only* reason a collision produced `French A1.cdeck (1)`
     instead of `French A1 (1).cdeck` — measured across three declarations on the egui build's
     `MediaStore` write ([evidence](./docs/research/android-file-identity/README.md)) — and the platform
     stores our files as `application/octet-stream` either way, so the Kotlin app creates its documents
-    with that type ([ADR-0047 §3](./docs/adr/0047-the-file-surface-on-android.md)).
+    with that type when it writes any (rule 11;
+    [ADR-0047 §3](./docs/adr/0047-the-file-surface-on-android.md)).
 13. **A file is identified by its bytes, never by its name.** The `mimetype` member is stored first and
     uncompressed so the type sits at a fixed offset, and on Android that is the *sole* authority over a
     file's **profile**: `.cdeck` and `.ccoll` both store as `application/octet-stream`, and a file
@@ -789,9 +794,11 @@ archiving against it.
    §6 states (it read that ADR's raw-interchange row where Auto Backup covers files on disk).
 5. **No file picker on the desktop and no text field for a filename there; no passphrase on either
    platform.** The desktop keeps [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md) as written. On
-   Android the Kotlin app uses the system picker and the save dialog, where the user may type a name
-   ([ADR-0045 §6](./docs/adr/0045-the-native-android-client.md), ADR-0047): the refusals there were
-   properties of the retired egui build. **Archives are still never encrypted**, on ADR-0020 §1's
+   Android the refusals are lifted ([ADR-0045 §6](./docs/adr/0045-the-native-android-client.md)):
+   they were properties of the retired egui build, so the backup slice
+   ([ADR-0053](./docs/adr/0053-backup-and-restore-on-android.md)) uses the system picker and the
+   save dialog, where the user may type a name (ADR-0047). Until that slice is built, Android has no
+   backup or restore at all. **Archives are still never encrypted**, on ADR-0020 §1's
    own grounds (protection-at-rest rule 1), which never depended on the input method.
 6. **The platform seam rule is per crate.** `cairn-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm
@@ -804,9 +811,9 @@ archiving against it.
    own is the rule working, and reading the module count as the limit is what would push the next
    such question back into the store.
 7. **`hand_off` is named for what it does on both platforms, and the two differ on purpose.**
-   On Android the Kotlin app launches the system share sheet itself (the seam's Android arm only
-   refuses); the desktop reveals the file **selected** in the file manager, because no
-   `org.freedesktop.portal.Share` exists. Calling it `send` invites an implementer to reach for the
+   On Android the share sheet is the Kotlin app's to launch, once something it writes is handed on
+   (rule 5); the seam's Android arm only refuses. The desktop reveals the file **selected** in the
+   file manager, because no `org.freedesktop.portal.Share` exists. Calling it `send` invites an implementer to reach for the
    mail portal on the desktop arm, which
    [ADR-0023 §4](./docs/adr/0023-sending-a-written-file.md) rejects — attaching to a message picks
    one channel on the user's behalf, which is what a share sheet exists not to do. **It never fires
@@ -816,7 +823,7 @@ archiving against it.
    and inherits none of the inner one's flags, so `FLAG_GRANT_READ_URI_PERMISSION` set only on the
    inner intent fails *after* the user has picked an application. (The retired egui build also
    needed `FLAG_ACTIVITY_NEW_TASK` there, because it started activities from the `Application`
-   context; the Kotlin app starts them from its activity.)
+   context; the Kotlin app, which has no share yet, will start it from its activity.)
 
 ### What the user sees
 
@@ -878,8 +885,8 @@ decision that erodes fastest when met without it.
    *passphrase* because the egui Android build's ASCII-only input (the retired client-stack rule 8)
    made it untypeable on the handset. That argument never reached a PIN, since digits are ASCII, and
    it went entirely with that build, since the Kotlin app takes any script. Reopening on either gap is
-   the predictable mistake. Two independent reasons refuse anyway. **There is nowhere to recover a forgotten secret
-   from** — no server, no account, no escrow, by construction — so a secret turns a design premised on
+   the predictable mistake. Two independent reasons refuse anyway. **There is nowhere to recover a
+   forgotten secret from** — no server, no account, no escrow, by construction — so a secret turns a design premised on
    never losing data into one where forgetting loses all of it. And **a PIN is safe on a phone only
    because the hardware refuses to be asked quickly**; data resting on a provider's disks cannot borrow
    that, so against unlimited offline guessing a six-digit space is a routine computation and the PIN

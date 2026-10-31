@@ -1,9 +1,10 @@
 //! Android has no user-files seam here: the Kotlin app moves the bytes itself.
 //!
 //! The `MediaStore` and share-sheet calls that lived here served the egui Android build, which is
-//! retired (ADR-0045 §8). The Kotlin app reads and writes files through the system picker and save
-//! dialog and hands the binding bytes (ADR-0047 §6). This arm still exists because the seam's third
-//! arm refuses an unlisted target: it compiles, and it refuses.
+//! retired (ADR-0045 §8). The Kotlin app opens files through the system picker and hands the binding
+//! bytes (ADR-0047 §6, ADR-0052); what it writes will go through the save dialog the same way. This
+//! arm still exists because the seam's third arm refuses an unlisted target: it compiles, and it
+//! refuses.
 
 use super::{PlatformError, Written};
 

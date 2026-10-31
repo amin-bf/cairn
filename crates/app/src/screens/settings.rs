@@ -223,9 +223,7 @@ fn sync_block(ui: &mut egui::Ui, setting_up: &mut bool) {
 ///
 /// The **file sets** sit under the fixtures, and they are the one control here that acts on the spot:
 /// a set only *adds* files through the user-files seam and reads the collection to check its plans,
-/// so it closes no connection and needs nothing from the caller. On a handset this row is the only
-/// way a file set lands at all — `MediaStore` is writable by the application and by nothing outside
-/// it (`file_bench`).
+/// so it closes no connection and needs nothing from the caller (`file_bench`).
 ///
 /// Returns what the person asked for; the caller acts once the collection borrow has ended.
 fn fixture_bench(
