@@ -113,7 +113,7 @@ sealed interface SettingsScreenState {
 }
 
 /** A failure as the row words it: the binding's own reason, or the exception's message. */
-private fun Exception.said(): String = (this as? CairnException.Failed)?.reason ?: message ?: javaClass.simpleName
+private fun Exception.failureReason(): String = (this as? CairnException.Failed)?.reason ?: message ?: javaClass.simpleName
 
 private fun BackupNudge.shown(nowMs: Long): BackupNudgeShown = when (val at = lastBackupMs) {
     null -> BackupNudgeShown.None(reviews.toLong(), notes.toLong())
@@ -338,14 +338,14 @@ class SettingsViewModel(
                     owner.use { it.recordBackup(created) }
                     written
                 } catch (e: CairnException) {
-                    written.copy(unrecorded = e.said())
+                    written.copy(unrecorded = e.failureReason())
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Only a build or a write failed here: the document holds no whole archive, so it goes.
                 documents.delete(uri)
-                BackupRow.Failed(e.said())
+                BackupRow.Failed(e.failureReason())
             }
             setBackup(row)
             read(rateRefused = false, appearanceRefused = false)

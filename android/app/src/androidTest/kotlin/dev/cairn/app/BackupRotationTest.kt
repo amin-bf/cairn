@@ -25,6 +25,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
 /** *Back up…* through a recreation of the activity (#249): the report survives it, and so does the instant behind the dialog. */
@@ -42,7 +43,7 @@ class BackupRotationTest {
         val pending = AtomicInteger(-1)
 
         /** The intents started through the registry other than the save dialog: Share's chooser. */
-        val started: MutableList<Intent> = java.util.concurrent.CopyOnWriteArrayList()
+        val started: MutableList<Intent> = CopyOnWriteArrayList()
 
         override val activityResultRegistry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {

@@ -57,6 +57,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipInputStream
@@ -88,7 +89,7 @@ class BackupTest {
     private val pending = AtomicInteger(-1)
 
     /** Every intent the app started through the registry other than the save dialog: the share sheet's chooser. */
-    private val started: MutableList<Intent> = java.util.concurrent.CopyOnWriteArrayList()
+    private val started: MutableList<Intent> = CopyOnWriteArrayList()
 
     private val dialog = object : ActivityResultRegistryOwner {
         override val activityResultRegistry = object : ActivityResultRegistry() {
