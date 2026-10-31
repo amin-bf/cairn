@@ -1,12 +1,12 @@
-# **The Settings half of the fixture bench, driven** — the half that reaches the handset.
+# **The Settings half of the fixture bench, driven.**
 #
 # The desktop harness never needs this block: it installs a fixture from outside, with
-# `cairn-fixture`, before the app starts. Android has no such route — `getFilesDir()` is not writable
-# from outside the app, and #141 found that an uninstall is not a first launch there either — so a
-# thumb tapping this row is the only way in on a phone, and #126 judges every destination and
-# sub-state that way.
+# `cairn-fixture`, before the app starts. The block was built for the egui Android build, where
+# `getFilesDir()` is not writable from outside the app (#141); that build is retired (ADR-0045 §8),
+# and the Kotlin app has its own *Development* block (ADR-0051 §1). The egui block stays on the
+# desktop, where a session can install a fixture without leaving the app.
 #
-# **So this storyboard exists to keep the handset from being where the block is first found broken.**
+# **So this storyboard exists to keep the block from being found broken by hand.**
 #
 # **Run it at 1280×800 and nowhere else.** It is a verification rather than a design capture, and
 # unlike every other storyboard here it is *not* width-independent: the bench sits below every group

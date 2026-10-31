@@ -163,7 +163,9 @@ Eight crates, laid out in [ADR-0009](./docs/adr/0009-crate-and-workspace-layout.
 (the `.cdeck` container), `cairn-sync` (publishing to the remote; holds the network dependencies),
 `cairn-ops` (the operations both renderers call; no renderer, no binding),
 `cairn-ffi` (the one uniffi crate: the Kotlin binding, thin),
-`cairn-app` (egui, lib + cdylib), `cairn-desktop` (a shim, forced by `cargo-apk`).
+`cairn-app` (egui, the desktop app; a lib), `cairn-desktop` (the desktop binaries, shims over
+`cairn-app`). The Android app is the Kotlin project in `android/`; the egui Android build is retired
+([ADR-0045 §8](./docs/adr/0045-the-native-android-client.md)).
 
 Contexts are **modules, not crates** — with two exceptions, both for the same reason: `export` and
 `sync` hold dependencies `cairn-core` may not have. A context becomes a crate only when it must
@@ -277,8 +279,11 @@ already leaning on a screen nobody had built.
 
 ## The client stack
 
-**egui / eframe**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). One binary per platform,
-no webview, no IPC. Setup and commands are in [`README.md`](./README.md).
+**egui / eframe on the desktop**, chosen in [ADR-0003](./docs/adr/0003-client-stack.md). No
+webview, no IPC. Setup and commands are in [`README.md`](./README.md). **Android is the Kotlin app**
+([ADR-0045](./docs/adr/0045-the-native-android-client.md)); the egui Android build retired at parity
+(§8), and the rules below are the desktop app's unless they name Android. Where a rule still names
+Android, it holds for the Kotlin app on the handset.
 
 **The targets are desktop and Android.** The web target was ruled out of scope in
 [ADR-0007 §1](./docs/adr/0007-the-local-store.md) — a browser cannot be the system of record for an
@@ -319,20 +324,18 @@ because they are validated findings, not because a web build ships.
 3. **The storage seam is a compile-time `#[cfg]`.** Keep it that way. Never introduce a runtime
    platform check — the whole stack choice rests on wrong platform code failing the build. It is two
    functions in `cairn-store::platform`, and a **third function appearing there means the seam is
-   eroding**. A `#[cfg(target_os)]` anywhere else in the workspace is a defect. **The vendored
-   dependency of rule 12 is outside this rule** — it is not a workspace member and it is not our code,
-   so the `#[cfg]` you will find there is correct. Said explicitly because a correct instance of a
-   construct used as a defect signal is how the signal quietly stops meaning anything.
+   eroding**. `cairn-export::platform` is the other per-crate seam (ADR-0016 §5), and both seams'
+   Android arms only refuse: the Kotlin app passes the directories in and moves the files itself
+   (ADR-0046 §5). A `#[cfg(target_os)]` anywhere else in the workspace is a defect.
 4. **Immediate mode has nowhere to `await`.** Spawn the future, store a handle, read the result on a
    later frame, and call `ctx.request_repaint()` on completion or the result sits unseen until the
    next input event.
-5. **The desktop binary lives in its own crate, and that crate stays empty.** `cargo-apk` panics
-   after signing when one crate has both a cdylib and a bin — the APK is fine, the exit code is not,
-   and CI breaks. So never add a `[[bin]]` to `cairn-app`, and never put logic in
-   `cairn-desktop`: code there is never compiled for Android and never runs on the handset.
-   It takes `eframe` by re-export from `cairn-app`, not as its own dependency.
-6. **`eframe`'s dependency is split per target** — its default `accesskit` feature is rejected
-   alongside `android-native-activity`.
+5. **The desktop binary lives in its own crate, and that crate stays empty.** The split was forced
+   by the retired egui Android build's packager (ADR-0003 §5) and stays because the scripts, captures
+   and docs run `-p cairn-desktop`. Never put logic in `cairn-desktop`: no test reaches it. It takes
+   `eframe` by re-export from `cairn-app`, not as its own dependency.
+6. *Retired with the egui Android build (ADR-0045 §8): `eframe`'s dependency was split per target
+   for it. The number is kept so the rules cited elsewhere keep theirs.*
 7. **Fonts are ours to ship — and must be installed on the first frame, not in `CreationContext`.**
    egui bundles only Hack, Ubuntu-Light and Noto Emoji. Register any added face in **every** family
    you use, or text silently renders as boxes. **That is three families, not the two this rule used
@@ -364,17 +367,10 @@ because they are validated findings, not because a web build ships.
    at size 150 puts 109px of stones in a 172px row and adds 53px of unchosen space before the stated
    gap (ADR-0032 §2). Call `crate::icon` for a picture standing alone; `ui.label` stays correct for
    an icon **inline** with its word, which is the case the whole route exists for.
-8. **Android text input is ASCII-only, and cannot be fixed here.** winit's Android backend handles
-   only motion and key events — it has no IME path, so composed text never reaches the app. This is
-   not the activity backend: GameActivity was tried and reverted (see
-   [`prototypes/egui-slice/android/README.md`](https://github.com/amin-bf/cairn/blob/prototypes/issue-8/prototypes/egui-slice/android/README.md)). Never design a feature that requires typing non-Latin
-   text on Android. **This rule is also rule 12's tripwire**: the patch there is justified by the
-   absence of an IME path, so the day winit grows one, that patch becomes a bug and must be re-judged
-   rather than re-applied. Whoever retires this rule owns that.
+8. *Retired with the egui Android build (ADR-0045 §8): that build's text input was ASCII-only,
+   because winit's Android backend has no IME path. The Kotlin app takes composed text, Persian
+   included, so nothing is designed around Latin-only input any more.*
 9. **Verify Android on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
-   `cargo apk build` needs a **JDK on `PATH`** — `apksigner` is a `java` wrapper, and its absence
-   surfaces only at the signing step, *after* a full NDK compile, as
-   `apksigner: line 97: exec: java: not found`.
    **And an intent fired from `am` is not the intent an application sends.**
    `FLAG_GRANT_READ_URI_PERMISSION` reaches the intent's `data` URI and its `ClipData`, never a bare
    Parcelable extra; real senders escape that only because `Activity.startActivity` migrates
@@ -394,48 +390,17 @@ because they are validated findings, not because a web build ships.
     or killed run holds no partial state and the recovery action is to press the button again. Never
     schedule it, never take a wakelock, and never promise the user that a started job is still
     progressing. [ADR-0014 §3](./docs/adr/0014-when-parameter-optimisation-runs.md).
-11. **The soft keyboard is invisible to the app unless it asks, and the failure is unreachability,
-    not occlusion.** Rule 8's gap has a second half: winit's Android backend reports no **insets**
-    either, and the window is enforced edge-to-edge, so `adjustResize` is inert — nothing resizes and
-    nothing is reported. egui then sizes its `ScrollArea` to a viewport taller than the visible one,
-    the content fits, and there is **no scroll range**, so the covered band cannot be reached at all.
-    Measured on the handset: **923dp of usable height down to 565dp, 39% of the screen, silently**.
-    So the `ui` crate carries a one-function `platform` seam returning the IME and system-bar insets
-    and reserves the band — a **third** per-crate seam under
-    [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md), not a widening of `cairn-store`'s two.
-    **That seam's return type must distinguish "this platform has no soft keyboard" from "the keyboard
-    is down"** — collapsing both to zero, as ADR-0025 §2 first wrote it, makes every gate on "the
-    keyboard is down" permanently true off Android
-    ([ADR-0026 §5](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)).
-    **Three guards come with all this and an implementation missing any of them is visibly broken**:
-    keep the focused field inside the shrunken viewport **in the same frame it shrinks** — a `TextEdit`
-    publishes `output.ime` only while its rect is visible, `egui-winit` turns that absence into
-    `hide_soft_input`, which collapses the inset, which restores the viewport, which shows the field
-    again — **surrender focus when a focused field is scrolled *completely* out of view**, which
-    is the same loop entered from the other end — and **raise the keyboard from a discrete press on a
-    text field** (rule 12), without which it never comes back after a manual dismiss.
-    [ADR-0025 §1 §2 §3](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md),
-    [ADR-0026 §4 §5](./docs/adr/0026-the-per-tap-keyboard-re-pop.md).
-12. **One dependency is vendored and patched, and a bump is not just a version change.** As published,
-    `egui`'s `TextEdit` calls `request_focus` on *every* pointer interaction with no `has_focus` check,
-    `request_focus` interrupts IME composition unconditionally, and `egui-winit` implements that
-    interruption as `set_ime_allowed(false)` then `(true)` — which winit's Android backend maps onto
-    `hide_soft_input`/`show_soft_input`. So **every tap into a text field dismisses and reopens the
-    keyboard**, measured at **6 hides / 17 shows for three taps on the already-focused field**, and the
-    inset collapse it causes throws away the scroll position that rule 11 exists to make meaningful.
-    It buys nothing here: rule 8's missing IME path means there is never a composition to interrupt.
-    **There is no fix above the dependency** — the interrupt flag is private, its setter is public and
-    its clearer is not, and nothing hooks the platform output before `egui-winit` reads it. So we carry
-    a **verbatim copy of the published crate** with that one block behind `#[cfg(not(target_os =
-    "android"))]`, wired by `[patch.crates-io]`, pinned exactly, verifiable by recursive diff against a
-    pristine copy. **The patch is bound to the block's shape, not its line number: if a release
-    restructures it, re-judge rather than re-apply** — a guard applied to a block that no longer means
-    the same thing looks healthy in a diff. Routine bumps need the diff and the shape check; the handset
-    measurement only when either is unhappy. **Both checks are one command — `scripts/verify-vendor.sh`**
-    — and the handset one is `scripts/measure-ime-requests.sh`, so neither is a procedure to reconstruct.
-    The reasoning, the rejected alternatives and the exit condition live in
-    [`vendor/PATCH.md`](./vendor/PATCH.md); read it before bumping the egui family.
-    [ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md).
+11. *Retired with the egui Android build (ADR-0045 §8): winit's Android backend reported no insets,
+    so the `ui` crate carried a one-function inset seam, reserved the keyboard's band and kept three
+    guards against the keyboard oscillating
+    ([ADR-0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md),
+    [ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)). The Kotlin app reads its own insets
+    as Android documents, and the desktop has no soft keyboard.*
+12. *Retired with the egui Android build (ADR-0045 §8): it carried a vendored `egui-winit` with one
+    block guarded off Android, so that a tap into a text field stopped dismissing and reopening the
+    keyboard ([ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)). The block never ran on
+    the desktop, so the workspace now takes the published crate, and a bump of the egui family is a
+    version change again.*
 13. **Colour is named in exactly one place — the `theme` module — and every screen reads the *ambient*
     visuals.** [ADR-0030 §1](./docs/adr/0030-the-first-finish-pass-decisions.md) puts the palette
     behind one function producing an `egui::Visuals`, installed once. A `Color32::from_rgb`, a
@@ -539,9 +504,10 @@ because they are validated findings, not because a web build ships.
     data directory — so the shipping seed's six due cards were once the only collection anything was
     ever photographed against, and #134 ended up shipping three decided states whose only pictures
     were of something that is not the application. `crates/ops/src/fixtures.rs` holds pre-made
-    collections instead, installed from outside by `cairn-fixture` on desktop and from a temporary
-    Settings block on the handset, where `getFilesDir()` is unwritable from outside and an uninstall
-    is not a first launch either (#141). **`cairn_ops::open_collection` stays untouched**, which is what
+    collections instead, installed from outside by `cairn-fixture` on desktop and from the Kotlin
+    app's *Development* block on the handset ([ADR-0051 §1](./docs/adr/0051-settings-on-android.md)),
+    where `getFilesDir()` is unwritable from outside and an uninstall is not a first launch either
+    (#141). **`cairn_ops::open_collection` stays untouched**, which is what
     keeps every capture taken before a fixture existed a picture of the same thing. A storyboard
     **names its own fixture** on a `fixture <name>` line, because a storyboard run without the
     collection it needs produces a full set of valid captures of the seed under the fixture's names.
@@ -555,10 +521,9 @@ because they are validated findings, not because a web build ships.
     review history.
     **The file surface needs files, not a collection, and they are a *file set*** (`file_bench`,
     #166): named on a `files <name>` line, installed **after** the fixture it is built against, and
-    refused unless every file plans against that collection the way the set says. It is written
-    through `cairn_export::platform::put` — never copied into a folder — because that is the only way
-    onto a handset, where nothing outside the application writes `MediaStore`. So
-    `capture-desktop.sh` redirects **`XDG_DOCUMENTS_DIR`** as well, on every run: it was the one base
+    refused unless every file plans against that collection the way the set says. On the desktop it is
+    written through `cairn_export::platform::put`, never copied into a folder; the Kotlin app takes the
+    same set's bytes from the binding's `bench_files()`. So `capture-desktop.sh` redirects **`XDG_DOCUMENTS_DIR`** as well, on every run: it was the one base
     left pointing at the operator's real `~/Documents`, and a hand run of `cairn-fixture files` owes
     it the same redirect.
     **And every control below the last card is now reached by `%BY-n%`, never a literal y**
@@ -691,40 +656,39 @@ A `.cdeck` file is a **zip archive** carrying deck content and never review prog
     enough to do it: they are format characters, so a name carrying a pop-isolate and an override
     would otherwise close the preview's isolate and reverse the application's own sentence after it
     ([ADR-0041 §2](./docs/adr/0041-the-file-surface.md)).
-11. **Read back the filename the platform wrote; never echo the one requested.** The Android put is a
-    `MediaStore` insert, and the user chose neither name nor location, so the report is the only way
-    they can find the file at all. **Measured on the handset** — it **dedupes**
-    ([evidence](./docs/research/android-outbound-share/README.md)). `MediaStore` also **discards the
-    media type we declare**, deriving it from the extension instead.
-12. **The Android write declares no `mime_type`, and that is what keeps the extension.** A declared
-    type that disagrees with the name is the *only* reason a collision produces `French A1.cdeck (1)`
-    instead of `French A1 (1).cdeck` — measured across three declarations
-    ([evidence](./docs/research/android-file-identity/README.md)). `MediaStore` stores
-    `application/octet-stream` either way, so the declaration buys nothing and costs the extension.
-13. **A file is identified by its bytes, never by its name — but whether it *reaches* us is decided by
-    the name.** The `mimetype` member is stored first and uncompressed so the type sits at a fixed
-    offset, and on Android that is the *sole* authority over a file's **profile**: `.cdeck` and
-    `.ccoll` both store as `application/octet-stream`, and a file arriving through a share may have no
-    usable name. But identification is downstream of arrival, and **arrival is gated by the
-    extension**: `MediaStore` derives the stored type from the extension, so a byte-identical deck
-    named `.txt` types as `text/plain`, the broad filter never fires, and no sniff can recover it — it
-    is unreachable, not merely misnamed (Pixel 8 Pro, API 37). A **stripped** name still types as
-    `application/octet-stream` and still arrives. So the extension survives as a display string, as the
-    `LIKE` clause the list enumerates with, and as the reachability gate — never as the thing that
-    decides a file's profile ([ADR-0024 §1](./docs/adr/0024-identifying-a-written-file.md)).
-14. **The Android file list shows only files this application wrote, and the interface must not imply
-    otherwise.** Scoped storage gives us our own `MediaStore` rows and nothing else — a `.cdeck` another
-    application put in `Downloads` is **invisible**, not merely unreadable, and `READ_MEDIA_*` does not
-    cover documents. A deck someone sends can therefore only arrive through an **intent filter**, which
-    is why the manifest declares the broad `application/octet-stream` filter for `ACTION_VIEW` and
-    `ACTION_SEND` and accepts appearing in the Open-with sheet for unrecognised files
-    ([ADR-0024 §2, §3](./docs/adr/0024-identifying-a-written-file.md)).
+11. **Read back the filename the platform wrote; never echo the one requested.** A provider may rename
+    what it is asked to write: the retired egui build's `MediaStore` insert **deduped** on the handset
+    ([evidence](./docs/research/android-outbound-share/README.md)), and the Kotlin app's save dialog
+    hands the name to a provider that may do the same, so its report states the name the document
+    actually got ([ADR-0047 §4](./docs/adr/0047-the-file-surface-on-android.md)).
+12. **The Android write declares `application/octet-stream`, never a type of our own.** A declared
+    type that disagrees with the name is the *only* reason a collision produced `French A1.cdeck (1)`
+    instead of `French A1 (1).cdeck` — measured across three declarations on the egui build's
+    `MediaStore` write ([evidence](./docs/research/android-file-identity/README.md)) — and the platform
+    stores our files as `application/octet-stream` either way, so the Kotlin app creates its documents
+    with that type ([ADR-0047 §3](./docs/adr/0047-the-file-surface-on-android.md)).
+13. **A file is identified by its bytes, never by its name.** The `mimetype` member is stored first and
+    uncompressed so the type sits at a fixed offset, and on Android that is the *sole* authority over a
+    file's **profile**: `.cdeck` and `.ccoll` both store as `application/octet-stream`, and a file
+    arriving through a share may have no usable name. **The extension can still gate arrival through
+    *Open with* and share**: the platform derives a stored type from the extension, so a byte-identical
+    deck named `.txt` types as `text/plain` and the broad filter never fires (Pixel 8 Pro, API 37).
+    The picker closes that hole, because it asks for any type and the sniff decides
+    ([ADR-0024 §1](./docs/adr/0024-identifying-a-written-file.md),
+    [ADR-0047 §2](./docs/adr/0047-the-file-surface-on-android.md)). So the extension is a display
+    string and, for the two filters, a reachability gate — never the thing that decides a profile.
+14. **There is no file list on Android; the picker replaces it.** The egui build's list could show
+    only the `MediaStore` rows this application wrote, and the Kotlin app keeps no list of its own:
+    *Open a file…* opens the system picker for any type, and *Open with* and share arrive through the
+    broad `application/octet-stream` filters for `ACTION_VIEW` and `ACTION_SEND`. All three reach the
+    one import preview ([ADR-0047 §1](./docs/adr/0047-the-file-surface-on-android.md),
+    [ADR-0052](./docs/adr/0052-the-file-surface-on-android-is-import-only.md)). The desktop keeps its
+    list (ADR-0047 §5).
 15. **Never match an intent filter on the extension.** No filename reaches one: `MediaStore` URIs and
-    a real file manager's alike carry a **row id** in the path. A `pathPattern` is also ignored
-    outright unless the filter declares a host, and `cargo-apk` drops the `\` escape — so verify the
-    emitted `AndroidManifest.xml`, never the source. The filter matches on **type**, but the extension
-    still gates arrival one step upstream: it is what `MediaStore` derives that type from (rule 13), so
-    the extension decides reachability without the filter ever reading it.
+    a real file manager's alike carry a **row id** in the path, and a `pathPattern` is ignored
+    outright unless the filter declares a host. The filter matches on **type**, but the extension
+    still gates arrival one step upstream: it is what the platform derives that type from (rule 13),
+    so the extension decides reachability without the filter ever reading it.
 16. **Applying an import re-derives it; it never executes a plan the screen computed.** ADR-0022 §5
     makes the plan derived on every read and *never* stored, so a plan handed to apply is a stored
     projection of the log — the precise thing ADR-0004 exists to prevent — and a sync landing under the
@@ -823,34 +787,36 @@ archiving against it.
    design, so backing it up protects nothing while spending the 25 MB platform quota and hastening
    the cutoff — which arrives after roughly **nine months** of heavy use, not the two years ADR-0007
    §6 states (it read that ADR's raw-interchange row where Auto Backup covers files on disk).
-5. **No file picker, on either platform, and no text field for a filename or a passphrase.** Activity
-   *results* need a Java subclass and therefore a dex, spending ADR-0003's Gradle-free APK; launch
-   intents and dropped files need neither and are fine. And rule 8 of the client stack makes Android
-   text input ASCII-only, so a passphrase set on the desktop in the user's own language cannot be
-   typed on the phone — which is why **archives are never encrypted**.
+5. **No file picker on the desktop and no text field for a filename there; no passphrase on either
+   platform.** The desktop keeps [ADR-0016 §5](./docs/adr/0016-backup-and-restore.md) as written. On
+   Android the Kotlin app uses the system picker and the save dialog, where the user may type a name
+   ([ADR-0045 §6](./docs/adr/0045-the-native-android-client.md), ADR-0047): the refusals there were
+   properties of the retired egui build. **Archives are still never encrypted**, on ADR-0020 §1's
+   own grounds (protection-at-rest rule 1), which never depended on the input method.
 6. **The platform seam rule is per crate.** `cairn-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm
    discipline. `cairn-export` has one — put, get, list, **hand_off**
-   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)) — and `cairn-app` has the **third**,
-   a single function returning the window's insets ([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md),
-   client-stack rule 11). The count is **not** the invariant: ADR-0016 §5's *"three operations, not
-   four"* was an argument about **delete**, which is still absent. *Opaque, minimal, enumerable* is
-   what binds. **Three modules is not itself the erosion signal** — a *fourth function* inside any one
-   of them is; a crate answering a question that is genuinely its own is the rule working, and reading
-   the module count as the limit is what would push the next such question back into the store.
-7. **`hand_off` is named for what it does on both platforms, and the two arms differ on purpose.**
-   Android launches the system share sheet; the desktop reveals the file **selected** in the file
-   manager, because no `org.freedesktop.portal.Share` exists. Calling it `send` invites an
-   implementer to reach for the mail portal on the desktop arm, which
+   ([ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md)). `cairn-app`'s inset seam was a third
+   and went with the egui Android build (ADR-0045 §8). The count is **not** the invariant: ADR-0016
+   §5's *"three operations, not four"* was an argument about **delete**, which is still absent.
+   *Opaque, minimal, enumerable* is what binds. **The module count is not itself the erosion signal**
+   — a *fourth function* inside one of them is; a crate answering a question that is genuinely its
+   own is the rule working, and reading the module count as the limit is what would push the next
+   such question back into the store.
+7. **`hand_off` is named for what it does on both platforms, and the two differ on purpose.**
+   On Android the Kotlin app launches the system share sheet itself (the seam's Android arm only
+   refuses); the desktop reveals the file **selected** in the file manager, because no
+   `org.freedesktop.portal.Share` exists. Calling it `send` invites an implementer to reach for the
+   mail portal on the desktop arm, which
    [ADR-0023 §4](./docs/adr/0023-sending-a-written-file.md) rejects — attaching to a message picks
    one channel on the user's behalf, which is what a share sheet exists not to do. **It never fires
    by itself**: a chooser or a file manager opening unasked takes the screen, and nothing in this
    specification acts unbidden.
-8. **On Android the context is `android.app.Application`, not the Activity.** `ndk_context` hands
-   back an `Application`, so `startActivity` **requires `FLAG_ACTIVITY_NEW_TASK`** or it throws. Both
-   that flag and `FLAG_GRANT_READ_URI_PERMISSION` go on the **chooser** intent —
-   `Intent.createChooser` returns a fresh `Intent` and inherits neither. Setting the grant only on
-   the inner intent fails *after* the user has picked an application.
+8. **The read grant goes on the *chooser* intent.** `Intent.createChooser` returns a fresh `Intent`
+   and inherits none of the inner one's flags, so `FLAG_GRANT_READ_URI_PERMISSION` set only on the
+   inner intent fails *after* the user has picked an application. (The retired egui build also
+   needed `FLAG_ACTIVITY_NEW_TASK` there, because it started activities from the `Application`
+   context; the Kotlin app starts them from its activity.)
 
 ### What the user sees
 
@@ -909,9 +875,10 @@ decision that erodes fastest when met without it.
 
 1. **Never ask the user for a secret — no passphrase, no PIN, no unlock code — and note that the
    ASCII-input argument is not why.** [ADR-0016 §8](./docs/adr/0016-backup-and-restore.md) rejected a
-   *passphrase* because client-stack rule 8 makes it untypeable on the handset, and that argument
-   genuinely **does not reach a PIN**, since digits are ASCII. Reopening on that gap is the predictable
-   mistake. Two independent reasons refuse anyway. **There is nowhere to recover a forgotten secret
+   *passphrase* because the egui Android build's ASCII-only input (the retired client-stack rule 8)
+   made it untypeable on the handset. That argument never reached a PIN, since digits are ASCII, and
+   it went entirely with that build, since the Kotlin app takes any script. Reopening on either gap is
+   the predictable mistake. Two independent reasons refuse anyway. **There is nowhere to recover a forgotten secret
    from** — no server, no account, no escrow, by construction — so a secret turns a design premised on
    never losing data into one where forgetting loses all of it. And **a PIN is safe on a phone only
    because the hardware refuses to be asked quickly**; data resting on a provider's disks cannot borrow
@@ -937,7 +904,7 @@ decision that erodes fastest when met without it.
 5. **Never claim the Android backup is unreadable by the provider — that guarantee is conditional and
    this project's own floor breaks it.** Auto Backup is always encrypted in transit and at rest, but
    under *operator-held* keys; the stronger layer, keyed to the lock screen, needs **Android 9+ (API
-   28) and a lock screen actually set**. `min_sdk_version = 24`, so API 24–27 handsets — and anyone
+   28) and a lock screen actually set**. `minSdk = 24`, so API 24–27 handsets — and anyone
    with no lock screen — have their collection *and* the sync refresh token held under keys the
    operator manages. Backup stays **on** regardless: refusing it would spend protection against loss,
    which is the thing this design actually fears, to buy confidentiality conceded everywhere else.

@@ -23,10 +23,10 @@ android {
         applicationId = "dev.cairn.app"
         minSdk = 24
         targetSdk = 36
-        // ADR-0045 §4: an upgrade over the egui build, whose emitted manifest carries 16777472 (the
-        // packager derives it from the crate version, 0.1.0). Android refuses an install -r that does
-        // not raise it. Debug builds are signed with ~/.android/debug.keystore, which is the key the
-        // egui build's packager signs with too, so the upgrade keeps the app's data.
+        // ADR-0045 §4: an upgrade over the retired egui build (§8), whose emitted manifest carried
+        // 16777472 (its packager derived it from the crate version, 0.1.0). Android refuses an
+        // install -r that does not raise it. Debug builds are signed with ~/.android/debug.keystore,
+        // which is the key the egui build's packager signed with too, so the upgrade keeps the data.
         versionCode = 20_000_000
         versionName = "0.2.0"
         ndk { abiFilters += targetAbis }
@@ -59,7 +59,8 @@ android {
     }
     if (providers.gradleProperty("cairn.testMinified").isPresent) testBuildType = "minified"
 
-    // The launcher mark is the egui build's, shared rather than copied, so the upgrade keeps its icon.
+    // The launcher mark is the retired egui build's, shared rather than copied: the upgrade keeps its
+    // icon, and scripts/build-icon-face.py generates the desktop's icon face from the same drawable.
     sourceSets["main"].res.directories.add("../../crates/app/res")
 
     // ADR-0051 §1: the Development block exists only in a build made with CAIRN_DEVELOPMENT=1. Its

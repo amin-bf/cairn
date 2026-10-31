@@ -36,19 +36,10 @@ Eight crates. Two of the boundaries are forced by the toolchain; see ADR-0009 §
 | `cairn-store` | [`crates/store/`](./crates/store) | SQLite persistence and the two-directory platform seam. |
 | `cairn-export` | [`crates/export/`](./crates/export) | The `.cdeck` and `.ccoll` containers, the import policy, and the user-files platform seam. Holds the zip dependency. |
 | `cairn-sync` | [`crates/sync/`](./crates/sync) | Publishing to the remote and reading it back. Holds the network dependencies. |
-| `cairn-ops` | [`crates/ops/`](./crates/ops) | The application's operations and the state they need, in plain Rust: the session and the sitting, cards, decks, the editor's settling, the note list with its search folding and the note, deck and kind writes, the leech list with suspend and unsuspend (suspended leeches counted once), import planning with the gate each plan is owed, optimisation, the fixture bench, the restricted Markdown, and Review as facts (the entrance's five states and counts, the sitting, the card shown as styled runs with its direction, box badge and interval previews). Depends on `cairn-core`, `cairn-store` and `cairn-export` (and `unicode-bidi`, for the direction fact both renderers share) and on **no renderer** (`egui`, `eframe`, `winit`, `android-activity`) and no binding; time is passed in, never read in the sitting or the editor. The egui app and the binding call it (optimisation's nudge, start and finish among the rest). |
+| `cairn-ops` | [`crates/ops/`](./crates/ops) | The application's operations and the state they need, in plain Rust: the session and the sitting, cards, decks, the editor's settling, the note list with its search folding and the note, deck and kind writes, the leech list with suspend and unsuspend (suspended leeches counted once), import planning with the gate each plan is owed, optimisation, the fixture bench, the restricted Markdown, and Review as facts (the entrance's five states and counts, the sitting, the card shown as styled runs with its direction, box badge and interval previews). Depends on `cairn-core`, `cairn-store` and `cairn-export` (and `unicode-bidi`, for the direction fact both renderers share) and on **no renderer** (`egui`, `eframe`, `winit`) and no binding; time is passed in, never read in the sitting or the editor. The egui app and the binding call it (optimisation's nudge, start and finish among the rest). |
 | `cairn-ffi` | [`crates/ffi/`](./crates/ffi) | The Kotlin binding: **the only crate that depends on uniffi** (`=0.32.2`), `cdylib` + `lib`, library `cairn_ffi`, generated Kotlin in `dev.cairn.ffi`. **Thin**: an exported collection handle over `cairn-ops` behind a `Mutex` (Review's state, the leech list and its two writes, a sitting handle, the optimisation nudge and an optimise handle polled for phase, cancel and finish, the fixture bench listed with `fixtures()`, installed by name and saying what it reached, and its deck files with `bench_files()`, an inbound file handle (`open_file`, whose `preview()` re-derives the plan on every call; its `apply()` writes it and says which deck the note list lands on), and `reset()` — all in every build; only the Kotlin *Development* block that reaches them is gated by `CAIRN_DEVELOPMENT=1`), the mirror records and enums, and one error crossing as `CairnException` (no field named `message`). Exports no platform function and calls none ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §5). Its `uniffi-bindgen` binary sits behind the host-only `cli` feature, which the Android build leaves off; the release profile never gains `panic = "abort"` (§7). |
-| `cairn-app` | [`crates/app/`](./crates/app) | The egui application, the bidi helper, the window's inset seam, the Android entry point — and the sentence helpers (`sentences`) and `sync`, which stay with it ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §2, §4). |
-| `cairn-desktop` | [`crates/desktop/`](./crates/desktop) | A twenty-line shim. Forced by `cargo-apk`; keep it empty. |
-
-**And one directory that is not a crate.** [`vendor/egui-winit`](./vendor/PATCH.md) is third-party
-source the repository carries: a verbatim copy of the published `egui-winit` 0.35.0 with **one block**
-behind `#[cfg(not(target_os = "android"))]`, reached only through `[patch.crates-io]`. It is excluded
-from the workspace, it is not our code, and it is **outside client-stack rule 3** — the
-`#[cfg(target_os)]` a reader will find there is the patch, not a defect
-([ADR-0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)). Bumping the egui family is therefore no
-longer only a version change: `scripts/verify-vendor.sh` runs the recursive diff and the block-shape
-check, and a release that restructures the block is **re-judged, not re-applied**.
+| `cairn-app` | [`crates/app/`](./crates/app) | The egui application, **desktop only** since the egui Android build retired ([ADR-0045](./docs/adr/0045-the-native-android-client.md) §8), and the bidi helper — and the sentence helpers (`sentences`) and `sync`, which stay with it ([ADR-0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) §2, §4). |
+| `cairn-desktop` | [`crates/desktop/`](./crates/desktop) | The desktop binaries, `cairn` and `cairn-fixture`: twenty-line shims over `cairn-app` and `cairn-ops`. Keep them empty. |
 
 Two rules about this table that are easy to break:
 
@@ -58,9 +49,9 @@ Two rules about this table that are easy to break:
   database, no window and no handset is ADR-0027 §2's five-part test, not the count — and `rand`,
   `serde`, `rayon` and `ndarray` sitting in the lockfile transitively are **not** available to our
   code.
-- **`cairn-app` has no `src/main.rs`, and `cairn-desktop` has no logic.** `cargo-apk` panics
-  after signing when one crate has both a cdylib and a bin, so the split is load-bearing, and code
-  put in `desktop` is never compiled for Android and never runs on the handset.
+- **`cairn-app` has no `src/main.rs`, and `cairn-desktop` has no logic.** The split was forced by
+  the retired egui Android build's packager and stays because the scripts, captures and docs run
+  `-p cairn-desktop`; code put in `desktop` is never reached by a test.
 
 ## Contexts
 
@@ -73,7 +64,7 @@ Two rules about this table that are easy to break:
 | Store | [`crates/store/src/`](./crates/store/src/CONTEXT.md) | The two databases, device identity, its platform seam |
 | Export | [`crates/export/src/`](./crates/export/src/CONTEXT.md) | Deck files, collection archives, profiles, revisions, import policy |
 | Sync | [`crates/sync/src/`](./crates/sync/src/CONTEXT.md) | The remote, namespaces, objects, roll-up, enrolment |
-| UI | [`crates/app/src/`](./crates/app/src/CONTEXT.md) | Screens, the session, the bidi helper, the inset seam and the reserved band |
+| UI | [`crates/app/src/`](./crates/app/src/CONTEXT.md) | The desktop's screens, the session, the bidi helper |
 
 ### How they relate
 
@@ -100,14 +91,11 @@ content ──┬──> scheduling ──┐
   [ADR-0023 §1](./docs/adr/0023-sending-a-written-file.md) — three `#[cfg]` arms with a
   `compile_error!` third, so that `cairn-store::platform` stays at exactly two functions. **The
   seam rule is per crate**, and the *number* of operations is not the invariant.
-- **`ui` holds the third platform seam, and it is one function.** An inset is a fact about the window
-  this crate is drawing into, so routing it through the store would make the store answer a question
-  about layout ([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)). Its
-  return type distinguishes *no soft keyboard on this platform* from *the keyboard is down* — zero
-  for both, as §2 first wrote it, makes every gate on "is it down" permanently true off Android
-  ([ADR-0026 §5](./docs/adr/0026-the-per-tap-keyboard-re-pop.md)). `android_main` lives in that arm
-  because the activity handle originates there and `ndk_context` holds the `Application`, not the
-  `Activity`; keeping them together is what leaves the seam one function wide.
+- **`ui` holds no platform seam any more.** Its one-function inset seam
+  ([ADR-0025 §2](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md)) and `android_main`
+  went with the egui Android build ([ADR-0045](./docs/adr/0045-the-native-android-client.md) §8); the
+  Kotlin app reads its own insets. On Android the two remaining seams' arms refuse: the Kotlin app
+  passes the directories in and moves the files itself.
 - **`sync` is a crate for the reason this file predicted**: it needs HTTP, TLS and OAuth, which
   `cairn-core` cannot hold. [ADR-0013](./docs/adr/0013-the-sync-transport.md) realised the
   anticipated sixth crate rather than overturning anything. It depends on `log` and knows nothing
@@ -128,7 +116,7 @@ Read the ADR sections in your row. Read the whole ADR only if you are changing t
 | `export` | [0008](./docs/adr/0008-the-deck-export-format.md), [0016](./docs/adr/0016-backup-and-restore.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0023](./docs/adr/0023-sending-a-written-file.md), [0024](./docs/adr/0024-identifying-a-written-file.md), [0041 §2 §5](./docs/adr/0041-the-file-surface.md) | 0005, 0002 §9, 0004 §11, 0011 §7, 0020 §4, 0021 §3, 0028 §3 §3a |
 | `sync` | [0013](./docs/adr/0013-the-sync-transport.md) | 0004 §2, 0004 §7, 0004 §10, 0007, 0014 §7, 0015 §2, 0015 §4, 0016 §10, 0019 §4, 0019 §6, 0020 §5, 0020 §6, 0020 §7 |
 | `ui` | [0003](./docs/adr/0003-client-stack.md), [0006](./docs/adr/0006-the-review-session-experience.md), [0010](./docs/adr/0010-leeches.md), [0011](./docs/adr/0011-new-card-rate-and-daily-limits.md), [0012](./docs/adr/0012-the-note-authoring-experience.md), [0014](./docs/adr/0014-when-parameter-optimisation-runs.md), [0015](./docs/adr/0015-the-sync-experience.md), [0018](./docs/adr/0018-the-card-pane-ordering.md), [0019](./docs/adr/0019-naming-the-account-at-enrolment.md), [0021](./docs/adr/0021-note-ordering-saving-and-the-note-list.md), [0022](./docs/adr/0022-the-import-preview-and-export-report.md), [0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md), [0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md), [0029](./docs/adr/0029-editing-a-note-from-the-review-screen.md), [0030](./docs/adr/0030-the-first-finish-pass-decisions.md), [0031](./docs/adr/0031-the-page-frame.md), [0032](./docs/adr/0032-the-type-scale-and-the-rhythm.md), [0033](./docs/adr/0033-the-card.md), [0034](./docs/adr/0034-the-controls.md), [0035](./docs/adr/0035-the-vertical-anchor.md), [0036](./docs/adr/0036-the-light-palette.md), [0037](./docs/adr/0037-motion-and-elevation.md), [0038](./docs/adr/0038-the-mark-and-the-icon-rule.md), [0039](./docs/adr/0039-the-list-row.md), [0040](./docs/adr/0040-the-note-editor.md), [0041](./docs/adr/0041-the-file-surface.md), [0042](./docs/adr/0042-the-settings-screen.md), [0043](./docs/adr/0043-the-leech-screen.md), [0044](./docs/adr/0044-the-ambient-hit-target.md), [0049](./docs/adr/0049-text-search-folds-persian-letter-variants.md) | 0002 §4, 0016 §5, 0016 §6, 0016 §11, 0016 §12, 0017 §5, 0017 §6, 0020 §7, 0023 §5, 0023 §6, 0024 §3, 0028 §1 §2 |
-| *the Android client* (Kotlin, not yet built) | [0045](./docs/adr/0045-the-native-android-client.md), [0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md), [0047](./docs/adr/0047-the-file-surface-on-android.md), [0048](./docs/adr/0048-notes-and-the-editor-on-android.md), [0050](./docs/adr/0050-the-leech-screen-on-android.md), [0051](./docs/adr/0051-settings-on-android.md), [0052](./docs/adr/0052-the-file-surface-on-android-is-import-only.md), [0053](./docs/adr/0053-backup-and-restore-on-android.md) | 0007 §6, 0016 §7, 0021 §7, 0022, 0023, 0024, 0031–0044 |
+| *the Android client* (Kotlin) | [0045](./docs/adr/0045-the-native-android-client.md), [0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md), [0047](./docs/adr/0047-the-file-surface-on-android.md), [0048](./docs/adr/0048-notes-and-the-editor-on-android.md), [0050](./docs/adr/0050-the-leech-screen-on-android.md), [0051](./docs/adr/0051-settings-on-android.md), [0052](./docs/adr/0052-the-file-surface-on-android-is-import-only.md), [0053](./docs/adr/0053-backup-and-restore-on-android.md) | 0007 §6, 0016 §7, 0021 §7, 0022, 0023, 0024, 0031–0044 |
 | *the workspace itself* | [0009](./docs/adr/0009-crate-and-workspace-layout.md), [0027](./docs/adr/0027-the-scheduler-dependency.md), [0028](./docs/adr/0028-the-application-is-named-cairn.md) | 0013 §11, 0013 §12, 0015 §15, 0016 §5 |
 
 **`replay` having no ADR of its own is why it is a context.** Its rules were each written for another
@@ -147,25 +135,14 @@ every read, never cached*. Its `ui` half is what four surfaces say: the import p
 screen, the export report and the file list. Change either half without the other and the surfaces
 state numbers the mechanism cannot produce.
 
-**[0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md) is the only ADR about a
-surface the app cannot see.** On Android nothing below the app reports the soft keyboard — the window
-is enforced edge-to-edge, so the old resize mode is inert, and winit reports no insets — so the UI
-layer is handed a viewport taller than the visible one. Read it before touching any screen with a text
-field: the cost is not occlusion but **unreachability**, since the scroll area sizes itself to the
-viewport it was given and the covered band has no scroll range. It also carries the guards without
-which the keyboard oscillates, and it is why [0012 §5](./docs/adr/0012-the-note-authoring-experience.md)'s
-destructive-edit warning sits *above* the fields rather than after the last one. **Read
-[0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) with it, never instead of it** — 0026 amends its
-seam return type and turns its two guards into three.
-
-**[0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) is the only ADR about a dependency we do not
-take as published**, and it is why a bump of the client stack is not just a version change. As shipped,
-every tap into a text field on Android dismisses and reopens the soft keyboard, because the UI toolkit
-interrupts IME composition on any pointer interaction and the layer below implements that as
-hide-then-show — on a platform whose backend has no IME path, so there was never a composition to
-interrupt. No fix exists above the dependency: the interrupt flag has a public setter and no public
-clearer. Read it before bumping `egui`, before touching the shared text-field wrapper, and before
-assuming the inset seam reports zero off Android.
+**[0025](./docs/adr/0025-the-authoring-screen-under-a-soft-keyboard.md) and
+[0026](./docs/adr/0026-the-per-tap-keyboard-re-pop.md) describe the egui Android build, retired by
+[0045 §8](./docs/adr/0045-the-native-android-client.md).** 0025 is why the egui build carried an inset
+seam and a reserved band: on Android winit reported no soft keyboard, so the covered band had no scroll
+range. 0026 is why it carried a vendored `egui-winit`: every tap into a text field dismissed and
+reopened the keyboard. Both workarounds went with the build; read them as history, and as the
+reason [0012 §5](./docs/adr/0012-the-note-authoring-experience.md)'s destructive-edit warning sits
+*above* the fields rather than after the last one.
 
 **[0024](./docs/adr/0024-identifying-a-written-file.md) is an Android-only correction, and it amends
 four accepted ADRs rather than deciding much of its own.** Read it before touching anything that
@@ -219,7 +196,8 @@ the way a stray `Color32::from_rgb` drifts the palette. **One arrangement, centr
 destination** — at 1280 half the window is empty by design. Read it before laying out any screen, and
 read §4 before touching the **editor**: its two panes genuinely sit side by side, which finally makes
 0012 §1's description true. §4's **900px window** threshold is **gone** — [0040 §1](./docs/adr/0040-the-note-editor.md)
-folds the panes where a soft keyboard exists and measures no width — but §4's trap is still worth
+folds the panes where a soft keyboard exists and measures no width, which since the egui Android build
+retired means the desktop never folds — but §4's trap is still worth
 knowing: under a frame `ui.available_width()` is the column, and a 640 column is not `>= 640`, so a
 width test there would put every desktop into the phone's toggle with nothing failing.
 
@@ -404,9 +382,11 @@ through `spacing::text_row` or comes out double-spaced. A combo box's popup cap 
 factor, since it is a height and not a count.
 
 **[0045](./docs/adr/0045-the-native-android-client.md) is the native Android client.** Android
-becomes Kotlin and Compose over the shared Rust core, in this repository, under the same package id;
-the egui Android build is retired at parity. On Android only, it lifts ADR-0016 §5's picker and
-filename refusals. Where Android has an established practice, the app follows it without a decision.
+becomes Kotlin and Compose over the shared Rust core, in this repository, under the same package id.
+On Android only, it lifts ADR-0016 §5's picker and filename refusals. Where Android has an
+established practice, the app follows it without a decision. **§8 retires the egui Android build**
+(31.10.2026): its packaging, the vendored patch, the inset seam and the ASCII-only rule are gone, an
+upgrade over an installed egui app needs nothing, and the desktop stays egui.
 
 **[0046](./docs/adr/0046-the-line-between-kotlin-and-rust.md) is the line between Kotlin and Rust.
 Read it before moving anything out of `cairn-app` or writing a Kotlin call into Rust.** The binding
@@ -478,8 +458,8 @@ the agent it was written for.
   that need "now" take it as a parameter.
 - **There is no fake store.** Store tests open a real SQLite database in a temp directory, because
   the design *is* WAL, `BEGIN IMMEDIATE`, `ATTACH` and `INSERT OR IGNORE`.
-- **Store tests run on desktop.** On Android the store depends on the activity existing, so
-  `cairn-store` is not independently runnable there.
+- **Store tests run on desktop.** On Android the Kotlin app passes the store its directories, and
+  the store is exercised there through the binding by the Kotlin app's instrumented tests.
 - **The highest-value test in the repository** is that any interleaving of two devices' rows replays
   to the same state. It needs no sync implementation and no second device.
 
@@ -490,10 +470,9 @@ See [`README.md`](./README.md) for prerequisites. In short:
 ```sh
 cargo run -p cairn-desktop            # desktop
 cargo test --workspace                  # everything testable without hardware
-scripts/verify-vendor.sh                # vendor/egui-winit: verbatim plus exactly one change
 
 source scripts/android-env.sh           # required before ANY Android command
-cd crates/app && cargo apk build        # APK: a manifest, one .so and res/ (the icon)
+cd android && ./gradlew assembleDebug   # the Kotlin app, with cairn-ffi's .so built in
 ```
 
 Verify UI judgements on the **real handset** — the emulator is x86_64 and the Pixel 8 Pro is
