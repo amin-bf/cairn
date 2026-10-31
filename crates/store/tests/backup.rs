@@ -84,7 +84,10 @@ fn the_mutable_lines_hand_out_every_settled_row_with_its_stamp_and_nothing_from_
     assert_eq!(tag.3, None, "a cleared value travels as null");
     let suspension = rows.iter().find(|r| r.0 == "suspension").unwrap();
     assert_eq!(suspension.1.len(), 36, "an 18-byte card key, in hex");
-    assert!(rows.iter().any(|r| r.0 == "setting" && r.3.as_deref() == Some("7")));
+    assert!(
+        rows.iter()
+            .any(|r| r.0 == "setting" && r.3.as_deref() == Some("7"))
+    );
 
     // Every stamp is the one the row settled under: distinct counters, all by this writer.
     let mut counters: Vec<i64> = rows.iter().map(|r| r.4).collect();
@@ -98,7 +101,13 @@ fn the_mutable_lines_hand_out_every_settled_row_with_its_stamp_and_nothing_from_
     let all = lines.join("\n");
     assert!(!all.contains("dark-theme-choice"));
     assert!(!all.contains(coll.collection_id()));
-    for local in ["last_backup", "seq_highwater", "lamport", "writer_id", "collection_id"] {
+    for local in [
+        "last_backup",
+        "seq_highwater",
+        "lamport",
+        "writer_id",
+        "collection_id",
+    ] {
         assert!(!all.contains(local), "{local} must never travel");
     }
 }
@@ -138,7 +147,8 @@ fn the_counts_are_every_review_the_reviews_after_an_instant_and_the_live_notes()
     review(&mut coll, kept, DAY0_MS + ONE_DAY_MS);
     review(&mut coll, deleted, DAY0_MS + 2 * ONE_DAY_MS);
     // A parameter row is in the log but is not a review.
-    coll.set_history_cutoff(0, DAY0_MS + 3 * ONE_DAY_MS).unwrap();
+    coll.set_history_cutoff(0, DAY0_MS + 3 * ONE_DAY_MS)
+        .unwrap();
 
     assert_eq!(coll.review_count().unwrap(), 3);
     assert_eq!(coll.reviews_after(DAY0_MS - 1).unwrap(), 3);
@@ -155,7 +165,10 @@ fn the_counts_include_reviews_merged_from_another_writer() {
         NoteId([0x11; 16]).to_canonical()
     );
     let stored = coll.ingest(&[&line], DAY0_MS + ONE_DAY_MS).unwrap().stored;
-    assert_eq!(stored, 1, "the fixture line is a well-formed review: {line}");
+    assert_eq!(
+        stored, 1,
+        "the fixture line is a well-formed review: {line}"
+    );
     assert_eq!(coll.review_count().unwrap(), 1);
     assert_eq!(coll.reviews_after(DAY0_MS).unwrap(), 1);
 }

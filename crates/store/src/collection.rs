@@ -722,11 +722,11 @@ impl Collection {
     /// How many reviews the log holds, from every writer — the figure the backup nudge states before
     /// the first backup and the archive's manifest carries (ADR-0016 §6, §11).
     pub fn review_count(&self) -> Result<u64, StoreError> {
-        let n: i64 =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM log WHERE kind = 'reviewed'", [], |r| {
-                    r.get(0)
-                })?;
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM log WHERE kind = 'reviewed'",
+            [],
+            |r| r.get(0),
+        )?;
         Ok(n as u64)
     }
 
