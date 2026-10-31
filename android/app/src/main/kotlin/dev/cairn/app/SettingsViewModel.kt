@@ -103,6 +103,8 @@ sealed interface SettingsScreenState {
         val updated: Boolean = false,
         val backupNudge: BackupNudgeShown? = null,
         val backup: BackupRow = BackupRow.Idle,
+        /** The collection's size in whole MB once it is past the automatic backup's quota; null under it. */
+        val backupOverQuotaMb: Long? = null,
     ) : SettingsScreenState
 
     data object Failed : SettingsScreenState
@@ -167,7 +169,8 @@ class SettingsViewModel(
     private suspend fun read(rateRefused: Boolean, appearanceRefused: Boolean, rereadRate: Boolean = false) {
         try {
             val (rate, choice, nudge) = owner.use { Triple(it.newCardRate(), it.themeChoice(), it.optimisationNudge().toNudge()) }
-            val backupNudge = owner.use { it.backupNudge() }.shown(nowWallMs())
+            val backupFacts = owner.use { it.backupNudge() }
+            val backupNudge = backupFacts.shown(nowWallMs())
             val before = _state.value as? SettingsScreenState.Ready
             val shown = before?.rate
             val keep = editing && !rereadRate && shown != null
@@ -182,6 +185,7 @@ class SettingsViewModel(
                 updated = before?.updated ?: false,
                 backupNudge = backupNudge,
                 backup = before?.backup ?: BackupRow.Idle,
+                backupOverQuotaMb = backupFacts.sizeMb.toLong().takeIf { backupFacts.overQuota },
             )
         } catch (_: CairnException) {
             _state.value = SettingsScreenState.Failed

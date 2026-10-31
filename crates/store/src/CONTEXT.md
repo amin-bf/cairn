@@ -128,6 +128,13 @@ The creation instant of the last archive this device wrote, epoch-milliseconds, 
 first. In `local`, so it never settles and never travels (ADR-0016 §6, ADR-0053 §4); recorded only
 after the write succeeded.
 
+**Backup size** (`backup_size`):
+The data directory as Android's automatic backup measures it against its quota (ADR-0016 §7): each
+regular file a 512-byte tar header plus its size padded to 512, directories nothing, the state
+directory left out wherever it sits. The unit was measured on the handset in
+[the quota research](../../../docs/research/auto-backup-quota/README.md) §2.2. Read from disk as it
+stands, so a `-wal` file counts as the platform would count it.
+
 **Line**:
 The `log.line` column: the interchange row exactly as received. **The only authoritative column** —
 every other column in the table, and everything in `derived.db`, is derived from it and may be

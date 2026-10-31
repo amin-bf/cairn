@@ -67,6 +67,33 @@ pub fn remove_files(data_dir: &Path, state_dir: &Path) {
     let _ = fs::remove_file(state_dir.join(WRITER_MARKER));
 }
 
+/// The size of `data_dir` in the unit Android's automatic backup measures against its quota
+/// ([ADR-0016 §7](../../../docs/adr/0016-backup-and-restore.md),
+/// [the quota research](../../../docs/research/auto-backup-quota/README.md) §2.2): uncompressed tar
+/// bytes, each regular file a 512-byte header plus its size padded to 512, a directory nothing.
+/// Everything under `no_backup_dir` is left out wherever it sits, since the platform never backs it
+/// up; a symbolic link is not followed. The bytes are on disk as they stand, `-wal` included.
+pub fn backup_size(data_dir: &Path, no_backup_dir: &Path) -> Result<u64, StoreError> {
+    const BLOCK: u64 = 512;
+    let mut total = 0;
+    let mut pending = vec![data_dir.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        if dir == no_backup_dir {
+            continue;
+        }
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if kind.is_file() {
+                total += BLOCK + entry.metadata()?.len().div_ceil(BLOCK) * BLOCK;
+            }
+        }
+    }
+    Ok(total)
+}
+
 /// The attribute-name prefix that makes a note's tags **settle by set union** (ADR-0002 §10,
 /// ADR-0005 §7). Each tag is its own mutable row — `tag:<name>` set to `"true"` — rather than a
 /// single multi-valued `tags` attribute, so two devices adding different tags offline each write a
@@ -210,6 +237,7 @@ const SKEW_TOLERANCE_MS: i64 = 86_400_000;
 /// this install writes under.
 pub struct Collection {
     conn: Connection,
+    data_dir: PathBuf,
     state_dir: PathBuf,
     /// This install's writer id, sixteen bytes (ADR-0004 §2). Held in memory so a hot path does not
     /// re-read `local`; the authoritative copy is the `local` row and the marker.
@@ -241,6 +269,7 @@ impl Collection {
 
         let mut collection = Collection {
             conn,
+            data_dir: data_dir.to_path_buf(),
             state_dir: state_dir.to_path_buf(),
             writer: [0; 16],
             collection_id: String::new(),
@@ -694,6 +723,13 @@ impl Collection {
     /// the write has succeeded, so a cancelled or failed save leaves the nudge as it was (ADR-0053 §4).
     pub fn record_backup(&mut self, created_ms: i64) -> Result<(), StoreError> {
         write_local(&self.conn, LAST_BACKUP_KEY, &created_ms.to_string())
+    }
+
+    /// This collection's size against Android's automatic-backup quota (ADR-0016 §7): its data
+    /// directory measured by [`backup_size`], leaving out the state directory, which holds what
+    /// stays outside the backup set.
+    pub fn backup_size(&self) -> Result<u64, StoreError> {
+        backup_size(&self.data_dir, &self.state_dir)
     }
 
     /// Every row of the mutable surface as one JSON line with its stamp — the archive's
