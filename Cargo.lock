@@ -645,6 +645,7 @@ dependencies = [
  "cairn-store",
  "tempfile",
  "unicode-bidi",
+ "zip",
 ]
 
 [[package]]

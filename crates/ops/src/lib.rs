@@ -10,6 +10,7 @@
 //! this crate's sitting or editor reads a clock.
 
 pub mod appearance;
+pub mod backup;
 pub mod cards;
 pub mod deck;
 pub mod editor;
