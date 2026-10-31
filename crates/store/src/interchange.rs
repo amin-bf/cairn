@@ -11,6 +11,7 @@
 //! clock and drawing entropy are edge acts, so they live here rather than in `cairn-core`.
 
 use cairn_core::content::{CardRef, NoteId};
+use cairn_core::log::Json;
 use cairn_core::scheduling::Grade;
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -134,6 +135,54 @@ pub fn mutable_line(
     push_hex(&mut out, writer);
     out.push_str("\"}");
     out
+}
+
+/// One mutable line read back: the row and the stamp it settled under, exactly as [`mutable_line`]
+/// writes them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MutableRow {
+    pub entity: String,
+    pub entity_id: Vec<u8>,
+    pub attr: String,
+    pub value: Option<String>,
+    pub counter: i64,
+    pub writer: [u8; 16],
+}
+
+/// Read one `mutable.jsonl` line back, or `None` when it is not one: every key present, `id` even-length
+/// hex, `writer` a sixteen-byte id in hex, `value` a string or `null`, `counter` a whole number no
+/// smaller than zero. The inverse of [`mutable_line`]; a restore refuses on `None` rather than guess.
+pub fn parse_mutable_line(line: &str) -> Option<MutableRow> {
+    let json = Json::parse(line)?;
+    let text = |key: &str| json.get(key).and_then(Json::as_str).map(str::to_owned);
+    let value = match json.get("value")? {
+        Json::Null => None,
+        v => Some(v.as_str()?.to_owned()),
+    };
+    let counter = json.get("counter").and_then(Json::as_i64)?;
+    if counter < 0 {
+        return None;
+    }
+    Some(MutableRow {
+        entity: text("entity")?,
+        entity_id: unhex(&text("id")?)?,
+        attr: text("attr")?,
+        value,
+        counter,
+        writer: unhex16(&text("writer")?)?,
+    })
+}
+
+/// Any even number of hex characters back into bytes; `None` for anything else.
+fn unhex(text: &str) -> Option<Vec<u8>> {
+    let bytes = text.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
+        return None;
+    }
+    bytes
+        .chunks(2)
+        .map(|pair| Some((hex_val(pair[0])? << 4) | hex_val(pair[1])?))
+        .collect()
 }
 
 /// Lowercase hex of any number of bytes, appended to `out`.

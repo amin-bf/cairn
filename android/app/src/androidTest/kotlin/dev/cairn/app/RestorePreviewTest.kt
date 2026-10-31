@@ -16,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -31,6 +33,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.cairn.design.CairnTheme
 import dev.cairn.design.pageArgb
+import dev.cairn.ffi.CairnException
+import dev.cairn.ffi.CollectionHandle
+import dev.cairn.ffi.DeckSelector
 import dev.cairn.ffi.FileArrival
 import dev.cairn.ffi.FilePreview
 import dev.cairn.ffi.ImportGate
@@ -49,13 +54,14 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileOutputStream
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
  * An opened archive shows the restore preview (#252, ADR-0053 §2, ADR-0016 §10 §11): the bench archive
  * — a backup of `Fixture::Decks` under an id of its own — picked over a collection holding nothing,
  * through the real binding, with the picker stubbed through a test `ActivityResultRegistry`. *Restore*
- * itself writes nothing yet (#253).
+ * merges it in and lands on the note list unfiltered (#253, ADR-0053 §3 §4, ADR-0016 §4).
  */
 @RunWith(AndroidJUnit4::class)
 class RestorePreviewTest {
@@ -66,6 +72,21 @@ class RestorePreviewTest {
     private val root = File(context.cacheDir, "restore-${System.nanoTime()}")
     private val owner = CollectionOwner(context, File(root, "files"), File(root, "no_backup"))
     private val archive = benchFiles(context.cacheDir.path)[2]
+
+    /** The real collection, except that the call numbered [failAt] is refused the way a store fault is. */
+    private class Access(private val real: CollectionOwner) : CollectionAccess {
+        val calls = AtomicInteger()
+
+        @Volatile
+        var failAt = -1
+
+        override suspend fun <T> use(block: (CollectionHandle) -> T): T {
+            if (calls.incrementAndGet() == failAt) throw CairnException.Failed("refused")
+            return real.use(block)
+        }
+    }
+
+    private val access = Access(owner)
 
     /** The bench archive's creation instant, 2026-09-01T00:00:00Z (`file_bench::ARCHIVE_CREATED_MS`). */
     private val createdMs = 20_697L * 86_400_000L
@@ -113,7 +134,7 @@ class RestorePreviewTest {
         val appearance = AppearanceState(ThemeChoice.LIGHT)
         rule.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides picker) {
-                CairnAppearance(appearance) { CairnNavHost(owner, keyboardUp = false) }
+                CairnAppearance(appearance) { CairnNavHost(access, keyboardUp = false) }
             }
         }
         waitFor("destinations")
@@ -121,8 +142,11 @@ class RestorePreviewTest {
         waitFor("open-file")
     }
 
-    private fun pick(query: String? = null) {
-        chosen.set(BenchProvider.uri(archive.name, query))
+    private fun selected(tag: String): Boolean =
+        rule.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected) == true
+
+    private fun pick(name: String = archive.name, query: String? = null) {
+        chosen.set(BenchProvider.uri(name, query))
         rule.onNodeWithTag("open-file").performClick()
         waitFor("import-screen")
     }
@@ -133,6 +157,8 @@ class RestorePreviewTest {
     }
 
     private fun noteCount() = runBlocking { owner.use { it.noteCount() } }
+
+    private fun noteIds() = runBlocking { owner.use { it.noteList(DeckSelector.All, "").rows } }.map { it.noteId }.toSet()
 
     @Test
     fun a_picked_archive_states_its_restore_and_offers_restore_and_cancel() {
@@ -173,16 +199,52 @@ class RestorePreviewTest {
     }
 
     @Test
-    fun restore_writes_nothing_yet_and_says_so_on_the_preview() {
+    fun restore_after_a_reset_lands_on_the_archives_notes_unfiltered_saying_nothing() {
         showApp()
         pick()
         rule.onNodeWithTag("gate-restore").performClick()
-        waitFor("restore-not-yet")
-        // The app's own sentence, not a write failure worded by the binding (#248: the binding sends facts).
-        assertEquals("Restoring is not built yet. Nothing was written.", text("restore-not-yet"))
+        waitFor("deck-filter")
+        assertFalse(exists("import-screen"))
+        assertTrue(selected("destination-notes"))
+        rule.onNodeWithTag("deck-filter").assertTextEquals("All decks")
+        rule.onNodeWithTag("notes-search").assertTextEquals("")
         assertFalse(exists("import-failure"))
-        assertTrue(exists("restore-summary"))
+        assertEquals(25uL, noteCount())
+        // Review is under the note list.
+        pressBack()
+        rule.waitUntil(10_000) { !exists("deck-filter") }
+        assertTrue(selected("destination-review"))
+    }
+
+    @Test
+    fun restoring_the_collections_own_archive_brings_back_nothing_deleted_and_removes_nothing() {
+        runBlocking { owner.use { it.installFixture("decks", System.currentTimeMillis()) } }
+        val own = runBlocking { owner.use { it.backup(System.currentTimeMillis(), 0) } }
+        BenchProvider.files[own.name] = own.bytes
+        val deleted = runBlocking { owner.use { it.noteList(DeckSelector.All, "").rows } }[0].noteId
+        runBlocking { owner.use { it.deleteNote(deleted) } }
+        val kept = noteIds()
+        showApp()
+        pick(own.name)
+        rule.onNodeWithTag("gate-restore").performClick()
+        waitFor("deck-filter")
+        // The delete is newer than the archive's note, so it stays deleted; nothing held goes.
+        assertEquals(kept, noteIds())
+        assertFalse(deleted in noteIds())
+    }
+
+    @Test
+    fun a_refused_restore_is_said_on_the_preview_and_the_gate_stays() {
+        showApp()
+        pick()
+        // The next call is the write.
+        access.failAt = access.calls.get() + 1
+        rule.onNodeWithTag("gate-restore").performClick()
+        waitFor("import-failure")
+        assertEquals("Could not restore the archive: refused", text("import-failure"))
+        rule.onNodeWithTag("gate-restore").assertIsEnabled()
         rule.onNodeWithTag("gate-cancel").assertIsEnabled()
+        assertTrue(exists("restore-summary"))
         assertEquals(0uL, noteCount())
     }
 

@@ -216,8 +216,8 @@
     <!-- Word for word cairn-export's RESTORE_IS_A_MERGE (ADR-0016 §4, §12): restore never replaces. -->
     <string name="restore_adds">Restore adds to this collection. It never removes anything you already hold.</string>
     <string name="restore_restore">Restore</string>
-    <!-- Said when Restore is pressed, until restore writes (#253). -->
-    <string name="restore_not_yet">Restoring is not built yet. Nothing was written.</string>
+    <!-- A restore the store refused, said above the gate (ADR-0053 §3). -->
+    <string name="restore_write_failed">Could not restore the archive: %1$s</string>
     <!-- cairn-export's RESTORE_MISMATCH_WAY_OUT (ADR-0016 §10) without ", then enrol": this app has no enrolment yet (ADR-0053 §4). -->
     <string name="restore_refusal_another_collection">This archive is from a different collection. To use it on this device: back up what is here, clear the app\'s data, restore.</string>
     <string name="restore_refusal_too_large">This archive is too large to open on this phone.</string>

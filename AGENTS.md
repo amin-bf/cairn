@@ -797,8 +797,8 @@ archiving against it.
    Android the refusals are lifted ([ADR-0045 §6](./docs/adr/0045-the-native-android-client.md)):
    they were properties of the retired egui build, so the backup slice
    ([ADR-0053](./docs/adr/0053-backup-and-restore-on-android.md)) uses the system picker and the
-   save dialog, where the user may type a name (ADR-0047). Backup is built on Android; restore is
-   not yet. **Archives are still never encrypted**, on ADR-0020 §1's
+   save dialog, where the user may type a name (ADR-0047). Backup and restore are both built on
+   Android. **Archives are still never encrypted**, on ADR-0020 §1's
    own grounds (protection-at-rest rule 1), which never depended on the input method.
 6. **The platform seam rule is per crate.** `cairn-store::platform` keeps exactly two functions;
    a crate needing the platform for an unrelated reason gets its own module under the same three-arm

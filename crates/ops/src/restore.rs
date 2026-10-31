@@ -1,5 +1,5 @@
-//! The restore preview (ADR-0016 §10 §11, ADR-0053 §2): a received `.ccoll` archive read against the
-//! collection as it stands, stated in one line, or the refusal shown in its place.
+//! The restore (ADR-0016 §4 §10 §11, ADR-0053 §2 §4): a received `.ccoll` archive read against the
+//! collection as it stands, stated in one line or refused in its place, and then merged in.
 //!
 //! **The desktop is not here.** [`crate::inbound`] still refuses an archive as the wrong profile, and
 //! the desktop reaches only that. The Kotlin binding routes a file whose head is an archive here
@@ -8,15 +8,13 @@
 //! **Derived on every read, never cached** (ADR-0022 §5, as [`crate::inbound::read`]): the identity
 //! gate's inputs — whether this device has authored anything, and the id it holds — are read from the
 //! store on each call, so a preview held open while the first note is written stops adopting and
-//! starts refusing a stranger's archive. Only the manifest is read; the log and the mutable surface
-//! are never inflated here.
-//!
-//! **Writing the restore is not built yet** (#253). This module states what a restore would be.
+//! starts refusing a stranger's archive. A preview reads only the manifest; the log and the mutable
+//! surface are inflated by [`apply`] alone, which derives the gate once more before it writes.
 
 use cairn_core::identity::CollectionId;
 use cairn_export::import::{self, Profile};
-use cairn_export::{RestoreRefusal, RestoreTarget, restore_preview};
-use cairn_store::{Collection, StoreError, epoch_millis_from_iso8601};
+use cairn_export::{RestoreRefusal, RestoreTarget, restore_preview, restore_read};
+use cairn_store::{Collection, Restored, StoreError, epoch_millis_from_iso8601};
 
 /// Whether this device adopts the archive's identity or already holds it — named here so a caller
 /// reaches it through this module.
@@ -53,6 +51,9 @@ pub enum Refusal {
     /// The platform stopped reading at its ceiling and the head it holds is an archive's: too large
     /// to open here, which is a different thing from unreadable.
     TooLarge,
+    /// The manifest passed the gate but the log or the mutable surface will not read: met only by
+    /// [`apply`], the one reader that inflates them, so the preview never shows it.
+    Damaged,
 }
 
 /// Whether these bytes — the whole file or only its head — are a collection archive. The sniff reads
@@ -69,33 +70,80 @@ pub fn read(
     coll: &Collection,
 ) -> Result<Result<Preview, Refusal>, StoreError> {
     if !complete {
-        return Ok(Err(if is_archive(bytes) {
-            Refusal::TooLarge
-        } else {
-            Refusal::Unreadable
-        }));
+        return Ok(Err(incomplete(bytes)));
     }
-    // Both inputs of the identity gate, read now (ADR-0016 §10).
-    let target = RestoreTarget {
-        empty: coll.is_empty()?,
-        own_id: CollectionId::parse_canonical(coll.collection_id())
-            .expect("the store keeps its collection id in canonical text"),
-    };
-    Ok(match restore_preview(bytes, &target) {
+    Ok(match restore_preview(bytes, &target(coll)?) {
         Ok(plan) => Ok(Preview {
             created_ms: epoch_millis_from_iso8601(&plan.created),
             notes: plan.notes as u64,
             reviews: plan.reviews as u64,
             adoption: plan.adoption,
         }),
-        Err(refusal) => Err(match refusal {
-            RestoreRefusal::Unreadable => Refusal::Unreadable,
-            RestoreRefusal::UnknownFormat(format) => Refusal::UnknownFormat(format),
-            RestoreRefusal::WrongProfile => Refusal::WrongProfile,
-            RestoreRefusal::BrokenPath => Refusal::BrokenPath,
-            RestoreRefusal::IdentityMismatch { .. } => Refusal::AnotherCollection,
-        }),
+        Err(refusal) => Err(from_export(refusal)),
     })
+}
+
+/// Restore an archive into `coll` (ADR-0016 §4 §10, ADR-0053 §4): the gate derived again, since the
+/// collection may have changed while the preview was open, and then the whole archive merged in one
+/// transaction. Refuses as [`read`] refuses, with nothing written; a payload that will not inflate or
+/// a line the store cannot read means a damaged file and is [`Refusal::Damaged`], also with nothing
+/// written. That is the one refusal reached only by inflating a payload (AGENTS.md deck export rule
+/// 9 keeps them out of the gate, and this is past it).
+pub fn apply(
+    bytes: &[u8],
+    complete: bool,
+    coll: &mut Collection,
+) -> Result<Result<Restored, Refusal>, StoreError> {
+    if !complete {
+        return Ok(Err(incomplete(bytes)));
+    }
+    let contents = match restore_read(bytes, &target(coll)?) {
+        Ok(contents) => contents,
+        Err(refusal) => return Ok(Err(from_export(refusal))),
+    };
+    match coll.restore(
+        &contents.collection_id.to_canonical(),
+        &contents.log,
+        &contents.mutable,
+    ) {
+        Ok(restored) => Ok(Ok(restored)),
+        // The gate is asked again inside the store's transaction; a write landing between the two
+        // reads is refused there.
+        Err(StoreError::CollectionIdMismatch { .. }) => Ok(Err(Refusal::AnotherCollection)),
+        Err(StoreError::MalformedArchiveLine { .. }) => Ok(Err(Refusal::Damaged)),
+        Err(e) => Err(e),
+    }
+}
+
+/// What a head cut at the platform's read ceiling is: too large when it is an archive's. The deck
+/// side's twin is [`crate::inbound::head_refusal`], where the same head is a refusal of its own.
+fn incomplete(head: &[u8]) -> Refusal {
+    if is_archive(head) {
+        Refusal::TooLarge
+    } else {
+        Refusal::Unreadable
+    }
+}
+
+/// Both inputs of the identity gate, read now (ADR-0016 §10).
+fn target(coll: &Collection) -> Result<RestoreTarget, StoreError> {
+    Ok(RestoreTarget {
+        empty: coll.is_empty()?,
+        own_id: CollectionId::parse_canonical(coll.collection_id())
+            .expect("the store keeps its collection id in canonical text"),
+    })
+}
+
+/// The export crate's refusal as this module's.
+fn from_export(refusal: RestoreRefusal) -> Refusal {
+    match refusal {
+        RestoreRefusal::Damaged => Refusal::Damaged,
+        RestoreRefusal::Unreadable => Refusal::Unreadable,
+        RestoreRefusal::UnknownFormat(format) => Refusal::UnknownFormat(format),
+        RestoreRefusal::WrongProfile => Refusal::WrongProfile,
+        RestoreRefusal::BrokenPath => Refusal::BrokenPath,
+        RestoreRefusal::IdentityMismatch { .. } => Refusal::AnotherCollection,
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +260,102 @@ mod tests {
             read(&deck.bytes, true, &source).unwrap(),
             Err(Refusal::WrongProfile)
         );
+    }
+
+    /// Everything ADR-0016 §12 says comes back, read off a collection: the log (every review, the
+    /// scheduler parameters with their fitted-over count) and the mutable surface (note content and
+    /// tags, decks and membership, suspensions, the new-card rate, kinds, per-deck revisions), each
+    /// as its verbatim lines, then the reads the app makes of them.
+    fn everything_restored(coll: &Collection) -> impl PartialEq + std::fmt::Debug {
+        let mut suspended: Vec<_> = coll.suspended().unwrap().into_iter().collect();
+        suspended.sort_by_key(|c| (c.note.0, c.ordinal));
+        (
+            coll.collection_id().to_owned(),
+            coll.log_lines().unwrap(),
+            coll.mutable_lines().unwrap(),
+            coll.review_count().unwrap(),
+            coll.decks().unwrap(),
+            suspended,
+            coll.new_card_rate().unwrap(),
+            coll.current_scheduler_parameters().unwrap(),
+        )
+    }
+
+    #[test]
+    fn a_fixtures_backup_restored_into_a_fresh_store_brings_everything_back_but_the_writer() {
+        let (mut source, _d, _s) = open();
+        Fixture::Decks.install(&mut source, CREATED_MS).unwrap();
+        // What the fixture does not hold already: a tag, a suspension, a rate, fitted parameters.
+        let note = cairn_core::content::NoteId(source.entity_ids("note").unwrap()[0]);
+        source.add_tag(note, "french").unwrap();
+        source
+            .suspend(cairn_core::content::CardRef { note, ordinal: 0 })
+            .unwrap();
+        source.set_new_card_rate(7).unwrap();
+        let mut weights = source.current_scheduler_parameters().unwrap();
+        weights[0] += 0.5;
+        source
+            .set_scheduler_parameters(&weights, 42, CREATED_MS, Default::default())
+            .unwrap();
+        let bytes = backup::build(&source, CREATED_MS, 0).unwrap().bytes;
+
+        let (mut here, _d2, _s2) = open();
+        let writer = here.writer_id();
+        apply(&bytes, true, &mut here).unwrap().unwrap();
+
+        assert_eq!(everything_restored(&here), everything_restored(&source));
+        // The one thing that does not come back is the source's identity as a writer.
+        assert_eq!(here.writer_id(), writer);
+        assert_ne!(here.writer_id(), source.writer_id());
+    }
+
+    #[test]
+    fn applying_derives_the_gate_again_and_refuses_once_the_collection_changed_under_the_preview() {
+        let (bytes, _source, _d, _s) = archive();
+        let (mut here, _d2, _s2) = open();
+        assert!(read(&bytes, true, &here).unwrap().is_ok());
+        here.create_note("basic", &[("Front", "a"), ("Back", "b")])
+            .unwrap();
+        let (log, mutable) = (here.log_lines().unwrap(), here.mutable_lines().unwrap());
+
+        assert_eq!(
+            apply(&bytes, true, &mut here).unwrap().map(|_| ()),
+            Err(Refusal::AnotherCollection)
+        );
+        assert_eq!(here.log_lines().unwrap(), log);
+        assert_eq!(here.mutable_lines().unwrap(), mutable);
+    }
+
+    #[test]
+    fn applying_refuses_what_reading_refuses_and_a_line_it_cannot_read_as_unreadable() {
+        let (bytes, mut source, _d, _s) = archive();
+        assert_eq!(
+            apply(&bytes, false, &mut source).unwrap().map(|_| ()),
+            Err(Refusal::TooLarge)
+        );
+        assert_eq!(
+            apply(b"not a zip at all", true, &mut source)
+                .unwrap()
+                .map(|_| ()),
+            Err(Refusal::Unreadable)
+        );
+        // A manifest the gate passes over a payload the store cannot read: the file is damaged.
+        let id = CollectionId([0x5a; 16]);
+        let damaged = cairn_export::build_collection(&cairn_export::CollectionArchive {
+            collection_id: &id,
+            created: "2026-03-03T09:00:00.000Z",
+            notes: 0,
+            reviews: 0,
+            log: &["{\"k\":\"rev\",".to_owned()],
+            mutable: &[],
+        });
+        let (mut here, _d2, _s2) = open();
+        let held = here.collection_id().to_owned();
+        assert_eq!(
+            apply(&damaged, true, &mut here).unwrap().map(|_| ()),
+            Err(Refusal::Damaged)
+        );
+        assert_eq!(here.collection_id(), held);
     }
 
     #[test]

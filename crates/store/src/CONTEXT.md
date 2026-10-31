@@ -123,6 +123,15 @@ card key, so ids are not all sixteen bytes); `value` a string or `null`; `counte
 stamp the row settled under, carried as it is and never restamped. Every row of `mutable` and
 nothing from `local`.
 
+**Restore** (`Collection::restore`):
+An archive's collection id, log lines and mutable lines merged in **one immediate transaction**
+(ADR-0016 §4 §10, ADR-0053 §4): the identity gate asked inside it, the log unioned on `(writer, seq)`
+as `ingest` unions it, each mutable line settled by its own stamp and never restamped, the Lamport
+counter raised to the highest counter merged and the sequence high-water past every restored row
+under this device's writer id. A merge, never a replace: it adds and removes nothing. It reports
+nothing after the fact either, so it does not run *detect on merge*; the instants it stores still
+feed the guard on write.
+
 **Last backup** (`local.last_backup`):
 The creation instant of the last archive this device wrote, epoch-milliseconds, none before the
 first. In `local`, so it never settles and never travels (ADR-0016 §6, ADR-0053 §4); recorded only
@@ -167,7 +176,12 @@ disown every earlier `reviewed` row.
   other identity is silent and destructive in opposite directions. At the seam where a device *meets*
   an identity (restore, enrolment), one rule decides both: an **empty** collection adopts the id it
   meets, a **non-empty** one refuses — and a refusal names the mismatch **and** the way out, never
-  only "no" (ADR-0016 §10).
+  only "no" (ADR-0016 §10). Both seams go through the one private `adopt_or_verify`.
+- **`ingest` skips a line it cannot read; `restore` refuses the whole archive over one.** Not an
+  inconsistency to fix: a sync batch is many sources' rows arriving over time, where one bad line
+  is noise (ADR-0004 §11), but an archive is written whole by this system, so a bad line means a
+  damaged file (`StoreError::MalformedArchiveLine`) and half of it is not a restore. A row of an
+  unknown *kind* is skipped by both, since a newer build's rows are not damage.
 - **A new row's instant never sorts at or below the log's highest.** The clock-skew guard on write
   (ADR-0004 §8) lifts a backwards clock above the log rather than writing a row into an order that
   never happened. It needs every row's instant, so `ingest` populates the derived `instant` column

@@ -149,6 +149,9 @@ pub enum RestoreRefusal {
     /// This device already holds a **different** collection (ADR-0016 §10). Names the archive's
     /// collection id so the interface can state the mismatch; the way out is [`RESTORE_MISMATCH_WAY_OUT`].
     IdentityMismatch { archive: String },
+    /// A log or mutable member the gate passed over that will not read: met only by
+    /// [`restore_read`], since the preview never inflates them, so it is never shown in its place.
+    Damaged,
 }
 
 /// A restore this device may perform, described in the one line the preview shows (ADR-0016 §11,
@@ -198,6 +201,65 @@ pub fn restore_preview(
     bytes: &[u8],
     target: &RestoreTarget,
 ) -> Result<RestorePlan, RestoreRefusal> {
+    gate(bytes, target).map(|cleared| cleared.plan)
+}
+
+/// What a restore writes, read whole from a `.ccoll` once [`restore_preview`]'s gate has cleared it:
+/// the archive's collection id, and both payloads as their verbatim lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoreContents {
+    pub collection_id: CollectionId,
+    /// `log.jsonl`, one line per entry, as the archive carries them (ADR-0004 §11).
+    pub log: Vec<String>,
+    /// `mutable.jsonl`, one line per entry, their stamps intact (ADR-0016 §2).
+    pub mutable: Vec<String>,
+}
+
+/// Read a received `.ccoll` for the restore itself: the same gate as [`restore_preview`], refusing
+/// exactly as it refuses, and only then the log and the mutable surface inflated (ADR-0022 §2). This
+/// crate still never parses their schema — the store reads each line and refuses one it cannot read.
+/// A member that is absent reads as empty, as the empty one a collection with nothing in it carries.
+pub fn restore_read(
+    bytes: &[u8],
+    target: &RestoreTarget,
+) -> Result<RestoreContents, RestoreRefusal> {
+    let Cleared {
+        mut archive,
+        collection_id,
+        ..
+    } = gate(bytes, target)?;
+    let mut lines = |name: &str| -> Result<Vec<String>, RestoreRefusal> {
+        if archive.index_for_name(name).is_none() {
+            return Ok(Vec::new());
+        }
+        let text =
+            container::read_member(&mut archive, name).map_err(|_| RestoreRefusal::Damaged)?;
+        Ok(text
+            .split('\n')
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect())
+    };
+    let log = lines(LOG_MEMBER)?;
+    let mutable = lines(MUTABLE_MEMBER)?;
+    Ok(RestoreContents {
+        collection_id,
+        log,
+        mutable,
+    })
+}
+
+/// A `.ccoll` the gate cleared.
+struct Cleared<'a> {
+    /// Kept open for the payload read that follows.
+    archive: zip::ZipArchive<Cursor<&'a [u8]>>,
+    plan: RestorePlan,
+    collection_id: CollectionId,
+}
+
+/// The gate both reads share: the profile, the member paths, the manifest's format and profile and
+/// the identity check.
+fn gate<'a>(bytes: &'a [u8], target: &RestoreTarget) -> Result<Cleared<'a>, RestoreRefusal> {
     match sniff(bytes) {
         Some(Profile::Collection) => {}
         Some(Profile::Deck | Profile::Other(_)) => return Err(RestoreRefusal::WrongProfile),
@@ -256,11 +318,15 @@ pub fn restore_preview(
     let notes = manifest.get("notes").and_then(Json::as_u64).unwrap_or(0) as usize;
     let reviews = manifest.get("reviews").and_then(Json::as_u64).unwrap_or(0) as usize;
 
-    Ok(RestorePlan {
-        created,
-        notes,
-        reviews,
-        adoption,
+    Ok(Cleared {
+        archive,
+        plan: RestorePlan {
+            created,
+            notes,
+            reviews,
+            adoption,
+        },
+        collection_id: archive_id,
     })
 }
 
@@ -532,5 +598,81 @@ mod tests {
             own_id: cid(0),
         };
         assert!(restore_preview(&bytes, &target).is_ok());
+    }
+
+    #[test]
+    fn a_restore_reads_the_id_and_both_payloads_back_line_for_line_after_the_gate() {
+        let id = cid(0x11);
+        let log = vec![
+            r#"{"k":"rev","w":"7f3a","s":1}"#.to_owned(),
+            "second".to_owned(),
+        ];
+        let mutable = vec![r#"{"entity":"note"}"#.to_owned()];
+        let bytes = build_collection(&sample(&id, &log, &mutable));
+        let target = RestoreTarget {
+            empty: true,
+            own_id: cid(0x99),
+        };
+
+        let read = restore_read(&bytes, &target).unwrap();
+        assert_eq!(read.collection_id, id);
+        assert_eq!(read.log, log);
+        assert_eq!(read.mutable, mutable);
+
+        // An empty collection's archive carries empty members, and a missing member reads as empty.
+        let empty = build_collection(&sample(&id, &[], &[]));
+        let read = restore_read(&empty, &target).unwrap();
+        assert!(read.log.is_empty() && read.mutable.is_empty());
+        let bare = container::build(&[
+            Member::stored(container::MIMETYPE_MEMBER, COLLECTION_MEDIA_TYPE),
+            Member::deflated(
+                MANIFEST_MEMBER,
+                manifest(&sample(&id, &[], &[])).into_bytes(),
+            ),
+        ]);
+        let read = restore_read(&bare, &target).unwrap();
+        assert!(read.log.is_empty() && read.mutable.is_empty());
+    }
+
+    #[test]
+    fn a_restore_read_refuses_exactly_as_the_preview_refuses() {
+        let archive_id = cid(0x11);
+        let bytes = build_collection(&sample(&archive_id, &[], &[]));
+        let stranger = RestoreTarget {
+            empty: false,
+            own_id: cid(0x22),
+        };
+        assert_eq!(
+            restore_read(&bytes, &stranger).map(|_| ()),
+            Err(RestoreRefusal::IdentityMismatch {
+                archive: archive_id.to_canonical(),
+            })
+        );
+        assert_eq!(
+            restore_read(b"not a zip", &stranger).map(|_| ()),
+            Err(RestoreRefusal::Unreadable)
+        );
+    }
+
+    #[test]
+    fn a_payload_the_preview_passed_but_that_will_not_read_is_damaged() {
+        let id = cid(0x11);
+        let target = RestoreTarget {
+            empty: true,
+            own_id: cid(0x99),
+        };
+        let bytes = container::build(&[
+            Member::stored(container::MIMETYPE_MEMBER, COLLECTION_MEDIA_TYPE),
+            Member::deflated(
+                MANIFEST_MEMBER,
+                manifest(&sample(&id, &[], &[])).into_bytes(),
+            ),
+            Member::deflated(LOG_MEMBER, vec![0xff, 0xfe, 0xfd]),
+        ]);
+        assert!(restore_preview(&bytes, &target).is_ok());
+        assert_eq!(
+            restore_read(&bytes, &target).map(|_| ()),
+            Err(RestoreRefusal::Damaged)
+        );
     }
 }

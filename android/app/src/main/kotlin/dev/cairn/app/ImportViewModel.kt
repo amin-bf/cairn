@@ -68,10 +68,11 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
     }
 
     /**
-     * *Import*: the plan is derived again and written, off the main thread (ADR-0022 §5), and nothing
-     * is said. The gate is disabled until the call returns. A refusal from a collection that changed
-     * under the preview is the preview's refusal now, so the plan is read again and shows it; a write
-     * the store refuses is said on the preview, the gate stays, and the plan is read again.
+     * *Import*, or *Restore* for an archive: the plan is derived again and written, off the main
+     * thread (ADR-0022 §5, ADR-0053 §3), and nothing is said. The gate is disabled until the call
+     * returns. A refusal from a collection that changed under the preview is the preview's refusal
+     * now, so the plan is read again and shows it; a write the store refuses is said on the preview,
+     * the gate stays, and the plan is read again.
      */
     fun import() {
         val held = file ?: return
