@@ -19,8 +19,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Open with and share, as the egui build declares them (ADR-0024 §2, ADR-0052 §2): the
-                 package id is the same, so the app stays offered after the upgrade. The bytes decide. -->
+            <!-- Open with and share, as the retired egui build declared them (ADR-0024 §2,
+                 ADR-0052 §2): the package id is the same, so the app stays offered after the
+                 upgrade. The bytes decide. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

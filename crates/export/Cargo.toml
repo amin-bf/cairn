@@ -24,12 +24,5 @@ cairn-core.workspace = true
 # cannot drift.
 zip.workspace = true
 
-# The Android arm of the user-files seam reaches `MediaStore` and the share sheet by hand-written
-# JNI, exactly as `cairn-store::platform::android` reaches the data directories (ADR-0007 §6,
-# ADR-0023 §3). Desktop and tests never link these.
-[target.'cfg(target_os = "android")'.dependencies]
-jni.workspace = true
-ndk-context.workspace = true
-
 [dev-dependencies]
 tempfile.workspace = true

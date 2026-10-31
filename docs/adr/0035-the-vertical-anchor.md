@@ -132,6 +132,9 @@ editor before the reveal.
 
 ### 3. Under a thumb the grades **stack**; under a pointer they stay a row
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026):** the egui app no longer
+> runs under a thumb, so it draws only the row; the stack went with the egui Android build.
+
 > Four full-width controls, *Forgot* held apart by three units and the three passes a unit apart, on
 > a touch-operated platform. On a pointer platform, ADR-0034 §1's arrangement is unchanged.
 

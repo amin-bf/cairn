@@ -17,8 +17,8 @@
 # silent-miss class as the x, arriving from the **vertical** axis, and caused by an arrangement
 # change rather than by a frame or a coordinate.
 #
-# #163 deleted that arrangement change: the toggle is a question about the platform's soft keyboard
-# now, not about the window, so the desktop has **one** vertical stack at every width and the field
+# #163 deleted that arrangement change, and the soft keyboard the toggle served went with the egui
+# Android build (ADR-0045 §8), so the desktop has **one** vertical stack at every width and the field
 # y's below are the same at 560 as at 1280. The pin went with the width it was made of.
 #
 # **Both shots are self-evidencing** and stay worth checking: a run that missed leaves

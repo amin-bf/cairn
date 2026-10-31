@@ -19,7 +19,7 @@ source scripts/android-env.sh
 ```
 
 That sets `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `NDK_HOME`,
-`ANDROID_NDK_HOME` and `ANDROID_NDK_ROOT` (for `cargo apk` and a bare `cargo ndk`; the
+`ANDROID_NDK_HOME` and `ANDROID_NDK_ROOT` (for a bare `cargo ndk`; the
 Gradle build uses AGP's own NDK) and prepends the tool
 directories to `PATH`. **None of these were set on the host before this ticket**, and
 nothing writes them to a shell profile — each build must source the script (or an
@@ -102,7 +102,7 @@ The 32-bit targets are installed although the native client packages only `arm64
   installed system-wide (an earlier 8.14.3 install existed for a client-stack candidate's CLI, and
   Gradle 8 cannot load an AGP 9 project at all).
 - **`compileSdk` 36, and androidx versions that fit it.** The newest Compose, lifecycle and activity
-  releases require `compileSdk` 37; the spec pins 36 (as the egui build declares), so the project
+  releases require `compileSdk` 37; the spec pins 36 (as the retired egui build declared), so the project
   pins the Compose BOM `2026.04.01`, lifecycle `2.10.0` and activity-compose `1.12.4`, the last
   that compile against 36. Moving to 37 is a deliberate bump, not a drift.
 
@@ -126,8 +126,8 @@ What it runs, in order, joined to AGP through the Variant API
    The `cli` feature is host-only: the cargo-ndk task never passes it, so it is absent from the
    Android library. Nothing generated is committed (`android/app/build` is git-ignored).
 3. AGP compiles, merges and packages both ABIs and signs the debug APK with
-   `~/.android/debug.keystore` — the same key `cargo-apk` signs with — so `adb install -r` over
-   the egui build keeps its data.
+   `~/.android/debug.keystore` — the same key the retired egui build's `cargo-apk` signed with — so
+   `adb install -r` over an installed egui build keeps its data.
 
 The debug variant also builds the `panic-probe` cargo feature (an export that panics on purpose,
 for the test that a Rust panic arrives as an exception); a release build never carries it. The
@@ -215,15 +215,6 @@ real figure differs by the split containers' overhead. **The minified APK is lar
 research's unminified one** because it is not the same app: it carries Compose, the design module
 with its bundled faces and the generated bindings, which the spike did not; the two APKs are not
 comparable beyond the dex, which R8 took from 3.4 MB to 1.4 MB despite the larger app.
-
-**The egui build on the emulator.** The upgrade check installs the egui APK first. Two things
-differ from the handset: `cargo apk` packages only `aarch64-linux-android` by default, which the
-x86_64 emulator cannot run, so build it with `--target x86_64-linux-android`; and the **debug**
-egui build crashes on the emulator's Vulkan (wgpu calls a debug-utils entry point the emulated
-driver lacks), so use `--release`. `cargo apk build --release` then stops at signing for want of
-a release keystore, and its unsigned APK lacks the library: add `lib/x86_64/libcairn_app.so` to it
-stored uncompressed (`zip -0`), `zipalign -P 16`, and sign with the debug keystore using
-`apksigner`.
 
 ## Proof the toolchain works
 

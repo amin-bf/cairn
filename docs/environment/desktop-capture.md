@@ -110,8 +110,8 @@ on empty page — use `%EX+n%` inside the editor, which is that frame's own toke
 `storyboards/baseline.txt` visits the editor **last** for exactly this reason, and says so.
 
 This used to be *"above `frame::TWO_COLUMN_MIN_WIDTH`"*, and #163 deleted that width: the editor
-folds its two panes into a toggle where a soft keyboard eats the height, never where a window is
-narrow, so on the desktop it is side by side at **every** width and the wider frame is unconditional.
+never folds where a window is narrow, and the soft keyboard it folded for went with the egui Android
+build (ADR-0045 §8), so it is side by side at **every** width and the wider frame is unconditional.
 That removed the awkward half of this warning rather than the warning — *Done* is still compact
 beside two columns, so the coordinate that reaches it is the editor frame's and not the page's.
 
@@ -268,11 +268,11 @@ the **keymap** path — the same events an `ir(pes)` layout produces. Persian ne
 it is an alphabetic script typed one character per key, with no composition step.
 
 **It does not exercise a composing input method.** `zwp_text_input_v3`, and with it the preedit
-handling in the vendored `egui-winit` adapter, is untouched by this — and cannot be exercised on this
+handling in the `egui-winit` adapter, is untouched by this — and cannot be exercised on this
 machine at all, because no input-method framework is installed. That is a gap in evidence, not a
 known failure: nothing here suggests the composing path is broken, only that it is unproven. Proving
 it needs an input method installed (`fcitx5` plus a Persian engine) and a person at the keyboard,
 and it is only worth doing if the product ever needs input that composes.
 
-Android is the opposite case and is settled: it has **no** IME path at all, so composed text never
-reaches the app there (`AGENTS.md` client-stack rule 8).
+Android is not this app's case any more: the egui build there had **no** IME path at all, and it is
+retired (ADR-0045 §8). The Kotlin app takes composed text through the platform's own input.

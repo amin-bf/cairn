@@ -154,6 +154,11 @@ months.
 
 ### 5. Toolchain constraints this locks in
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026): the egui Android build
+> is retired**, and with it `cargo-apk`, the per-target `eframe` split and the hand-written JNI. The
+> desktop binary stays in its own crate, because the scripts and docs run `-p cairn-desktop`. The
+> same applies to §6: Android is the Kotlin app, which takes composed text.
+
 - **`cargo-apk`** for Android packaging. It works on NDK 29 / API 37 but was last published
   **2023-11-30** and is unmaintained. It also **panics after signing** (`Bin is not compatible with
   Cdylib`) when a crate has both a cdylib and a bin — the APK is correct, the exit code is not.

@@ -2,9 +2,8 @@
 //!
 //! What crosses is an operation and the facts it returns. This crate exports **no platform function
 //! and calls none** (ADR-0046 §5): Kotlin passes `filesDir` and `noBackupFilesDir` to [`open`](CollectionHandle::open),
-//! and never reaches `cairn_store::platform`, whose Android arm panics in a library no
-//! `android-activity` loaded. Time is a value here as everywhere: where an operation needs *now*, the
-//! caller passes it.
+//! and never reaches `cairn_store::platform`, whose Android arm refuses (ADR-0045 §8). Time is a
+//! value here as everywhere: where an operation needs *now*, the caller passes it.
 //!
 //! **A panic reaches Kotlin as an exception only while the release profile unwinds** (ADR-0046 §7), so
 //! `panic = "abort"` must never be added to the workspace's `[profile.release]`.

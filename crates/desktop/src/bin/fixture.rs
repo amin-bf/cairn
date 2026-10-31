@@ -11,8 +11,8 @@
 //! state, so the app opens a non-empty store and the shipping seed never fires — see
 //! `cairn_app::fixtures` for why that route was chosen over the two obvious alternatives.
 //!
-//! **Keep it this short**, for the same reason `main.rs` is short (ADR-0003 §5): logic here is never
-//! compiled by the Android build and never exercised on the handset. Everything real is in
+//! **Keep it this short**, for the same reason `main.rs` is short: logic here is where no test
+//! reaches. Everything real is in
 //! `cairn_app::fixtures`, which the temporary Settings block calls too — one definition of each
 //! state, two ways in.
 //!

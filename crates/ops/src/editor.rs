@@ -225,10 +225,6 @@ pub struct Editing {
     /// The new-deck name buffer for *create a new deck*, available from the deck dropdown (ADR-0021
     /// §9): the moment you need a deck that does not exist is while filing the note that wants it.
     pub new_deck: String,
-    /// Which of the two panes is showing when the screen is too narrow to hold both — the phone's
-    /// `Write | Cards` toggle (ADR-0012 §1, ADR-0025 §5). `false` is *Write*, the form. On a wide
-    /// screen both panes show and this is ignored.
-    pub show_cards: bool,
     /// When a buffer last changed, in the caller's monotonic milliseconds, while that change may not
     /// yet be settled — the start of ADR-0021 §7's idle window ([`Editing::settle_if_idle`]). `None`
     /// when nothing has been typed since the last idle settle, which is what keeps an untouched
@@ -250,7 +246,6 @@ impl Editing {
                 .collect(),
             deck: None,
             new_deck: String::new(),
-            show_cards: false,
             edited_at: None,
         }
     }
@@ -286,7 +281,6 @@ impl Editing {
             fields,
             deck,
             new_deck: String::new(),
-            show_cards: false,
             edited_at: None,
         }
     }

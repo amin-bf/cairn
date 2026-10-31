@@ -35,16 +35,16 @@ compile_error!(
 
 /// The outcome of a [`put`]: **the name the platform actually wrote**, which a collision may have
 /// deduped away from the one requested (ADR-0022 §10). The report reads this back and never echoes
-/// the request — on Android the user chose neither the name nor the location, so it is the only way
-/// they can find the file.
+/// the request — the user chose neither the name nor the location, so it is the only way they can
+/// find the file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Written {
     pub name: String,
 }
 
 /// Write `bytes` to the user-visible files area under `requested_name`, returning the name actually
-/// written. Desktop writes into the documents folder; Android inserts a `MediaStore` row **declaring
-/// no media type**, which is what keeps the extension on a collision (ADR-0024 §4).
+/// written. Desktop writes into the documents folder. Every Android function here refuses: the
+/// Kotlin app moves files through the system picker and save dialog and passes bytes (ADR-0047 §6).
 pub fn put(requested_name: &str, bytes: &[u8]) -> Result<Written, PlatformError> {
     imp::put(requested_name, bytes)
 }
@@ -54,17 +54,15 @@ pub fn get(name: &str) -> Result<Vec<u8>, PlatformError> {
     imp::get(name)
 }
 
-/// The names of the recognised files the application can see — `.cdeck` and `.ccoll`. On Android
-/// this is the `MediaStore` rows we wrote, and **only** those: a file another application dropped in
-/// `Downloads` is invisible to the query, not merely unreadable (ADR-0024 §3).
+/// The names of the recognised files the application can see — `.cdeck` and `.ccoll`.
 pub fn list() -> Result<Vec<String>, PlatformError> {
     imp::list()
 }
 
 /// Hand the written file to the surface the platform provides for passing a file onward, and stop
-/// there (ADR-0023 §1). Android launches the system share sheet; the desktop reveals the file
-/// **selected** in the file manager. It **never fires by itself** — the caller invokes it from a
-/// user action, never on an export completing (ADR-0023 §5).
+/// there (ADR-0023 §1). The desktop reveals the file **selected** in the file manager. It **never
+/// fires by itself** — the caller invokes it from a user action, never on an export completing
+/// (ADR-0023 §5).
 pub fn hand_off(name: &str) -> Result<(), PlatformError> {
     imp::hand_off(name)
 }

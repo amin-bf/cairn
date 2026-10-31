@@ -338,6 +338,10 @@ must name the offending device.**
 
 ### 9. The Android text-input limitation is stated in advance, at the point of failure
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026): there is no limitation
+> left to state.** The egui Android build is retired, and the Kotlin app takes composed text, so the
+> editor's line and its constant are gone.
+
 [`AGENTS.md`](../../AGENTS.md) client-stack rule 8 records that winit's Android backend has no IME
 path, so composed text never reaches the application. **The failure mode is the problem, not the
 limitation**: a user switches to a non-Latin keyboard, types, and **nothing happens at all.** We
