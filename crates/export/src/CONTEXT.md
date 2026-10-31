@@ -89,7 +89,9 @@ effects, because a restore only ever adds and so has no destructive effect to en
 run identically at the enrolment seam): an **empty** device adopts the archive's id, a **non-empty**
 one holding a **different** collection is refused **by name**, with the way out stated
 ([`collection::RESTORE_MISMATCH_WAY_OUT`]). The log and the mutable surface are never inflated to
-build it — the gate and the one line come from the manifest alone.
+build it — the gate and the one line come from the manifest alone. The restore itself reads through
+the same gate ([`collection::restore_read`]) and only then inflates both payloads, as verbatim lines
+for the store to settle.
 _Avoid_: Restore summary, restore result — a merge reports nothing after the fact, exactly as an
 import does not.
 
