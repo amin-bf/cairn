@@ -337,7 +337,9 @@ class SettingsViewModel(
                 try {
                     owner.use { it.recordBackup(created) }
                     written
-                } catch (e: CairnException) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
                     written.copy(unrecorded = e.failureReason())
                 }
             } catch (e: CancellationException) {

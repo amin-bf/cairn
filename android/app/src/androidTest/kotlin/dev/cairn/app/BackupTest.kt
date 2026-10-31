@@ -444,8 +444,15 @@ class BackupTest {
     }
 
     @Test
-    fun a_written_archive_whose_recording_fails_is_still_reported_with_share_and_says_it_was_not_recorded() {
-        // The real collection, except that the call after the write, recording it, is refused.
+    fun a_written_archive_whose_recording_fails_is_still_reported_with_share_and_says_it_was_not_recorded() =
+        recordingRefused(CairnException.Failed("disk full"), "disk full")
+
+    @Test
+    fun a_written_archive_is_kept_whatever_the_recording_throws() =
+        recordingRefused(IllegalStateException("collection closed"), "collection closed")
+
+    private fun recordingRefused(thrown: Exception, said: String) {
+        // The real collection, except that the call after the write, recording it, throws.
         val refusing = object : CollectionAccess {
             @Volatile
             var refuseNext = false
@@ -453,7 +460,7 @@ class BackupTest {
             override suspend fun <T> use(block: (CollectionHandle) -> T): T {
                 if (refuseNext) {
                     refuseNext = false
-                    throw CairnException.Failed("disk full")
+                    throw thrown
                 }
                 return owner.use(block)
             }
@@ -479,7 +486,7 @@ class BackupTest {
         // The archive is whole and kept: it is reported, Share hands it on, and the row says what failed.
         assertEquals("Unrecorded.ccoll — 25 notes, 225 reviews", text("backup-report"))
         assertTrue(exists("backup-share"))
-        assertEquals("Saved, but not recorded as the last backup: disk full", text("backup-unrecorded"))
+        assertEquals("Saved, but not recorded as the last backup: $said", text("backup-unrecorded"))
         assertFalse(exists("backup-failed"))
         assertTrue(BenchProvider.files.containsKey("Unrecorded.ccoll"))
         assertTrue(BenchProvider.deleted.isEmpty())
