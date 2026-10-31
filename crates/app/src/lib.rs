@@ -554,8 +554,8 @@ impl eframe::App for CairnApp {
         let report = self.inbound.as_ref().map(|file| inbound::read(file, coll));
         if let Some(report) = &report {
             let gate = match report {
-                Ok(report) => screens::import::gate_for(&report.outcome),
-                Err(_) => screens::import::Gate::Dismiss,
+                Ok(report) => inbound::gate_for(&report.outcome),
+                Err(_) => inbound::Gate::Dismiss,
             };
             let band = frame::pinned_band(ui.available_rect_before_wrap().height());
             let mut pressed = None;

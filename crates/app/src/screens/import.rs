@@ -7,7 +7,7 @@
 //! [`crate::CairnApp`]'s hands, and while one is held this screen takes the page in place of whatever
 //! destination was showing (ADR-0022 §6, §9, confirmed by #151). The gate — *Import* and *Cancel*, or
 //! a lone *Close* — is drawn by the caller in a band pinned outside the scroll on the reach line
-//! (ADR-0039 §8), which is why this module answers [`gate_for`] separately from drawing the body.
+//! (ADR-0039 §8), which is why the gate is decided by [`crate::inbound::gate_for`] apart from the body.
 //!
 //! **The plan is derived by the caller once per frame and handed in, never held** (ADR-0022 §5): the
 //! body and the gate must describe the same derivation, and the next frame derives again, so a sync
@@ -27,8 +27,8 @@ use cairn_export::{DeckPlan, Header, Path, Refusal};
 
 // The gate's decision is `cairn-ops`'s, shared with the Android client (ADR-0046 §3); this screen
 // only draws it.
+use crate::inbound::Gate;
 use crate::inbound::Report;
-pub(crate) use crate::inbound::{Gate, gate_for};
 use crate::{bidi, body, frame, spacing};
 
 /// What the person pressed in the band.
@@ -345,6 +345,8 @@ mod tests {
     use super::*;
     use cairn_core::content::DeckId;
     use cairn_export::{MovingIn, Plan};
+
+    use crate::inbound::gate_for;
 
     fn deck() -> DeckPlan {
         DeckPlan {

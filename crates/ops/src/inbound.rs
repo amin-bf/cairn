@@ -23,8 +23,12 @@
 //! preview changes the numbers before the user can act on stale ones.
 
 use cairn_core::content::DeckId;
-use cairn_export::import::{self, Plan, Profile, Refusal};
+use cairn_export::import::{self, Profile};
 use cairn_store::{Collection, StoreError};
+
+/// The plan and the refusal a [`read`] states, named here so a caller reaches them through this
+/// module rather than through `cairn-export` (ADR-0046 §2: the binding is a handle over `cairn-ops`).
+pub use cairn_export::import::{Path, Plan, Refusal};
 
 use crate::notes;
 
@@ -86,6 +90,16 @@ fn changes_nothing(plan: &Plan) -> bool {
     plan.decks.iter().all(|d| d.no_change)
         && plan.adopted_kinds.is_empty()
         && plan.emptied_decks.is_empty()
+}
+
+/// The refusal a file meets when the platform stopped reading it at its ceiling and only its head is
+/// held: nothing is planned from a part. A collection archive is still told apart, because the sniff
+/// reads only the first member; anything else is unreadable (#242).
+pub fn head_refusal(head: &[u8]) -> Refusal {
+    match import::sniff(head) {
+        Some(Profile::Collection) => Refusal::WrongProfile,
+        _ => Refusal::Unreadable,
+    }
 }
 
 /// A file the platform handed us, before it is identified: how it arrived, whatever display name
@@ -887,5 +901,30 @@ mod tests {
     #[test]
     fn a_picked_file_is_named_in_the_log() {
         assert_eq!(Arrival::Picked.label(), "chosen in the system picker");
+    }
+
+    /// The head of a file the platform stopped reading at its ceiling: the bench's file by `name`,
+    /// cut to its first 512 bytes.
+    fn bench_head(name: &str) -> Vec<u8> {
+        let files = crate::file_bench::FileSet::Imports.files().unwrap();
+        let file = files.into_iter().find(|f| f.name == name).unwrap();
+        file.bytes[..512.min(file.bytes.len())].to_vec()
+    }
+
+    #[test]
+    fn a_head_cut_short_still_tells_a_collection_archive_apart() {
+        assert_eq!(
+            head_refusal(&bench_head("collection.ccoll")),
+            Refusal::WrongProfile
+        );
+    }
+
+    #[test]
+    fn a_deck_cut_short_is_unreadable_never_a_plan() {
+        assert_eq!(
+            head_refusal(&bench_head("French A1.cdeck")),
+            Refusal::Unreadable
+        );
+        assert_eq!(head_refusal(&[]), Refusal::Unreadable);
     }
 }

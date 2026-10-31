@@ -14,10 +14,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::scheduling::Grade as CoreGrade;
-use cairn_export::import::{self, Plan, Profile, Refusal};
 use cairn_ops::cards;
 use cairn_ops::editor::{self, Editing};
-use cairn_ops::inbound;
+use cairn_ops::inbound::{self, Plan, Refusal};
 use cairn_ops::leeches;
 use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::optimise;
@@ -1294,8 +1293,24 @@ impl From<Refusal> for FileRefusal {
 /// Whether a deck in the file is one the collection holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum DeckPath {
+    /// The collection holds the deck, and the file updates it.
     Update,
+    /// The collection holds no such deck, and the file creates it.
     Create,
+}
+
+impl From<inbound::Path> for DeckPath {
+    fn from(path: inbound::Path) -> Self {
+        match path {
+            inbound::Path::Update => Self::Update,
+            inbound::Path::Create => Self::Create,
+        }
+    }
+}
+
+/// A count from a file's plan, as it crosses. A count no `u64` holds saturates rather than wraps.
+fn count(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
 }
 
 /// Notes moving into a deck from one the collection holds; `from` is `None` for unfiled notes.
@@ -1375,21 +1390,18 @@ impl FilePreview {
                         .into_iter()
                         .map(|d| DeckEffects {
                             name: d.name,
-                            path: match d.path {
-                                import::Path::Update => DeckPath::Update,
-                                import::Path::Create => DeckPath::Create,
-                            },
-                            new_notes: d.new_notes as u64,
-                            already_yours: d.already_yours as u64,
+                            path: d.path.into(),
+                            new_notes: count(d.new_notes),
+                            already_yours: count(d.already_yours),
                             moving_in: d
                                 .moving_in
                                 .into_iter()
                                 .map(|m| MovingInFacts {
                                     from: m.from,
-                                    count: m.count as u64,
+                                    count: count(m.count),
                                 })
                                 .collect(),
-                            deleted: d.deleted as u64,
+                            deleted: count(d.deleted),
                             renamed_from: d.renamed_from,
                             no_change: d.no_change,
                             revision_conflict: d.revision_conflict,
@@ -1416,13 +1428,9 @@ pub struct InboundFileHandle {
 }
 
 impl InboundFileHandle {
-    /// The refusal an incomplete read meets before anything is planned: a collection archive is
-    /// still told apart, because the sniff reads only the first member; anything else is unreadable.
+    /// The refusal an incomplete read meets before anything is planned; the rule is `cairn-ops`'s.
     fn head_refusal(&self) -> Refusal {
-        match import::sniff(&self.inbound.bytes) {
-            Some(Profile::Collection) => Refusal::WrongProfile,
-            _ => Refusal::Unreadable,
-        }
+        inbound::head_refusal(&self.inbound.bytes)
     }
 }
 
@@ -1492,6 +1500,8 @@ pub struct BenchFileFact {
 pub fn bench_files() -> Vec<BenchFileFact> {
     let set = cairn_ops::file_bench::FileSet::Imports;
     set.files()
+        // The set is built from the bench's own constant fixtures, never from input, and
+        // `file_bench`'s tests build it on every run: a failure here is a broken build, not a state.
         .expect("the bench's files build")
         .into_iter()
         .map(|f| BenchFileFact {
@@ -2870,10 +2880,10 @@ mod tests {
             }
         );
         // The head of a deck is not enough to plan from, so it is unreadable, never a plan.
-        let deck =
-            handle
-                .clone()
-                .open_file(FileArrival::Picked, None, files[0].bytes.clone(), false);
+        let head = files[0].bytes[..512.min(files[0].bytes.len())].to_vec();
+        let deck = handle
+            .clone()
+            .open_file(FileArrival::Picked, None, head, false);
         assert_eq!(
             deck.preview().unwrap(),
             FilePreview::Refused {

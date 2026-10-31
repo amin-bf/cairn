@@ -14,7 +14,6 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 cairn-core.workspace = true
-cairn-export.workspace = true
 cairn-ops.workspace = true
 cairn-store.workspace = true
 uniffi.workspace = true
