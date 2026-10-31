@@ -16,10 +16,10 @@ sealed interface ImportScreenState {
     data object Empty : ImportScreenState
 
     /**
-     * The file's name as it arrived, if it had one, and what importing it would do now. [opening]
-     * counts the files opened, so a file replacing another is a new page, though its name is the same.
+     * The file's name as it arrived, if it had one, and what importing it would do now. [opened]
+     * counts the files opened so far, so a file replacing another is a new page, though its name is the same.
      */
-    data class Preview(val name: String?, val preview: FilePreview, val opening: Int) : ImportScreenState
+    data class Preview(val name: String?, val preview: FilePreview, val opened: Int) : ImportScreenState
 
     data object Failed : ImportScreenState
 }
@@ -36,14 +36,14 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
 
     private var file: InboundFileHandle? = null
     private var name: String? = null
-    private var opening = 0
+    private var opened = 0
 
     /** Hand the model a document that was read; the preview is derived before this returns. */
     suspend fun open(arrival: FileArrival, read: DocumentRead) {
         try {
             file = owner.use { it.openFile(arrival, read.name, read.bytes, read.complete) }
             name = read.name
-            opening++
+            opened++
             derive()
         } catch (_: CairnException) {
             _state.value = ImportScreenState.Failed
@@ -67,7 +67,7 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         try {
             val preview = owner.use { held.preview() }
             // A file let go while the plan was being derived stays let go.
-            if (file === held) _state.value = ImportScreenState.Preview(name, preview, opening)
+            if (file === held) _state.value = ImportScreenState.Preview(name, preview, opened)
         } catch (_: CairnException) {
             _state.value = ImportScreenState.Failed
         }

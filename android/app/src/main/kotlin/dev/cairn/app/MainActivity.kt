@@ -2,13 +2,13 @@ package dev.cairn.app
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cairn.design.CairnPage
 import dev.cairn.design.CairnText

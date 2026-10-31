@@ -52,7 +52,7 @@ fun ImportScreen(model: ImportViewModel, onLeave: () -> Unit, onImport: () -> Un
         is ImportScreenState.Empty -> CairnPage {}
         // A file replacing another opens at its page's top (#241); a plan read again keeps the place.
         is ImportScreenState.Preview ->
-            key(s.opening) { ImportPage(s.name, s.preview, onImport = onImport, onLeave = onLeave) }
+            key(s.opened) { ImportPage(s.name, s.preview, onImport = onImport, onLeave = onLeave) }
         is ImportScreenState.Failed ->
             CairnPage { CairnText(stringResource(R.string.review_unavailable), Modifier.testTag("import-failed")) }
     }

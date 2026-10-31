@@ -121,7 +121,7 @@ private fun CairnPlaces(
         LaunchedEffect(incoming) {
             // A newer file cancels the one still being read: the newest is the one the person chose.
             incoming.pending.filterNotNull().collectLatest { file ->
-                openEditor?.settled()
+                openEditor?.settleAllAndWait()
                 arrive(file.arrival, file.uri)
                 incoming.handled(file)
             }

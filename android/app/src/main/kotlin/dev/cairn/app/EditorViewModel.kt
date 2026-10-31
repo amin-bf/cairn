@@ -197,7 +197,7 @@ class EditorViewModel(
     fun settleAll(then: () -> Unit = {}) {
         val snapshot = snapshot()
         enqueue {
-            editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
+            settle(snapshot)
             then()
         }
     }
@@ -206,17 +206,21 @@ class EditorViewModel(
      * Settle every field and return once it is done, failed or not: a file arriving from another app
      * waits on it before the preview takes the screen (ADR-0021 §7, ADR-0052 §2).
      */
-    suspend fun settled() {
+    suspend fun settleAllAndWait() {
         val done = CompletableDeferred<Unit>()
         val snapshot = snapshot()
         enqueue {
             try {
-                editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
+                settle(snapshot)
             } finally {
                 done.complete(Unit)
             }
         }
         done.await()
+    }
+
+    private suspend fun settle(snapshot: List<FieldValue>) {
+        editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
     }
 
     /** `Write | Cards`: either way it settles all, and the Cards pane then shows what the store holds (ADR-0048 §7). */
