@@ -11,6 +11,11 @@
   [ADR-0016 §5](0016-backup-and-restore.md) (the per-crate platform-seam rule),
   [ADR-0001 §1](0001-scheduling-algorithm-and-grade-scale.md) (the exact-pinning precedent)
 
+> **Superseded by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026): the egui Android
+> build is retired.** The vendored `egui-winit`, `[patch.crates-io]`, `scripts/verify-vendor.sh` and
+> `scripts/measure-ime-requests.sh` are gone; the guarded block never ran on the desktop, so the
+> workspace takes the published crate again. Read this ADR as the record of why the patch existed.
+
 ## Context
 
 [ADR-0025 §6](0025-the-authoring-screen-under-a-soft-keyboard.md) settled the authoring screen under a

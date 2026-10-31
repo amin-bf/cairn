@@ -12,6 +12,11 @@
   (autosave, *New note*, the deck dropdown — all of which land on this surface),
   [ADR-0016 §5](0016-backup-and-restore.md) (the per-crate platform-seam rule this ADR adds a third seam under)
 
+> **Superseded in part by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026): the egui
+> Android build is retired**, and with it the inset seam, the reserved band and the guards (§1–§3).
+> The Kotlin app reads its own insets, and the desktop has no soft keyboard. §4 stands: the
+> destructive-edit warning stays above the fields.
+
 ## Context
 
 [ADR-0012 §9](0012-the-note-authoring-experience.md) recorded that its prototype *"fakes the width but

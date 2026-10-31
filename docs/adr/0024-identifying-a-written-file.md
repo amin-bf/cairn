@@ -184,6 +184,10 @@ the user where the file went.
 
 ### 5. Facts the implementation must not rediscover
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026):** facts 2 and 6 are
+> about `cargo-apk`, which went with the egui Android build; the Kotlin app's manifest is written by
+> hand and packaged by Gradle. The rest still hold on Android.
+
 Each is a **silent** failure: it produces no error, or an error at the wrong moment, and two of them
 cost this ADR a build cycle each.
 

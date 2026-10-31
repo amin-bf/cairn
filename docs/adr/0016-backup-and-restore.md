@@ -174,6 +174,10 @@ in another is the conditional rule this specification has refused repeatedly.
 
 ### 5. Artifacts reach the filesystem through a put/get/list seam, and this resolves ADR-0013 §12
 
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026):** the seam's Android
+> arm now refuses; the Kotlin app saves and opens documents itself
+> ([ADR-0047](0047-the-file-surface-on-android.md)). The desktop reads this section as written.
+
 Nobody owned this. [ADR-0008](0008-the-deck-export-format.md) specifies the container's bytes and
 never says how a file reaches the user's filesystem, so the deck file has the same gap; it simply
 never had to be faced. A backup that cannot leave the device is not a backup.
@@ -364,6 +368,10 @@ heavy use, not two years.
 > [Evidence](../research/auto-backup-at-rest/README.md).
 
 ### 8. The archive is not encrypted
+
+> **Amended by [ADR-0045 §8](0045-the-native-android-client.md) (31.10.2026):** the ASCII-only input
+> argument below went with the egui Android build. The refusal stands on
+> [ADR-0020 §1](0020-protection-at-rest.md)'s own grounds.
 
 **Not even optionally.** This is the one artifact designed to leave the device and land on storage we
 do not control, so the case for encryption is the strongest anywhere in this specification. It loses

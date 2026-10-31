@@ -40,6 +40,7 @@ decision so that it would transfer to a native renderer; this ADR is the rendere
 5. **The egui Android build is retired once the Kotlin app reaches parity.** With it go the
    `cargo-apk` packaging, the vendored `egui-winit` patch, the window's inset seam and the ASCII-only
    input rule. Until then both exist, and nothing new is invested in the egui Android build.
+   *Done on 31.10.2026: see §8.*
 6. **On Android the system file picker is used, and the user may type a filename.** ADR-0016 §5
    refused both for reasons that were properties of the egui stack: `NativeActivity` cannot receive an
    activity result, and text input was ASCII-only. A Kotlin activity has neither limit. The desktop
@@ -49,6 +50,51 @@ decision so that it would transfer to a native renderer; this ADR is the rendere
    Lifecycle, threading, permissions, storage access, theming plumbing, testing and packaging are done
    the way the platform's own documentation recommends. A decision is raised only where Cairn's own
    ADRs bind the answer, or where the platform offers no settled practice.
+8. **The egui Android build is retired (the repository owner, 31.10.2026), and an upgrade over an
+   installed egui app needs nothing of its own.** The Kotlin app reached parity with the file
+   surface slice, judged on the handset the same day. Two decisions, both the owner's:
+   - **The retirement happens now, and the desktop stays egui.** §5's list goes, with everything that
+     existed only for that build: the `cargo-apk` packaging and the `cdylib`, the vendored
+     `egui-winit` and its scripts, the window's inset seam with its reserved band and guards, the
+     ASCII-only input rule and the editor's line saying the phone types Latin text only, the
+     launch intent, the folded editor and the stacked grades a thumb got, and `cairn-app`'s Android
+     arm. `cairn-store::platform` and `cairn-export::platform` keep their three arms, and the Android
+     arm of each refuses: the Kotlin app passes the directories in and moves the files itself
+     (ADR-0046 §5, ADR-0047 §6).
+   - **No step is built for the upgrade over an installed egui app.** §4 already makes it an upgrade:
+     the same package id, the same debug key, a higher version code, and the same `getFilesDir()`
+     collection and `getNoBackupFilesDir()` marker. Nothing else is migrated, checked or announced.
+
+   **What is kept, though the egui Android build used it**: `cairn-desktop` as its own crate (the
+   scripts, captures and docs run `-p cairn-desktop`), `crates/app/res` (the Kotlin build ships the
+   launcher icon from it, and the desktop's icon face is generated from its drawable), and the egui
+   Settings fixture bench (the desktop reaches it too).
+
+   **Backup and restore are not lost by this.** The egui build never had them on Android;
+   [ADR-0053](0053-backup-and-restore-on-android.md) builds them in the Kotlin app as the next slice.
+
+## Amendments to accepted ADRs
+
+§8 retires what these describe on Android; each now holds for the desktop, or as history.
+
+- **[ADR-0003 §5 §6](0003-client-stack.md)** — `cargo-apk`, the per-target `eframe` split, the
+  hand-written JNI and the Android text-input choice were the egui Android build's. The split of
+  `cairn-desktop` out of `cairn-app` stays, for the reason above.
+- **[ADR-0007 §6](0007-the-local-store.md)** — the Android data directory is passed in by the
+  Kotlin app; the hand-written JNI is gone. The locations are unchanged.
+- **[ADR-0015 §9](0015-the-sync-experience.md)** — the advance statement of the Android text-input
+  limitation has nothing to state: the Kotlin app takes composed text.
+- **[ADR-0016 §5 §8](0016-backup-and-restore.md)** — §5's seam keeps its Android arms, which refuse;
+  §8's ASCII-input argument is gone, and its refusal stands on ADR-0020 §1.
+- **[ADR-0024 §5](0024-identifying-a-written-file.md)** — the `cargo-apk` facts (the dropped escape,
+  the JDK on `PATH`) describe a packager no longer used.
+- **[ADR-0025](0025-the-authoring-screen-under-a-soft-keyboard.md)** and
+  **[ADR-0026](0026-the-per-tap-keyboard-re-pop.md)** — retired whole: the inset seam, the reserved
+  band, the guards and the vendored patch. ADR-0025 §4's warning above the fields stays.
+- **[ADR-0035 §3](0035-the-vertical-anchor.md)** — the egui app no longer runs under a thumb, so it
+  draws only the pointer's row; the Kotlin app's grades are its own Review slice's.
+- **[ADR-0047](0047-the-file-surface-on-android.md)** — its Consequences' re-wording of the
+  `MediaStore` rules is done: `AGENTS.md` deck-export rules 11–15 and backup rules 5, 6 and 8.
 
 What the Kotlin app inherits unchanged: the domain and store rules through the shared core; the design
 system's values and rules (ADR-0031 to ADR-0044, stated in logical pixels and in terms of *touch*
