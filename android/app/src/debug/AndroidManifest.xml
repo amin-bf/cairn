@@ -7,5 +7,11 @@
             android:exported="true" />
         <!-- Launched by SettingsRotationTest -->
         <activity android:name=".RotatingActivity" android:exported="false" />
+        <!-- Serves the bench's deck files to the picker's stub, as a document provider would (ImportPreviewTest).
+             It lives in the app's process because a test APK's provider would not share its memory. -->
+        <provider
+            android:name=".BenchProvider"
+            android:authorities="dev.cairn.app.test.bench"
+            android:exported="false" />
     </application>
 </manifest>

@@ -1,6 +1,9 @@
 package dev.cairn.app
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
@@ -23,13 +26,18 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.cairn.ffi.FileArrival
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.cairn.design.CairnShell
 import dev.cairn.design.Destination
 import dev.cairn.design.rememberKeyboardUp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** How often a sitting is asked again while nothing is touched, so the check-in can fall due. */
 private const val TICK_MS = 15_000L
@@ -41,6 +49,7 @@ private const val REVIEW = "review"
 private const val NOTES = "notes"
 private const val SETTINGS = "settings"
 private const val LEECHES = "leeches"
+private const val IMPORT = "import"
 private const val EDITOR = "editor?$ARG_NOTE={$ARG_NOTE}&$ARG_KIND={$ARG_KIND}&$ARG_DECK={$ARG_DECK}"
 
 /** The editor's route: a stored [note], or a draft of [kind] to be filed to [deck]. */
@@ -70,7 +79,7 @@ fun CairnNavHost(
     val appearance = LocalAppearance.current
     val scope = rememberCoroutineScope()
     key(generation) {
-        CairnPlaces(owner, keyboardUp, settingsTickMs) {
+        CairnPlaces(owner, generation, keyboardUp, settingsTickMs) {
             scope.launch {
                 appearance.choice = owner.themeChoiceOrSystem()
                 generation++
@@ -80,8 +89,11 @@ fun CairnNavHost(
 }
 
 @Composable
-private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, settingsTickMs: Long, onRestart: () -> Unit) {
+private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Boolean, settingsTickMs: Long, onRestart: () -> Unit) {
     val nav = rememberNavController()
+    // The file arrives before the screen that shows it, so the model is the activity's: it survives a
+    // rotation, and a replaced collection (#237) gets a fresh one.
+    val importModel = viewModel(key = "import-$generation") { ImportViewModel(owner) }
     val route = nav.currentBackStackEntryAsState().value?.destination?.route
     val destinations = listOf(
         Destination(stringResource(R.string.destination_review), route == REVIEW || route == LEECHES, "destination-review") { nav.goTo(REVIEW) },
@@ -139,7 +151,43 @@ private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, settingsTi
                         }
                     }
                 }
-                SettingsScreen(model, development = { DevelopmentBlock(owner, onRestart) })
+                // The system picker, for any type; a picker closed with nothing chosen does nothing. The
+                // document is read once and its grant is never kept (ADR-0047 §1, ADR-0052).
+                val resolver = LocalContext.current.contentResolver
+                val scope = rememberCoroutineScope()
+                val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    if (uri != null) {
+                        scope.launch {
+                            importModel.open(FileArrival.PICKED, readDocument(resolver, uri))
+                            // The read came back from another thread; the back stack is the main thread's.
+                            withContext(Dispatchers.Main) { nav.navigate(IMPORT) { launchSingleTop = true } }
+                        }
+                    }
+                }
+                SettingsScreen(
+                    model,
+                    onOpenFile = { picker.launch(arrayOf("*/*")) },
+                    development = { DevelopmentBlock(owner, onRestart) },
+                )
+            }
+            composable(IMPORT) {
+                // Cancel, Close and Back are one dismissal: nothing written, nothing kept (ADR-0052).
+                val leave = {
+                    importModel.clear()
+                    nav.popBackStack()
+                    Unit
+                }
+                BackHandler(onBack = leave)
+                // The plan is derived on every read, so it is read again on return (ADR-0022 §5).
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { importModel.refresh() }
+                // After a killed process the route comes back with no file: the preview is not restored.
+                val held by importModel.state.collectAsStateWithLifecycle()
+                if (held is ImportScreenState.Empty) {
+                    LaunchedEffect(Unit) {
+                        if (nav.currentBackStackEntry?.destination?.route == IMPORT) nav.popBackStack()
+                    }
+                }
+                ImportScreen(importModel, onLeave = leave)
             }
             composable(
                 EDITOR,
@@ -163,7 +211,8 @@ private fun CairnPlaces(owner: CollectionAccess, keyboardUp: Boolean, settingsTi
             }
         }
     }
-    CairnShell(destinations, keyboardUp = keyboardUp, content = shell)
+    // The import preview takes the whole screen, with no destinations row (ADR-0052).
+    CairnShell(destinations, keyboardUp = keyboardUp, showDestinations = route != IMPORT, content = shell)
 }
 
 /** Switch destination the way a top-level row does: one entry per place, state kept, no pile-up. */
