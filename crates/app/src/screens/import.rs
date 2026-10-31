@@ -7,7 +7,7 @@
 //! [`crate::CairnApp`]'s hands, and while one is held this screen takes the page in place of whatever
 //! destination was showing (ADR-0022 §6, §9, confirmed by #151). The gate — *Import* and *Cancel*, or
 //! a lone *Close* — is drawn by the caller in a band pinned outside the scroll on the reach line
-//! (ADR-0039 §8), which is why this module answers [`gate_for`] separately from drawing the body.
+//! (ADR-0039 §8), which is why the gate is decided by [`crate::inbound::gate_for`] apart from the body.
 //!
 //! **The plan is derived by the caller once per frame and handed in, never held** (ADR-0022 §5): the
 //! body and the gate must describe the same derivation, and the next frame derives again, so a sync
@@ -23,22 +23,13 @@
 //! *moving in from X*, *renaming your X* — goes in through [`bidi::isolate`], which orders it as a run
 //! of its own.
 
-use cairn_export::{DeckPlan, Header, Path, Plan, Refusal};
+use cairn_export::{DeckPlan, Header, Path, Refusal};
 
+// The gate's decision is `cairn-ops`'s, shared with the Android client (ADR-0046 §3); this screen
+// only draws it.
+use crate::inbound::Gate;
 use crate::inbound::Report;
 use crate::{bidi, body, frame, spacing};
-
-/// What the pinned band offers under the screen (ADR-0022 §1, §4; ADR-0041 §3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Gate {
-    /// *Import* as the primary with *Cancel* beside it as a text action — a plan that changes
-    /// something, which is the only state in which an import can be accepted.
-    Decide,
-    /// A lone *Close*, as the primary. A refusal has one way out, and so does a file whose import
-    /// would change nothing: ADR-0022 §4 says the no-op *"costs one dismissal"*, and an *Import* that
-    /// writes nothing is a second button whose only effect is to leave the screen.
-    Dismiss,
-}
 
 /// What the person pressed in the band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,21 +76,6 @@ pub(crate) fn gate(ui: &mut egui::Ui, gate: Gate) -> Option<Pressed> {
             pressed
         }
     }
-}
-
-/// Which gate a derived report is owed.
-pub(crate) fn gate_for(outcome: &Result<Plan, Refusal>) -> Gate {
-    match outcome {
-        Ok(plan) if !changes_nothing(plan) => Gate::Decide,
-        _ => Gate::Dismiss,
-    }
-}
-
-/// Whether accepting this plan would write nothing: every deck unchanged, and no file-level effect.
-fn changes_nothing(plan: &Plan) -> bool {
-    plan.decks.iter().all(|d| d.no_change)
-        && plan.adopted_kinds.is_empty()
-        && plan.emptied_decks.is_empty()
 }
 
 /// The screen's heading: the file's name as it arrived — the object the person opened — or, for a
@@ -368,7 +344,9 @@ fn aligned_job(ui: &mut egui::Ui, mut job: egui::text::LayoutJob, rtl: bool) {
 mod tests {
     use super::*;
     use cairn_core::content::DeckId;
-    use cairn_export::MovingIn;
+    use cairn_export::{MovingIn, Plan};
+
+    use crate::inbound::gate_for;
 
     fn deck() -> DeckPlan {
         DeckPlan {

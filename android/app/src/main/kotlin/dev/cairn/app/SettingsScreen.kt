@@ -41,7 +41,7 @@ import dev.cairn.ffi.ThemeChoice
 
 /** Settings over its model: the page, or the failure page when the collection cannot be read. */
 @Composable
-fun SettingsScreen(model: SettingsViewModel, development: @Composable () -> Unit = {}) {
+fun SettingsScreen(model: SettingsViewModel, onOpenFile: () -> Unit = {}, development: @Composable () -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     when (val s = state) {
         is SettingsScreenState.Loading -> CairnPage {}
@@ -52,6 +52,7 @@ fun SettingsScreen(model: SettingsViewModel, development: @Composable () -> Unit
             onChoose = model::chooseAppearance,
             onOptimise = model::optimise,
             onCancelOptimise = model::cancelOptimise,
+            onOpenFile = onOpenFile,
             development = development,
         )
         is SettingsScreenState.Failed ->
@@ -63,7 +64,7 @@ fun SettingsScreen(model: SettingsViewModel, development: @Composable () -> Unit
  * The page (ADR-0042): the heading, then two groups, each a bold name at body size over a caption,
  * (the egui build's rule between two blocks of a group is drawn when a group holds a second block).
  * Nothing is pinned to the reach line.
- * *This device* holds Appearance alone: no Files block and no sync block (ADR-0051 §3, §5).
+ * *This device* holds Files, then Appearance, which closes the group: no sync block (ADR-0051 §3, §5).
  */
 @Composable
 fun SettingsPage(
@@ -73,6 +74,7 @@ fun SettingsPage(
     onChoose: (ThemeChoice) -> Unit,
     onOptimise: () -> Unit,
     onCancelOptimise: () -> Unit,
+    onOpenFile: () -> Unit = {},
     development: @Composable () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
@@ -98,6 +100,11 @@ fun SettingsPage(
 
             Spacer(Modifier.height(gap(2)))
             GroupHeading(stringResource(R.string.settings_device), stringResource(R.string.settings_device_caption), "group-device")
+            FilesBlock(onOpenFile)
+            // The rule between two blocks of a group, as above.
+            Spacer(Modifier.height(gap(3)))
+            CairnRule()
+            Spacer(Modifier.height(gap(2)))
             AppearanceBlock(state, onChoose)
 
             // A development build only: the shipping source set draws nothing here (ADR-0051 §1).
@@ -141,9 +148,18 @@ private fun RateBlock(state: SettingsScreenState.Ready, onChange: (String) -> Un
     CairnText(stringResource(R.string.settings_rate_consequence), Modifier.testTag("rate-consequence"))
 }
 
+/** *Files* (ADR-0051 §5): the system picker for a deck file, styled as Optimise is. */
+@Composable
+private fun FilesBlock(onOpenFile: () -> Unit) {
+    CairnFieldLabel(stringResource(R.string.settings_files_label), Modifier.testTag("label-Files"))
+    CairnControl(stringResource(R.string.settings_open_file), onOpenFile, Modifier.fillMaxWidth().testTag("open-file"))
+    Spacer(Modifier.height(gap(1)))
+    CairnText(stringResource(R.string.settings_files_line), Modifier.testTag("files-line"))
+}
+
 @Composable
 private fun AppearanceBlock(state: SettingsScreenState.Ready, onChoose: (ThemeChoice) -> Unit) {
-    CairnFieldLabel(stringResource(R.string.settings_appearance_label))
+    CairnFieldLabel(stringResource(R.string.settings_appearance_label), Modifier.testTag("label-Appearance"))
     val options = listOf(
         Triple(ThemeChoice.SYSTEM, R.string.settings_appearance_system, "appearance-system"),
         Triple(ThemeChoice.LIGHT, R.string.settings_appearance_light, "appearance-light"),

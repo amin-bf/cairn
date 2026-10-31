@@ -50,10 +50,8 @@ import dev.cairn.design.CairnText
 import dev.cairn.design.CairnTextField
 import dev.cairn.design.Tier
 import dev.cairn.design.gap
+import dev.cairn.design.reachLineBelow
 import dev.cairn.design.rememberKeyboardUp
-import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Frame
-import dev.cairn.design.tokens.Spacing
 import dev.cairn.ffi.DeckSelector
 
 /** Notes: the note list, its deck filter and search (ADR-0021 §2, §9; ADR-0039). */
@@ -190,8 +188,7 @@ fun NoteList(
                     modifier = Modifier.fillMaxWidth().testTag("create-note"),
                     primary = true,
                 )
-                val full = (Frame.REACH_LINE + Controls.HEIGHT + Spacing.UNIT).dp
-                Spacer(Modifier.height(if (page != Dp.Unspecified && full <= page / 3) Frame.REACH_LINE.dp else gap(2)))
+                Spacer(Modifier.height(reachLineBelow(page)))
             }
         }
     }

@@ -32,9 +32,7 @@ import dev.cairn.design.CairnText
 import dev.cairn.design.CairnWell
 import dev.cairn.design.Tier
 import dev.cairn.design.gap
-import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Frame
-import dev.cairn.design.tokens.Spacing
+import dev.cairn.design.reachLineBelow
 import dev.cairn.ffi.LeechCost
 import dev.cairn.ffi.LeechListFacts
 import dev.cairn.ffi.LeechRowFact
@@ -112,15 +110,13 @@ fun LeechList(
                     }
                     Spacer(Modifier.height(gap(2)))
                 }
-                // The reach line when it fits in a third of the page, as the note list's does.
-                val full = (Frame.REACH_LINE + Controls.HEIGHT + Spacing.UNIT).dp
                 Spacer(Modifier.height(gap(2)))
                 CairnControl(
                     stringResource(R.string.leeches_back),
                     onClick = onBack,
                     modifier = Modifier.fillMaxWidth().testTag("back-to-review"),
                 )
-                Spacer(Modifier.height(if (full <= page / 3) Frame.REACH_LINE.dp else gap(2)))
+                Spacer(Modifier.height(reachLineBelow(page)))
             }
         }
     }

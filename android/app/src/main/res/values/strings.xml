@@ -89,6 +89,10 @@
     </plurals>
     <string name="settings_device">This device</string>
     <string name="settings_device_caption">Stays on this machine.</string>
+    <!-- The Files block (ADR-0051 §5): new in this build, the egui build's Files block being a list. -->
+    <string name="settings_files_label">Files</string>
+    <string name="settings_files_line">Choose a file to see what importing it would do.</string>
+    <string name="settings_open_file">Open a file…</string>
     <string name="settings_appearance_label">Appearance</string>
     <string name="settings_appearance_system">System</string>
     <string name="settings_appearance_light">Light</string>
@@ -141,4 +145,37 @@
     <string name="editor_dormant_blank">blank %1$d</string>
     <string name="editor_dormant_slot">card %1$d</string>
     <string name="editor_dormant_history">%1$s · dormant · %2$d reviews kept</string>
+
+    <!-- The import preview (ADR-0022 §3, §4; ADR-0041). The egui build's words, word for word. -->
+    <string name="import_untitled">A deck file</string>
+    <string name="import_by">by %1$s</string>
+    <string name="import_caption_update">updating a deck you already have</string>
+    <string name="import_caption_create">new deck</string>
+    <string name="import_caption_held">a deck you already have</string>
+    <string name="import_nothing_changes">Nothing will change.</string>
+    <plurals name="import_new_notes">
+        <item quantity="one">%1$s new note</item>
+        <item quantity="other">%1$s new notes</item>
+    </plurals>
+    <plurals name="import_notes">
+        <item quantity="one">%1$s note</item>
+        <item quantity="other">%1$s notes</item>
+    </plurals>
+    <string name="import_already_yours">%1$s already yours</string>
+    <string name="import_new_and_already_yours">%1$s, %2$s already yours</string>
+    <string name="import_moving_in">%1$s moving in from %2$s</string>
+    <string name="import_deleted">%1$s of your notes will be deleted</string>
+    <string name="import_renaming">Renaming your %1$s to %2$s</string>
+    <string name="import_revision_conflict">Same revision as yours, with different content</string>
+    <string name="import_adds_kinds">Adds a card type this build doesn\'t have: %1$s</string>
+    <string name="import_left_empty">%1$s will be left empty</string>
+    <string name="import_history_untouched">Your review history is untouched.</string>
+    <string name="import_refusal_unreadable">This file could not be read as a deck.</string>
+    <string name="import_refusal_newer">This file needs a newer version of the app.</string>
+    <string name="import_refusal_archive">This is a collection archive, not a deck file.</string>
+    <string name="import_refusal_not_a_deck">This file is not put together the way a deck is.</string>
+    <string name="import_refusal_older">This is an older copy of %1$s than the one you have.</string>
+    <string name="import_import">Import</string>
+    <string name="import_cancel">Cancel</string>
+    <string name="import_close">Close</string>
 </resources>

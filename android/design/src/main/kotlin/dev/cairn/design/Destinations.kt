@@ -63,7 +63,8 @@ fun rememberKeyboardUp(): Boolean = WindowInsets.ime.getBottom(LocalDensity.curr
 
 /**
  * The shell around every destination (ADR-0048 §1): the destinations row pinned at the top while the
- * keyboard is down and absent while it is up, so an editor's first screen is the form's. The shell
+ * keyboard is down and absent while it is up, so an editor's first screen is the form's, and absent
+ * when [showDestinations] is false, for a screen that takes the whole page (the import preview). The shell
  * takes the system insets, so the page inside it asks for none twice.
  */
 @Composable
@@ -71,10 +72,11 @@ fun CairnShell(
     destinations: List<Destination>,
     modifier: Modifier = Modifier,
     keyboardUp: Boolean = rememberKeyboardUp(),
+    showDestinations: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize().background(Cairn.colors.page).windowInsetsPadding(WindowInsets.safeDrawing)) {
-        if (!keyboardUp) {
+        if (showDestinations && !keyboardUp) {
             Box(Modifier.fillMaxWidth().padding(horizontal = Frame.PAGE_MARGIN.dp), contentAlignment = Alignment.TopCenter) {
                 CairnDestinationsRow(destinations, Modifier.widthIn(max = Frame.MEASURE.dp).fillMaxWidth().testTag("destinations"))
             }
