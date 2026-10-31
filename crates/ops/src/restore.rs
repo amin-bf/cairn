@@ -46,8 +46,9 @@ pub enum Refusal {
     WrongProfile,
     /// A member name the format forbids (ADR-0008 §6).
     BrokenPath,
-    /// This device holds a different collection (ADR-0016 §10); the way out is
-    /// [`cairn_export::RESTORE_MISMATCH_WAY_OUT_ANDROID`].
+    /// This device holds a different collection (ADR-0016 §10). The platform words the way out:
+    /// [`cairn_export::RESTORE_MISMATCH_WAY_OUT`] where enrolment exists, without it on Android
+    /// (ADR-0053 §4).
     AnotherCollection,
     /// The platform stopped reading at its ceiling and the head it holds is an archive's: too large
     /// to open here, which is a different thing from unreadable.
