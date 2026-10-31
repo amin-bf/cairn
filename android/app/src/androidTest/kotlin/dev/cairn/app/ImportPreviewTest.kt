@@ -26,6 +26,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.test.core.app.ApplicationProvider
@@ -402,6 +408,32 @@ class ImportPreviewTest {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
         assertEquals(pageArgb(dark), bitmap.getPixel(2, bitmap.height / 2))
+    }
+
+    @Test
+    fun a_file_replacing_the_preview_opens_at_the_top_of_its_page() {
+        // A short host, so the bench's longest preview scrolls; the files arrive as another app hands
+        // them over (#244). The same file twice: the second is a new arrival, though its name is the same.
+        val incoming = IncomingFiles()
+        rule.setContent {
+            Box(Modifier.height(240.dp)) {
+                CairnAppearance(AppearanceState(ThemeChoice.LIGHT)) {
+                    CairnNavHost(owner, keyboardUp = false, incoming = incoming)
+                }
+            }
+        }
+        waitFor("destinations")
+        fun heading() = rule.onNodeWithTag("import-heading").fetchSemanticsNode().positionInRoot.y
+        incoming.arrive(Arriving(FileArrival.OPENED, BenchProvider.uri(several.name)))
+        waitFor("import-deck-0")
+        val atTop = heading()
+        rule.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 10_000f) }
+        rule.waitForIdle()
+        assertTrue("the page scrolled: ${heading()} against $atTop", heading() < atTop)
+        incoming.arrive(Arriving(FileArrival.OPENED, BenchProvider.uri(several.name)))
+        rule.waitUntil(10_000) { incoming.pending.value == null }
+        rule.waitForIdle()
+        assertEquals(atTop, heading(), 1f)
     }
 
     private fun previewOf(file: dev.cairn.ffi.BenchFileFact) = runBlocking {
