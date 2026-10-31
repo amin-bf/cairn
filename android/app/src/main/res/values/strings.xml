@@ -105,6 +105,8 @@
     <string name="backup_share">Share</string>
     <!-- Under the report when the archive was written whole but "last backup" could not be recorded. -->
     <string name="backup_unrecorded">Saved, but not recorded as the last backup: %1$s</string>
+    <!-- Under the nudge once the collection is past Android's automatic-backup quota (ADR-0016 §7): two facts, no verb. The size arrives grouped, in whole MB rounded up; 25 MB is cairn_ops::backup::QUOTA_BYTES. -->
+    <string name="backup_size_over">Your collection is %1$s MB. Android\'s automatic backup stops above 25 MB.</string>
     <plurals name="backup_reviews">
         <item quantity="one">%1$s review</item>
         <item quantity="other">%1$s reviews</item>

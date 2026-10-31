@@ -53,6 +53,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -232,6 +233,72 @@ class BackupTest {
         val late = 1_772_494_200_000L
         assertEquals("2 March", backupDate(late, march, utc))
         assertEquals("3 March", backupDate(late, march, TimeZone.getTimeZone("GMT+01:00")))
+    }
+
+    // --- The size against the automatic backup's quota (ADR-0016 §7, #250).
+
+    private val overQuota = "Your collection is 31 MB. Android's automatic backup stops above 25 MB."
+
+    @Test
+    fun the_size_line_stands_under_the_nudge_over_the_quota_and_is_absent_under_it() {
+        var shown by mutableStateOf(SettingsScreenState.Ready("5", ThemeChoice.LIGHT, backupNudge = BackupNudgeShown.None(4200, 812)))
+        rule.setContent { CairnTheme(dark = false) { SettingsPage(shown, {}, {}, {}, {}, {}) } }
+        rule.waitForIdle()
+        assertFalse(exists("backup-size"))
+
+        shown = shown.copy(backupOverQuotaMb = 31)
+        rule.waitForIdle()
+        assertEquals(overQuota, text("backup-size"))
+        assertTrue(top("backup-nudge") < top("backup-size"))
+        assertTrue(top("backup-size") < top("label-Appearance"))
+
+        // It stays under a report too, since the size is the collection's and not the backup's.
+        shown = shown.copy(backup = BackupRow.Written("Cairn backup 2026-10-31.ccoll", 812, 4200, BenchProvider.uri("Cairn backup 2026-10-31.ccoll")))
+        rule.waitForIdle()
+        assertEquals(overQuota, text("backup-size"))
+        assertTrue(top("backup-size") < top("backup-report"))
+
+        // A size past a thousand MB is grouped as the counts are.
+        shown = shown.copy(backupOverQuotaMb = 1024)
+        rule.waitForIdle()
+        assertEquals("Your collection is 1,024 MB. Android's automatic backup stops above 25 MB.", text("backup-size"))
+    }
+
+    @Test
+    fun the_binding_states_the_size_of_the_files_directory_once_it_is_past_the_quota() {
+        showApp()
+        openSettings()
+        assertFalse(exists("backup-size"))
+
+        // A sparse file of exactly the quota puts the files directory past it without writing 25 MiB.
+        RandomAccessFile(File(root, "files/padding.bin"), "rw").use { it.setLength(26_214_400) }
+        rule.onNodeWithTag("destination-review").performClick()
+        rule.waitForIdle()
+        openSettings()
+        waitFor("backup-size")
+        val mb = runBlocking { owner.use { it.backupNudge().sizeMb } }
+        assertTrue("$mb", mb > 25u)
+        assertEquals("Your collection is $mb MB. Android's automatic backup stops above 25 MB.", text("backup-size"))
+    }
+
+    @Test
+    fun the_files_block_is_captured_with_the_size_line_in_both_themes() {
+        val dir = context.getExternalFilesDir("settings-shots")!!
+        val state = SettingsScreenState.Ready("5", ThemeChoice.LIGHT, backupNudge = BackupNudgeShown.Last("3 March", 1240), backupOverQuotaMb = 31)
+        var dark by mutableStateOf(false)
+        rule.setContent { CairnTheme(dark) { SettingsPage(state, {}, {}, {}, {}, {}) } }
+        for (isDark in listOf(false, true)) {
+            dark = isDark
+            rule.waitForIdle()
+            rule.onNodeWithTag("backup-size").performScrollTo()
+            rule.waitForIdle()
+            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+            FileOutputStream(File(dir, "backup-size-${if (isDark) "dark" else "light"}.png")).use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+            assertEquals(pageArgb(isDark), bitmap.getPixel(2, bitmap.height / 2))
+        }
+        assertEquals(overQuota, text("backup-size"))
     }
 
     // --- The flow (ADR-0053 §4).
