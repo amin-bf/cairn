@@ -12,7 +12,7 @@ mod interchange;
 pub mod platform;
 
 pub use collection::{
-    Collection, MergeReport, SkewWarning, StoreError, TAG_ATTR_PREFIX, remove_files,
+    Collection, MergeReport, SkewWarning, StoreError, TAG_ATTR_PREFIX, backup_size, remove_files,
 };
 /// The instant token every row and the archive's manifest carry (ADR-0004 §11, ADR-0016 §11): the
 /// one formatting of an epoch-millisecond instant, so a backup's `created` reads as the log's do.
