@@ -14,6 +14,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -103,12 +106,18 @@ fun ImportPage(
                     }
                     Spacer(Modifier.height(gap(2)))
                 }
+                // Until restore writes (#253), pressing it says so here and reaches no write.
+                var restorePressed by rememberSaveable(preview) { mutableStateOf(false) }
                 if (failure != null) {
                     Spacer(Modifier.height(gap(1)))
                     Sentence(stringResource(R.string.import_write_failed, failure), "import-failure")
+                } else if (restorePressed) {
+                    Spacer(Modifier.height(gap(1)))
+                    Sentence(stringResource(R.string.restore_not_yet), "restore-not-yet")
                 }
                 Spacer(Modifier.height(gap(2)))
-                Gate(preview.gate(), restore = preview is FilePreview.Restore, onImport, onLeave, enabled = !writing)
+                val restore = preview is FilePreview.Restore
+                Gate(preview.gate(), restore, if (restore) ({ restorePressed = true }) else onImport, onLeave, enabled = !writing)
                 Spacer(Modifier.height(reachLineBelow(page)))
             }
         }
@@ -130,8 +139,7 @@ private fun FilePreview.isArchive(): Boolean = when (this) {
 
 /**
  * *Import* — or *Restore*, for an archive — as the primary with *Cancel* beside it as a text action, or
- * a lone *Close* (ADR-0041 §3, ADR-0053 §2). The primary goes to [onImport] either way: the binding
- * derives which write it is.
+ * a lone *Close* (ADR-0041 §3, ADR-0053 §2). The primary goes to [onImport].
  */
 @Composable
 private fun Gate(gate: ImportGate, restore: Boolean, onImport: () -> Unit, onLeave: () -> Unit, enabled: Boolean) {

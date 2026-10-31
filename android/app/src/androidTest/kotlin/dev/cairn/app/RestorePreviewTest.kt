@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -176,8 +177,12 @@ class RestorePreviewTest {
         showApp()
         pick()
         rule.onNodeWithTag("gate-restore").performClick()
-        waitFor("import-failure")
+        waitFor("restore-not-yet")
+        // The app's own sentence, not a write failure worded by the binding (#248: the binding sends facts).
+        assertEquals("Restoring is not built yet. Nothing was written.", text("restore-not-yet"))
+        assertFalse(exists("import-failure"))
         assertTrue(exists("restore-summary"))
+        rule.onNodeWithTag("gate-cancel").assertIsEnabled()
         assertEquals(0uL, noteCount())
     }
 
