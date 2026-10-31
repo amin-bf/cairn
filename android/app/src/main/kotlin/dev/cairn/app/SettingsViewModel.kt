@@ -169,8 +169,8 @@ class SettingsViewModel(
     private suspend fun read(rateRefused: Boolean, appearanceRefused: Boolean, rereadRate: Boolean = false) {
         try {
             val (rate, choice, nudge) = owner.use { Triple(it.newCardRate(), it.themeChoice(), it.optimisationNudge().toNudge()) }
-            val facts = owner.use { it.backupNudge() }
-            val backupNudge = facts.shown(nowWallMs())
+            val backupFacts = owner.use { it.backupNudge() }
+            val backupNudge = backupFacts.shown(nowWallMs())
             val before = _state.value as? SettingsScreenState.Ready
             val shown = before?.rate
             val keep = editing && !rereadRate && shown != null
@@ -185,7 +185,7 @@ class SettingsViewModel(
                 updated = before?.updated ?: false,
                 backupNudge = backupNudge,
                 backup = before?.backup ?: BackupRow.Idle,
-                backupOverQuotaMb = facts.sizeMb.toLong().takeIf { facts.overQuota },
+                backupOverQuotaMb = backupFacts.sizeMb.toLong().takeIf { backupFacts.overQuota },
             )
         } catch (_: CairnException) {
             _state.value = SettingsScreenState.Failed

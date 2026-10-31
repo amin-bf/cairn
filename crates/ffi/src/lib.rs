@@ -3091,12 +3091,12 @@ mod tests {
         // exactly the quota puts the collection past it, and nothing in the state directory counts.
         std::fs::File::create(state.path().join("elsewhere.bin"))
             .unwrap()
-            .set_len(40 * 1_048_576)
+            .set_len(2 * cairn_ops::backup::QUOTA_BYTES)
             .unwrap();
         assert_eq!(handle.backup_nudge().unwrap(), under);
         std::fs::File::create(data.path().join("padding.bin"))
             .unwrap()
-            .set_len(26_214_400)
+            .set_len(cairn_ops::backup::QUOTA_BYTES)
             .unwrap();
         let over = handle.backup_nudge().unwrap();
         assert!(over.over_quota);

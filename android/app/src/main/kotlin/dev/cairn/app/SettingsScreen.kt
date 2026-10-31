@@ -180,10 +180,7 @@ private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit,
     }
     state.backupOverQuotaMb?.let {
         Spacer(Modifier.height(gap(1)))
-        CairnText(
-            stringResource(R.string.backup_size_over, String.format(java.util.Locale.ENGLISH, "%,d", it)),
-            Modifier.testTag("backup-size"),
-        )
+        CairnText(stringResource(R.string.backup_size_over, grouped(it)), Modifier.testTag("backup-size"))
     }
     when (val row = state.backup) {
         is BackupRow.Written -> {
@@ -285,4 +282,4 @@ private fun nudgeSentence(nudge: Nudge): String = when (nudge) {
 
 @Composable
 private fun counted(plural: Int, n: Long): String =
-    pluralStringResource(plural, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), String.format(java.util.Locale.ENGLISH, "%,d", n))
+    pluralStringResource(plural, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), grouped(n))

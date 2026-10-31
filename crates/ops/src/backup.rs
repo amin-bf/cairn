@@ -1,5 +1,6 @@
 //! A backup (ADR-0016 §2 §6, ADR-0053 §4): the whole collection as one `.ccoll` archive, written
-//! where the person chooses, and the nudge that says how long ago the last one was.
+//! where the person chooses, and the nudge that says how long ago the last one was and how large
+//! the collection is against Android's automatic-backup quota (ADR-0016 §7).
 //!
 //! **Building is not backing up.** [`build`] hands back the archive's bytes, the suggested name and
 //! the counts, and records nothing; the caller writes the bytes through the platform and calls
