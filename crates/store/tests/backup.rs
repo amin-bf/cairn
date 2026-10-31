@@ -127,7 +127,7 @@ fn last_backup_is_none_before_the_first_and_reads_back_after() {
 }
 
 #[test]
-fn the_counts_are_every_review_the_reviews_after_an_instant_and_the_live_notes() {
+fn the_counts_are_every_review_and_the_reviews_after_an_instant() {
     let (mut coll, _d, _s) = open();
     let kept = coll.create_note("basic", &[("Front", "a")]).unwrap();
     let deleted = coll.create_note("basic", &[("Front", "b")]).unwrap();
@@ -141,7 +141,6 @@ fn the_counts_are_every_review_the_reviews_after_an_instant_and_the_live_notes()
         .unwrap();
 
     assert_eq!(coll.review_count().unwrap(), 0);
-    assert_eq!(coll.live_note_count().unwrap(), 1);
 
     review(&mut coll, kept, DAY0_MS);
     review(&mut coll, kept, DAY0_MS + ONE_DAY_MS);

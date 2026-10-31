@@ -742,41 +742,6 @@ impl Collection {
         Ok(n as u64)
     }
 
-    /// How many notes are live: not deleted by their own flag nor by their deck's (ADR-0005 §7) —
-    /// the notes the note list shows, counted for the nudge and the manifest (ADR-0016 §6, §11).
-    pub fn live_note_count(&self) -> Result<u64, StoreError> {
-        let deleted_decks = self.deleted_deck_ids()?;
-        let mut stmt = self.conn.prepare(
-            "SELECT entity_id, attr, value FROM mutable WHERE entity = 'note' ORDER BY entity_id",
-        )?;
-        let mut rows = stmt.query([])?;
-        let mut live = 0u64;
-        let mut current: Option<(Vec<u8>, bool)> = None;
-        while let Some(row) = rows.next()? {
-            let id: Vec<u8> = row.get(0)?;
-            let attr: String = row.get(1)?;
-            let value: Option<String> = row.get(2)?;
-            if current.as_ref().is_none_or(|(held, _)| *held != id) {
-                if let Some((_, false)) = current {
-                    live += 1;
-                }
-                current = Some((id, false));
-            }
-            let gone = match (attr.as_str(), value.as_deref()) {
-                ("deleted", Some("true")) => true,
-                ("deck", Some(deck)) => deleted_decks.contains(deck),
-                _ => false,
-            };
-            if gone && let Some((_, deleted)) = current.as_mut() {
-                *deleted = true;
-            }
-        }
-        if let Some((_, false)) = current {
-            live += 1;
-        }
-        Ok(live)
-    }
-
     /// The scheduler parameter vector currently in effect (ADR-0001 §6): the weights of the **latest**
     /// `config-set` parameter row in the canonical total order, or the published defaults when no run
     /// has ever written one. This is what an optimisation run's result is compared against to decide

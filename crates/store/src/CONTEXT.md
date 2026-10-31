@@ -116,7 +116,7 @@ surface**. The test that decides whether a device adopts a collection id it meet
 
 **Mutable line**:
 One row of the mutable surface as `mutable_lines` hands it out — the archive's `mutable.jsonl`
-format (ADR-0016 §2; the shape is #248's call, *yours to overturn*):
+format. ADR-0016 §2 selects the rows; spec #248 set the line's shape:
 `{"entity":"note","id":"<hex>","attr":"Front","value":"chien","counter":9,"writer":"<hex>"}`. Keys
 in that order; `id` and `writer` lowercase hex of their bytes (a suspension's id is the 18-byte
 card key, so ids are not all sixteen bytes); `value` a string or `null`; `counter` and `writer` the

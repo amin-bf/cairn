@@ -54,7 +54,7 @@ pub fn build(
 ) -> Result<Backup, StoreError> {
     let log = coll.log_lines()?;
     let mutable = coll.mutable_lines()?;
-    let notes = coll.live_note_count()?;
+    let notes = live_notes(coll)?;
     let reviews = coll.review_count()?;
     // The store mints the id and keeps it in canonical text, so it always reads back.
     let collection_id = CollectionId::parse_canonical(coll.collection_id())
@@ -92,8 +92,14 @@ pub fn nudge(coll: &Collection) -> Result<Nudge, StoreError> {
         last_backup_ms,
         reviews_since,
         reviews,
-        notes: coll.live_note_count()?,
+        notes: live_notes(coll)?,
     })
+}
+
+/// The live notes, counted from the note list so the nudge, the manifest and the list never disagree
+/// on what a deleted deck takes with it (ADR-0005 §7).
+fn live_notes(coll: &Collection) -> Result<u64, StoreError> {
+    Ok(crate::notes::list(coll, &crate::notes::Filter::default())?.len() as u64)
 }
 
 #[cfg(test)]
@@ -171,17 +177,17 @@ mod tests {
             Some("2026-03-02T23:30:00.000Z")
         );
 
-        // Nothing ADR-0016 §2 excludes: no device-local value anywhere in the archive.
+        // Nothing ADR-0016 §2 excludes: the device-local values set above appear nowhere in the
+        // archive. Which lines the payloads select is the store's, proved in its own backup tests.
         let everything = ["manifest.json", "log.jsonl", "mutable.jsonl"]
             .map(|m| member(&backup.bytes, m))
             .join("\n");
         for local in [
-            "dark-theme-choice",
-            "last_backup",
-            "seq_highwater",
-            "writer_id",
+            "dark-theme-choice".to_string(),
+            (LATE_MS - 1).to_string(),
+            iso8601_millis(LATE_MS - 1),
         ] {
-            assert!(!everything.contains(local), "{local} must never travel");
+            assert!(!everything.contains(&local), "{local} must never travel");
         }
         // Building is not backing up: nothing is recorded until the write succeeds.
         assert_eq!(coll.last_backup().unwrap(), Some(LATE_MS - 1));
@@ -212,7 +218,7 @@ mod tests {
         let (mut coll, _d, _s) = open();
         Fixture::History.install(&mut coll, LATE_MS).unwrap();
         let reviews = coll.review_count().unwrap();
-        let notes = coll.live_note_count().unwrap();
+        let notes = notes::list(&coll, &Filter::default()).unwrap().len() as u64;
         assert!(reviews > 0);
 
         let before = nudge(&coll).unwrap();

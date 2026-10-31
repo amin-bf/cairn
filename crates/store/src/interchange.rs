@@ -23,10 +23,7 @@ const HEX: &[u8; 16] = b"0123456789abcdef";
 /// so the `log_replay` index order and the interchange tie-break order (ADR-0004 §9) agree.
 pub fn hex16(bytes: &[u8; 16]) -> String {
     let mut s = String::with_capacity(32);
-    for byte in bytes {
-        s.push(char::from(HEX[usize::from(byte >> 4)]));
-        s.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
+    push_hex(&mut s, bytes);
     s
 }
 
@@ -149,6 +146,8 @@ fn push_hex(out: &mut String, bytes: &[u8]) {
 
 /// A JSON string literal with the escapes JSON requires. A value on the mutable surface is authored
 /// text — a quote, a newline or a control character in a field must survive the line intact.
+/// `cairn_export::json::string` writes the same literal; the store depends on no crate but
+/// `cairn-core`, so it keeps its own.
 fn json_string(out: &mut String, s: &str) {
     out.push('"');
     for ch in s.chars() {
