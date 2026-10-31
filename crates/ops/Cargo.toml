@@ -14,9 +14,10 @@ cairn-core.workspace = true
 cairn-store.workspace = true
 cairn-export.workspace = true
 unicode-bidi.workspace = true
+# The file bench builds its archive as a backup of a store it opens in a scratch directory and
+# removes again (`file_bench`); the session and deck tests use it for their stores too.
+tempfile.workspace = true
 
 [dev-dependencies]
-# The session and deck logic is tested against a real store in a temp dir (there is no fake store).
-tempfile.workspace = true
 # The backup tests open the archive they built and read its members back.
 zip.workspace = true

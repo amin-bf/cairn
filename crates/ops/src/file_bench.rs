@@ -52,10 +52,10 @@ use cairn_export::{
     Path, Plan, Profile, Refusal, Tombstone, build_collection, build_deck, collection_filename,
     deck_digest, export_filename, next_revision, platform,
 };
-use cairn_store::Collection;
+use cairn_store::{Collection, iso8601_millis};
 
 use crate::fixtures::{DECK_NOTES, DECKS, Fixture, bench_id, deck_note_id};
-use crate::{inbound, listing};
+use crate::{backup, inbound, listing, restore};
 
 /// **Temporary, and not a specified feature.** A set of files, named by what planning them reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,8 +109,15 @@ impl FileSet {
         }
     }
 
-    /// The files, built. Deterministic: the same bytes on every call and every build.
+    /// The files, built, with the archive's scratch store under the system's temporary directory.
+    /// Deterministic: the same bytes on every call and every build.
     pub fn files(self) -> Result<Vec<BenchFile>, String> {
+        self.files_in(&std::env::temp_dir())
+    }
+
+    /// [`FileSet::files`] with the archive's scratch store under `scratch` — for a platform with no
+    /// usable temporary directory, as an Android application has none but its own cache.
+    pub fn files_in(self, scratch: &std::path::Path) -> Result<Vec<BenchFile>, String> {
         match self {
             FileSet::Imports => Ok(vec![
                 BenchFile {
@@ -127,7 +134,7 @@ impl FileSet {
                 },
                 BenchFile {
                     name: collection_filename("2026-09-01"),
-                    bytes: archive_file(),
+                    bytes: archive_file(scratch)?,
                     wants: Wants::Archive,
                 },
                 BenchFile {
@@ -204,7 +211,18 @@ impl FileSet {
             // The path a selected row takes, not a shortcut to the planner (ADR-0022 §5).
             let report = inbound::read(&listing::select(name, bytes.clone()), coll)
                 .map_err(|e| e.to_string())?;
-            if let Err(wanted) = file.wants.holds(report.sniffed.as_ref(), &report.outcome) {
+            // The archive's other half: the restore preview the Kotlin app routes it to (ADR-0053 §2),
+            // which against this set's fixture is another collection's.
+            let restored = match file.wants {
+                Wants::Archive => {
+                    Some(restore::read(bytes, true, coll).map_err(|e| e.to_string())?)
+                }
+                _ => None,
+            };
+            if let Err(wanted) =
+                file.wants
+                    .holds(report.sniffed.as_ref(), &report.outcome, restored)
+            {
                 return Err(format!(
                     "file set '{}': \"{name}\" wanted {wanted}, and does not — these files are \
                      built against the '{}' fixture",
@@ -277,13 +295,16 @@ impl Wants {
         self,
         sniffed: Option<&Profile>,
         outcome: &Result<Plan, Refusal>,
+        restored: Option<Result<restore::Preview, restore::Refusal>>,
     ) -> Result<(), &'static str> {
         let deck = Some(&Profile::Deck);
         let reached = match self {
             Wants::Update => sniffed == deck && outcome.as_ref().is_ok_and(update_holds),
             Wants::Several => sniffed == deck && outcome.as_ref().is_ok_and(several_holds),
             Wants::Archive => {
-                sniffed == Some(&Profile::Collection) && *outcome == Err(Refusal::WrongProfile)
+                sniffed == Some(&Profile::Collection)
+                    && *outcome == Err(Refusal::WrongProfile)
+                    && restored == Some(Err(restore::Refusal::AnotherCollection))
             }
             Wants::Unreadable => sniffed.is_none() && *outcome == Err(Refusal::Unreadable),
         };
@@ -297,7 +318,10 @@ impl Wants {
                 "three decks with no header — one held and gaining notes, two new, one of those \
                  skipping a note already held",
             ),
-            (false, Wants::Archive) => Err("a collection archive, refused as the wrong profile"),
+            (false, Wants::Archive) => Err(
+                "a collection archive, refused by import as the wrong profile and by restore as \
+                 another collection's",
+            ),
             (false, Wants::Unreadable) => Err("no container at all, refused as unreadable"),
         }
     }
@@ -499,17 +523,55 @@ fn several_file() -> Result<Vec<u8>, String> {
     )
 }
 
-/// A collection archive — the other profile in the same container. Nothing about its contents is
-/// read on the way to its refusal, so it carries no rows; its counts are only what a manifest says.
-fn archive_file() -> Vec<u8> {
-    build_collection(&CollectionArchive {
-        collection_id: &CollectionId(bench_id(0x09, 1).0),
-        created: "2026-09-01T00:00:00Z",
-        notes: DECK_NOTES.len(),
-        reviews: DECK_NOTES.len() * 2,
-        log: &[],
-        mutable: &[],
-    })
+/// The archive's collection id: in the bench's `f1c7` range, which no store mints, so no installed
+/// fixture holds it (a test checks).
+fn archive_collection() -> CollectionId {
+    CollectionId(bench_id(0x09, 1).0)
+}
+
+/// The writer id the archive's rows carry in place of the one its store minted at random.
+const ARCHIVE_WRITER: &str = "f1c70a00000040008000000000000001";
+
+/// The archive's creation instant, 2026-09-01T00:00:00Z — the day its name carries.
+const ARCHIVE_CREATED_MS: i64 = 20_697 * 86_400_000;
+
+/// A collection archive — the other profile in the same container, and the file a restore preview is
+/// read from: a backup of a store holding [`Fixture::Decks`], built through [`backup::build`] in a
+/// scratch directory under `scratch` that is removed again.
+///
+/// **Pinned, so it is byte-identical on every build.** The store mints its collection id and its
+/// writer id at random; the id is replaced by [`archive_collection`] through adoption while the store
+/// is still empty, and the writer id — which only the rows carry — by [`ARCHIVE_WRITER`] in each line
+/// before the archive is assembled again with the backup's own manifest values.
+fn archive_file(scratch: &std::path::Path) -> Result<Vec<u8>, String> {
+    let dir = tempfile::Builder::new()
+        .prefix("cairn-bench-archive-")
+        .tempdir_in(scratch)
+        .map_err(|e| e.to_string())?;
+    let mut coll = Collection::open(&dir.path().join("data"), &dir.path().join("state"))
+        .map_err(|e| e.to_string())?;
+    coll.adopt_or_verify_collection_id(&archive_collection().to_canonical())
+        .map_err(|e| e.to_string())?;
+    Fixture::Decks.install(&mut coll, ARCHIVE_CREATED_MS)?;
+    let backup = backup::build(&coll, ARCHIVE_CREATED_MS, 0).map_err(|e| e.to_string())?;
+
+    let writer = coll.writer_id();
+    let pin = |lines: Vec<String>| -> Vec<String> {
+        lines
+            .into_iter()
+            .map(|line| line.replace(&writer, ARCHIVE_WRITER))
+            .collect()
+    };
+    let log = pin(coll.log_lines().map_err(|e| e.to_string())?);
+    let mutable = pin(coll.mutable_lines().map_err(|e| e.to_string())?);
+    Ok(build_collection(&CollectionArchive {
+        collection_id: &archive_collection(),
+        created: &iso8601_millis(ARCHIVE_CREATED_MS),
+        notes: backup.notes as usize,
+        reviews: backup.reviews as usize,
+        log: &log,
+        mutable: &mutable,
+    }))
 }
 
 fn deck_file(header: &Metadata, decks: Vec<DeckContent>) -> Result<Vec<u8>, String> {
@@ -708,6 +770,84 @@ mod tests {
         assert_eq!(once, again);
         let names: std::collections::HashSet<&str> = once.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names.len(), once.len(), "no two files share a name");
+    }
+
+    fn member(bytes: &[u8], name: &str) -> String {
+        use std::io::Read;
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut text = String::new();
+        zip.by_name(name)
+            .unwrap()
+            .read_to_string(&mut text)
+            .unwrap();
+        text
+    }
+
+    fn the_archive() -> BenchFile {
+        FileSet::Imports
+            .files()
+            .unwrap()
+            .into_iter()
+            .find(|f| matches!(f.wants, Wants::Archive))
+            .unwrap()
+    }
+
+    /// **The archive is a real backup of `Fixture::Decks`**: what `backup::build` writes for a store
+    /// holding that fixture, under the bench's collection id, with the store's random writer id
+    /// replaced by the bench's own so the bytes are the same on every build.
+    #[test]
+    fn the_archive_is_a_backup_of_the_decks_fixture_under_a_fixed_id() {
+        let archive = the_archive();
+        assert_eq!(archive.name, "Cairn backup 2026-09-01.ccoll");
+
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let mut coll = Collection::open(data.path(), state.path()).unwrap();
+        coll.adopt_or_verify_collection_id(&archive_collection().to_canonical())
+            .unwrap();
+        Fixture::Decks
+            .install(&mut coll, ARCHIVE_CREATED_MS)
+            .unwrap();
+        let backup = crate::backup::build(&coll, ARCHIVE_CREATED_MS, 0).unwrap();
+        assert_eq!(backup.name, archive.name);
+
+        let writer = coll.writer_id();
+        for name in ["manifest.json", "log.jsonl", "mutable.jsonl"] {
+            assert_eq!(
+                member(&archive.bytes, name),
+                member(&backup.bytes, name).replace(&writer, ARCHIVE_WRITER),
+                "{name}"
+            );
+        }
+        let log = member(&archive.bytes, "log.jsonl");
+        assert!(log.lines().count() > 0 && log.contains(ARCHIVE_WRITER));
+    }
+
+    /// **No installed fixture holds the archive's id**, a reset collection included — so against any
+    /// collection the bench reaches, the archive previews by adoption or refuses as another
+    /// collection's, and never reads as this collection's own.
+    #[test]
+    fn no_installed_fixture_holds_the_archive_id() {
+        let id = archive_collection().to_canonical();
+        for fixture in Fixture::ALL {
+            let (_d, _s, coll) = installed(fixture);
+            assert_ne!(coll.collection_id(), id, "{}", fixture.key());
+        }
+        let data = TempDir::new().unwrap();
+        let state = TempDir::new().unwrap();
+        let reset = crate::fixtures::reset_files(data.path(), state.path()).unwrap();
+        assert_ne!(reset.collection_id(), id, "a reset collection");
+    }
+
+    /// Against the fixture the set is built for, the archive is another collection's: the restore
+    /// half of the archive's want, beside the import half that still refuses it as the wrong profile.
+    #[test]
+    fn against_its_fixture_the_archive_is_another_collections() {
+        let (_d, _s, coll) = installed(FileSet::Imports.against());
+        assert_eq!(
+            crate::restore::read(&the_archive().bytes, true, &coll).unwrap(),
+            Err(crate::restore::Refusal::AnotherCollection)
+        );
     }
 
     #[test]
