@@ -1328,7 +1328,7 @@ pub enum FileRefusal {
     Unreadable,
     /// A `format` this build cannot read.
     NeedsNewerVersion,
-    /// An absolute path, a `..` segment, a symlink or an unknown member.
+    /// An absolute path, a `..` segment, a symlink or an unknown member, in a deck or an archive.
     NotADeck,
     /// An older revision of a deck the collection holds, named by the held deck's name.
     OlderCopy { deck: String },
@@ -1355,11 +1355,11 @@ impl From<Refusal> for FileRefusal {
 impl From<restore::Refusal> for FileRefusal {
     fn from(refusal: restore::Refusal) -> Self {
         match refusal {
-            // A broken archive is not a deck put together wrongly: it is a file this application
-            // cannot read.
-            restore::Refusal::Unreadable
-            | restore::Refusal::WrongProfile
-            | restore::Refusal::BrokenPath => Self::Unreadable,
+            // The import's own refusals carry an archive's (#248): a member the format forbids is
+            // one put together wrongly, and a head that sniffed as an archive but reads as none is
+            // a file this application cannot read.
+            restore::Refusal::Unreadable | restore::Refusal::WrongProfile => Self::Unreadable,
+            restore::Refusal::BrokenPath => Self::NotADeck,
             restore::Refusal::UnknownFormat(_) => Self::NeedsNewerVersion,
             restore::Refusal::AnotherCollection => Self::AnotherCollection,
             restore::Refusal::TooLarge => Self::TooLargeToRead,
@@ -3012,6 +3012,31 @@ mod tests {
             preview,
             FilePreview::Refused {
                 refusal: FileRefusal::AnotherCollection,
+                gate: ImportGate::Dismiss
+            }
+        );
+    }
+
+    #[test]
+    fn an_archive_with_a_member_the_format_forbids_is_not_put_together_as_a_deck() {
+        // The member renamed in both its local header and the central directory, same length, so
+        // the zip still reads and only the name is one the format does not know (ADR-0008 §6).
+        let mut bytes = bench()[2].bytes.clone();
+        let (from, to) = (b"mutable.jsonl", b"mutable.jsonx");
+        let mut at = 0;
+        while let Some(i) = bytes[at..].windows(from.len()).position(|w| w == from) {
+            bytes[at + i..at + i + to.len()].copy_from_slice(to);
+            at += i + to.len();
+        }
+        assert!(at > 0, "the bench archive names its mutable member");
+        let (handle, _d, _s) = benched("empty");
+        let file = handle
+            .clone()
+            .open_file(FileArrival::Picked, None, bytes, true);
+        assert_eq!(
+            file.preview().unwrap(),
+            FilePreview::Refused {
+                refusal: FileRefusal::NotADeck,
                 gate: ImportGate::Dismiss
             }
         );
