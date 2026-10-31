@@ -869,10 +869,7 @@ mod tests {
 
     #[test]
     fn a_plan_that_changes_something_is_decided() {
-        assert_eq!(
-            gate_for(&Ok(plan_of(vec![deck_plan(false)]))),
-            Gate::Decide
-        );
+        assert_eq!(gate_for(&Ok(plan_of(vec![deck_plan(false)]))), Gate::Decide);
         // One unchanged deck beside a changing one still changes something.
         assert_eq!(
             gate_for(&Ok(plan_of(vec![deck_plan(true), deck_plan(false)]))),

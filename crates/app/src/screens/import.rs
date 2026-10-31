@@ -23,12 +23,12 @@
 //! *moving in from X*, *renaming your X* — goes in through [`bidi::isolate`], which orders it as a run
 //! of its own.
 
-use cairn_export::{DeckPlan, Header, Path, Plan, Refusal};
+use cairn_export::{DeckPlan, Header, Path, Refusal};
 
 // The gate's decision is `cairn-ops`'s, shared with the Android client (ADR-0046 §3); this screen
 // only draws it.
-pub(crate) use crate::inbound::{Gate, gate_for};
 use crate::inbound::Report;
+pub(crate) use crate::inbound::{Gate, gate_for};
 use crate::{bidi, body, frame, spacing};
 
 /// What the person pressed in the band.
@@ -344,7 +344,7 @@ fn aligned_job(ui: &mut egui::Ui, mut job: egui::text::LayoutJob, rtl: bool) {
 mod tests {
     use super::*;
     use cairn_core::content::DeckId;
-    use cairn_export::MovingIn;
+    use cairn_export::{MovingIn, Plan};
 
     fn deck() -> DeckPlan {
         DeckPlan {

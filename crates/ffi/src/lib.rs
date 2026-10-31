@@ -14,8 +14,10 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use cairn_core::content::{CardRef, DeckId, NoteId};
 use cairn_core::scheduling::Grade as CoreGrade;
+use cairn_export::import::{self, Plan, Profile, Refusal};
 use cairn_ops::cards;
 use cairn_ops::editor::{self, Editing};
+use cairn_ops::inbound;
 use cairn_ops::leeches;
 use cairn_ops::notes::{self, DeckFilter, Filter};
 use cairn_ops::optimise;
@@ -1107,7 +1109,10 @@ pub enum OptimisationNudge {
     /// No run has written a vector: the standard parameters, over this many reviews in all.
     Standard { reviews_total: u64 },
     /// A run fitted the vector over `fitted_over` reviews, and `reviews_since` have been done since.
-    Fitted { fitted_over: u64, reviews_since: u64 },
+    Fitted {
+        fitted_over: u64,
+        reviews_since: u64,
+    },
 }
 
 impl From<optimise::OptimisationNudge> for OptimisationNudge {
@@ -1215,6 +1220,283 @@ pub fn fixtures() -> Vec<BenchFixture> {
             key: f.key().to_owned(),
             label: f.label().to_owned(),
             reaches: f.reaches().to_owned(),
+        })
+        .collect()
+}
+
+/// How a file reached the application: the mirror of `cairn_ops::inbound::Arrival` for the three
+/// ways the Kotlin app is handed one. It names the arrival in the log and changes nothing else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum FileArrival {
+    /// Chosen in the system picker (*Open a file…*).
+    Picked,
+    /// Opened from a file manager (`ACTION_VIEW`).
+    Opened,
+    /// Shared from another application (`ACTION_SEND`).
+    Shared,
+}
+
+impl From<FileArrival> for inbound::Arrival {
+    fn from(arrival: FileArrival) -> Self {
+        match arrival {
+            FileArrival::Picked => Self::Picked,
+            FileArrival::Opened => Self::Opened,
+            FileArrival::Shared => Self::Shared,
+        }
+    }
+}
+
+/// Which gate a preview is owed (decided in `cairn-ops`, shared with the desktop).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ImportGate {
+    /// *Import* and *Cancel*.
+    Decide,
+    /// A lone *Close*.
+    Dismiss,
+}
+
+impl From<inbound::Gate> for ImportGate {
+    fn from(gate: inbound::Gate) -> Self {
+        match gate {
+            inbound::Gate::Decide => Self::Decide,
+            inbound::Gate::Dismiss => Self::Dismiss,
+        }
+    }
+}
+
+/// Why a file cannot be previewed, as a fact; Kotlin chooses the sentence (ADR-0046 §4).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum FileRefusal {
+    /// Not an archive this application can read, or a read that stopped short of a deck.
+    Unreadable,
+    /// A `format` this build cannot read.
+    NeedsNewerVersion,
+    /// A collection archive, not a deck.
+    CollectionArchive,
+    /// An absolute path, a `..` segment, a symlink or an unknown member.
+    NotADeck,
+    /// An older revision of a deck the collection holds, named by the held deck's name.
+    OlderCopy { deck: String },
+}
+
+impl From<Refusal> for FileRefusal {
+    fn from(refusal: Refusal) -> Self {
+        match refusal {
+            Refusal::Unreadable => Self::Unreadable,
+            Refusal::UnknownFormat(_) => Self::NeedsNewerVersion,
+            Refusal::WrongProfile => Self::CollectionArchive,
+            Refusal::BrokenPath => Self::NotADeck,
+            Refusal::Older { deck } => Self::OlderCopy { deck },
+        }
+    }
+}
+
+/// Whether a deck in the file is one the collection holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DeckPath {
+    Update,
+    Create,
+}
+
+/// Notes moving into a deck from one the collection holds; `from` is `None` for unfiled notes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MovingInFacts {
+    pub from: Option<String>,
+    pub count: u64,
+}
+
+/// What importing would do to one deck of the file.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DeckEffects {
+    pub name: String,
+    pub path: DeckPath,
+    pub new_notes: u64,
+    pub already_yours: u64,
+    pub moving_in: Vec<MovingInFacts>,
+    pub deleted: u64,
+    /// The collection's own name for the deck, when the file renames it.
+    pub renamed_from: Option<String>,
+    pub no_change: bool,
+    /// The same revision as the held deck, with different content.
+    pub revision_conflict: bool,
+}
+
+/// What importing a file would do, as facts. The header's fields are empty when the file has none.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportPlanFacts {
+    pub author: String,
+    pub licence: String,
+    pub description: String,
+    pub decks: Vec<DeckEffects>,
+    /// Card types the file adds that this build does not have.
+    pub adopted_kinds: Vec<String>,
+    /// Held decks the import leaves empty.
+    pub emptied_decks: Vec<String>,
+    pub gate: ImportGate,
+}
+
+/// A refusal or a plan, each with its gate.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum FilePreview {
+    Refused {
+        refusal: FileRefusal,
+        gate: ImportGate,
+    },
+    Plan {
+        plan: ImportPlanFacts,
+    },
+}
+
+/// What applying a file did.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum FileApplied {
+    /// Written. `filter_to` is the deck id to filter the note list to, `None` when the file held
+    /// several decks.
+    Landed { filter_to: Option<String> },
+    /// The collection changed under the preview and the file is now refused.
+    Refused { refusal: FileRefusal },
+}
+
+impl FilePreview {
+    fn of(outcome: Result<Plan, Refusal>) -> Self {
+        let gate = inbound::gate_for(&outcome).into();
+        match outcome {
+            Err(refusal) => Self::Refused {
+                refusal: refusal.into(),
+                gate,
+            },
+            Ok(plan) => Self::Plan {
+                plan: ImportPlanFacts {
+                    author: plan.header.author,
+                    licence: plan.header.licence,
+                    description: plan.header.description,
+                    decks: plan
+                        .decks
+                        .into_iter()
+                        .map(|d| DeckEffects {
+                            name: d.name,
+                            path: match d.path {
+                                import::Path::Update => DeckPath::Update,
+                                import::Path::Create => DeckPath::Create,
+                            },
+                            new_notes: d.new_notes as u64,
+                            already_yours: d.already_yours as u64,
+                            moving_in: d
+                                .moving_in
+                                .into_iter()
+                                .map(|m| MovingInFacts {
+                                    from: m.from,
+                                    count: m.count as u64,
+                                })
+                                .collect(),
+                            deleted: d.deleted as u64,
+                            renamed_from: d.renamed_from,
+                            no_change: d.no_change,
+                            revision_conflict: d.revision_conflict,
+                        })
+                        .collect(),
+                    adopted_kinds: plan.adopted_kinds,
+                    emptied_decks: plan.emptied_decks,
+                    gate,
+                },
+            },
+        }
+    }
+}
+
+/// A file Kotlin read and handed over. The bytes are held here, in Rust, so they cross once however
+/// often the preview is read again; the plan is derived on every `preview()` and never held
+/// (ADR-0022 §5).
+#[derive(uniffi::Object)]
+pub struct InboundFileHandle {
+    owner: Arc<CollectionHandle>,
+    inbound: inbound::Inbound,
+    /// False when Kotlin stopped at the read ceiling: only the head is held.
+    complete: bool,
+}
+
+impl InboundFileHandle {
+    /// The refusal an incomplete read meets before anything is planned: a collection archive is
+    /// still told apart, because the sniff reads only the first member; anything else is unreadable.
+    fn head_refusal(&self) -> Refusal {
+        match import::sniff(&self.inbound.bytes) {
+            Some(Profile::Collection) => Refusal::WrongProfile,
+            _ => Refusal::Unreadable,
+        }
+    }
+}
+
+#[uniffi::export]
+impl InboundFileHandle {
+    /// What importing the file would do to the collection as it stands now, or why it can't.
+    pub fn preview(&self) -> Result<FilePreview, CairnError> {
+        if !self.complete {
+            return Ok(FilePreview::of(Err(self.head_refusal())));
+        }
+        let report = inbound::read(&self.inbound, &self.owner.collection())?;
+        Ok(FilePreview::of(report.outcome))
+    }
+
+    /// Re-derive the plan and write it. A store failure is the binding's one error.
+    pub fn apply(&self) -> Result<FileApplied, CairnError> {
+        if !self.complete {
+            return Ok(FileApplied::Refused {
+                refusal: self.head_refusal().into(),
+            });
+        }
+        let applied = inbound::apply(&self.inbound, &mut self.owner.collection())?;
+        Ok(match applied {
+            Ok(applied) => FileApplied::Landed {
+                filter_to: applied.filter_to.map(|id| id.to_canonical()),
+            },
+            Err(refusal) => FileApplied::Refused {
+                refusal: refusal.into(),
+            },
+        })
+    }
+}
+
+#[uniffi::export]
+impl CollectionHandle {
+    /// Hold a file the platform handed over. `name` is the display name it carried, if any;
+    /// `complete` is false when the read stopped at its ceiling and `bytes` is only the head.
+    pub fn open_file(
+        self: Arc<Self>,
+        arrival: FileArrival,
+        name: Option<String>,
+        bytes: Vec<u8>,
+        complete: bool,
+    ) -> Arc<InboundFileHandle> {
+        Arc::new(InboundFileHandle {
+            owner: self,
+            inbound: inbound::Inbound {
+                arrival: arrival.into(),
+                name,
+                bytes,
+            },
+            complete,
+        })
+    }
+}
+
+/// One of the bench's deck files: its name and its bytes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BenchFileFact {
+    pub name: String,
+    pub bytes: Vec<u8>,
+}
+
+/// The bench's deck files, built against `Fixture::Decks`. Like [`fixtures`], in every build of the
+/// binding, so the tests and the handset session use the files the desktop bench writes.
+#[uniffi::export]
+pub fn bench_files() -> Vec<BenchFileFact> {
+    let set = cairn_ops::file_bench::FileSet::Imports;
+    set.files()
+        .expect("the bench's files build")
+        .into_iter()
+        .map(|f| BenchFileFact {
+            name: f.name,
+            bytes: f.bytes,
         })
         .collect()
 }
@@ -1738,10 +2020,18 @@ mod tests {
     fn the_new_card_rate_is_read_set_clamped_and_zero_is_kept() {
         let (data, state) = dirs();
         let handle = open(&data, &state);
-        assert_eq!(handle.new_card_rate().unwrap(), 5, "unset reads the default");
+        assert_eq!(
+            handle.new_card_rate().unwrap(),
+            5,
+            "unset reads the default"
+        );
         assert_eq!(handle.set_new_card_rate(20).unwrap(), 20);
         assert_eq!(handle.new_card_rate().unwrap(), 20);
-        assert_eq!(handle.set_new_card_rate(100_000).unwrap(), 9_999, "the clamp");
+        assert_eq!(
+            handle.set_new_card_rate(100_000).unwrap(),
+            9_999,
+            "the clamp"
+        );
         assert_eq!(handle.set_new_card_rate(0).unwrap(), 0, "zero is kept");
         assert_eq!(handle.new_card_rate().unwrap(), 0);
     }
@@ -2090,7 +2380,10 @@ mod tests {
     #[test]
     fn a_draft_holds_its_deck_until_the_note_is_born() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Français".into()).unwrap().expect("a deck");
+        let deck = handle
+            .create_deck("Français".into())
+            .unwrap()
+            .expect("a deck");
         let editing = handle
             .clone()
             .new_draft("basic".into(), Some(deck.clone()))
@@ -2107,7 +2400,10 @@ mod tests {
     #[test]
     fn changing_deck_and_kind_on_a_stored_note_writes_at_once() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Persian".into()).unwrap().expect("a deck");
+        let deck = handle
+            .create_deck("Persian".into())
+            .unwrap()
+            .expect("a deck");
         let editing = handle.clone().new_draft("basic".into(), None).unwrap();
         editing.commit_field("Front".into(), "x".into()).unwrap();
         editing.set_deck(Some(deck.clone())).unwrap();
@@ -2146,7 +2442,10 @@ mod tests {
     #[test]
     fn new_note_settles_this_one_and_opens_a_draft_with_the_same_kind_and_deck() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Français".into()).unwrap().expect("a deck");
+        let deck = handle
+            .create_deck("Français".into())
+            .unwrap()
+            .expect("a deck");
         let editing = handle
             .clone()
             .new_draft("basic".into(), Some(deck.clone()))
@@ -2181,7 +2480,10 @@ mod tests {
     #[test]
     fn the_editor_lists_the_decks() {
         let (handle, _d, _s) = blank_bench();
-        let deck = handle.create_deck("Français".into()).unwrap().expect("a deck");
+        let deck = handle
+            .create_deck("Français".into())
+            .unwrap()
+            .expect("a deck");
         let editing = handle.clone().new_draft("basic".into(), None).unwrap();
         let decks = editing.decks().unwrap();
         assert_eq!(decks.len(), 1);
@@ -2263,24 +2565,27 @@ mod tests {
             .iter()
             .find(|(_, p)| p.state == PaneState::NoLiveCards)
             .expect("a pane with nothing live");
-        let names: Vec<_> = emptied
-            .warning
-            .iter()
-            .map(|d| d.name.clone())
-            .collect();
+        let names: Vec<_> = emptied.warning.iter().map(|d| d.name.clone()).collect();
         assert_eq!(
             names,
             vec![
-                DormantName::Roles { prompt: vec!["Term".into()], answer: vec!["Meaning".into()] },
-                DormantName::Roles { prompt: vec!["Meaning".into()], answer: vec!["Term".into()] },
+                DormantName::Roles {
+                    prompt: vec!["Term".into()],
+                    answer: vec!["Meaning".into()]
+                },
+                DormantName::Roles {
+                    prompt: vec!["Meaning".into()],
+                    answer: vec!["Term".into()]
+                },
             ]
         );
 
         // The stranger's slot is shown by its bare number beside the live card.
-        assert!(all.iter().any(|(_, p)| p
-            .warning
-            .iter()
-            .any(|d| d.name == DormantName::Slot { slot: 7 })));
+        assert!(all.iter().any(|(_, p)| {
+            p.warning
+                .iter()
+                .any(|d| d.name == DormantName::Slot { slot: 7 })
+        }));
     }
 
     #[test]
@@ -2314,9 +2619,7 @@ mod tests {
             .unwrap();
         let id = cloze.note_id().unwrap();
         let basic = handle.clone().new_draft("basic".into(), None).unwrap();
-        basic
-            .commit_field("Front".into(), "chien".into())
-            .unwrap();
+        basic.commit_field("Front".into(), "chien".into()).unwrap();
         (handle, id, d, s)
     }
 
@@ -2438,5 +2741,213 @@ mod tests {
             handle.optimisation_nudge().unwrap(),
             OptimisationNudge::Standard { .. }
         ));
+    }
+
+    // ---- The file surface (ADR-0022, ADR-0052) ---------------------------------------------------
+
+    /// The bench's files in the order `FileSet::Imports` builds them: the update deck, the
+    /// three-deck file, a collection archive, and a file this application wrote and cannot parse.
+    fn bench() -> Vec<BenchFileFact> {
+        let files = bench_files();
+        assert_eq!(files.len(), 4);
+        files
+    }
+
+    fn open_bench_file(
+        handle: &Arc<CollectionHandle>,
+        file: &BenchFileFact,
+    ) -> Arc<InboundFileHandle> {
+        handle.clone().open_file(
+            FileArrival::Picked,
+            Some(file.name.clone()),
+            file.bytes.clone(),
+            true,
+        )
+    }
+
+    fn plan_of(preview: FilePreview) -> ImportPlanFacts {
+        match preview {
+            FilePreview::Plan { plan, .. } => plan,
+            other => panic!("expected a plan, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_bench_serves_its_deck_files_in_every_build() {
+        let files = bench();
+        assert!(
+            files
+                .iter()
+                .all(|f| !f.name.is_empty() && !f.bytes.is_empty())
+        );
+        let mut names: Vec<_> = files.iter().map(|f| f.name.clone()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), 4);
+    }
+
+    #[test]
+    fn the_update_deck_previews_its_plan_with_the_decide_gate() {
+        let (handle, _d, _s) = benched("decks");
+        let file = open_bench_file(&handle, &bench()[0]);
+        let plan = plan_of(file.preview().unwrap());
+        assert_eq!(plan.gate, ImportGate::Decide);
+        assert_eq!(plan.author, "Marjan Rahimi");
+        assert_eq!(plan.licence, "CC BY-SA 4.0");
+        assert_eq!(
+            plan.description,
+            "A1 vocabulary for the first ten chapters."
+        );
+        assert_eq!(plan.decks.len(), 1);
+        let deck = &plan.decks[0];
+        assert_eq!(deck.path, DeckPath::Update);
+        assert!(deck.new_notes > 0);
+        assert!(deck.already_yours > 0);
+        assert!(deck.deleted > 0);
+        assert!(!deck.moving_in.is_empty());
+        assert!(!deck.no_change);
+    }
+
+    #[test]
+    fn the_three_deck_file_carries_its_persian_name_and_no_header() {
+        let (handle, _d, _s) = benched("decks");
+        let plan = plan_of(open_bench_file(&handle, &bench()[1]).preview().unwrap());
+        assert_eq!(plan.decks.len(), 3);
+        assert_eq!(plan.decks[0].name, "فارسی");
+        assert_eq!(plan.decks[0].path, DeckPath::Update);
+        assert_eq!(plan.decks[1].path, DeckPath::Create);
+        assert_eq!(
+            (
+                plan.author.as_str(),
+                plan.licence.as_str(),
+                plan.description.as_str()
+            ),
+            ("", "", "")
+        );
+        assert_eq!(plan.gate, ImportGate::Decide);
+    }
+
+    #[test]
+    fn an_archive_is_refused_as_a_collection_archive_with_a_lone_close() {
+        let (handle, _d, _s) = benched("decks");
+        let preview = open_bench_file(&handle, &bench()[2]).preview().unwrap();
+        assert_eq!(
+            preview,
+            FilePreview::Refused {
+                refusal: FileRefusal::CollectionArchive,
+                gate: ImportGate::Dismiss
+            }
+        );
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_parsed_is_unreadable() {
+        let (handle, _d, _s) = benched("decks");
+        let preview = open_bench_file(&handle, &bench()[3]).preview().unwrap();
+        assert_eq!(
+            preview,
+            FilePreview::Refused {
+                refusal: FileRefusal::Unreadable,
+                gate: ImportGate::Dismiss
+            }
+        );
+    }
+
+    #[test]
+    fn an_incomplete_read_is_told_apart_by_its_head() {
+        let (handle, _d, _s) = benched("decks");
+        let files = bench();
+        // The head of an archive still says what it is: the sniff reads only the first member.
+        let head = files[2].bytes[..512.min(files[2].bytes.len())].to_vec();
+        let archive = handle
+            .clone()
+            .open_file(FileArrival::Picked, None, head, false);
+        assert_eq!(
+            archive.preview().unwrap(),
+            FilePreview::Refused {
+                refusal: FileRefusal::CollectionArchive,
+                gate: ImportGate::Dismiss
+            }
+        );
+        // The head of a deck is not enough to plan from, so it is unreadable, never a plan.
+        let deck =
+            handle
+                .clone()
+                .open_file(FileArrival::Picked, None, files[0].bytes.clone(), false);
+        assert_eq!(
+            deck.preview().unwrap(),
+            FilePreview::Refused {
+                refusal: FileRefusal::Unreadable,
+                gate: ImportGate::Dismiss
+            }
+        );
+    }
+
+    #[test]
+    fn applying_the_update_lands_on_its_deck_and_a_re_read_changes_nothing() {
+        let (handle, _d, _s) = benched("decks");
+        let file = open_bench_file(&handle, &bench()[0]);
+        let landed = file.apply().unwrap();
+        let FileApplied::Landed { filter_to } = landed else {
+            panic!("expected the import to land, got {landed:?}");
+        };
+        assert_eq!(filter_to.as_deref(), Some(cairn_ops::fixtures::DECKS[0].0));
+        // The preview is re-derived against the collection as it now stands: the same file changes
+        // nothing, so its gate is a lone close.
+        let plan = plan_of(file.preview().unwrap());
+        assert_eq!(plan.gate, ImportGate::Dismiss);
+        assert!(plan.decks[0].no_change);
+    }
+
+    #[test]
+    fn applying_a_several_deck_file_names_no_deck() {
+        let (handle, _d, _s) = benched("decks");
+        let file = open_bench_file(&handle, &bench()[1]);
+        assert_eq!(
+            file.apply().unwrap(),
+            FileApplied::Landed { filter_to: None }
+        );
+    }
+
+    #[test]
+    fn applying_a_refused_file_says_why_and_writes_nothing() {
+        let (handle, _d, _s) = benched("decks");
+        let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
+        let file = open_bench_file(&handle, &bench()[2]);
+        assert_eq!(
+            file.apply().unwrap(),
+            FileApplied::Refused {
+                refusal: FileRefusal::CollectionArchive
+            }
+        );
+        assert_eq!(
+            handle.note_list(DeckSelector::All, String::new()).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn the_preview_is_re_derived_when_the_collection_changes_under_it() {
+        let (handle, _d, _s) = benched("decks");
+        let file = open_bench_file(&handle, &bench()[0]);
+        let before = plan_of(file.preview().unwrap());
+        // Another door lands the same file first.
+        open_bench_file(&handle, &bench()[0]).apply().unwrap();
+        let after = plan_of(file.preview().unwrap());
+        assert_ne!(before, after);
+        assert_eq!(after.gate, ImportGate::Dismiss);
+    }
+
+    #[test]
+    fn an_arrival_makes_no_difference_to_the_plan() {
+        let (handle, _d, _s) = benched("decks");
+        let file = &bench()[0];
+        let picked = plan_of(open_bench_file(&handle, file).preview().unwrap());
+        for arrival in [FileArrival::Opened, FileArrival::Shared] {
+            let other = handle
+                .clone()
+                .open_file(arrival, None, file.bytes.clone(), true);
+            assert_eq!(plan_of(other.preview().unwrap()), picked);
+        }
     }
 }
