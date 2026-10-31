@@ -51,7 +51,7 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         try {
             file = owner.use { it.openFile(arrival, read.name, read.bytes, read.complete) }
             name = read.name
-            derive()
+            derive(failure = null)
         } catch (_: CairnException) {
             _state.value = ImportScreenState.Failed
         }
@@ -59,7 +59,7 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
 
     /** Derive the plan again against the collection as it stands. */
     fun refresh() {
-        viewModelScope.launch { derive() }
+        viewModelScope.launch { derive(failure = (_state.value as? ImportScreenState.Preview)?.failure) }
     }
 
     /**
@@ -74,20 +74,21 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         if (shown.writing) return
         _state.value = shown.copy(writing = true, failure = null)
         viewModelScope.launch {
-            val failure = try {
-                when (val applied = owner.use { held.apply() }) {
-                    is FileApplied.Landed -> {
-                        if (file === held) _state.value = ImportScreenState.Landed(applied.filterTo)
-                        return@launch
-                    }
-                    is FileApplied.Refused -> null
-                }
+            val applied = try {
+                owner.use { held.apply() }
             } catch (e: CairnException) {
-                (e as? CairnException.Failed)?.reason ?: e.message.orEmpty()
+                derive(failure = (e as? CairnException.Failed)?.reason ?: e.message.orEmpty())
+                return@launch
             }
-            derive(failure)
+            when (applied) {
+                is FileApplied.Landed -> if (file === held) _state.value = ImportScreenState.Landed(applied.filterTo)
+                is FileApplied.Refused -> derive(failure = null)
+            }
         }
     }
+
+    /** Whether a write is in flight: the gate, and Back with it, cannot be pressed until it returns. */
+    val writing: Boolean get() = (_state.value as? ImportScreenState.Preview)?.writing == true
 
     /** Let the file go: *Cancel*, *Close* and Back all end here, with nothing written and nothing kept. */
     fun clear() {
@@ -96,8 +97,8 @@ class ImportViewModel(private val owner: CollectionAccess) : ViewModel() {
         _state.value = ImportScreenState.Empty
     }
 
-    /** Derive the plan again; a refused write's [failure] stays said under it until the next attempt. */
-    private suspend fun derive(failure: String? = (_state.value as? ImportScreenState.Preview)?.failure) {
+    /** Derive the plan again, with a refused write's [failure] said under it, or none. */
+    private suspend fun derive(failure: String?) {
         val held = file ?: return
         try {
             val preview = owner.use { held.preview() }

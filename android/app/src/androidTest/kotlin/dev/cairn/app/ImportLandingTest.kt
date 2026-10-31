@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -229,6 +230,45 @@ class ImportLandingTest {
         write.complete(Unit)
         waitFor("deck-filter")
         assertTrue(selected("destination-notes"))
+    }
+
+    @Test
+    fun back_while_the_write_is_in_flight_does_nothing_and_the_import_lands() {
+        fixture("decks")
+        showApp()
+        pick(update.name)
+        val write = CompletableDeferred<Unit>()
+        access.held = write
+        rule.onNodeWithTag("gate-import").performClick()
+        rule.waitForIdle()
+        // Back is the gate's dismissal, and the gate cannot be pressed now.
+        pressBack()
+        assertTrue(exists("import-screen"))
+        access.held = null
+        write.complete(Unit)
+        waitFor("deck-filter")
+        rule.onNodeWithTag("deck-filter").assertTextEquals("French A1")
+    }
+
+    @Test
+    fun the_landing_clears_a_search_and_a_filter_the_note_list_had() {
+        fixture("decks")
+        showApp()
+        rule.onNodeWithTag("destination-notes").performClick()
+        waitFor("notes-search")
+        rule.onNodeWithTag("notes-search").performTextInput("zzz")
+        rule.waitForIdle()
+        rule.onNodeWithTag("notes-search").assertTextEquals("zzz")
+        pick(update.name)
+        landOnNotes()
+        rule.onNodeWithTag("deck-filter").assertTextEquals("French A1")
+        rule.onNodeWithTag("notes-search").assertTextEquals("")
+        // The note list left before the import is not restored over the landing later either.
+        pressBack()
+        rule.waitUntil(10_000) { !exists("deck-filter") }
+        rule.onNodeWithTag("destination-notes").performClick()
+        waitFor("notes-search")
+        rule.onNodeWithTag("notes-search").assertTextEquals("")
     }
 
     @Test

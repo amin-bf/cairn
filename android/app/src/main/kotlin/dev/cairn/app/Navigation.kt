@@ -47,7 +47,8 @@ const val SETTINGS_TICK_MS = 250L
 
 private const val REVIEW = "review"
 private const val ARG_FILTER = "filter"
-private const val NOTES = "notes?$ARG_FILTER={$ARG_FILTER}"
+private const val NOTES_PLACE = "notes"
+private const val NOTES = "$NOTES_PLACE?$ARG_FILTER={$ARG_FILTER}"
 private const val SETTINGS = "settings"
 private const val LEECHES = "leeches"
 private const val IMPORT = "import"
@@ -63,7 +64,8 @@ internal fun editorRoute(note: String? = null, kind: String? = null, deck: Strin
     }
 
 /** The note list's route: unfiltered, or opened on [deck] the way an import lands (ADR-0041 §3). */
-private fun notesRoute(deck: String? = null): String = if (deck == null) "notes" else "notes?$ARG_FILTER=${Uri.encode(deck)}"
+private fun notesRoute(deck: String? = null): String = 
+    if (deck == null) NOTES_PLACE else "$NOTES_PLACE?$ARG_FILTER=${Uri.encode(deck)}"
 
 /**
  * The app's places on the Navigation back stack (ADR-0048 §1, §6): Review, where it starts, Notes and
@@ -192,7 +194,11 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                     nav.popBackStack()
                     Unit
                 }
-                BackHandler(onBack = leave)
+                // Back is the gate's, so while the write is in flight it does nothing, as the gate does.
+                // It stays handled then: a handler let go would leave Back to the NavHost's own pop.
+                BackHandler {
+                    if (!importModel.writing) leave()
+                }
                 // The plan is derived on every read, so it is read again on return (ADR-0022 §5).
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { importModel.refresh() }
                 // After a killed process the route comes back with no file: the preview is not
