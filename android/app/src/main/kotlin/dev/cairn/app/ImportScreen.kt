@@ -33,9 +33,8 @@ import dev.cairn.design.CairnTextAction
 import dev.cairn.design.Family
 import dev.cairn.design.Tier
 import dev.cairn.design.gap
-import dev.cairn.design.tokens.Controls
-import dev.cairn.design.tokens.Frame
-import dev.cairn.design.tokens.Spacing
+import dev.cairn.design.isRightToLeft
+import dev.cairn.design.reachLineBelow
 import dev.cairn.ffi.DeckEffects
 import dev.cairn.ffi.DeckPath
 import dev.cairn.ffi.FilePreview
@@ -85,9 +84,7 @@ fun ImportPage(name: String?, preview: FilePreview, onImport: () -> Unit, onLeav
                 }
                 Spacer(Modifier.height(gap(2)))
                 Gate(preview.gate(), onImport, onLeave)
-                // The reach line when it fits in a third of the page, as the leech screen's does.
-                val full = (Frame.REACH_LINE + Controls.HEIGHT + Spacing.UNIT).dp
-                Spacer(Modifier.height(if (full <= page / 3) Frame.REACH_LINE.dp else gap(2)))
+                Spacer(Modifier.height(reachLineBelow(page)))
             }
         }
     }
@@ -128,7 +125,7 @@ private fun PlanBody(plan: ImportPlanFacts) {
     // The file-level lines, after every deck: the kinds it adopts and the held decks its moves leave
     // empty. Both are about the collection rather than about one deck in the file.
     val fileLines = buildList {
-        if (plan.adoptedKinds.isNotEmpty()) add(stringResource(R.string.import_adds_kinds, plan.adoptedKinds.joinToString(", ")))
+        if (plan.adoptedKinds.isNotEmpty()) add(stringResource(R.string.import_adds_kinds, plan.adoptedKinds.joinToString(", ") { wrapped(it) }))
         plan.emptiedDecks.forEach { add(stringResource(R.string.import_left_empty, wrapped(it))) }
     }
     if (fileLines.isNotEmpty()) {
@@ -162,7 +159,7 @@ private fun Header(plan: ImportPlanFacts) {
     }
     Spacer(Modifier.height(gap(2)))
     CairnRule(Modifier.testTag("import-header-rule"))
-    Spacer(Modifier.height(gap(3)))
+    Spacer(Modifier.height(gap(2)))
 }
 
 /**
@@ -183,7 +180,7 @@ private fun DeckBlock(index: Int, deck: DeckEffects) {
         Modifier.fillMaxWidth().testTag("import-caption-$index"),
         tier = Tier.Small,
         color = Cairn.colors.weak,
-        direction = if (deck.name.startsRightToLeft()) TextDirection.Rtl else TextDirection.Ltr,
+        direction = if (isRightToLeft(deck.name)) TextDirection.Rtl else TextDirection.Ltr,
     )
     Spacer(Modifier.height(gap(1)))
     Column(Modifier.padding(start = gap(2))) { Lines(effectLines(deck)) }
@@ -241,8 +238,6 @@ private fun Sentence(text: String, tag: String) {
 
 /** A name inside a sentence is isolated, as the note list's delete question does. */
 private fun wrapped(name: String): String = BidiFormatter.getInstance().unicodeWrap(name)
-
-private fun String.startsRightToLeft(): Boolean = dev.cairn.design.isRightToLeft(this)
 
 private fun grouped(n: Long): String = String.format(java.util.Locale.ENGLISH, "%,d", n)
 

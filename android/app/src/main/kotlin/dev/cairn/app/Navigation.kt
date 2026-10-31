@@ -159,7 +159,8 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                     if (uri != null) {
                         scope.launch {
                             importModel.open(FileArrival.PICKED, readDocument(resolver, uri))
-                            // The read came back from another thread; the back stack is the main thread's.
+                            // The back stack is the main thread's. The scope is too, but under an
+                            // unconfined dispatcher (the compose test's) the read resumes on the IO thread.
                             withContext(Dispatchers.Main) { nav.navigate(IMPORT) { launchSingleTop = true } }
                         }
                     }
@@ -180,11 +181,15 @@ private fun CairnPlaces(owner: CollectionAccess, generation: Int, keyboardUp: Bo
                 BackHandler(onBack = leave)
                 // The plan is derived on every read, so it is read again on return (ADR-0022 §5).
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { importModel.refresh() }
-                // After a killed process the route comes back with no file: the preview is not restored.
+                // After a killed process the route comes back with no file: the preview is not
+                // restored, and the app opens on Review (#241). Leaving clears the model too, but
+                // has already popped the route by then.
                 val held by importModel.state.collectAsStateWithLifecycle()
                 if (held is ImportScreenState.Empty) {
                     LaunchedEffect(Unit) {
-                        if (nav.currentBackStackEntry?.destination?.route == IMPORT) nav.popBackStack()
+                        if (nav.currentBackStackEntry?.destination?.route == IMPORT) {
+                            nav.navigate(REVIEW) { popUpTo(nav.graph.id) { inclusive = true } }
+                        }
                     }
                 }
                 ImportScreen(importModel, onLeave = leave)
