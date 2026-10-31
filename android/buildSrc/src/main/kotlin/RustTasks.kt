@@ -33,7 +33,7 @@ abstract class RustTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     val rustSources: FileCollection
         get() = project.fileTree(workspace) {
-            include("Cargo.toml", "Cargo.lock", "crates/**", "vendor/**")
+            include("Cargo.toml", "Cargo.lock", "crates/**")
             exclude("**/target/**")
         }
 

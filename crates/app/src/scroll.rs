@@ -7,20 +7,21 @@
 /// The scroll area every destination is drawn in, and the offset a replacing screen forces on it.
 #[derive(Debug, Default)]
 pub struct Page {
-    /// Set for exactly one frame, to pin the offset *before* layout.
-    forced_scroll: Option<f32>,
+    /// Set for exactly one frame, to pin the offset to the top *before* layout.
+    to_top: bool,
 }
 
 impl Page {
-    /// The scroll area for this frame, carrying the forced offset when there is one.
+    /// The scroll area for this frame, put at its top when a replacing screen asked for it.
     ///
     /// The offset is **set**, not requested: `scroll_to_rect` and friends land a frame later, so the
     /// first frame of the new page would be drawn at the old offset.
     pub fn scroll_area(&mut self) -> egui::ScrollArea {
         let area = egui::ScrollArea::vertical().auto_shrink([false, false]);
-        match self.forced_scroll.take() {
-            Some(offset) => area.vertical_scroll_offset(offset),
-            None => area,
+        if std::mem::take(&mut self.to_top) {
+            area.vertical_scroll_offset(0.0)
+        } else {
+            area
         }
     }
 
@@ -31,7 +32,7 @@ impl Page {
     /// Settings opens its preview halfway down too, with the file's name and its header already
     /// scrolled away above the viewport.
     pub fn scroll_to_top(&mut self) {
-        self.forced_scroll = Some(0.0);
+        self.to_top = true;
     }
 }
 
@@ -44,12 +45,12 @@ mod tests {
     #[test]
     fn the_top_is_forced_for_one_frame_only() {
         let mut page = Page::default();
-        assert_eq!(page.forced_scroll, None);
+        assert!(!page.to_top);
 
         page.scroll_to_top();
-        assert_eq!(page.forced_scroll, Some(0.0));
+        assert!(page.to_top);
 
         let _ = page.scroll_area();
-        assert_eq!(page.forced_scroll, None);
+        assert!(!page.to_top);
     }
 }
