@@ -16,6 +16,7 @@ import dev.cairn.ffi.CardPaneFacts
 import dev.cairn.ffi.DeckFact
 import dev.cairn.ffi.EditingHandle
 import dev.cairn.ffi.FieldValue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -199,6 +200,23 @@ class EditorViewModel(
             editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
             then()
         }
+    }
+
+    /**
+     * Settle every field and return once it is done, failed or not: a file arriving from another app
+     * waits on it before the preview takes the screen (ADR-0021 §7, ADR-0052 §2).
+     */
+    suspend fun settled() {
+        val done = CompletableDeferred<Unit>()
+        val snapshot = snapshot()
+        enqueue {
+            try {
+                editing?.let { h -> persistNoteId(owner.use { h.settleAll(snapshot) }) }
+            } finally {
+                done.complete(Unit)
+            }
+        }
+        done.await()
     }
 
     /** `Write | Cards`: either way it settles all, and the Cards pane then shows what the store holds (ADR-0048 §7). */

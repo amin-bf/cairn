@@ -9,12 +9,30 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Cairn">
 
+        <!-- singleTask (#241, yours to overturn): a file from another app reaches the running app through
+             onNewIntent, not a second copy of it in the other app's task. -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Open with and share, as the egui build declares them (ADR-0024 §2, ADR-0052 §2): the
+                 package id is the same, so the app stays offered after the upgrade. The bytes decide. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/vnd.cairn.deck+zip" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/vnd.cairn.deck+zip" />
             </intent-filter>
         </activity>
     </application>

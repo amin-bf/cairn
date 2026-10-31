@@ -1,5 +1,8 @@
 package dev.cairn.app
 
+import android.content.Intent
+import android.os.Bundle
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -11,10 +14,27 @@ import dev.cairn.design.CairnPage
 import dev.cairn.design.CairnText
 
 class MainActivity : CairnActivity() {
+    private val incoming by lazy { ViewModelProvider(this)[IncomingFiles::class.java] }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // An intent is handled once (#241): a recreation brings the one already handled back, and so
+        // does a return from the recents screen, which marks it as launched from history.
+        val fromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+        if (savedInstanceState == null && !fromHistory) arrivingFrom(intent)?.let(incoming::arrive)
+    }
+
+    // singleTask: a file opened from another app while this one runs comes here (ADR-0052 §2). It is
+    // handled here and not kept as the activity's intent, which nothing reads again.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        arrivingFrom(intent)?.let(incoming::arrive)
+    }
+
     @Composable
     override fun Screen() {
         val owner = (LocalContext.current.applicationContext as CairnApplication).collection
-        CairnNavHost(owner)
+        CairnNavHost(owner, incoming = incoming)
     }
 }
 
