@@ -1,9 +1,7 @@
 //! The launcher mark ships as an Android adaptive icon (issue #119).
 //!
-//! `cargo-apk` assembles the APK from Cargo metadata and a `resources` folder, and it has dropped
-//! attributes before — the intent filters carry the same warning (see `Cargo.toml`). The real
-//! verification is against the *emitted* `AndroidManifest.xml` and the built APK on the handset,
-//! which this sandbox cannot package or run. What it *can* pin is the half that fails in silence:
+//! The Kotlin app (`android/`) bundles this folder as its launcher icon. The real verification is
+//! the built APK on the handset; what a test *can* pin is the half that fails in silence:
 //! a layer removed, a reference left dangling, or the `resources`/`icon` wiring deleted so the mark
 //! never enters the build. None of those fail any other test, and the launcher shows a blank
 //! platform default rather than an error — so the drift is invisible without this guard.
@@ -58,7 +56,7 @@ fn every_layer_is_a_vector_source() {
     }
 }
 
-/// `min_sdk_version = 24` predates adaptive icons (API 26). Without a fallback at the unqualified
+/// `minSdk = 24` predates adaptive icons (API 26). Without a fallback at the unqualified
 /// `mipmap/` the launcher on 24–25 shows the platform default, not the mark — so the legacy entry
 /// must composite the same background and foreground layers rather than being absent.
 #[test]
@@ -71,19 +69,22 @@ fn legacy_fallback_carries_the_mark() {
     );
 }
 
-/// The wiring that actually puts the mark in the APK: `resources` points cargo-apk at the folder,
-/// and the application `icon` names the launcher resource. Delete either and every file above is
-/// still present and correct while the built APK carries no icon at all.
+/// The wiring that actually puts the mark in the APK: the Kotlin app's Gradle build adds this folder
+/// to its resources, and its manifest's application `icon` names the launcher resource. Delete either
+/// and every file above is still present and correct while the built APK carries no icon at all.
 #[test]
-fn cargo_metadata_ships_the_resources() {
-    let manifest = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
-        .expect("read app Cargo.toml");
+fn the_kotlin_build_ships_the_resources() {
+    let android = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../android/app");
+    let gradle =
+        fs::read_to_string(android.join("build.gradle.kts")).expect("read the app's Gradle build");
     assert!(
-        manifest.contains("resources = \"res\""),
-        "cargo-apk is not told to bundle the res folder"
+        gradle.contains("res.directories.add(\"../../crates/app/res\")"),
+        "the Gradle build is not told to bundle this res folder"
     );
+    let manifest = fs::read_to_string(android.join("src/main/AndroidManifest.xml"))
+        .expect("read the app's manifest");
     assert!(
-        manifest.contains("icon = \"@mipmap/ic_launcher\""),
+        manifest.contains("android:icon=\"@mipmap/ic_launcher\""),
         "the application icon does not name the launcher resource"
     );
 }

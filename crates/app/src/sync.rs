@@ -23,9 +23,6 @@
 //!   **never starts while a sitting is running** (ADR-0015 §6). [`Trigger`] enumerates the three and
 //!   [`should_start`] is the whole gate; the absence of any scheduler is what makes "no background
 //!   sync" true, and it is load-bearing for §6, not a limitation to lift.
-//! - **The Android text-input limitation is stated in advance** (ADR-0015 §9), off [`LATIN_INPUT_ONLY`]
-//!   — the one sanctioned `cfg(target_os)` capability constant (ADR-0015 §15), which makes a
-//!   limitation *visible* rather than varying behaviour.
 
 use std::time::Duration;
 
@@ -262,24 +259,6 @@ pub fn revocation_and_removal() -> String {
          it appears as \"{APP_NAME}\". Revoking access there signs out every device you own."
     )
 }
-
-/// True on platforms whose text input cannot accept non-Latin script (ADR-0015 §9). This is the
-/// **one sanctioned exception** to the no-`cfg(target_os)` rule (ADR-0015 §15, client-stack rule 8):
-/// a compile-time constant whose only job is to make a limitation *visible*, which is the inverse of
-/// the behaviour-divergence that rule guards against. winit's Android backend has no IME path, so
-/// composed non-Latin text never reaches the app and the failure is *silence* — nothing happens at
-/// all — which can only be stated in advance.
-#[cfg(target_os = "android")]
-pub const LATIN_INPUT_ONLY: bool = true;
-
-/// See the Android arm above — false everywhere the platform has a working IME.
-#[cfg(not(target_os = "android"))]
-pub const LATIN_INPUT_ONLY: bool = false;
-
-/// The standing quiet line the editor carries when [`LATIN_INPUT_ONLY`] holds (ADR-0015 §9). Stated
-/// in advance, at the point of authoring, because the failure it describes arrives as silence.
-pub const DESKTOP_AUTHORING_LINE: &str =
-    "This device types Latin text only — author other scripts on the desktop and they sync here.";
 
 #[cfg(test)]
 mod tests {
@@ -522,14 +501,5 @@ mod tests {
         ] {
             assert!(!p.contains(banned), "promise said {banned:?}: {PROMISE}");
         }
-    }
-
-    #[test]
-    fn the_capability_constant_matches_the_target() {
-        // ADR-0015 §9, §15: the one sanctioned cfg constant. Its value is the platform's, and the
-        // standing line exists to be shown where it holds.
-        assert!(!DESKTOP_AUTHORING_LINE.is_empty());
-        // Latin-only exactly on Android, false everywhere with a working IME.
-        assert_eq!(LATIN_INPUT_ONLY, cfg!(target_os = "android"));
     }
 }

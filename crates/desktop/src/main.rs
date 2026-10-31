@@ -1,12 +1,11 @@
 //! The desktop binary.
 //!
-//! This crate exists for one reason: `cargo-apk` panics after signing when a single crate has both
-//! a cdylib and a bin, so the desktop entry point cannot live in `cairn-app` (ADR-0003 §5).
+//! The crate was split out of `cairn-app` for the egui Android build's packager (ADR-0003 §5); that
+//! build is retired (ADR-0045 §8) and the split stays, because the scripts and docs run
+//! `-p cairn-desktop`.
 //!
-//! **Keep it this short.** Logic added here is never compiled by the Android build and never
-//! exercised on the handset — a silent desktop-only path, which is the same class of defect as a
-//! runtime platform check and is exactly what ADR-0003's compile-time seam exists to prevent.
-//! Anything that looks like it belongs here belongs in `cairn_app`.
+//! **Keep it this short.** Anything that looks like it belongs here belongs in `cairn_app`, where
+//! the tests reach it.
 
 use cairn_app::eframe;
 

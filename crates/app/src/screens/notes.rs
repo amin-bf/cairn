@@ -1,5 +1,5 @@
 //! The **Notes** destination: the note list and deck controls, and the editor pane — its form and
-//! card bodies, the pane toggle, the cloze field and blank selection, and the warning banner.
+//! card bodies, the cloze field and blank selection, and the warning banner.
 
 use cairn_core::content::NoteId;
 use cairn_store::Collection;
@@ -9,8 +9,8 @@ use eframe::egui::{Align, Layout, vec2};
 use crate::notes::{self, DeckFilter, Filter};
 use crate::{
     Editing, badge, bidi, bidi_layouter, body, box_badge_wording, cards, compact_button, controls,
-    editor, field_label, field_label_over, fonts, frame, full_width_button, heading,
-    raise_keyboard, sync, text, text_field,
+    editor, field_label, field_label_over, fonts, frame, full_width_button, heading, text,
+    text_field,
 };
 use crate::{spacing, surface};
 
@@ -51,16 +51,11 @@ fn editor_heading(ui: &mut egui::Ui, ed: &Editing) {
     );
 }
 
-/// The editor inside its own frame. **Whether the panes sit side by side is asked once and handed
-/// down** — never re-derived further in, where the answer would be about the column rather than the
-/// screen.
+/// The editor inside its own frame: the form and the cards side by side.
 fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<Editing>) {
-    // **No width is measured here any more** (#163). This used to read `viewport_rect().width()` and
-    // compare it against a 900px threshold, and the width was never what the question was about: the
-    // toggle below exists because a soft keyboard eats *height*, and at 880 on a desktop there is no
-    // keyboard and 450px going spare. Dragged down by hand to 118px per pane the two columns stayed
-    // readable, so there is no width to find — `frame::editor_is_side_by_side` asks the platform.
-    let two_column = frame::editor_is_side_by_side();
+    // **No width is measured here** (#163). This used to read `viewport_rect().width()` and compare
+    // it against a 900px threshold; dragged down by hand to 118px per pane the two columns stayed
+    // readable, so there is no width to find.
     let cap = frame::cap_for(true);
     frame::wide_column(ui, cap, |ui| {
         // **The heading leads the screen, because *Done* no longer does** (#163). It used to sit
@@ -70,7 +65,7 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
             ui.add_space(spacing::gap(2));
         }
         if let Some(ed) = editing.as_mut() {
-            editor_pane(ui, coll, ed, two_column);
+            editor_pane(ui, coll, ed);
         }
 
         // ***Done* sits on the reach line** — [ADR-0035 §1]'s **fourth** call site, and the first on
@@ -96,18 +91,12 @@ fn editor_screen(ui: &mut egui::Ui, coll: &mut Collection, editing: &mut Option<
             controls::HEIGHT,
             spacing::gap(2),
         ));
-        // Full width is a target on a phone and a distance on a desktop: at 1120 it drew a *Done*
-        // wider than the two columns of content beneath it. Same 36px height either way — the map
-        // holds hit targets to touch, so only the stretching goes.
-        let done = if two_column {
-            compact_button(ui, "Done")
-        } else {
-            full_width_button(ui, "Done")
-        };
-        if done.clicked() {
+        // Not full width: at 1120 that drew a *Done* wider than the two columns of content beneath
+        // it. The same 36px height — the map holds hit targets to touch, so only the stretching goes.
+        if compact_button(ui, "Done").clicked() {
             // **Settle before letting go of the buffers.** Clearing `editing` throws away the field
             // the user is still inside, which never produced the response its autosave is read from
-            // (ADR-0021 §7). That lost the last field typed, silently, on both arrangements.
+            // (ADR-0021 §7). That lost the last field typed, silently.
             if let Some(ed) = editing {
                 editor::settle_all(coll, ed.note, &ed.kind, &ed.fields, ed.deck);
             }
@@ -373,8 +362,7 @@ fn deck_controls(ui: &mut egui::Ui, coll: &mut Collection, deck: &mut notes::Dec
         let created = controls::snug(ui, "New deck").clicked();
         text_field(ui, &mut deck.new_name);
         // Create the deck and immediately filter to it — you made it to use it (ADR-0021 §9).
-        if created && let Ok(Some(id)) = notes::create_deck(coll, &deck.new_name)
-        {
+        if created && let Ok(Some(id)) = notes::create_deck(coll, &deck.new_name) {
             deck.filter = DeckFilter::Deck(id);
             deck.new_name.clear();
         }
@@ -465,8 +453,7 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
     spacing::row(ui, 1, |ui| {
         let created = ui.button(text(ui, "New deck")).clicked();
         text_field(ui, &mut ed.new_deck);
-        if created && let Ok(Some(id)) = notes::create_deck(coll, &ed.new_deck)
-        {
+        if created && let Ok(Some(id)) = notes::create_deck(coll, &ed.new_deck) {
             ed.deck = Some(id);
             ed.new_deck.clear();
             if let Some(note) = ed.note {
@@ -478,75 +465,35 @@ fn editor_deck_dropdown(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editi
 
 /// The editor's two panes (ADR-0012 §1): the header (kind and deck dropdowns), then the **form body**
 /// — the fields, each autosaved per blur (ADR-0021 §7), with the destructive-edit warning above them
-/// (ADR-0025 §4) — and the **card body**, *"what will I be asked"* (`cards`). On a narrow screen the
-/// two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show together.
-fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing, two_column: bool) {
+/// (ADR-0025 §4) — and the **card body**, *"what will I be asked"* (`cards`), side by side.
+fn editor_pane(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
     // The card pane and the ambient destructive-edit warning are recomputed from current content
     // every frame (ADR-0012 §5): dormancy holds no before-state, so there is no "just became dormant"
     // and nothing to auto-scroll to (ADR-0018 §4). A draft not yet born has no stored note, so no
     // cards and no history — its pane is empty until its first field commits (ADR-0021 §7).
-    let mut pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
+    let pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
 
-    // On a phone the two bodies are a `Write | Cards` toggle (ADR-0012 §1); where both fit they show
-    // together (ADR-0025 §5). **Where both fit, they now sit side by side** — which is what ADR-0012
-    // §1 has always described and what the implementation never did: the old wide layout stacked
-    // them vertically with a rule between, so its `640` was a *width* test gating a decision about
-    // *vertical* room. #131 made that latent oddity load-bearing, because a page frame changes what
-    // "the width" means, and #131's answer is this: the width test now decides the thing it names.
+    // **The two bodies sit side by side** — which is what ADR-0012 §1 has always described. The
+    // phone's `Write | Cards` toggle retired with the egui Android build (ADR-0045 §8).
     //
-    // `two_column` arrives from `editor_screen`, measured against the **window**. Re-deriving it from
-    // `ui.available_width()` here is the defect the whole change exists to remove.
-    if two_column {
-        // **The header travels with the form**, not across the top. Kind, deck and *new deck* are
-        // properties of the note being written, so side by side the left column reads as *the note*
-        // and the right as *its cards* — whereas a header stretched over both columns makes a 1050px
-        // text field out of *new deck* and belongs to neither.
-        let gutter = frame::PANE_GUTTER;
-        let each = ((ui.available_width() - gutter) / 2.0).max(1.0);
-        ui.horizontal_top(|ui| {
-            pane_column(ui, each, |ui| {
-                editor_header(ui, coll, ed);
-                editor_form_body(ui, coll, ed, pane.as_ref());
-            });
-            ui.add_space(gutter);
-            pane_column(ui, each, |ui| editor_cards_body(ui, pane.as_ref()));
+    // **The header travels with the form**, not across the top. Kind, deck and *new deck* are
+    // properties of the note being written, so side by side the left column reads as *the note* and
+    // the right as *its cards* — whereas a header stretched over both columns makes a 1050px text
+    // field out of *new deck* and belongs to neither.
+    let gutter = frame::PANE_GUTTER;
+    let each = ((ui.available_width() - gutter) / 2.0).max(1.0);
+    ui.horizontal_top(|ui| {
+        pane_column(ui, each, |ui| {
+            editor_header(ui, coll, ed);
+            editor_form_body(ui, coll, ed, pane.as_ref());
         });
-        return;
-    }
-
-    editor_header(ui, coll, ed);
-    // Switching to *Cards* stops drawing the form on the same frame, so the field being typed in
-    // never sees its blur — the same loss *Done* had, and worse in kind: the pane the tap asked
-    // *"what will I be asked"* of would answer with a card missing the half just written.
-    if pane_toggle(ui, &mut ed.show_cards) && ed.show_cards {
-        ed.note = editor::settle_all(coll, ed.note, &ed.kind, &ed.fields, ed.deck);
-        // Re-read the pane after settling, not on the next frame. It was computed above from the
-        // content the store held *before* this tap, and egui repaints on demand — so leaving it
-        // stale draws the card the tap was asking about one edit behind, until something unrelated
-        // asks for another frame.
-        pane = ed.note.and_then(|id| cards::card_pane(coll, id).ok());
-    }
-    ui.add_space(spacing::gap(2));
-    if ed.show_cards {
-        editor_cards_body(ui, pane.as_ref());
-    } else {
-        editor_form_body(ui, coll, ed, pane.as_ref());
-    }
+        ui.add_space(gutter);
+        pane_column(ui, each, |ui| editor_cards_body(ui, pane.as_ref()));
+    });
 }
 
-/// The editor's header: the Android input caveat, then the kind and deck dropdowns. Above the fields
-/// in one column, and at the top of the **form** column when there are two.
+/// The editor's header: the kind and deck dropdowns, at the top of the **form** column.
 fn editor_header(ui: &mut egui::Ui, coll: &mut Collection, ed: &mut Editing) {
-    // The standing quiet line stating the Android text-input limitation *in advance* (ADR-0015 §9):
-    // the failure is silence — composed non-Latin text never reaches the app — so it can only be
-    // told, never detected. Off the one sanctioned `cfg(target_os)` capability constant (ADR-0015
-    // §15), so on desktop this compiles to nothing rather than a statement about a limitation the
-    // reader does not have.
-    if sync::LATIN_INPUT_ONLY {
-        field_label(ui, sync::DESKTOP_AUTHORING_LINE);
-        ui.add_space(spacing::gap(2));
-    }
-
     // The kind dropdown: the shipped kinds plus this note's own current kind when acquired, and never
     // another acquired one (ADR-0012 §2, ADR-0017 §6).
     let options = editor::kind_options(&ed.kind);
@@ -589,31 +536,6 @@ fn pane_column(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) {
             add(ui);
         },
     );
-}
-
-/// The phone's `Write | Cards` pane toggle (ADR-0012 §1): two mutually exclusive choices, the current
-/// one marked. Which pane is showing is the only thing it changes — there is no third state.
-///
-/// Returns whether this tap **moved** it. The caller needs the transition rather than the state,
-/// because leaving *Write* is what strands the edit in the field being typed in, and re-settling on
-/// every frame spent on the *Cards* tab would ask the store the same question forever.
-fn pane_toggle(ui: &mut egui::Ui, show_cards: &mut bool) -> bool {
-    let was = *show_cards;
-    spacing::row(ui, 1, |ui| {
-        if ui
-            .selectable_label(!*show_cards, text(ui, "Write"))
-            .clicked()
-        {
-            *show_cards = false;
-        }
-        if ui
-            .selectable_label(*show_cards, text(ui, "Cards"))
-            .clicked()
-        {
-            *show_cards = true;
-        }
-    });
-    *show_cards != was
 }
 
 /// The editor's **form body** (ADR-0012 §1): the destructive-edit warning **above** the fields
@@ -896,7 +818,7 @@ fn multiline_field_output(
 ) -> egui::text_edit::TextEditOutput {
     let rtl = bidi::is_rtl(buffer);
     let mut layouter = bidi_layouter;
-    let out = egui::TextEdit::multiline(buffer)
+    egui::TextEdit::multiline(buffer)
         .desired_width(f32::INFINITY)
         .horizontal_align(if rtl {
             egui::Align::RIGHT
@@ -904,12 +826,7 @@ fn multiline_field_output(
             egui::Align::LEFT
         })
         .layouter(&mut layouter)
-        .show(ui);
-    // The keyboard raise rides here too (ADR-0026 §4). The two wrappers are one wrapper in the sense
-    // that matters — they share `bidi_layouter` and every field goes through one of them — and a
-    // promise made to "every field" that skipped `cloze`'s Text is not a promise.
-    raise_keyboard(ui.ctx(), &out.response);
-    out
+        .show(ui)
 }
 
 #[cfg(test)]

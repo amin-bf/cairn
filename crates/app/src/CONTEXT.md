@@ -1,7 +1,9 @@
 # UI
 
-The egui application: every screen the user sees, the text-layout helper every one of them goes
-through, and both platform entry points.
+The egui desktop application: every screen the user sees, and the text-layout helper every one of
+them goes through. Android is the Kotlin client under `android/`; the egui Android build is retired
+([ADR-0045 §8](../../../docs/adr/0045-the-native-android-client.md)), so the soft-keyboard and inset
+rules ADR-0025 and ADR-0026 added describe a client that no longer exists.
 
 **Bound by** [ADR-0003](../../../docs/adr/0003-client-stack.md),
 [ADR-0006](../../../docs/adr/0006-the-review-session-experience.md),
@@ -53,8 +55,8 @@ _Avoid_: The visual design pass, for either half alone — it is the word that l
 arrangement read as an open colour question, and an open colour question read as settled.
 
 **Renderer** / **Operation**:
-A **renderer** is what draws the application and speaks its platform: egui on the desktop (and on
-Android until parity), Compose on Android. An **operation** is what a screen asks the application to
+A **renderer** is what draws the application and speaks its platform: egui on the desktop, Compose on
+Android. An **operation** is what a screen asks the application to
 do — *grade this card*, *commit this field*, *plan this import* — implemented once, in Rust, for every
 renderer (ADR-0046 §1). The operation decides the rule and *which* statement applies; the renderer
 owns the words, the layout, the gesture and the text being typed (ADR-0046 §3 §4, ADR-0038 §6).
@@ -126,14 +128,9 @@ One of the three places the app can be: **Review**, **Notes**, **Settings** (ADR
 that makes every specified screen reachable — the leech screen hangs off review's end-of-session
 pointer, enrolment sits inside settings. Every screen is reachable from one of the three **except the
 import preview**, which belongs to none.
-**The nav row is pinned, and yields the screen to the soft keyboard.** ADR-0021 §1's *persistent*
-affordance and ADR-0025's *"the form pane's first screen is a specified resource"* pull against each
-other, and nothing recorded which won: a row that scrolls away is not persistent, and a row that is
-always pinned spends the band the destructive-edit warning was moved into because nowhere else works.
-So it is pinned whenever the keyboard is **down**, and absent while it is **up** — one rule reading
-one fact, expressible only because ADR-0026 §5 made the seam distinguish *no soft keyboard on this
-platform* from *keyboard down*. On the desktop the seam says the first, so it is simply always
-pinned; this is **not** platform-conditional behaviour and client-stack rule 3 is untouched.
+**The nav row is pinned** (ADR-0021 §1's *persistent* affordance), except while the import preview
+replaces the page. The egui Android build hid it under a raised soft keyboard; that build is retired
+(ADR-0045 §8), and the desktop has no soft keyboard.
 _Avoid_: Tab, page, route — none of which is fixed here.
 
 **Note list**:
@@ -352,7 +349,8 @@ The authoring editor's second pane: **the cards this note currently generates**,
 I be asked" (ADR-0012 §1). Ordered by **raw slot number**, live and dormant alike — never grouped by
 dormancy, and **never sorted on `ordinal & 0x7FFF`**, which would interleave cloze blanks among
 fixed-arity slots and assert an adjacency ADR-0017 §3 partitioned the namespaces to deny (ADR-0018
-§1). The mask is a *name*, never a sort key. On a phone the two panes are a `Write | Cards` toggle.
+§1). The mask is a *name*, never a sort key. The two panes always stand side by side; the phone's
+`Write | Cards` toggle went with the egui Android build (ADR-0045 §8).
 _Avoid_: Preview pane — it is not a rendering of the fields, which is the whole result of ADR-0012's
 round 1.
 
@@ -375,30 +373,7 @@ per-frame recomputation does not have.
 the form pane's *first screen* is on show, and a warning after the last field leaves just the
 `· 1 dormant` marker visible at the moment of the edit — which is the counter ADR-0018 §4 established
 does not warn. Moving it adds no speaker; it is the same warning, placed where it can be read.
-Reserving the IME band makes it *reachable*, which is not the same as *visible*.
-
-**Reserved band**:
-The strip at the top or bottom of the window that the platform's chrome or soft keyboard is sitting
-on, read from this crate's own one-function `platform` seam and held out of the layout by an
-exact-size panel (`keyboard::Band`, ADR-0025 §1). Bottom is a **max, not a sum** — the keyboard is
-drawn *over* the gesture bar. Reserving it is what gives the scroll area a real range over the covered
-region, which is the difference between *below the fold* and *does not exist*; unreserved, the top
-band is why the first line of text drew under the clock. **The reserve is necessary and not
-sufficient** — it makes the warning above the fields *reachable*, never *visible at the moment of the
-edit*, which is what ADR-0025 §4 moved it for.
-_Avoid_: Occluded area, keyboard padding, safe area — the failure is reachability, not occlusion.
-
-**The three guards**:
-The behaviour that has to come with a reserved band, and an implementation missing any one is visibly
-broken (ADR-0025 §3, ADR-0026 §4). **Keep the focused field inside the viewport in the same frame it
-shrinks**; **surrender focus when a focused field is scrolled *completely* out of view** — the same
-oscillation entered from the other end, and *completely*, since a field half off the edge is still
-being typed into; and **raise the keyboard from a discrete click on a text field**, which is the
-recovery half of the vendored adapter patch. The first two are consequences of *reading insets*, the
-third of *carrying the patch*. All three live where every screen with a text field inherits them —
-`keyboard`, and the shared text-field wrapper — never in the editor.
-_Avoid_: Keyboard fix, IME workaround; and never key any of them on a per-frame "something is focused
-and the pointer went down", which is what issued 72 show requests from one scroll gesture.
+The placement stays on the desktop, where a short window shows only the form's first screen too.
 
 **Family** / **Face**:
 Two words this crate had been using as one, which is how two silent defects hid at once. A **family**
@@ -496,8 +471,8 @@ _Avoid_: Train, recalculate, sync parameters — and never a threshold, a badge 
 
 **Import preview**:
 The one gate in this specification (ADR-0022 §1), and **the one screen that belongs to no
-destination**. Three entry points — the file list, a desktop drop, an Android launch intent —
-produce **one** screen (in the Kotlin app the **system picker** takes the list's place, ADR-0047 §2), which must be **cold-start capable**, because the intent can start the
+destination**. Every entry point — the file list and a desktop drop here, a launch intent in the
+Kotlin app — produces **one** screen (in the Kotlin app the **system picker** takes the list's place, ADR-0047 §2), which must be **cold-start capable**, because the intent can start the
 application directly into an import. So it is drawn without the nav row: there may not be a
 destination behind it. Applying returns to the **note list**, with the deck filter set to the
 imported deck when the file carried one and left unfiltered when it carried several; **cancelling
@@ -567,11 +542,6 @@ picker is the platform's and shows everything.
   this near-white body (measured as "I can't see bold"). To draw the `**bold**` Markdown subset
   (ADR-0002 §8) select `fonts::bold_family()`, a real heavier face — never a brighter shade. Do not
   reach for `strong` in the card pane or the answer-emphasis renderer (ADR-0012 §8).
-- **Android text input is ASCII-only and cannot be fixed here.** winit's Android backend has no IME
-  path. Never design a feature that requires typing non-Latin text on Android. Because we receive no
-  events, the failure is *silence* — so the editor states it in advance, off a compile-time
-  capability constant (ADR-0015 §9). That constant is the one sanctioned exception to the
-  no-`#[cfg(target_os)]` rule, and it exists to make a limitation visible, never to vary behaviour.
 - **Never start a sync while the review screen is up**, and let one already in flight finish. This
   is not a lock on review — the app never blocks reviewing (ADR-0015 §1) — it is what stops a merge
   recomputing every `(S, D)` mid-session, which ADR-0014 called locally unfixable. It works only
@@ -588,28 +558,6 @@ picker is the platform's and shows everything.
 - **Only two things may speak about sync**, and every future feature will have a reason to want a
   third. A badge, a toast on success, a "syncing…" indicator in the chrome — each is a defect
   against ADR-0015 §4, not a UX improvement.
-- **The soft keyboard is invisible unless this crate asks**, and the failure is *unreachability*, not
-  occlusion. Nothing below us reports the IME inset — rule 8's gap has a second half — and the window
-  is edge-to-edge, so `adjustResize` does nothing. egui then sizes its `ScrollArea` to a viewport
-  taller than the visible one, the content fits, and there is **no scroll range** over the covered
-  39%. This crate's one-function `platform` seam returns the insets and the band is reserved. **Its
-  return type says whether the platform has a soft keyboard at all** — "no keyboard here" and "keyboard
-  down" both reported zero in ADR-0025 §2's original wording, which makes every "is it down" gate
-  permanently true on desktop (ADR-0026 §5). **Three guards are load-bearing**: keep the focused field
-  inside the shrunken viewport *in the same frame it shrinks* (a `TextEdit` publishes `output.ime` only
-  while visible; `egui-winit` turns its absence into `hide_soft_input`, which collapses the inset, which
-  restores the viewport — a closed loop that presents as a flickering keyboard); **surrender focus when
-  a focused field is scrolled fully out of view** (the same loop from the other end); and **raise the
-  keyboard from a discrete press on a text field**, below. ADR-0025 §1–§3, ADR-0026 §4–§5.
-- **The keyboard is raised from the shared text-field wrapper, on that field's own click.** This is the
-  recovery half of the vendored `egui-winit` patch (rule 12), and it is not optional: once the per-tap
-  interrupt is suppressed, nothing re-asserts show after the user dismisses the keyboard with the IME
-  chevron, because the layer below debounces its allow-IME flag against a state that never changed. It
-  goes through `ViewportCommand::IMEAllowed(true)`, which reaches the window without touching that flag.
-  **Keyed on a discrete click, never on a per-frame "something is focused and the pointer went down"** —
-  `request_focus` fires while *dragging* too, and the version that hung off it issued **72 show requests
-  from a single scroll gesture**. It lives in the wrapper because rule 2 already routes every field
-  through it, which is the only way every field can be promised the same behaviour. ADR-0026 §4.
 - **Colour is named in one place — the `theme` module — and pinning dark is two acts, not one.**
   Every screen reads the *ambient* visuals (`ui.visuals().text_color()`, `weak_text_color()`,
   `hyperlink_color`); a `Color32::from_rgb` or a `ui.visuals_mut()` tweak in a screen renders fine and
@@ -617,15 +565,13 @@ picker is the platform's and shows everything.
   is **7:1** and binds text against its surface, never the decorative non-text pairs (§3). And the app
   **pins dark**: install the palette *and* disable theme-following, or an OS theme change silently
   restores stock egui — the drafted palette is dark only, so nothing tests the light path (§2).
-- **Verify on the real handset.** The emulator is x86_64; the Pixel 8 Pro is arm64-v8a only.
 
 ## Why this crate has no `main.rs`
 
-`cargo-apk` panics after signing when one crate has both a cdylib and a bin. The desktop binary is
-`cairn-desktop`. Adding a `[[bin]]` here breaks the Android release build (ADR-0003 §5).
+The split was forced by the egui Android build's packager, which panicked on a crate with both a
+cdylib and a bin (ADR-0003 §5). That build is retired (ADR-0045 §8); the split stays because the
+scripts, captures and docs run `-p cairn-desktop`.
 
 `cairn-desktop` carries **two** binaries — `cairn` and `cairn-fixture`, the bench's outside way in —
-and both are shims of the same shape. The rule that keeps them so is unchanged and is the reason
-`fixtures::install_into_platform_dirs` lives in *this* crate: logic written in `cairn-desktop` is
-never compiled by the Android build and never exercised on the handset, which is the same class of
-defect as a runtime platform check.
+and both are shims of the same shape: logic belongs in this crate or in `cairn-ops`, where the tests
+reach it, which is why `fixtures::install_into_platform_dirs` lives in `cairn-ops`.

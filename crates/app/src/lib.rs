@@ -1,15 +1,9 @@
-//! The egui application: the application state and frame loop, the shared text-layout helpers, and
-//! both entry points. The destinations' screens live one module each under [`screens`].
+//! The egui application — the desktop client: the application state and frame loop, and the shared
+//! text-layout helpers. The destinations' screens live one module each under [`screens`].
 //!
-//! **This crate deliberately has no `src/main.rs`.** `cargo-apk` panics after signing
-//! (`Bin is not compatible with Cdylib`) when one crate has both a cdylib and a bin — the APK comes
-//! out correct but the exit code does not, and CI breaks. The desktop binary is `cairn-desktop`,
-//! which is a shim with no logic (ADR-0003 §5, ADR-0009 §3).
-//!
-//! **The Android entry point is `platform::android`**, not this file. The activity handle the inset
-//! seam needs originates in `android_main` and nothing else can hand it over — `ndk_context` holds
-//! the `Application` — so keeping the two together is what leaves `platform` one function wide and
-//! this file free of `#[cfg(target_os)]` (ADR-0025 §2, client-stack rule 3).
+//! **This crate has no `src/main.rs`.** The desktop binary is `cairn-desktop`, a shim with no logic
+//! (ADR-0009 §3). Android is the Kotlin client under `android/`; the egui Android build retired at
+//! parity ([ADR-0045 §8](../../../docs/adr/0045-the-native-android-client.md)).
 //!
 //! See `CONTEXT.md` beside this file, [ADR-0003](../../../docs/adr/0003-client-stack.md) and
 //! [ADR-0006](../../../docs/adr/0006-the-review-session-experience.md).
@@ -18,12 +12,11 @@ pub mod bidi;
 pub mod controls;
 pub mod fonts;
 pub mod frame;
-pub mod keyboard;
 #[cfg(test)]
 mod kotlin_tokens;
 pub mod motion;
-pub mod platform;
 mod screens;
+pub mod scroll;
 pub mod sentences;
 pub mod spacing;
 pub mod surface;
@@ -64,7 +57,7 @@ pub(crate) fn mono_ms() -> u64 {
 
 /// Take a file dropped onto the desktop window this frame, if any — egui surfaces dropped files
 /// directly, with no operating-system dialog and **no seam function** (ADR-0016 §5). Returns `None`
-/// on a frame with no drop, and on Android, where there is nothing to drag.
+/// on a frame with no drop.
 ///
 /// A native drop carries a path; the bytes are read from it here. (The web backend, which does not
 /// ship — ADR-0007 §1 — would instead carry the bytes inline; both are handled so this reads the
@@ -153,18 +146,16 @@ pub struct CairnApp {
     /// Cleared until the shipped font set is installed. The install happens on the **first frame**,
     /// not in `CreationContext` — see `fonts` and the note on `new`.
     fonts_installed: bool,
-    /// The band the platform's chrome and soft keyboard are sitting on, and the state its guards
-    /// need across frames (ADR-0025 §1, §3). Held here because two of the guards are differential:
-    /// they read the previous frame's geometry and must act before this frame lays anything out.
-    band: keyboard::Band,
+    /// The page's one scroll area, and the offset a screen that replaces the page puts it at.
+    page: scroll::Page,
     /// **Temporary** — the hand-off specimen's state (see [`handoff_specimen`]).
     handoff: HandOff,
     /// The file list's rows, read again each time Settings opens (ADR-0022 §11, ADR-0041 §5).
     file_list: FileList,
     /// **Temporary** — the fixture bench's state (see `fixtures`).
     bench: Bench,
-    /// The file the platform handed us — a launch intent read once at startup, or the last file
-    /// dropped on the window, or a row opened in the file list. **While it is `Some`, the import
+    /// The file the platform handed us — the last file dropped on the window, or a row opened in
+    /// the file list. **While it is `Some`, the import
     /// preview takes the screen** (ADR-0022 §6). This is the *file*, never a cached plan:
     /// `inbound::read` runs the whole gate-then-describe read against the live collection every frame
     /// the preview draws (ADR-0022 §5).
@@ -179,9 +170,6 @@ pub struct CairnApp {
     /// Whether the preview was on screen last frame — so the frame it starts or ends on can put the
     /// page back at its top.
     was_previewing: bool,
-    /// Whether the launch intent has been consulted yet (`platform::launch_file` is a one-shot read,
-    /// so it is asked once as the app comes up — which is where cold start is satisfied, ADR-0016 §5).
-    launch_checked: bool,
 }
 
 impl CairnApp {
@@ -238,14 +226,13 @@ impl CairnApp {
             optimise_job: None,
             optimise_done: false,
             fonts_installed: false,
-            band: keyboard::Band::default(),
+            page: scroll::Page::default(),
             handoff: HandOff::default(),
             file_list: FileList::default(),
             bench: Bench::default(),
             inbound: None,
             import_failed: None,
             was_previewing: false,
-            launch_checked: false,
         }
     }
 
@@ -283,14 +270,14 @@ impl CairnApp {
         self.forget_screen_state();
     }
 
-    /// **Temporary** — the handset half of the fixture bench (`fixtures`). Replace the collection
-    /// with a pre-made one, so a person holding the device can reach a state the shipping seed never
-    /// produces without a cable and `run-as`.
+    /// **Temporary** — the in-app half of the fixture bench (`fixtures`). Replace the collection
+    /// with a pre-made one, so a person at the running app can reach a state the shipping seed never
+    /// produces without quitting it.
     ///
     /// The desktop harness does this from *outside* with the `cairn-fixture` binary, because it owns
-    /// the scratch data directory already. Android has no such route: `data_dir` is `getFilesDir()`,
-    /// which nothing outside the app may write, and #141 found that even an uninstall is not a first
-    /// launch there, because ADR-0007 §6 deliberately puts it in the Auto Backup set.
+    /// the scratch data directory already. This route was built for the egui Android build, where
+    /// nothing outside the app may write `getFilesDir()`; that build is retired (ADR-0045 §8) and the
+    /// route stays as the desktop's in-app one.
     ///
     /// **The collection is opened directly rather than through
     /// [`open_store`](CairnApp::open_store), and that is the decision this whole bench rests on.**
@@ -395,7 +382,7 @@ impl eframe::App for CairnApp {
     /// `eframe::App::ui`'s contract says the `Ui` it hands you *"has no margin or background
     /// color"*, and this app neither wrapped its content in a `CentralPanel` nor overrode this —
     /// so the page was eframe's own default, a hard-coded `rgba(12, 12, 12, 180)` compositing to
-    /// `#080808`, on every screen. `panel_fill` reached only the nav strip and the inset bands,
+    /// `#080808`, on every screen. `panel_fill` reached only the nav strip and the (since retired) inset bands,
     /// which is why the strip was visibly *lighter* than the page under it.
     ///
     /// `#080808` sits **below every rung of the stone ramp**, so it was not merely unnamed but
@@ -427,16 +414,9 @@ impl eframe::App for CairnApp {
 
         // ---- The inbound file, read before the collection is borrowed (ADR-0016 §5, #107) --------
         //
-        // Two routes converge on one held [`inbound::Inbound`]: the Android launch intent, consulted
-        // once as the app comes up (cold-start capable — the intent is on the activity from the
-        // first frame), and a desktop drop, surfaced by egui directly on the frame it lands. The
-        // *file* is held; its plan is derived fresh every frame by the specimen (ADR-0022 §5).
-        if !self.launch_checked {
-            self.launch_checked = true;
-            if let Some(launched) = platform::launch_file() {
-                self.inbound = Some(launched);
-            }
-        }
+        // A desktop drop, surfaced by egui directly on the frame it lands, becomes the held
+        // [`inbound::Inbound`]. The *file* is held; its plan is derived fresh every frame by the
+        // specimen (ADR-0022 §5).
         if let Some(dropped) = take_dropped(ui.ctx()) {
             self.inbound = Some(dropped);
         }
@@ -455,70 +435,26 @@ impl eframe::App for CairnApp {
             Ok(coll) => coll,
         };
 
-        // ---- The band the platform's chrome and keyboard are sitting on (ADR-0025 §1) -----------
-        //
-        // Nothing below this application reports the soft keyboard, so it asks — and un-asked the
-        // failure is *unreachability*, not occlusion: egui is handed a viewport taller than the
-        // visible one, the content fits inside it, and there is no scroll range over the covered
-        // band at all. Reserving it is what gives the scroll area a real range, and reserving the
-        // top is what stops the first line of text being drawn under the status bar.
-        let bands = self.band.read(ui.ctx());
-        if keyboard::Bands::is_worth_reserving(bands.top) {
-            egui::Panel::top("inset-top")
-                .exact_size(bands.top)
-                .frame(egui::Frame::NONE)
-                .show(ui, |_| {});
-        }
-
         // ---- The navigation shell (ADR-0021 §1; `CONTEXT.md`'s *Top-level destination*) ----------
         //
-        // **Pinned, and it yields the screen to the soft keyboard.** Two accepted constraints pull
-        // against each other here, and neither document recorded which won. ADR-0021 §1 wants a
-        // *persistent* affordance, because "a destination reachable only by completing a session is
-        // not reachable" — and a row that scrolls away is not persistent. ADR-0025's consequences
-        // make the form pane's **first screen** a specified resource, holding the destructive-edit
-        // warning because nowhere else works — and a row that is always pinned spends that resource
-        // out of the 565dp a keyboard leaves of 923dp.
-        //
-        // So it is drawn whenever the keyboard is **not up**: full reachability while the user is
-        // reading, the whole first screen while they are typing, and the row is back the moment the
-        // keyboard goes down. **One rule reading one fact.** It is expressible only because
-        // ADR-0026 §5 made the seam distinguish *no soft keyboard on this platform* from *keyboard
-        // down* — off Android the seam reports the first, `keyboard_is_up` is permanently false, and
-        // the row is simply always pinned. One rule reaching two answers is **not**
-        // platform-conditional behaviour, so client-stack rule 3 is untouched.
-        //
-        // It sits below the status-bar band and outside the scroll area, which is what makes it
-        // pinned rather than merely first.
+        // **Pinned**, because ADR-0021 §1 wants a *persistent* affordance — "a destination reachable
+        // only by completing a session is not reachable" — and a row that scrolls away is not
+        // persistent. It sits outside the scroll area, which is what makes it pinned rather than
+        // merely first.
         //
         // **And it steps aside while a file is being previewed.** The preview has no destination and
         // takes the screen (ADR-0022 §6, #151): its only ways out are the gate's, so a file held while
         // the person wanders to another destination can never be left behind half-decided — and the
         // one screen that renders a stranger's strings is the one screen with nothing else on it.
         let previewing = self.inbound.is_some();
-        if !self.band.keyboard_is_up() && !previewing {
+        if !previewing {
             // The row aligns to whatever column the destination beneath it is using, which on every
-            // screen but a wide editor is the measure. Both sides ask `frame::cap_for` rather than
+            // screen but the editor is the measure. Both sides ask `frame::cap_for` rather than
             // naming a number, so the nav cannot drift out of step with the content (`frame`).
             let cap = frame::cap_for(self.dest == Destination::Notes && self.editing.is_some());
             egui::Panel::top("nav")
                 .resizable(false)
                 .show(ui, |ui| nav_bar(ui, &mut self.dest, cap));
-        }
-
-        // **Before the band is reserved, not after.** The focused field has to be inside the
-        // viewport on the *same* frame it shrinks, or its IME output lapses for one frame and the
-        // keyboard is gone before the next one — see `keyboard` for the loop this breaks.
-        let viewport_bottom = ui.available_rect_before_wrap().bottom() - bands.bottom;
-        self.band
-            .keep_focus_visible(ui.ctx(), bands, viewport_bottom);
-        self.band.settle_focus_scrolled_away(ui.ctx());
-
-        if keyboard::Bands::is_worth_reserving(bands.bottom) {
-            egui::Panel::bottom("inset-bottom")
-                .exact_size(bands.bottom)
-                .frame(egui::Frame::NONE)
-                .show(ui, |_| {});
         }
 
         // ***Create note* is pinned below the scroll, on the reach line** (ADR-0039 §8, ADR-0035 §1).
@@ -584,9 +520,9 @@ impl eframe::App for CairnApp {
         let previewing = self.inbound.is_some();
         let report = report.filter(|_| previewing);
         // The preview replaces the page, so it opens at its top — and so does whatever it hands back
-        // to, which is the note list after an import (see `Band::scroll_to_top`).
+        // to, which is the note list after an import (see `Page::scroll_to_top`).
         if previewing != self.was_previewing {
-            self.band.scroll_to_top();
+            self.page.scroll_to_top();
             self.was_previewing = previewing;
         }
         let Ok(coll) = self.store.as_mut() else {
@@ -622,19 +558,15 @@ impl eframe::App for CairnApp {
             }
         }
 
-        // Everything the destination draws scrolls, which is what makes the covered band reachable
-        // rather than merely clipped. The nav row is **not** in here — it is the pinned panel above,
-        // so scrolling a long note list never carries the way out off the screen with it.
+        // Everything the destination draws scrolls. The nav row is **not** in here — it is the
+        // pinned panel above, so scrolling a long note list never carries the way out off the screen
+        // with it.
         //
-        // The area is taken *before* the closure so it carries guard 1's forced offset without
-        // holding a borrow of `band` across the frame the destinations are drawn in.
-        let area = self.band.scroll_area();
-        // Whether a thumb is driving this (ADR-0035 §3). Read once here, from the insets this frame
-        // already took, and passed down — so the screens ask a value rather than a platform, and
-        // nothing below this line acquires a reason to know what it is running on.
-        let touch = self.band.is_touch();
+        // The area is taken *before* the closure so it carries a forced offset without holding a
+        // borrow of `page` across the frame the destinations are drawn in.
+        let area = self.page.scroll_area();
         let mut bench_request: Option<BenchRequest> = None;
-        let out = area.show(ui, |ui| {
+        area.show(ui, |ui| {
             ui.add_space(spacing::gap(1));
 
             // **A held file takes the screen** in place of the destination (ADR-0022 §6): the
@@ -671,7 +603,6 @@ impl eframe::App for CairnApp {
                             now_ms,
                             mono_ms(),
                             today,
-                            touch,
                         )
                     });
                     if let Some(note) = opened {
@@ -711,7 +642,6 @@ impl eframe::App for CairnApp {
                 }
             }
         });
-        self.band.record(&out);
 
         match bench_request {
             None => {}
@@ -964,7 +894,7 @@ pub(crate) fn field_label_over(ui: &mut egui::Ui, s: &str, content: &str) -> egu
 pub(crate) fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Response {
     let rtl = bidi::is_rtl(buffer);
     let mut layouter = bidi_layouter;
-    let response = ui.add(
+    ui.add(
         egui::TextEdit::singleline(buffer)
             .desired_width(f32::INFINITY)
             .horizontal_align(if rtl {
@@ -973,40 +903,7 @@ pub(crate) fn text_field(ui: &mut egui::Ui, buffer: &mut String) -> egui::Respon
                 egui::Align::LEFT
             })
             .layouter(&mut layouter),
-    );
-    raise_keyboard(ui.ctx(), &response);
-    response
-}
-
-/// **Guard 3** — raise the soft keyboard when the user clicks a text field and it is down
-/// (ADR-0026 §4).
-///
-/// This is the recovery half of the vendored adapter patch (`vendor/PATCH.md`), and it is not
-/// optional. Once the per-tap interrupt is suppressed, nothing re-asserts *show* after the user
-/// dismisses the keyboard with the IME's own chevron: the adapter debounces its allow-IME flag
-/// against its own previous value, and that value never changed — only the platform's did. The
-/// interrupt block was the only thing re-asserting it, so removing the defect removes recovery with
-/// it. An implementation that takes the patch without this ships a keyboard the user cannot get
-/// back.
-///
-/// It goes through `ViewportCommand::IMEAllowed(true)`, which the adapter maps straight onto the
-/// window without touching that debounced flag — public API, and no state to desync.
-///
-/// **Keyed on the field's own discrete click**, never on a per-frame "something is focused and the
-/// pointer went down": `request_focus` fires while *dragging* too, and the version that hung off it
-/// issued **72 show requests from a single scroll gesture**. Both wrong versions made the same
-/// mistake — hanging behaviour off a per-frame flag when the thing being modelled is a discrete
-/// event.
-///
-/// **Gated on a keyboard that exists and is currently down**, read from the seam at the moment of the
-/// click rather than from a cached frame value, so "is it actually down" is answered by the platform.
-/// The gate is what keeps the measured zero-hides-zero-shows shape: without it every click sends a
-/// redundant show. And it is the seam's honest return type that makes the gate correct off Android —
-/// a platform with no soft keyboard answers `Absent`, not "down" (ADR-0026 §5).
-pub(crate) fn raise_keyboard(ctx: &egui::Context, response: &egui::Response) {
-    if response.clicked() && crate::platform::insets().keyboard.is_down() {
-        ctx.send_viewport_cmd(egui::ViewportCommand::IMEAllowed(true));
-    }
+    )
 }
 
 /// The bidi text-edit layouter shared by every field (`text_field`, `multiline_field_output`): it
