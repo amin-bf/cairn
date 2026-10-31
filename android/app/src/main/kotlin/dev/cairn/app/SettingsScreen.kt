@@ -178,6 +178,13 @@ private fun FilesBlock(state: SettingsScreenState.Ready, onOpenFile: () -> Unit,
         Spacer(Modifier.height(gap(1)))
         CairnText(backupNudgeSentence(it), Modifier.testTag("backup-nudge"))
     }
+    state.backupOverQuotaMb?.let {
+        Spacer(Modifier.height(gap(1)))
+        CairnText(
+            stringResource(R.string.backup_size_over, String.format(java.util.Locale.ENGLISH, "%,d", it)),
+            Modifier.testTag("backup-size"),
+        )
+    }
     when (val row = state.backup) {
         is BackupRow.Written -> {
             Spacer(Modifier.height(gap(1)))
