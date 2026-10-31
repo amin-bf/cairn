@@ -22,7 +22,9 @@ enum class Tier(internal val size: Float) {
 
 /**
  * Text at a tier, in a family, with every glyph reaching the face that has it. The direction follows
- * the content, so a Persian sentence sets right to left and a French one left to right.
+ * the content, so a Persian sentence sets right to left and a French one left to right — unless a
+ * [direction] is given, which the application's own sentences use to keep the interface's edge
+ * whatever name they carry.
  */
 @Composable
 fun CairnText(
@@ -32,6 +34,7 @@ fun CairnText(
     family: Family = Family.Proportional,
     color: Color = Cairn.colors.body,
     maxLines: Int = Int.MAX_VALUE,
+    direction: TextDirection = TextDirection.Content,
 ) {
     val faces = LocalFaces.current
     val resolved = remember(text, family, faces) { faces.resolve(text, family) }
@@ -43,7 +46,7 @@ fun CairnText(
         style = TextStyle(
             color = color,
             fontSize = tier.size.sp,
-            textDirection = TextDirection.Content,
+            textDirection = direction,
         ),
     )
 }
