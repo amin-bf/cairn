@@ -505,7 +505,12 @@ from a cold start lands on the count picker**, the same place ADR-0006 §2's for
 What it *states* is `export`'s (**import plan**, **preview**, **gate / describe**); what is here is
 that it has no home and takes the screen. The **restore preview** is the same screen, one line long.
 Its **gate** is *Import* and *Cancel*, or a lone *Close* when it refuses or would change nothing,
-pinned on the reach line (ADR-0041 §3).
+pinned on the reach line (ADR-0041 §3). **Which gate a plan is owed is `cairn-ops`'s decision**
+(`inbound::gate_for`), so the egui screen and the Kotlin app cannot disagree about whether a file can
+be imported; each draws it in its own words. In the Kotlin app the screen is the `IMPORT` route, which
+hides the destinations row, and *Cancel*, *Close* and Back are one dismissal back to where the person
+was — Review's entrance from a cold start, which is where the egui build's count picker is on Android
+(ADR-0052).
 _Avoid_: Import dialog, import modal, import overlay — ADR-0022 §6 rules out all three, and *overlay*
 implies a destination underneath that a cold start does not have.
 
