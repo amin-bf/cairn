@@ -44,7 +44,9 @@ map's scope.
   says nothing about Compose; the debug build's design specimen is its Kotlin counterpart.
 - **The hand-off specimen** is not carried. Half of it is the direct `MediaStore` write that ADR-0047
   replaced with the system save dialog. The other half, the share sheet, is checked against a real
-  export in the file-surface slice.
+  export in the file-surface slice. *(Amended by
+  [ADR-0052 §3](0052-the-file-surface-on-android-is-import-only.md): the file-surface slice is
+  import only, so the share sheet is checked against the backup slice's archive export.)*
 
 This reverses ADR-0042 §3's *in every build* on Android only. A person who never sets the variable
 never meets a control that replaces their collection. The desktop keeps ADR-0042 §3 as written.
