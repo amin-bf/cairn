@@ -36,6 +36,33 @@ pub struct Nudge {
     pub reviews_since: u64,
     pub reviews: u64,
     pub notes: u64,
+    /// The collection's size against Android's automatic-backup quota (ADR-0016 §7).
+    pub size: Size,
+}
+
+/// Android's automatic-backup quota: 25 MiB, which ADR-0016 §7's sentence states as *"25 MB"*. The
+/// platform documents *"25 MB"*; the binary reading is the stricter of the two, so the line appears
+/// no later than the cutoff could.
+pub const QUOTA_BYTES: u64 = 25 * MIB;
+
+const MIB: u64 = 1_048_576;
+
+/// The collection's size as the backup row states it (ADR-0016 §7): whole MB, rounded up so the
+/// size is never understated, in the same MB the quota is stated in — so a collection over the quota
+/// never reads as *"25 MB"* beside *"stops above 25 MB"*.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Size {
+    pub mb: u64,
+    /// Past the quota, where the platform's automatic backup silently stops.
+    pub over_quota: bool,
+}
+
+/// `bytes`, in the tar unit the platform measures, stated against the quota.
+pub fn size(bytes: u64) -> Size {
+    Size {
+        mb: bytes.div_ceil(MIB),
+        over_quota: bytes > QUOTA_BYTES,
+    }
 }
 
 /// The name a backup made at `created_ms` suggests: `Cairn backup YYYY-MM-DD.ccoll`, dated by the
@@ -93,6 +120,7 @@ pub fn nudge(coll: &Collection) -> Result<Nudge, StoreError> {
         reviews_since,
         reviews,
         notes: live_notes(coll)?,
+        size: size(coll.backup_size()?),
     })
 }
 
@@ -229,6 +257,7 @@ mod tests {
                 reviews_since: reviews,
                 reviews,
                 notes,
+                size: before.size,
             }
         );
 
@@ -238,5 +267,57 @@ mod tests {
         assert_eq!(after.reviews_since, 0);
         assert_eq!(after.reviews, reviews);
         assert_eq!(after.notes, notes);
+    }
+
+    #[test]
+    fn the_size_is_over_the_quota_only_past_25_mib() {
+        // 25 MiB is 26,214,400 bytes: at it the backup still runs, a byte past it does not.
+        assert_eq!(
+            size(26_214_399),
+            Size {
+                mb: 25,
+                over_quota: false
+            }
+        );
+        assert_eq!(
+            size(26_214_400),
+            Size {
+                mb: 25,
+                over_quota: false
+            }
+        );
+        assert_eq!(
+            size(26_214_401),
+            Size {
+                mb: 26,
+                over_quota: true
+            }
+        );
+    }
+
+    #[test]
+    fn the_size_is_stated_in_whole_mb_rounded_up() {
+        assert_eq!(size(0).mb, 0);
+        assert_eq!(size(1).mb, 1);
+        assert_eq!(size(1_048_576).mb, 1);
+        assert_eq!(size(1_048_577).mb, 2);
+        // ADR-0016 §7's example: a collection of 31 MB is a little over 30 MiB.
+        assert_eq!(
+            size(31_457_281),
+            Size {
+                mb: 31,
+                over_quota: true
+            }
+        );
+    }
+
+    #[test]
+    fn the_nudge_carries_the_collections_size() {
+        let (mut coll, _d, _s) = open();
+        Fixture::History.install(&mut coll, LATE_MS).unwrap();
+        let bytes = coll.backup_size().unwrap();
+        assert!(bytes > 0);
+        assert_eq!(nudge(&coll).unwrap().size, size(bytes));
+        assert!(!nudge(&coll).unwrap().size.over_quota);
     }
 }
