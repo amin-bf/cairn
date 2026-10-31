@@ -133,7 +133,7 @@ class SettingsTest {
     }
 
     @Test
-    fun the_page_has_two_groups_with_their_captions_and_no_files_or_sync_block() {
+    fun the_page_has_two_groups_with_their_captions_and_no_sync_block() {
         showApp()
         openSettings()
         rule.onNodeWithTag("settings-heading").assertTextEquals("Settings")
@@ -146,7 +146,8 @@ class SettingsTest {
             .assertTextEquals("The only limit in the app. Set it to zero to clear a backlog, then turn it back on.")
         rule.onNodeWithTag("appearance-note")
             .assertTextEquals("This machine only — your appearance does not follow the collection to another device.")
-        for (absent in listOf("Files", "Open a file", "sync", "Sync")) {
+        // The Files block is #242's and has its own tests (ImportPreviewTest); sync is still to come.
+        for (absent in listOf("sync", "Sync")) {
             assertEquals("nothing on the page says '$absent'", 0, rule.onAllNodesWithText(absent, substring = true).fetchSemanticsNodes().size)
         }
     }
