@@ -2956,12 +2956,12 @@ mod tests {
         let before = handle.note_list(DeckSelector::All, String::new()).unwrap();
         // Under the preview, a newer revision of the deck arrives — as a sync from a device that
         // imported a later copy would leave it. The attribute is the one an import writes back
-        // (ADR-0008 §9, `cairn_export::DECK_REVISION_ATTR`).
+        // (ADR-0008 §9).
         let (deck, name) = cairn_ops::fixtures::DECKS[0];
         let id = DeckId::parse_canonical(deck).unwrap();
         handle
             .collection()
-            .mutable_set_if_changed("deck", &id.0, "revision", Some("9"))
+            .mutable_set_if_changed("deck", &id.0, cairn_export::DECK_REVISION_ATTR, Some("9"))
             .unwrap();
         // Import re-derives, so the file it was shown is now an older copy and nothing is written.
         assert_eq!(
