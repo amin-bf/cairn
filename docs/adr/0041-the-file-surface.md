@@ -168,6 +168,10 @@ are grouped (*1,202*) everywhere on this surface.
   can be told apart — but nothing in the application reads one, so opening an archive reaches the deck
   import's *"This is a collection archive, not a deck file."* The application also never *writes* an
   archive; only the bench does. It leaves the map as a named follow-on beside the export screen.
+
+  > **Note (31.10.2026):** on Android, [ADR-0053](0053-backup-and-restore-on-android.md) builds both
+  > halves in the native map: a backup action on Settings, and the restore preview reached by opening
+  > an archive. The desktop reads this bullet as written.
 - **A four-digit count has still not been photographed.** Grouping is pinned by
   `counts_are_grouped_by_thousands`, but the bench's counts are single digits, so how a long count
   wraps on a handset line is unseen.
