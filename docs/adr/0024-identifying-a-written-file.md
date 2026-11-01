@@ -85,6 +85,14 @@ content is not a contradiction — it is the only split the platform permits.
 
 ### 2. Reach costs a broad filter, and we pay it
 
+> **Amended (01.11.2026, #256):** the broad filter is wider than `application/octet-stream`. Files by
+> Google's browse-by-folder route asks the system who opens a `.ccoll` by a type that is neither
+> filter's, and shows only the apps that match; captured on a handset, with no match its *Open with*
+> does nothing. The Kotlin app's manifest therefore also declares one `VIEW` filter on any type
+> (`*/*`, `content` and `file`), so the application is offered for every file there. The cost below is
+> paid in full, and §1 still makes it survivable. [ADR-0047 §2](0047-the-file-surface-on-android.md)'s
+> "the filters stay as they are" holds for the rest.
+
 > **The manifest declares `application/octet-stream` for `ACTION_VIEW` and `ACTION_SEND`, alongside
 > the precise `application/vnd.leitner.deck+zip` filter.**
 
