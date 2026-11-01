@@ -89,9 +89,24 @@ content is not a contradiction — it is the only split the platform permits.
 > Google's browse-by-folder route asks the system who opens a `.ccoll` by a type that is neither
 > filter's, and shows only the apps that match; captured on a handset, with no match its *Open with*
 > does nothing. The Kotlin app's manifest therefore also declares one `VIEW` filter on any type
-> (`*/*`, `content` and `file`), so the application is offered for every file there. The cost below is
-> paid in full, and §1 still makes it survivable. [ADR-0047 §2](0047-the-file-surface-on-android.md)'s
-> "the filters stay as they are" holds for the rest.
+> (`*/*`) on `content` URIs of that file manager's own provider alone, so the application is offered
+> for every file in that one app and in no other. The cost below is paid there in full, and §1 still
+> makes it survivable. [ADR-0047 §2](0047-the-file-surface-on-android.md)'s "the filters stay as
+> they are" holds for the rest.
+>
+> **Narrowed (01.11.2026, #256):** the first form of this filter also took `file` URIs and every
+> provider. The retired egui build's manifest is no narrower: it declared exactly the two type
+> filters above, `application/octet-stream` and `application/vnd.cairn.deck+zip`, each for `VIEW` and
+> `SEND`, with no scheme, host or name pattern, so it reached a file only by those types, which
+> the browse route does not ask by. Measured on a Samsung handset (API 29): the browse route's type
+> is none of `text/*`, `application/*`, `image/*`, `video/*` or `audio/*`, and no untyped filter
+> matches, so only an any-type filter does. What narrows it is the *host*: the route's URIs are
+> `content://<its provider>/…`, and a filter that names that host matched there, in the real *Open
+> with* sheet, while a `file` URI or another provider's URI typed outside the two filters is no
+> longer offered (`FileRouteTest`). A `pathPattern` on `.ccoll` and `.ldeck` combined with the
+> any-type filter also matched, but it lets the name decide arrival, which this section refuses.
+> The host is a deliberate pin: another file manager whose route asks by an unnamed type needs its
+> own measurement and its own host.
 
 > **The manifest declares `application/octet-stream` for `ACTION_VIEW` and `ACTION_SEND`, alongside
 > the precise `application/vnd.leitner.deck+zip` filter.**
