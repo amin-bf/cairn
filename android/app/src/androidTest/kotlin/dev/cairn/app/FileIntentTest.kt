@@ -17,6 +17,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.cairn.ffi.DeckSelector
+import dev.cairn.ffi.FileArrival
 import dev.cairn.ffi.benchFiles
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -55,6 +56,7 @@ class FileIntentTest {
 
     @After
     fun tearDown() {
+        HandledArrivals.of(context).clear()
         BenchProvider.files.clear()
         BenchProvider.opened.clear()
     }
@@ -147,6 +149,54 @@ class FileIntentTest {
             assertFalse("the preview takes the whole screen", exists("destinations"))
             rule.onNodeWithTag("gate-cancel").performClick()
             waitUntil { onReviewsEntrance() }
+        }
+    }
+
+    // --- An intent is acted on once (#255): the system replays a task's root intent after an upgrade.
+
+    /** The file was opened under an earlier build: the record says so, as the one the last run left. */
+    private fun openedUnderAnEarlierBuild(file: ArrivingFile) =
+        HandledArrivals.of(context, installed = { 1L }).handled(file)
+
+    @Test
+    fun a_cold_start_replaying_the_file_opened_before_an_upgrade_reaches_no_preview() {
+        openedUnderAnEarlierBuild(ArrivingFile(FileArrival.OPENED, BenchProvider.uri(update.name)))
+        ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use {
+            staysOnReviewsEntrance()
+            assertFalse(exists("import-screen"))
+        }
+    }
+
+    @Test
+    fun a_replay_is_dropped_once_and_the_same_file_opened_again_reaches_the_preview() {
+        openedUnderAnEarlierBuild(ArrivingFile(FileArrival.OPENED, BenchProvider.uri(update.name)))
+        ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use { scenario ->
+            staysOnReviewsEntrance()
+            arriveWhileRunning(scenario, view(BenchProvider.uri(update.name)))
+            waitFor("import-screen")
+            assertEquals(update.name, text("import-heading"))
+        }
+    }
+
+    @Test
+    fun a_running_app_gets_a_replay_dropped_and_another_file_still_arrives() {
+        openedUnderAnEarlierBuild(ArrivingFile(FileArrival.OPENED, BenchProvider.uri(update.name)))
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitUntil { onReviewsEntrance() }
+            arriveWhileRunning(scenario, view(BenchProvider.uri(update.name)))
+            staysOnReviewsEntrance()
+            arriveWhileRunning(scenario, view(BenchProvider.uri(several.name)))
+            waitFor("import-screen")
+            assertEquals(several.name, text("import-heading"))
+        }
+    }
+
+    @Test
+    fun a_file_opened_under_this_build_is_not_taken_for_a_replay() {
+        HandledArrivals.of(context).handled(ArrivingFile(FileArrival.OPENED, BenchProvider.uri(update.name)))
+        ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use {
+            waitFor("import-screen")
+            assertEquals(update.name, text("import-heading"))
         }
     }
 

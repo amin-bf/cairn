@@ -15,20 +15,29 @@ import dev.cairn.design.CairnText
 
 class MainActivity : CairnActivity() {
     private val incoming by lazy { ViewModelProvider(this)[IncomingFiles::class.java] }
+    private val handledArrivals by lazy { HandledArrivals.of(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // An intent is handled once (#241): a recreation brings the one already handled back, and so
         // does a return from the recents screen, which marks it as launched from history.
         val fromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
-        if (savedInstanceState == null && !fromHistory) arrivingFrom(intent)?.let(incoming::arrive)
+        if (savedInstanceState == null && !fromHistory) arrive(intent)
     }
 
     // singleTask: a file opened from another app while this one runs comes here (ADR-0052 §2). It is
     // handled here and not kept as the activity's intent, which nothing reads again.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        arrivingFrom(intent)?.let(incoming::arrive)
+        arrive(intent)
+    }
+
+    // The system replays a task's root intent after an upgrade (#255); an arrival is acted on once.
+    private fun arrive(intent: Intent) {
+        val file = arrivingFrom(intent) ?: return
+        if (handledArrivals.isReplay(file)) return
+        handledArrivals.handled(file)
+        incoming.arrive(file)
     }
 
     @Composable

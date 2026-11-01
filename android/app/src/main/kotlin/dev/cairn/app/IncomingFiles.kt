@@ -1,7 +1,9 @@
 package dev.cairn.app
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.AndroidViewModel
@@ -55,5 +57,43 @@ class IncomingFiles(app: Application) : AndroidViewModel(app) {
     /** [file] has reached the preview; a newer one that came meanwhile stays pending. */
     fun handled(file: ReadFile) {
         _pending.compareAndSet(file, null)
+    }
+}
+
+/**
+ * The arrival the app last acted on, kept across processes with the install it was acted on under.
+ * The system replays a task's root intent after an upgrade, and the file it names is no longer granted
+ * (#255): an arrival equal to the last one handled, under an install since replaced, is that replay.
+ */
+class HandledArrivals(private val prefs: SharedPreferences, private val installed: () -> Long) {
+    /**
+     * [file] is the replay of the last arrival handled under an earlier install. It is said once: the
+     * record moves to this install, so the same file opened again is a new arrival.
+     */
+    fun isReplay(file: ArrivingFile): Boolean {
+        val replay = prefs.getString(KEY, null) == key(file) && prefs.getLong(INSTALL, 0L) != installed()
+        if (replay) prefs.edit().putLong(INSTALL, installed()).apply()
+        return replay
+    }
+
+    fun handled(file: ArrivingFile) {
+        prefs.edit().putString(KEY, key(file)).putLong(INSTALL, installed()).apply()
+    }
+
+    fun clear() {
+        prefs.edit().clear().apply()
+    }
+
+    private fun key(file: ArrivingFile) = "${file.arrival}|${file.uri}"
+
+    companion object {
+        private const val KEY = "arrival"
+        private const val INSTALL = "install"
+
+        fun of(context: Context, installed: () -> Long = { installTime(context) }) =
+            HandledArrivals(context.getSharedPreferences("handled_arrivals", Context.MODE_PRIVATE), installed)
+
+        private fun installTime(context: Context): Long =
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
     }
 }
