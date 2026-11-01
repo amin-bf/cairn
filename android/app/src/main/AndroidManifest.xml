@@ -31,13 +31,14 @@
             </intent-filter>
             <!-- Files by Google's browse-by-folder route asks the system who opens a `.ccoll` with a type
                  neither of the two above names, and offers only what matches (#256, captured on a handset).
-                 Any type, on the file and content schemes: the bytes decide (ADR-0024 §1). -->
+                 Any type, but only on that file manager's own provider: a path pattern on the name or an
+                 untyped filter does not match, and the name does not decide anyway (ADR-0024 §1, §2). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
+                <data android:host="com.google.android.apps.nbu.files.provider" />
                 <data android:mimeType="*/*" />
             </intent-filter>
             <intent-filter>

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,14 +33,21 @@ class FileRouteTest {
 
     @Test
     fun an_archive_is_offered_whatever_type_the_file_manager_asks_by() {
-        val files = listOf(
-            "content://com.google.android.apps.nbu.files.provider/1/file:///storage/emulated/0/Download/Cairn%20backup.ccoll",
+        val file = "content://com.google.android.apps.nbu.files.provider/1/file:///storage/emulated/0/Download/Cairn%20backup.ccoll"
+        for (type in listOf("*/*", "application/zip", "application/x-zip-compressed", "application/octet-stream")) {
+            assertTrue("$file, $type", offered(file, type))
+        }
+    }
+
+    @Test
+    fun the_any_type_door_opens_for_that_file_manager_alone() {
+        val elsewhere = listOf(
+            "content://com.example.other.provider/1/Cairn%20backup.ccoll",
             "file:///storage/emulated/0/Download/Cairn%20backup.ccoll",
         )
-        for (uri in files) {
-            for (type in listOf("*/*", "application/zip", "application/x-zip-compressed", "application/octet-stream")) {
-                assertTrue("$uri, $type", offered(uri, type))
-            }
+        for (uri in elsewhere) {
+            assertFalse(uri, offered(uri, "application/zip"))
+            assertTrue(uri, offered(uri, "application/octet-stream"))
         }
     }
 }
