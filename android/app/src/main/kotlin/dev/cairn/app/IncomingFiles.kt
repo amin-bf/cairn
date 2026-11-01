@@ -61,9 +61,10 @@ class IncomingFiles(app: Application) : AndroidViewModel(app) {
 }
 
 /**
- * The arrival the app last acted on, kept across processes with the install it was acted on under.
+ * The arrival the app was last started by, kept across processes with the install it was started under.
  * The system replays a task's root intent after an upgrade, and the file it names is no longer granted
- * (#255): an arrival equal to the last one handled, under an install since replaced, is that replay.
+ * (#255): a start equal to the last one recorded, under an install since replaced, is that replay.
+ * Only starts are recorded; a file reaching the running app is not, so it cannot hide the root intent.
  */
 class HandledArrivals(private val prefs: SharedPreferences, private val installed: () -> Long) {
     /**
@@ -72,16 +73,17 @@ class HandledArrivals(private val prefs: SharedPreferences, private val installe
      */
     fun isReplay(file: ArrivingFile): Boolean {
         val replay = prefs.getString(KEY, null) == key(file) && prefs.getLong(INSTALL, 0L) != installed()
-        if (replay) prefs.edit().putLong(INSTALL, installed()).apply()
+        if (replay) prefs.edit().putLong(INSTALL, installed()).commit()
         return replay
     }
 
+    // Committed, not applied: a process killed right after the start must not lose the record.
     fun handled(file: ArrivingFile) {
-        prefs.edit().putString(KEY, key(file)).putLong(INSTALL, installed()).apply()
+        prefs.edit().putString(KEY, key(file)).putLong(INSTALL, installed()).commit()
     }
 
     fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
     }
 
     private fun key(file: ArrivingFile) = "${file.arrival}|${file.uri}"

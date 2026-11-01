@@ -179,15 +179,30 @@ class FileIntentTest {
     }
 
     @Test
-    fun a_running_app_gets_a_replay_dropped_and_another_file_still_arrives() {
+    fun a_file_reaching_the_running_app_is_never_a_replay() {
+        // The system replays the task's root intent, which starts the app; one that reaches the running
+        // app through onNewIntent is the person's, even when it names the file the record holds.
         openedUnderAnEarlierBuild(ArrivingFile(FileArrival.OPENED, BenchProvider.uri(update.name)))
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             waitUntil { onReviewsEntrance() }
             arriveWhileRunning(scenario, view(BenchProvider.uri(update.name)))
-            staysOnReviewsEntrance()
+            waitFor("import-screen")
+            assertEquals(update.name, text("import-heading"))
+        }
+    }
+
+    @Test
+    fun a_file_that_reached_the_running_app_does_not_hide_the_replay_of_the_root_intent() {
+        // A opened the app, B reached it running, the app was upgraded and A is replayed.
+        openedUnderAnEarlierBuild(ArrivingFile(FileArrival.OPENED, BenchProvider.uri(update.name)))
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitUntil { onReviewsEntrance() }
             arriveWhileRunning(scenario, view(BenchProvider.uri(several.name)))
             waitFor("import-screen")
-            assertEquals(several.name, text("import-heading"))
+        }
+        ActivityScenario.launch<MainActivity>(view(BenchProvider.uri(update.name))).use {
+            staysOnReviewsEntrance()
+            assertFalse(exists("import-screen"))
         }
     }
 
