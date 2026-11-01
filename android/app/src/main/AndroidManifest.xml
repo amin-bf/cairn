@@ -29,6 +29,38 @@
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/vnd.cairn.deck+zip" />
             </intent-filter>
+            <!-- A file manager that types the file as anything else, or not at all (#256): offered by the
+                 name, `.ccoll` or `.cdeck`, with a pattern for a name holding more dots. The bytes still
+                 decide what the file is (ADR-0047 §2); the name only gets the app offered. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.ccoll" />
+                <data android:pathPattern=".*\\..*\\.ccoll" />
+                <data android:pathPattern=".*\\..*\\..*\\.ccoll" />
+                <data android:pathPattern=".*\\.cdeck" />
+                <data android:pathPattern=".*\\..*\\.cdeck" />
+                <data android:pathPattern=".*\\..*\\..*\\.cdeck" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.ccoll" />
+                <data android:pathPattern=".*\\..*\\.ccoll" />
+                <data android:pathPattern=".*\\..*\\..*\\.ccoll" />
+                <data android:pathPattern=".*\\.cdeck" />
+                <data android:pathPattern=".*\\..*\\.cdeck" />
+                <data android:pathPattern=".*\\..*\\..*\\.cdeck" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
