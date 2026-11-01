@@ -1,7 +1,9 @@
 package dev.cairn.app
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.AndroidViewModel
@@ -55,5 +57,45 @@ class IncomingFiles(app: Application) : AndroidViewModel(app) {
     /** [file] has reached the preview; a newer one that came meanwhile stays pending. */
     fun handled(file: ReadFile) {
         _pending.compareAndSet(file, null)
+    }
+}
+
+/**
+ * The arrival the app was last started by, kept across processes with the install it was started under.
+ * The system replays a task's root intent after an upgrade, and the file it names is no longer granted
+ * (#255): a start equal to the last one recorded, under an install since replaced, is that replay.
+ * Only starts are recorded; a file reaching the running app is not, so it cannot hide the root intent.
+ */
+class HandledArrivals(private val prefs: SharedPreferences, private val installed: () -> Long) {
+    /**
+     * [file] is the replay of the last arrival handled under an earlier install. It is said once: the
+     * record moves to this install, so the same file opened again is a new arrival.
+     */
+    fun isReplay(file: ArrivingFile): Boolean {
+        val replay = prefs.getString(KEY, null) == key(file) && prefs.getLong(INSTALL, 0L) != installed()
+        if (replay) prefs.edit().putLong(INSTALL, installed()).commit()
+        return replay
+    }
+
+    // Committed, not applied: a process killed right after the start must not lose the record.
+    fun handled(file: ArrivingFile) {
+        prefs.edit().putString(KEY, key(file)).putLong(INSTALL, installed()).commit()
+    }
+
+    fun clear() {
+        prefs.edit().clear().commit()
+    }
+
+    private fun key(file: ArrivingFile) = "${file.arrival}|${file.uri}"
+
+    companion object {
+        private const val KEY = "arrival"
+        private const val INSTALL = "install"
+
+        fun of(context: Context, installed: () -> Long = { installTime(context) }) =
+            HandledArrivals(context.getSharedPreferences("handled_arrivals", Context.MODE_PRIVATE), installed)
+
+        private fun installTime(context: Context): Long =
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
     }
 }
